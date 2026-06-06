@@ -11,10 +11,14 @@ export function setCognitoSessionCookies(response, tokens, requestUrl) {
 export function setSessionCookie(response, name, value, requestUrl, maxAge) {
   if (!value) return;
 
+  // En producción la app va detrás de Caddy (TLS); request.url interno es http,
+  // así que no podemos depender de su protocolo para marcar Secure.
+  const secure = process.env.NODE_ENV === "production" || requestUrl?.protocol === "https:";
+
   response.cookies.set(name, value, {
     httpOnly: true,
     sameSite: "lax",
-    secure: requestUrl.protocol === "https:",
+    secure,
     path: "/",
     maxAge,
   });

@@ -1,18 +1,23 @@
 import { NextResponse } from "next/server";
 
+import { originUrl } from "@/lib/request-origin";
+
 export const runtime = "nodejs";
 
+/**
+ * Entrada legacy del hosted-UI. Mindbliss usa UI propia para todo el flujo
+ * (login por código, contraseña, registro, recuperación), así que esta ruta
+ * solo reencamina a /login propio — nunca abre el hosted UI de Cognito.
+ */
 export async function GET(request) {
-  const requestUrl = new URL(request.url);
-  const loginHint = normalizeEmailHint(
-    requestUrl.searchParams.get("login_hint") || requestUrl.searchParams.get("email")
-  );
+  const url = new URL(request.url);
+  const loginHint = normalizeEmailHint(url.searchParams.get("login_hint") || url.searchParams.get("email"));
 
-  if ((requestUrl.searchParams.has("login_hint") || requestUrl.searchParams.has("email")) && !loginHint) {
-    return NextResponse.redirect(new URL("/login?auth=invalid-email", requestUrl));
+  if ((url.searchParams.has("login_hint") || url.searchParams.has("email")) && !loginHint) {
+    return NextResponse.redirect(originUrl(request, "/login?auth=invalid-email"));
   }
 
-  const loginUrl = new URL("/login", requestUrl);
+  const loginUrl = originUrl(request, "/login");
   loginUrl.searchParams.set("auth", "use-designed-login");
   if (loginHint) loginUrl.searchParams.set("email", loginHint);
 

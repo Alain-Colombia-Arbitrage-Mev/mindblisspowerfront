@@ -5,6 +5,7 @@ import {
   buildTokenRequestBody,
   getRequiredCognitoConfig,
 } from "@/lib/cognito";
+import { originUrl, resolveOrigin } from "@/lib/request-origin";
 
 export const runtime = "nodejs";
 
@@ -16,21 +17,21 @@ export async function GET(request) {
   const expectedState = request.cookies.get("vp_cognito_state")?.value;
 
   if (error) {
-    return redirectToLogin(requestUrl, error);
+    return redirectToLogin(request, error);
   }
 
   if (!code || !state || !expectedState || state !== expectedState) {
-    return redirectToLogin(requestUrl, "invalid-state");
+    return redirectToLogin(request, "invalid-state");
   }
 
   let config;
   try {
     config = getRequiredCognitoConfig(process.env);
   } catch (configError) {
-    return redirectToLogin(requestUrl, configError.message);
+    return redirectToLogin(request, configError.message);
   }
 
-  const redirectUri = config.redirectUri || `${requestUrl.origin}/api/auth/cognito/callback`;
+  const redirectUri = config.redirectUri || `${resolveOrigin(request)}/api/auth/cognito/callback`;
   const tokenEndpoint = new URL("/oauth2/token", config.domain);
   const tokenResponse = await fetch(tokenEndpoint, {
     method: "POST",
@@ -46,11 +47,11 @@ export async function GET(request) {
   });
 
   if (!tokenResponse.ok) {
-    return redirectToLogin(requestUrl, "token-exchange-failed");
+    return redirectToLogin(request, "token-exchange-failed");
   }
 
   const tokens = await tokenResponse.json();
-  const response = NextResponse.redirect(new URL("/dashboard", requestUrl));
+  const response = NextResponse.redirect(originUrl(request, "/dashboard"));
   const accessMaxAge = Number(tokens.expires_in || 3600);
 
   setSessionCookie(response, "vp_access_token", tokens.access_token, requestUrl, accessMaxAge);
@@ -65,8 +66,8 @@ export async function GET(request) {
   return response;
 }
 
-function redirectToLogin(requestUrl, reason) {
-  const response = NextResponse.redirect(new URL(`/login?auth=${encodeURIComponent(reason)}`, requestUrl));
+function redirectToLogin(request, reason) {
+  const response = NextResponse.redirect(originUrl(request, `/login?auth=${encodeURIComponent(reason)}`));
   clearCookie(response, "vp_cognito_state");
   clearCookie(response, "vp_cognito_nonce");
   return response;
