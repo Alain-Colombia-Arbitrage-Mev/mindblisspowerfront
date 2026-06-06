@@ -198,21 +198,7 @@ class PlatformDataCore {
         };
         this.users.push(descendantUser);
 
-        // WEIGHTED INVESTMENT DISTRIBUTION
-        // Majority at 5000, strong group at 10000, small elite at 25000
-        let descendantInvestment;
-        const rand = Math.random();
-        if (rand < 0.05) {
-          descendantInvestment = 25000; // 5% elite
-        } else if (rand < 0.25) {
-          descendantInvestment = 10000; // 20% premium
-        } else if (rand < 0.75) {
-          descendantInvestment = 5000; // 50% core base
-        } else if (rand < 0.90) {
-          descendantInvestment = 2500; // 15% moderate
-        } else {
-          descendantInvestment = 1000; // 10% entry (very few)
-        }
+        const descendantInvestment = this.getDeterministicInvestment(nodeId);
 
         // Create membership
         this.memberships.push({
@@ -334,6 +320,19 @@ class PlatformDataCore {
       'Bronce': 'Basic',
     };
     return planMap[rank] || 'Basic';
+  }
+
+  getDeterministicInvestment(index) {
+    const weightedPlans = [
+      25000,
+      15000,
+      10000, 10000, 10000,
+      5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000,
+      2500, 2500, 2500, 2500, 2500,
+      1000, 1000, 1000,
+    ];
+
+    return weightedPlans[(index - 1) % weightedPlans.length];
   }
 
   // Query methods

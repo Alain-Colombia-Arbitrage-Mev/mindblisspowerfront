@@ -54,6 +54,8 @@ export default function RegisterPage() {
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [confirmStep, setConfirmStep] = useState(false);
+  const [confirmCode, setConfirmCode] = useState("");
 
   useEffect(() => {
     const stored = readStoredJson("mp_registration_draft");
@@ -140,7 +142,8 @@ export default function RegisterPage() {
       localStorage.setItem("vp_registration_draft", JSON.stringify(draft));
 
       if (payload.userConfirmed === false) {
-        setSuccess("Cuenta creada. Revisa tu email para confirmar la cuenta y luego inicia sesión con contraseña.");
+        setConfirmStep(true);
+        setSuccess("Cuenta creada. Te enviamos un código por correo — ingrésalo abajo para activar tu cuenta.");
         setLoading(false);
         return;
       }
@@ -150,6 +153,77 @@ export default function RegisterPage() {
       setErrors({ form: "No se pudo conectar con el servicio de registro." });
       setLoading(false);
     }
+  }
+
+  async function handleConfirm(event) {
+    event.preventDefault();
+    setErrors({});
+    setSuccess("");
+
+    if (!confirmCode.trim()) {
+      setErrors({ form: "Ingresa el código que recibiste por correo." });
+      return;
+    }
+
+    setLoading(true);
+    const email = form.email.trim().toLowerCase();
+
+    try {
+      const response = await fetch("/api/auth/cognito/confirm-signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, code: confirmCode.trim() }),
+      });
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok || !payload.ok) {
+        setErrors({ form: payload.error || "No se pudo confirmar la cuenta." });
+        setLoading(false);
+        return;
+      }
+
+      // Cuenta confirmada → login automático con la contraseña del formulario.
+      const loginResponse = await fetch("/api/auth/cognito/password-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password: form.password }),
+      });
+      const loginPayload = await loginResponse.json().catch(() => ({}));
+
+      if (loginResponse.ok && loginPayload.ok) {
+        router.push("/onboarding?source=register");
+        return;
+      }
+
+      router.push(`/login?email=${encodeURIComponent(email)}`);
+    } catch {
+      setErrors({ form: "No se pudo conectar con el servicio de registro." });
+      setLoading(false);
+    }
+  }
+
+  async function handleResendCode() {
+    setErrors({});
+    setSuccess("");
+    setLoading(true);
+
+    try {
+      const response = await fetch("/api/auth/cognito/confirm-signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: form.email.trim().toLowerCase(), resend: true }),
+      });
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok || !payload.ok) {
+        setErrors({ form: payload.error || "No se pudo reenviar el código." });
+      } else {
+        setSuccess("Código reenviado. Revisa tu correo.");
+      }
+    } catch {
+      setErrors({ form: "No se pudo conectar con el servicio de registro." });
+    }
+    setLoading(false);
   }
 
   return (
@@ -191,6 +265,70 @@ export default function RegisterPage() {
           </div>
         </div>
 
+        {confirmStep ? (
+          <form className="space-y-5" onSubmit={handleConfirm}>
+            {success && (
+              <div
+                className="rounded-lg px-4 py-3 text-sm font-semibold"
+                style={{
+                  color: "var(--vp-accent)",
+                  background: "var(--vp-accent-muted)",
+                  border: "1px solid var(--vp-accent-border)",
+                }}
+              >
+                {success}
+              </div>
+            )}
+
+            {errors.form && (
+              <div
+                className="rounded-lg px-4 py-3 text-sm font-semibold"
+                style={{
+                  color: "var(--vp-danger)",
+                  background: "var(--vp-danger-muted)",
+                  border: "1px solid var(--vp-danger-border)",
+                }}
+              >
+                {errors.form}
+              </div>
+            )}
+
+            <Field
+              id="confirmCode"
+              label={`Código enviado a ${form.email}`}
+              value={confirmCode}
+              onChange={(event) => setConfirmCode(event.target.value)}
+              placeholder="123456"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              required
+            />
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex min-h-12 w-full items-center justify-center gap-2 rounded-lg px-5 py-3 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-60"
+              style={{
+                color: "var(--vp-shell)",
+                background: "var(--vp-accent)",
+                border: "1px solid var(--vp-accent-strong)",
+              }}
+            >
+              {loading ? <Loader2 className="animate-spin" size={16} /> : <ArrowRight size={16} />}
+              Confirmar cuenta
+            </button>
+
+            <button
+              type="button"
+              onClick={handleResendCode}
+              disabled={loading}
+              className="block w-full text-center text-sm font-bold transition hover:opacity-80 disabled:opacity-50"
+              style={{ color: "var(--vp-muted)" }}
+            >
+              Reenviar código
+            </button>
+          </form>
+        ) : (
         <form className="space-y-5" onSubmit={handleSubmit}>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field
@@ -353,6 +491,7 @@ export default function RegisterPage() {
             Crear cuenta
           </button>
         </form>
+        )}
 
         <div className="mt-6 grid gap-3 border-t pt-5 sm:grid-cols-2" style={{ borderColor: "var(--vp-border)" }}>
           <Link

@@ -21,14 +21,6 @@ export async function POST(request) {
   try {
     config = getCognitoIdentityProviderConfig(process.env);
   } catch (error) {
-    if (!process.env.COGNITO_DOMAIN && !process.env.COGNITO_CLIENT_ID) {
-      return NextResponse.json({
-        ok: true,
-        mode: "demo",
-        userConfirmed: true,
-      });
-    }
-
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
