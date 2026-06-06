@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 
-import { buildCognitoPasswordAuthPayload, getCognitoIdentityProviderConfig } from "@/lib/cognito";
+import {
+  buildCognitoChallengeResponsePayload,
+  buildCognitoPasswordAuthPayload,
+  buildCognitoPasswordChoiceStartPayload,
+  getCognitoIdentityProviderConfig,
+} from "@/lib/cognito";
 import {
   buildDemoUser,
   buildUserFromIdToken,
@@ -39,15 +44,11 @@ export async function POST(request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const cognitoResponse = await callCognito({
+  const cognitoResponse = await initiatePasswordAuth({
     endpoint: config.endpoint,
-    target: "AWSCognitoIdentityProviderService.InitiateAuth",
-    payload: buildCognitoPasswordAuthPayload({
-      clientId: config.clientId,
-      clientSecret: config.clientSecret,
-      username: email,
-      password,
-    }),
+    config,
+    email,
+    password,
   });
 
   if (!cognitoResponse.ok) {
@@ -84,6 +85,158 @@ export async function POST(request) {
   return response;
 }
 
+async function initiatePasswordAuth({ endpoint, config, email, password }) {
+  const passwordAuthResponse = await callCognito({
+    endpoint,
+    target: "AWSCognitoIdentityProviderService.InitiateAuth",
+    payload: buildCognitoPasswordAuthPayload({
+      clientId: config.clientId,
+      clientSecret: config.clientSecret,
+      username: email,
+      password,
+    }),
+  });
+
+  if (passwordAuthResponse.ok) {
+    if (passwordAuthResponse.body.AuthenticationResult) {
+      return passwordAuthResponse;
+    }
+
+    return resolvePasswordChallenge({
+      endpoint,
+      config,
+      email,
+      password,
+      body: passwordAuthResponse.body,
+    });
+  }
+
+  if (getCognitoErrorCode(passwordAuthResponse.body) !== "InvalidParameterException") {
+    return passwordAuthResponse;
+  }
+
+  const choiceResponse = await callCognito({
+    endpoint,
+    target: "AWSCognitoIdentityProviderService.InitiateAuth",
+    payload: buildCognitoPasswordChoiceStartPayload({
+      clientId: config.clientId,
+      clientSecret: config.clientSecret,
+      username: email,
+    }),
+  });
+
+  if (!choiceResponse.ok || choiceResponse.body.AuthenticationResult) {
+    return choiceResponse;
+  }
+
+  return resolvePasswordChallenge({
+    endpoint,
+    config,
+    email,
+    password,
+    body: choiceResponse.body,
+  });
+}
+
+async function resolvePasswordChallenge({ endpoint, config, email, password, body }) {
+  if (body.ChallengeName === "PASSWORD") {
+    const response = await callCognito({
+      endpoint,
+      target: "AWSCognitoIdentityProviderService.RespondToAuthChallenge",
+      payload: buildCognitoChallengeResponsePayload({
+        clientId: config.clientId,
+        clientSecret: config.clientSecret,
+        username: email,
+        session: body.Session,
+        challengeName: "PASSWORD",
+        responses: { PASSWORD: password },
+      }),
+    });
+
+    return resolvePostPasswordChallengeResponse({
+      endpoint,
+      config,
+      email,
+      password,
+      response,
+    });
+  }
+
+  if (body.ChallengeName === "SELECT_CHALLENGE" && hasAvailableChallenge(body, "PASSWORD")) {
+    const response = await callCognito({
+      endpoint,
+      target: "AWSCognitoIdentityProviderService.RespondToAuthChallenge",
+      payload: buildCognitoChallengeResponsePayload({
+        clientId: config.clientId,
+        clientSecret: config.clientSecret,
+        username: email,
+        session: body.Session,
+        challengeName: "SELECT_CHALLENGE",
+        responses: {
+          ANSWER: "PASSWORD",
+          PASSWORD: password,
+        },
+      }),
+    });
+
+    return resolvePostPasswordChallengeResponse({
+      endpoint,
+      config,
+      email,
+      password,
+      response,
+    });
+  }
+
+  if (body.ChallengeName === "NEW_PASSWORD_REQUIRED") {
+    return resolveNewPasswordRequired({
+      endpoint,
+      config,
+      email,
+      password,
+      body,
+    });
+  }
+
+  return {
+    ok: true,
+    status: 200,
+    body,
+  };
+}
+
+async function resolvePostPasswordChallengeResponse({ endpoint, config, email, password, response }) {
+  if (!response.ok || response.body.AuthenticationResult || response.body.ChallengeName !== "NEW_PASSWORD_REQUIRED") {
+    return response;
+  }
+
+  return resolveNewPasswordRequired({
+    endpoint,
+    config,
+    email,
+    password,
+    body: response.body,
+  });
+}
+
+async function resolveNewPasswordRequired({ endpoint, config, email, password, body }) {
+  return callCognito({
+    endpoint,
+    target: "AWSCognitoIdentityProviderService.RespondToAuthChallenge",
+    payload: buildCognitoChallengeResponsePayload({
+      clientId: config.clientId,
+      clientSecret: config.clientSecret,
+      username: email,
+      session: body.Session,
+      challengeName: "NEW_PASSWORD_REQUIRED",
+      responses: {
+        NEW_PASSWORD: password,
+        ...buildRequiredAttributeResponses(body, email),
+      },
+    }),
+  });
+}
+
 async function callCognito({ endpoint, target, payload }) {
   const response = await fetch(endpoint, {
     method: "POST",
@@ -115,6 +268,69 @@ function hasAnyCognitoRuntimeConfig(env) {
       env.COGNITO_DOMAIN ||
       env.COGNITO_REGION
   );
+}
+
+function hasAvailableChallenge(body, expectedChallenge) {
+  const challenges = [
+    ...(Array.isArray(body.AvailableChallenges) ? body.AvailableChallenges : []),
+    String(body.ChallengeParameters?.AvailableChallenges || ""),
+  ]
+    .join(",")
+    .split(",")
+    .map((challenge) => challenge.trim());
+
+  return challenges.includes(expectedChallenge);
+}
+
+function buildRequiredAttributeResponses(body, email) {
+  const requiredAttributes = parseRequiredAttributes(body.ChallengeParameters?.requiredAttributes);
+  if (requiredAttributes.length === 0) return {};
+
+  const existingAttributes = parseJsonMap(body.ChallengeParameters?.userAttributes);
+  const responses = {};
+
+  requiredAttributes.forEach((attribute) => {
+    if (existingAttributes[attribute]) return;
+
+    responses[`userAttributes.${attribute}`] = getRequiredAttributeFallback(attribute, email);
+  });
+
+  return responses;
+}
+
+function parseRequiredAttributes(value) {
+  try {
+    const parsed = JSON.parse(String(value || "[]"));
+    return Array.isArray(parsed)
+      ? parsed.map((attribute) => String(attribute).trim()).filter(Boolean)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseJsonMap(value) {
+  try {
+    const parsed = JSON.parse(String(value || "{}"));
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function getRequiredAttributeFallback(attribute, email) {
+  if (attribute === "email") return email;
+  if (attribute === "name") return "Miembro Mindbliss";
+  if (attribute === "given_name") return "Miembro";
+  if (attribute === "family_name") return "Mindbliss";
+  if (attribute === "preferred_username") return email.split("@")[0];
+  if (attribute === "locale") return "es";
+  if (attribute === "zoneinfo") return "America/Bogota";
+  if (attribute === "birthdate") return "1990-01-01";
+  if (attribute === "gender") return "unspecified";
+  if (attribute === "address") return "-";
+  if (attribute === "updated_at") return String(Math.floor(Date.now() / 1000));
+  return "-";
 }
 
 function isDemoCredentialAllowed(env, email, password) {

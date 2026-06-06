@@ -6,6 +6,7 @@ import {
   buildCognitoChallengeResponsePayload,
   buildCognitoEmailOtpStartPayload,
   buildCognitoPasswordAuthPayload,
+  buildCognitoPasswordChoiceStartPayload,
   buildCognitoLogoutUrl,
   buildCognitoSecretHash,
   buildCognitoSignUpPayload,
@@ -113,6 +114,27 @@ test("builds USER_PASSWORD_AUTH payload with secret hash", () => {
   assert.equal(payload.ClientId, "client-123");
   assert.equal(payload.AuthParameters.USERNAME, "miembro@mindbliss.test");
   assert.equal(payload.AuthParameters.PASSWORD, "StrongPassword123!");
+  assert.equal(
+    payload.AuthParameters.SECRET_HASH,
+    buildCognitoSecretHash({
+      username: "miembro@mindbliss.test",
+      clientId: "client-123",
+      clientSecret: "secret-456",
+    })
+  );
+});
+
+test("builds USER_AUTH password choice start payload with secret hash", () => {
+  const payload = buildCognitoPasswordChoiceStartPayload({
+    clientId: "client-123",
+    clientSecret: "secret-456",
+    username: "Miembro@Mindbliss.test",
+  });
+
+  assert.equal(payload.AuthFlow, "USER_AUTH");
+  assert.equal(payload.ClientId, "client-123");
+  assert.equal(payload.AuthParameters.USERNAME, "miembro@mindbliss.test");
+  assert.equal(payload.AuthParameters.PREFERRED_CHALLENGE, "PASSWORD");
   assert.equal(
     payload.AuthParameters.SECRET_HASH,
     buildCognitoSecretHash({

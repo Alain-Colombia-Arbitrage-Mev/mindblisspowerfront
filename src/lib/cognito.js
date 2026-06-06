@@ -120,6 +120,28 @@ export function buildCognitoPasswordAuthPayload({ clientId, clientSecret = "", u
   };
 }
 
+export function buildCognitoPasswordChoiceStartPayload({ clientId, clientSecret = "", username }) {
+  const normalizedUsername = normalizeUsername(username);
+  const authParameters = {
+    USERNAME: normalizedUsername,
+    PREFERRED_CHALLENGE: "PASSWORD",
+  };
+
+  if (clientSecret) {
+    authParameters.SECRET_HASH = buildCognitoSecretHash({
+      username: normalizedUsername,
+      clientId,
+      clientSecret,
+    });
+  }
+
+  return {
+    AuthFlow: "USER_AUTH",
+    ClientId: clientId,
+    AuthParameters: authParameters,
+  };
+}
+
 export function buildCognitoEmailOtpStartPayload({ clientId, clientSecret = "", username }) {
   const normalizedUsername = normalizeUsername(username);
   const authParameters = {
