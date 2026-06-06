@@ -1,0 +1,61 @@
+{
+  "name": "Payment",
+  "type": "object",
+  "properties": {
+    "user_id": {
+      "type": "string",
+      "title": "User ID"
+    },
+    "plan_id": {
+      "type": "string",
+      "title": "Plan ID"
+    },
+    "amount": {
+      "type": "number",
+      "title": "Amount"
+    },
+    "currency": {
+      "type": "string",
+      "title": "Currency",
+      "default": "USD"
+    },
+    "provider": {
+      "type": "string",
+      "title": "Payment Provider",
+      "enum": ["stripe", "crypto", "bank_transfer"],
+      "default": "stripe"
+    },
+    "status": {
+      "type": "string",
+      "title": "Status",
+      "enum": ["pending", "processing", "completed", "failed", "refunded"],
+      "default": "pending"
+    },
+    "transaction_id": {
+      "type": "string",
+      "title": "Provider Transaction ID"
+    },
+    "reference": {
+      "type": "string",
+      "title": "Internal Reference"
+    },
+    "payment_method": {
+      "type": "string",
+      "title": "Payment Method",
+      "enum": ["card", "bank_account", "crypto"]
+    },
+    "metadata": {
+      "type": "string",
+      "title": "Metadata (JSON)"
+    },
+    "tenant_id": {
+      "type": "string",
+      "title": "Tenant ID"
+    },
+    "processed_at": {
+      "type": "string",
+      "title": "Processing Timestamp"
+    }
+  },
+  "required": ["user_id", "plan_id", "amount", "provider"]
+}

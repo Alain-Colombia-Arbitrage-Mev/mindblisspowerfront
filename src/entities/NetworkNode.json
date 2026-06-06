@@ -1,0 +1,42 @@
+{
+  "name": "NetworkNode",
+  "type": "object",
+  "properties": {
+    "user_id": {
+      "type": "string",
+      "title": "User ID"
+    },
+    "upline_id": {
+      "type": "string",
+      "title": "Upline User ID (Sponsor)"
+    },
+    "binary_side": {
+      "type": "string",
+      "title": "Binary Side",
+      "enum": ["left", "right"],
+      "default": "left"
+    },
+    "depth": {
+      "type": "number",
+      "title": "Depth in Tree",
+      "default": 0
+    },
+    "path": {
+      "type": "string",
+      "title": "Path for Fast Traversal (dot-separated)"
+    },
+    "left_child_id": {
+      "type": "string",
+      "title": "Left Child User ID"
+    },
+    "right_child_id": {
+      "type": "string",
+      "title": "Right Child User ID"
+    },
+    "tenant_id": {
+      "type": "string",
+      "title": "Tenant ID"
+    }
+  },
+  "required": ["user_id", "upline_id", "binary_side"]
+}

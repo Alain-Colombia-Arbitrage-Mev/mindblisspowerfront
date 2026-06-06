@@ -1,0 +1,43 @@
+{
+  "name": "Tenant",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "title": "Tenant Name"
+    },
+    "slug": {
+      "type": "string",
+      "title": "Tenant Slug (unique identifier)"
+    },
+    "domain": {
+      "type": "string",
+      "title": "Custom Domain"
+    },
+    "logo_url": {
+      "type": "string",
+      "title": "Logo URL"
+    },
+    "status": {
+      "type": "string",
+      "title": "Status",
+      "enum": ["active", "inactive", "suspended"],
+      "default": "active"
+    },
+    "tier": {
+      "type": "string",
+      "title": "Subscription Tier",
+      "enum": ["starter", "professional", "enterprise"],
+      "default": "starter"
+    },
+    "settings": {
+      "type": "string",
+      "title": "Settings (JSON)"
+    },
+    "owner_id": {
+      "type": "string",
+      "title": "Owner User ID"
+    }
+  },
+  "required": ["name", "slug"]
+}

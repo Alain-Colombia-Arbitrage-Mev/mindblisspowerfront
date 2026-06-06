@@ -1,0 +1,209 @@
+import { NextResponse } from "next/server";
+
+import { buildCognitoPasswordAuthPayload, getCognitoIdentityProviderConfig } from "@/lib/cognito";
+
+export const runtime = "nodejs";
+
+export async function POST(request) {
+  const requestUrl = new URL(request.url);
+  const body = await readJson(request);
+  const email = normalizeEmail(body.email);
+  const password = String(body.password || "");
+
+  if (!email || !password || password.length > 256) {
+    return NextResponse.json({ error: "Ingresa email y contraseña válidos." }, { status: 400 });
+  }
+
+  let config;
+  try {
+    config = getCognitoIdentityProviderConfig(process.env);
+  } catch (error) {
+    if (!process.env.COGNITO_DOMAIN && !process.env.COGNITO_CLIENT_ID) {
+      return NextResponse.json({
+        ok: true,
+        mode: "demo",
+        redirectTo: "/dashboard/profile",
+        user: buildDemoUser(email),
+      });
+    }
+
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  const cognitoResponse = await callCognito({
+    endpoint: config.endpoint,
+    target: "AWSCognitoIdentityProviderService.InitiateAuth",
+    payload: buildCognitoPasswordAuthPayload({
+      clientId: config.clientId,
+      clientSecret: config.clientSecret,
+      username: email,
+      password,
+    }),
+  });
+
+  if (!cognitoResponse.ok) {
+    return NextResponse.json(
+      { error: mapCognitoAuthError(cognitoResponse.body) },
+      { status: mapCognitoStatus(cognitoResponse.body) }
+    );
+  }
+
+  if (cognitoResponse.body.ChallengeName) {
+    return NextResponse.json(
+      {
+        error: mapChallengeMessage(cognitoResponse.body.ChallengeName),
+        challenge: cognitoResponse.body.ChallengeName,
+      },
+      { status: 409 }
+    );
+  }
+
+  const tokens = cognitoResponse.body.AuthenticationResult;
+  if (!tokens?.AccessToken || !tokens?.IdToken) {
+    return NextResponse.json({ error: "Cognito no devolvió una sesión válida." }, { status: 502 });
+  }
+
+  const response = NextResponse.json({
+    ok: true,
+    mode: "cognito",
+    redirectTo: "/dashboard",
+    user: buildUserFromIdToken(tokens.IdToken, email),
+  });
+
+  const accessMaxAge = Number(tokens.ExpiresIn || 3600);
+  setSessionCookie(response, "vp_access_token", tokens.AccessToken, requestUrl, accessMaxAge);
+  setSessionCookie(response, "vp_id_token", tokens.IdToken, requestUrl, accessMaxAge);
+
+  if (tokens.RefreshToken) {
+    setSessionCookie(response, "vp_refresh_token", tokens.RefreshToken, requestUrl, 60 * 60 * 24 * 30);
+  }
+
+  return response;
+}
+
+async function callCognito({ endpoint, target, payload }) {
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-amz-json-1.1",
+      "X-Amz-Target": target,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const body = await response.json().catch(() => ({}));
+  return { ok: response.ok, status: response.status, body };
+}
+
+function readJson(request) {
+  return request.json().catch(() => ({}));
+}
+
+function normalizeEmail(value) {
+  const email = String(value || "").trim().toLowerCase();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "";
+}
+
+function setSessionCookie(response, name, value, requestUrl, maxAge) {
+  if (!value) return;
+
+  response.cookies.set(name, value, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: requestUrl.protocol === "https:",
+    path: "/",
+    maxAge,
+  });
+}
+
+function getCognitoErrorCode(body) {
+  const raw = body?.__type || body?.code || "";
+  return String(raw).split("#").pop();
+}
+
+function mapCognitoStatus(body) {
+  const code = getCognitoErrorCode(body);
+  if (code === "UserNotConfirmedException") return 403;
+  if (code === "PasswordResetRequiredException") return 403;
+  if (code === "TooManyRequestsException" || code === "LimitExceededException") return 429;
+  if (code === "InvalidParameterException") return 400;
+  return 401;
+}
+
+function mapCognitoAuthError(body) {
+  const code = getCognitoErrorCode(body);
+
+  if (code === "UserNotConfirmedException") {
+    return "La cuenta está creada, pero falta confirmar el email antes de iniciar sesión.";
+  }
+
+  if (code === "PasswordResetRequiredException") {
+    return "Cognito requiere restablecer la contraseña antes de entrar.";
+  }
+
+  if (code === "TooManyRequestsException" || code === "LimitExceededException") {
+    return "Demasiados intentos. Espera unos minutos antes de volver a intentar.";
+  }
+
+  if (code === "InvalidParameterException") {
+    return "La configuración de Cognito no acepta este flujo de contraseña.";
+  }
+
+  return "Email o contraseña incorrectos.";
+}
+
+function mapChallengeMessage(challengeName) {
+  if (challengeName === "NEW_PASSWORD_REQUIRED") {
+    return "Cognito requiere crear una nueva contraseña antes de entrar.";
+  }
+
+  if (String(challengeName).includes("MFA") || String(challengeName).includes("OTP")) {
+    return "La cuenta requiere verificación adicional. Completa el segundo factor en Cognito.";
+  }
+
+  return "Cognito requiere un paso adicional para completar el acceso.";
+}
+
+function buildUserFromIdToken(idToken, fallbackEmail) {
+  const claims = decodeJwtPayload(idToken);
+  const email = claims.email || fallbackEmail;
+  const name = claims.name || claims.given_name || email;
+  const id = claims.sub || `member-${Date.now()}`;
+
+  return {
+    id,
+    name,
+    email,
+    phone: claims.phone_number || "",
+    country: claims.address?.country || "",
+    company: "Mindbliss Power",
+    rank: "Miembro",
+    role: "user",
+    type: "user",
+    user_type: "DIRECT",
+    path: "member",
+  };
+}
+
+function decodeJwtPayload(token) {
+  try {
+    const payload = String(token).split(".")[1];
+    return JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+  } catch {
+    return {};
+  }
+}
+
+function buildDemoUser(email) {
+  return {
+    id: `member-${email.replace(/[^a-z0-9]/gi, "_")}`,
+    name: "Miembro Mindbliss",
+    email,
+    company: "Mindbliss Power",
+    rank: "Miembro",
+    role: "user",
+    type: "user",
+    user_type: "DIRECT",
+    path: "member",
+  };
+}

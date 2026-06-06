@@ -1,0 +1,52 @@
+{
+  "name": "Commission",
+  "type": "object",
+  "properties": {
+    "user_id": {
+      "type": "string",
+      "title": "User ID (earner)"
+    },
+    "type": {
+      "type": "string",
+      "title": "Commission Type",
+      "enum": ["base", "binary", "network", "direct"],
+      "default": "base"
+    },
+    "amount": {
+      "type": "number",
+      "title": "Commission Amount"
+    },
+    "currency": {
+      "type": "string",
+      "title": "Currency",
+      "default": "USD"
+    },
+    "source_user_id": {
+      "type": "string",
+      "title": "Source User ID (who generated it)"
+    },
+    "period": {
+      "type": "string",
+      "title": "Period (YYYY-MM)"
+    },
+    "status": {
+      "type": "string",
+      "title": "Status",
+      "enum": ["pending", "approved", "paid", "disputed"],
+      "default": "pending"
+    },
+    "calculation_details": {
+      "type": "string",
+      "title": "Calculation Details (JSON)"
+    },
+    "ledger_entry_id": {
+      "type": "string",
+      "title": "Associated Ledger Entry ID"
+    },
+    "tenant_id": {
+      "type": "string",
+      "title": "Tenant ID"
+    }
+  },
+  "required": ["user_id", "type", "amount", "period"]
+}

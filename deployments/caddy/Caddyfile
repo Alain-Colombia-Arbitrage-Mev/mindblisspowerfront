@@ -1,0 +1,36 @@
+{
+  email {$CADDY_ACME_EMAIL:ops@mindblisspower.com}
+  servers {
+    timeouts {
+      read_body 10s
+      read_header 5s
+      write 30s
+      idle 120s
+    }
+  }
+}
+
+{$MINDBLISS_SITE_ADDRESS::80} {
+  encode zstd gzip
+
+  header {
+    X-Content-Type-Options nosniff
+    Referrer-Policy strict-origin-when-cross-origin
+    Permissions-Policy camera=(), microphone=(), geolocation=()
+  }
+
+  reverse_proxy 127.0.0.1:3000 {
+    health_uri /health
+    health_interval 10s
+    health_timeout 2s
+    fail_duration 30s
+  }
+
+  log {
+    output file /var/log/caddy/mindbliss-frontend.log {
+      roll_size 100mb
+      roll_keep 14
+    }
+    format json
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "name": "Alert",
+  "type": "object",
+  "properties": {
+    "user_id": {
+      "type": "string",
+      "title": "User ID"
+    },
+    "type": {
+      "type": "string",
+      "title": "Alert Type",
+      "enum": ["inactivity", "imbalance", "new_join", "high_value", "system", "compliance"],
+      "default": "system"
+    },
+    "priority": {
+      "type": "string",
+      "title": "Priority",
+      "enum": ["low", "medium", "high", "critical"],
+      "default": "medium"
+    },
+    "message": {
+      "type": "string",
+      "title": "Alert Message"
+    },
+    "status": {
+      "type": "string",
+      "title": "Status",
+      "enum": ["open", "acknowledged", "closed"],
+      "default": "open"
+    },
+    "metadata": {
+      "type": "string",
+      "title": "Metadata (JSON)"
+    },
+    "closed_at": {
+      "type": "string",
+      "title": "Closed Timestamp"
+    },
+    "tenant_id": {
+      "type": "string",
+      "title": "Tenant ID"
+    }
+  },
+  "required": ["user_id", "type", "message"]
+}

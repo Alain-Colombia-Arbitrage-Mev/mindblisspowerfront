@@ -1,0 +1,43 @@
+{
+  "name": "Message",
+  "type": "object",
+  "properties": {
+    "sender_id": {
+      "type": "string",
+      "title": "Sender User ID"
+    },
+    "receiver_id": {
+      "type": "string",
+      "title": "Receiver User ID"
+    },
+    "subject": {
+      "type": "string",
+      "title": "Message Subject"
+    },
+    "content": {
+      "type": "string",
+      "title": "Message Content"
+    },
+    "type": {
+      "type": "string",
+      "title": "Message Type",
+      "enum": ["direct", "system", "notification"],
+      "default": "direct"
+    },
+    "status": {
+      "type": "string",
+      "title": "Status",
+      "enum": ["sent", "read", "archived", "deleted"],
+      "default": "sent"
+    },
+    "read_at": {
+      "type": "string",
+      "title": "Read Timestamp"
+    },
+    "tenant_id": {
+      "type": "string",
+      "title": "Tenant ID"
+    }
+  },
+  "required": ["sender_id", "receiver_id", "content"]
+}

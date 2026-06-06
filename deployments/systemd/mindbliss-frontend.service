@@ -1,0 +1,29 @@
+[Unit]
+Description=Mindbliss Power Frontend
+Documentation=file:/opt/mindbliss/frontend/current/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mindbliss
+Group=mindbliss
+WorkingDirectory=/opt/mindbliss/frontend/current
+EnvironmentFile=/etc/mindbliss/frontend.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/npm run start -- -H 127.0.0.1 -p 3000
+Restart=always
+RestartSec=5
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=/opt/mindbliss/frontend
+LimitNOFILE=65536
+
+KillSignal=SIGTERM
+TimeoutStopSec=45
+
+[Install]
+WantedBy=multi-user.target

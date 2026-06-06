@@ -1,0 +1,56 @@
+{
+  "name": "Payout",
+  "type": "object",
+  "properties": {
+    "user_id": {
+      "type": "string",
+      "title": "User ID"
+    },
+    "amount": {
+      "type": "number",
+      "title": "Payout Amount"
+    },
+    "currency": {
+      "type": "string",
+      "title": "Currency",
+      "default": "USD"
+    },
+    "method": {
+      "type": "string",
+      "title": "Payout Method",
+      "enum": ["bank_transfer", "stripe_payout", "crypto_wallet", "check"],
+      "default": "bank_transfer"
+    },
+    "status": {
+      "type": "string",
+      "title": "Status",
+      "enum": ["requested", "approved", "processing", "completed", "failed", "cancelled"],
+      "default": "requested"
+    },
+    "destination": {
+      "type": "string",
+      "title": "Destination (account/wallet/email)"
+    },
+    "requested_at": {
+      "type": "string",
+      "title": "Request Timestamp"
+    },
+    "processed_at": {
+      "type": "string",
+      "title": "Processing Timestamp"
+    },
+    "transaction_id": {
+      "type": "string",
+      "title": "Provider Transaction ID"
+    },
+    "notes": {
+      "type": "string",
+      "title": "Admin Notes"
+    },
+    "tenant_id": {
+      "type": "string",
+      "title": "Tenant ID"
+    }
+  },
+  "required": ["user_id", "amount", "method"]
+}

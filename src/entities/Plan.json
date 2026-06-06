@@ -1,0 +1,58 @@
+{
+  "name": "Plan",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "title": "Plan Name"
+    },
+    "amount": {
+      "type": "number",
+      "title": "Plan Amount (USD)"
+    },
+    "currency": {
+      "type": "string",
+      "title": "Currency Code",
+      "default": "USD"
+    },
+    "description": {
+      "type": "string",
+      "title": "Plan Description"
+    },
+    "duration_days": {
+      "type": "number",
+      "title": "Membership Duration (days)",
+      "default": 365
+    },
+    "benefits": {
+      "type": "string",
+      "title": "Benefits (JSON array)"
+    },
+    "commission_percentage": {
+      "type": "number",
+      "title": "Monthly Commission %",
+      "default": 8.33
+    },
+    "binary_bonus_percentage": {
+      "type": "number",
+      "title": "Binary Bonus %",
+      "default": 10
+    },
+    "network_bonus_percentage": {
+      "type": "number",
+      "title": "Network Bonus %",
+      "default": 2
+    },
+    "status": {
+      "type": "string",
+      "title": "Status",
+      "enum": ["active", "inactive"],
+      "default": "active"
+    },
+    "tenant_id": {
+      "type": "string",
+      "title": "Tenant ID"
+    }
+  },
+  "required": ["name", "amount"]
+}

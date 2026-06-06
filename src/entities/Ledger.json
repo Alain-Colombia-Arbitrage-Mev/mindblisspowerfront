@@ -1,0 +1,61 @@
+{
+  "name": "Ledger",
+  "type": "object",
+  "properties": {
+    "user_id": {
+      "type": "string",
+      "title": "User ID"
+    },
+    "type": {
+      "type": "string",
+      "title": "Transaction Type",
+      "enum": ["credit", "debit"],
+      "default": "credit"
+    },
+    "category": {
+      "type": "string",
+      "title": "Category",
+      "enum": ["commission", "payment", "payout", "refund", "adjustment", "fee"],
+      "default": "commission"
+    },
+    "amount": {
+      "type": "number",
+      "title": "Amount"
+    },
+    "currency": {
+      "type": "string",
+      "title": "Currency",
+      "default": "USD"
+    },
+    "balance_after": {
+      "type": "number",
+      "title": "Balance After Transaction"
+    },
+    "reference_id": {
+      "type": "string",
+      "title": "Reference ID (payment/commission/payout)"
+    },
+    "reference_type": {
+      "type": "string",
+      "title": "Reference Type",
+      "enum": ["payment", "commission", "payout", "manual"]
+    },
+    "description": {
+      "type": "string",
+      "title": "Description"
+    },
+    "metadata": {
+      "type": "string",
+      "title": "Metadata (JSON)"
+    },
+    "tenant_id": {
+      "type": "string",
+      "title": "Tenant ID"
+    },
+    "verified_by": {
+      "type": "string",
+      "title": "Verified By (admin user ID)"
+    }
+  },
+  "required": ["user_id", "type", "amount", "category"]
+}

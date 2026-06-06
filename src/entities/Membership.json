@@ -1,0 +1,51 @@
+{
+  "name": "Membership",
+  "type": "object",
+  "properties": {
+    "user_id": {
+      "type": "string",
+      "title": "User ID"
+    },
+    "plan_id": {
+      "type": "string",
+      "title": "Plan ID"
+    },
+    "amount": {
+      "type": "number",
+      "title": "Membership Amount"
+    },
+    "currency": {
+      "type": "string",
+      "title": "Currency",
+      "default": "USD"
+    },
+    "status": {
+      "type": "string",
+      "title": "Status",
+      "enum": ["active", "inactive", "expired", "cancelled"],
+      "default": "active"
+    },
+    "start_date": {
+      "type": "string",
+      "title": "Start Date"
+    },
+    "end_date": {
+      "type": "string",
+      "title": "End Date"
+    },
+    "payment_id": {
+      "type": "string",
+      "title": "Associated Payment ID"
+    },
+    "auto_renew": {
+      "type": "boolean",
+      "title": "Auto-Renew",
+      "default": true
+    },
+    "tenant_id": {
+      "type": "string",
+      "title": "Tenant ID"
+    }
+  },
+  "required": ["user_id", "plan_id", "amount", "start_date"]
+}

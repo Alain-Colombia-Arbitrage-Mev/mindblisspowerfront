@@ -1,0 +1,44 @@
+{
+  "name": "Session",
+  "type": "object",
+  "properties": {
+    "user_id": {
+      "type": "string",
+      "title": "User ID"
+    },
+    "access_token": {
+      "type": "string",
+      "title": "JWT Access Token (hashed)"
+    },
+    "refresh_token": {
+      "type": "string",
+      "title": "Refresh Token (hashed)"
+    },
+    "ip_address": {
+      "type": "string",
+      "title": "IP Address"
+    },
+    "user_agent": {
+      "type": "string",
+      "title": "User Agent"
+    },
+    "expires_at": {
+      "type": "string",
+      "title": "Session Expiration"
+    },
+    "is_active": {
+      "type": "boolean",
+      "title": "Is Active",
+      "default": true
+    },
+    "last_activity": {
+      "type": "string",
+      "title": "Last Activity Timestamp"
+    },
+    "tenant_id": {
+      "type": "string",
+      "title": "Tenant ID"
+    }
+  },
+  "required": ["user_id", "access_token", "refresh_token"]
+}

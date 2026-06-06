@@ -1,0 +1,87 @@
+{
+  "name": "User",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "title": "Full Name"
+    },
+    "email": {
+      "type": "string",
+      "title": "Email Address",
+      "description": "Unique email for login"
+    },
+    "password_hash": {
+      "type": "string",
+      "title": "Password Hash (bcrypt)"
+    },
+    "phone": {
+      "type": "string",
+      "title": "Phone Number"
+    },
+    "country": {
+      "type": "string",
+      "title": "Country Code"
+    },
+    "rank": {
+      "type": "string",
+      "title": "Current Rank",
+      "enum": ["Principiante", "Bronce", "Plata", "Oro", "Platino", "Zafiro", "Rubí", "Esmeralda", "Diamante", "Diamante Azul", "Diamante Negro", "E. Corona"],
+      "default": "Principiante"
+    },
+    "plan_id": {
+      "type": "string",
+      "title": "Current Plan ID"
+    },
+    "status": {
+      "type": "string",
+      "title": "Account Status",
+      "enum": ["active", "inactive", "suspended", "pending_verification"],
+      "default": "pending_verification"
+    },
+    "role": {
+      "type": "string",
+      "title": "User Role",
+      "enum": ["member", "leader", "admin"],
+      "default": "member"
+    },
+    "tenant_id": {
+      "type": "string",
+      "title": "Tenant ID (for multi-tenant)"
+    },
+    "kyc_status": {
+      "type": "string",
+      "title": "KYC Status",
+      "enum": ["pending", "verified", "rejected"],
+      "default": "pending"
+    },
+    "kyb_status": {
+      "type": "string",
+      "title": "KYB Status",
+      "enum": ["pending", "verified", "rejected"],
+      "default": "pending"
+    },
+    "last_login": {
+      "type": "string",
+      "title": "Last Login Timestamp"
+    },
+    "password_reset_token": {
+      "type": "string",
+      "title": "Password Reset Token"
+    },
+    "password_reset_expires": {
+      "type": "string",
+      "title": "Password Reset Token Expiration"
+    },
+    "two_factor_enabled": {
+      "type": "boolean",
+      "title": "2FA Enabled",
+      "default": false
+    },
+    "metadata": {
+      "type": "string",
+      "title": "Additional Data (JSON)"
+    }
+  },
+  "required": ["name", "email", "password_hash", "country"]
+}
