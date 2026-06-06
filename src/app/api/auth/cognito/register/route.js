@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 
 import { buildCognitoSignUpPayload, getCognitoIdentityProviderConfig } from "@/lib/cognito";
@@ -11,6 +12,9 @@ export async function POST(request) {
   const fullName = String(body.fullName || "").trim();
   const phone = normalizePhone(body.phone);
   const preferredLanguage = String(body.preferredLanguage || "es").trim().toLowerCase();
+  const birthDate = normalizeBirthDate(body.birthDate);
+  const city = String(body.city || "").trim();
+  const country = String(body.country || "").trim();
 
   const validationError = validateInput({ email, password, fullName });
   if (validationError) {
@@ -24,10 +28,33 @@ export async function POST(request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  // El pool usa email como ALIAS: el username no puede tener formato de email.
+  const username = `mp_${randomUUID().replaceAll("-", "")}`;
+
+  // El pool marca como required casi todos los atributos estándar (inmutable
+  // post-creación), así que se completan todos con datos del formulario o
+  // valores neutros.
+  const nameParts = fullName.split(/\s+/);
+  const givenName = nameParts[0];
+  const familyName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : givenName;
+
   const attributes = [
     { Name: "email", Value: email },
     { Name: "name", Value: fullName },
-    { Name: "locale", Value: preferredLanguage },
+    { Name: "given_name", Value: givenName },
+    { Name: "family_name", Value: familyName },
+    { Name: "middle_name", Value: nameParts[1] || givenName },
+    { Name: "nickname", Value: givenName },
+    { Name: "preferred_username", Value: username },
+    { Name: "profile", Value: "member" },
+    { Name: "picture", Value: "https://app.mindblisspower.com/avatar.png" },
+    { Name: "website", Value: "https://mindblisspower.com" },
+    { Name: "gender", Value: "unspecified" },
+    { Name: "birthdate", Value: birthDate },
+    { Name: "zoneinfo", Value: "America/Bogota" },
+    { Name: "locale", Value: preferredLanguage || "es" },
+    { Name: "address", Value: city || country ? `${city}${city && country ? ", " : ""}${country}` : "-" },
+    { Name: "updated_at", Value: String(Math.floor(Date.now() / 1000)) },
   ];
 
   if (phone) {
@@ -40,7 +67,7 @@ export async function POST(request) {
     payload: buildCognitoSignUpPayload({
       clientId: config.clientId,
       clientSecret: config.clientSecret,
-      username: email,
+      username,
       password,
       attributes,
     }),
@@ -57,6 +84,7 @@ export async function POST(request) {
     {
       ok: true,
       mode: "cognito",
+      username,
       userConfirmed: Boolean(cognitoResponse.body.UserConfirmed),
       delivery: cognitoResponse.body.CodeDeliveryDetails || null,
       userSub: cognitoResponse.body.UserSub || null,
@@ -91,6 +119,11 @@ function normalizeEmail(value) {
 function normalizePhone(value) {
   const phone = String(value || "").trim();
   return /^\+[1-9]\d{7,14}$/.test(phone) ? phone : "";
+}
+
+function normalizeBirthDate(value) {
+  const date = String(value || "").trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : "1990-01-01";
 }
 
 function validateInput({ email, password, fullName }) {

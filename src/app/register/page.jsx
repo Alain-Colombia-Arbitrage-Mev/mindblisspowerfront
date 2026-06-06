@@ -56,6 +56,7 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [confirmStep, setConfirmStep] = useState(false);
   const [confirmCode, setConfirmCode] = useState("");
+  const [cognitoUsername, setCognitoUsername] = useState("");
 
   useEffect(() => {
     const stored = readStoredJson("mp_registration_draft");
@@ -142,6 +143,7 @@ export default function RegisterPage() {
       localStorage.setItem("vp_registration_draft", JSON.stringify(draft));
 
       if (payload.userConfirmed === false) {
+        setCognitoUsername(payload.username || "");
         setConfirmStep(true);
         setSuccess("Cuenta creada. Te enviamos un código por correo — ingrésalo abajo para activar tu cuenta.");
         setLoading(false);
@@ -172,7 +174,7 @@ export default function RegisterPage() {
       const response = await fetch("/api/auth/cognito/confirm-signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, code: confirmCode.trim() }),
+        body: JSON.stringify({ email, username: cognitoUsername, code: confirmCode.trim() }),
       });
       const payload = await response.json().catch(() => ({}));
 
@@ -211,7 +213,7 @@ export default function RegisterPage() {
       const response = await fetch("/api/auth/cognito/confirm-signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: form.email.trim().toLowerCase(), resend: true }),
+        body: JSON.stringify({ email: form.email.trim().toLowerCase(), username: cognitoUsername, resend: true }),
       });
       const payload = await response.json().catch(() => ({}));
 

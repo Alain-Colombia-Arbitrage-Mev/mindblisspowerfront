@@ -5,7 +5,7 @@ export const runtime = "nodejs";
 
 export async function GET() {
   const cookieStore = await cookies();
-  const authenticated = Boolean(cookieStore.get("vp_id_token") || cookieStore.get("vp_access_token"));
+  const authenticated = Boolean(cookieStore.get("vp_id_token")?.value || cookieStore.get("vp_access_token")?.value);
 
   return NextResponse.json({
     authenticated,

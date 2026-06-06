@@ -10,8 +10,11 @@ export async function POST(request) {
   const email = normalizeEmail(body.email);
   const code = String(body.code || "").trim();
   const resend = Boolean(body.resend);
+  // Antes de confirmar, el alias por email aún no existe: usar el username real.
+  const rawUsername = String(body.username || "").trim();
+  const username = /^[\w.-]{1,128}$/.test(rawUsername) ? rawUsername : email;
 
-  if (!email) {
+  if (!username) {
     return NextResponse.json({ error: "Ingresa un email válido." }, { status: 400 });
   }
 
@@ -22,10 +25,10 @@ export async function POST(request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const basePayload = { ClientId: config.clientId, Username: email };
+  const basePayload = { ClientId: config.clientId, Username: username };
   if (config.clientSecret) {
     basePayload.SecretHash = buildCognitoSecretHash({
-      username: email,
+      username,
       clientId: config.clientId,
       clientSecret: config.clientSecret,
     });
