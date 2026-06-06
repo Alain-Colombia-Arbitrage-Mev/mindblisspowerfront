@@ -31,6 +31,10 @@ export async function POST(request) {
     config = getCognitoIdentityProviderConfig(process.env);
   } catch (error) {
     if (!hasAnyCognitoRuntimeConfig(process.env)) {
+      if (!isDemoEmailAllowed(process.env, email)) {
+        return NextResponse.json({ error: "No existe una cuenta demo con ese email." }, { status: 404 });
+      }
+
       const response = NextResponse.json({
         ok: true,
         mode: "demo",
@@ -222,4 +226,9 @@ function hasAnyCognitoRuntimeConfig(env) {
       env.COGNITO_DOMAIN ||
       env.COGNITO_REGION
   );
+}
+
+function isDemoEmailAllowed(env, email) {
+  const demoEmail = normalizeEmail(env.DEMO_USER_EMAIL);
+  return !demoEmail || email === demoEmail;
 }

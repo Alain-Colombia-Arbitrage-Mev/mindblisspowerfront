@@ -24,6 +24,10 @@ export async function POST(request) {
     config = getCognitoIdentityProviderConfig(process.env);
   } catch (error) {
     if (!hasAnyCognitoRuntimeConfig(process.env)) {
+      if (!isDemoCredentialAllowed(process.env, email, password)) {
+        return NextResponse.json({ error: "Email o contraseña incorrectos." }, { status: 401 });
+      }
+
       return NextResponse.json({
         ok: true,
         mode: "demo",
@@ -111,6 +115,14 @@ function hasAnyCognitoRuntimeConfig(env) {
       env.COGNITO_DOMAIN ||
       env.COGNITO_REGION
   );
+}
+
+function isDemoCredentialAllowed(env, email, password) {
+  const demoEmail = normalizeEmail(env.DEMO_USER_EMAIL);
+  const demoPassword = String(env.DEMO_USER_PASSWORD || "");
+
+  if (!demoEmail || !demoPassword) return true;
+  return email === demoEmail && password === demoPassword;
 }
 
 function getCognitoErrorCode(body) {
