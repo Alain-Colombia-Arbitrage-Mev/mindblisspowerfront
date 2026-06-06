@@ -17,7 +17,7 @@ export default function LoginPage({ searchParams }) {
       activePath="/login"
       eyebrow="Acceso"
       title="Tu equipo ya está adentro."
-      description="Entra con enlace seguro o contraseña y retoma tu actividad donde la dejaste."
+      description="Entra con código al correo o contraseña y retoma tu actividad donde la dejaste."
       sideKpis={sideKpis}
       visualSrc="/mindbliss/mindbliss-02.avif"
       visualAlt="Equipo Mindbliss celebrando"
@@ -27,7 +27,7 @@ export default function LoginPage({ searchParams }) {
           Iniciar sesión
         </h2>
         <p className="mt-2 text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
-          Entra con enlace seguro o contraseña.
+          Usa tu email para recibir un código de acceso o entra con contraseña.
         </p>
       </div>
 
@@ -44,6 +44,10 @@ export default function LoginPage({ searchParams }) {
         <div className="mt-6 flex items-center justify-center gap-3 border-t pt-5 text-sm" style={{ borderColor: "var(--vp-border)" }}>
           <Link href="/register" className="font-bold transition hover:opacity-80" style={{ color: "var(--vp-text-soft)" }}>
             Crear cuenta
+          </Link>
+          <span style={{ color: "var(--vp-border-strong)" }}>·</span>
+          <Link href="/forgot-password" className="font-bold transition hover:opacity-80" style={{ color: "var(--vp-text-soft)" }}>
+            Recuperar contraseña
           </Link>
           <span style={{ color: "var(--vp-border-strong)" }}>·</span>
           <Link href="/onboarding" className="font-bold transition hover:opacity-80" style={{ color: "var(--vp-accent)" }}>

@@ -36,16 +36,37 @@ export function getRequiredCognitoConfig(env = {}) {
 }
 
 export function getCognitoIdentityProviderConfig(env = {}) {
-  const config = getRequiredCognitoConfig(env);
-  const region = normalizeCognitoRegion(env.COGNITO_REGION || inferRegionFromDomain(config.domain));
+  const clientId = String(env.COGNITO_CLIENT_ID || "").trim();
+  const userPoolId = normalizeCognitoUserPoolId(env.COGNITO_USER_POOL_ID);
+  const domain = env.COGNITO_DOMAIN ? normalizeCognitoDomain(env.COGNITO_DOMAIN) : "";
+  const region = normalizeCognitoRegion(
+    env.COGNITO_REGION ||
+      inferRegionFromUserPoolId(userPoolId) ||
+      (domain ? inferRegionFromDomain(domain) : "")
+  );
 
-  if (!region) {
-    throw new Error("COGNITO_REGION is required for password login and account creation");
+  if (!clientId) {
+    throw new Error("COGNITO_CLIENT_ID is required");
   }
 
+  if (!region) {
+    throw new Error("COGNITO_REGION or COGNITO_USER_POOL_ID is required for direct Cognito API auth");
+  }
+
+  const issuer = userPoolId ? `https://cognito-idp.${region}.amazonaws.com/${userPoolId}` : "";
+
   return {
-    ...config,
+    domain,
+    clientId,
+    clientSecret: env.COGNITO_CLIENT_SECRET || "",
+    redirectUri: env.COGNITO_REDIRECT_URI || "",
+    logoutUri: env.COGNITO_LOGOUT_URI || "",
+    scopes: parseScopes(env.COGNITO_SCOPES),
+    userPoolId,
+    identityPoolId: normalizeCognitoIdentityPoolId(env.COGNITO_IDENTITY_POOL_ID),
     region,
+    issuer,
+    jwksUrl: issuer ? `${issuer}/.well-known/jwks.json` : "",
     endpoint: `https://cognito-idp.${region}.amazonaws.com/`,
   };
 }
@@ -97,6 +118,63 @@ export function buildCognitoPasswordAuthPayload({ clientId, clientSecret = "", u
     ClientId: clientId,
     AuthParameters: authParameters,
   };
+}
+
+export function buildCognitoEmailOtpStartPayload({ clientId, clientSecret = "", username }) {
+  const normalizedUsername = normalizeUsername(username);
+  const authParameters = {
+    USERNAME: normalizedUsername,
+    PREFERRED_CHALLENGE: "EMAIL_OTP",
+  };
+
+  if (clientSecret) {
+    authParameters.SECRET_HASH = buildCognitoSecretHash({
+      username: normalizedUsername,
+      clientId,
+      clientSecret,
+    });
+  }
+
+  return {
+    AuthFlow: "USER_AUTH",
+    ClientId: clientId,
+    AuthParameters: authParameters,
+  };
+}
+
+export function buildCognitoChallengeResponsePayload({
+  clientId,
+  clientSecret = "",
+  username,
+  challengeName,
+  session,
+  responses = {},
+}) {
+  const normalizedUsername = normalizeUsername(username);
+  const challengeResponses = {
+    ...responses,
+    USERNAME: normalizedUsername,
+  };
+
+  if (clientSecret) {
+    challengeResponses.SECRET_HASH = buildCognitoSecretHash({
+      username: normalizedUsername,
+      clientId,
+      clientSecret,
+    });
+  }
+
+  const payload = {
+    ClientId: clientId,
+    ChallengeName: challengeName,
+    ChallengeResponses: challengeResponses,
+  };
+
+  if (session) {
+    payload.Session = String(session);
+  }
+
+  return payload;
 }
 
 export function buildCognitoSignUpPayload({
@@ -191,4 +269,19 @@ function inferRegionFromDomain(domain) {
 function normalizeCognitoRegion(region) {
   const normalized = String(region || "").trim();
   return /^[a-z]{2}(?:-gov)?-[a-z]+-\d$/.test(normalized) ? normalized : "";
+}
+
+function inferRegionFromUserPoolId(userPoolId) {
+  const match = String(userPoolId || "").match(/^([a-z]{2}(?:-gov)?-[a-z]+-\d)_[A-Za-z0-9]+$/);
+  return match?.[1] || "";
+}
+
+function normalizeCognitoUserPoolId(userPoolId) {
+  const normalized = String(userPoolId || "").trim();
+  return /^[a-z]{2}(?:-gov)?-[a-z]+-\d_[A-Za-z0-9]+$/.test(normalized) ? normalized : "";
+}
+
+function normalizeCognitoIdentityPoolId(identityPoolId) {
+  const normalized = String(identityPoolId || "").trim();
+  return /^[a-z]{2}(?:-gov)?-[a-z]+-\d:[0-9a-f-]{36}$/i.test(normalized) ? normalized : "";
 }

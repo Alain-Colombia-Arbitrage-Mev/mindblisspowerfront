@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 
 import { buildCognitoPasswordAuthPayload, getCognitoIdentityProviderConfig } from "@/lib/cognito";
+import {
+  buildDemoUser,
+  buildUserFromIdToken,
+  setCognitoSessionCookies,
+} from "@/lib/cognito-session";
 
 export const runtime = "nodejs";
 
@@ -18,7 +23,7 @@ export async function POST(request) {
   try {
     config = getCognitoIdentityProviderConfig(process.env);
   } catch (error) {
-    if (!process.env.COGNITO_DOMAIN && !process.env.COGNITO_CLIENT_ID) {
+    if (!hasAnyCognitoRuntimeConfig(process.env)) {
       return NextResponse.json({
         ok: true,
         mode: "demo",
@@ -70,13 +75,7 @@ export async function POST(request) {
     user: buildUserFromIdToken(tokens.IdToken, email),
   });
 
-  const accessMaxAge = Number(tokens.ExpiresIn || 3600);
-  setSessionCookie(response, "vp_access_token", tokens.AccessToken, requestUrl, accessMaxAge);
-  setSessionCookie(response, "vp_id_token", tokens.IdToken, requestUrl, accessMaxAge);
-
-  if (tokens.RefreshToken) {
-    setSessionCookie(response, "vp_refresh_token", tokens.RefreshToken, requestUrl, 60 * 60 * 24 * 30);
-  }
+  setCognitoSessionCookies(response, tokens, requestUrl);
 
   return response;
 }
@@ -104,16 +103,14 @@ function normalizeEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "";
 }
 
-function setSessionCookie(response, name, value, requestUrl, maxAge) {
-  if (!value) return;
-
-  response.cookies.set(name, value, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: requestUrl.protocol === "https:",
-    path: "/",
-    maxAge,
-  });
+function hasAnyCognitoRuntimeConfig(env) {
+  return Boolean(
+    env.COGNITO_CLIENT_ID ||
+      env.COGNITO_USER_POOL_ID ||
+      env.COGNITO_IDENTITY_POOL_ID ||
+      env.COGNITO_DOMAIN ||
+      env.COGNITO_REGION
+  );
 }
 
 function getCognitoErrorCode(body) {
@@ -162,48 +159,4 @@ function mapChallengeMessage(challengeName) {
   }
 
   return "Cognito requiere un paso adicional para completar el acceso.";
-}
-
-function buildUserFromIdToken(idToken, fallbackEmail) {
-  const claims = decodeJwtPayload(idToken);
-  const email = claims.email || fallbackEmail;
-  const name = claims.name || claims.given_name || email;
-  const id = claims.sub || `member-${Date.now()}`;
-
-  return {
-    id,
-    name,
-    email,
-    phone: claims.phone_number || "",
-    country: claims.address?.country || "",
-    company: "Mindbliss Power",
-    rank: "Miembro",
-    role: "user",
-    type: "user",
-    user_type: "DIRECT",
-    path: "member",
-  };
-}
-
-function decodeJwtPayload(token) {
-  try {
-    const payload = String(token).split(".")[1];
-    return JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
-  } catch {
-    return {};
-  }
-}
-
-function buildDemoUser(email) {
-  return {
-    id: `member-${email.replace(/[^a-z0-9]/gi, "_")}`,
-    name: "Miembro Mindbliss",
-    email,
-    company: "Mindbliss Power",
-    rank: "Miembro",
-    role: "user",
-    type: "user",
-    user_type: "DIRECT",
-    path: "member",
-  };
 }

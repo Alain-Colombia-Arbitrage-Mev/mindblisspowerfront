@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 
 import {
   buildCognitoAuthorizeUrl,
+  buildCognitoChallengeResponsePayload,
+  buildCognitoEmailOtpStartPayload,
   buildCognitoPasswordAuthPayload,
   buildCognitoLogoutUrl,
   buildCognitoSecretHash,
@@ -80,6 +82,25 @@ test("infers Cognito identity provider endpoint from hosted UI domain", () => {
   assert.equal(config.endpoint, "https://cognito-idp.us-east-1.amazonaws.com/");
 });
 
+test("builds Cognito identity provider config from user pool id without hosted UI domain", () => {
+  const config = getCognitoIdentityProviderConfig({
+    COGNITO_USER_POOL_ID: "us-east-1_8tLjOfPH1",
+    COGNITO_IDENTITY_POOL_ID: "us-east-1:3851d951-0dcb-487f-a418-b55de754df8c",
+    COGNITO_CLIENT_ID: "client-123",
+  });
+
+  assert.equal(config.domain, "");
+  assert.equal(config.region, "us-east-1");
+  assert.equal(config.userPoolId, "us-east-1_8tLjOfPH1");
+  assert.equal(config.identityPoolId, "us-east-1:3851d951-0dcb-487f-a418-b55de754df8c");
+  assert.equal(config.endpoint, "https://cognito-idp.us-east-1.amazonaws.com/");
+  assert.equal(config.issuer, "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_8tLjOfPH1");
+  assert.equal(
+    config.jwksUrl,
+    "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_8tLjOfPH1/.well-known/jwks.json"
+  );
+});
+
 test("builds USER_PASSWORD_AUTH payload with secret hash", () => {
   const payload = buildCognitoPasswordAuthPayload({
     clientId: "client-123",
@@ -94,6 +115,52 @@ test("builds USER_PASSWORD_AUTH payload with secret hash", () => {
   assert.equal(payload.AuthParameters.PASSWORD, "StrongPassword123!");
   assert.equal(
     payload.AuthParameters.SECRET_HASH,
+    buildCognitoSecretHash({
+      username: "miembro@mindbliss.test",
+      clientId: "client-123",
+      clientSecret: "secret-456",
+    })
+  );
+});
+
+test("builds USER_AUTH email OTP start payload with secret hash", () => {
+  const payload = buildCognitoEmailOtpStartPayload({
+    clientId: "client-123",
+    clientSecret: "secret-456",
+    username: "Miembro@Mindbliss.test",
+  });
+
+  assert.equal(payload.AuthFlow, "USER_AUTH");
+  assert.equal(payload.ClientId, "client-123");
+  assert.equal(payload.AuthParameters.USERNAME, "miembro@mindbliss.test");
+  assert.equal(payload.AuthParameters.PREFERRED_CHALLENGE, "EMAIL_OTP");
+  assert.equal(
+    payload.AuthParameters.SECRET_HASH,
+    buildCognitoSecretHash({
+      username: "miembro@mindbliss.test",
+      clientId: "client-123",
+      clientSecret: "secret-456",
+    })
+  );
+});
+
+test("builds EMAIL_OTP challenge response payload with secret hash", () => {
+  const payload = buildCognitoChallengeResponsePayload({
+    clientId: "client-123",
+    clientSecret: "secret-456",
+    username: "Miembro@Mindbliss.test",
+    challengeName: "EMAIL_OTP",
+    session: "session-token",
+    responses: { EMAIL_OTP_CODE: "123456" },
+  });
+
+  assert.equal(payload.ClientId, "client-123");
+  assert.equal(payload.ChallengeName, "EMAIL_OTP");
+  assert.equal(payload.Session, "session-token");
+  assert.equal(payload.ChallengeResponses.USERNAME, "miembro@mindbliss.test");
+  assert.equal(payload.ChallengeResponses.EMAIL_OTP_CODE, "123456");
+  assert.equal(
+    payload.ChallengeResponses.SECRET_HASH,
     buildCognitoSecretHash({
       username: "miembro@mindbliss.test",
       clientId: "client-123",
