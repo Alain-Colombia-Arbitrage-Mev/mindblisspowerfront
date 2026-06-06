@@ -55,7 +55,10 @@ const sections = [
   },
   {
     section: "FINANZAS",
-    items: [{ icon: Wallet, label: "Retiros", href: "/dashboard/withdrawals" }],
+    items: [
+      { icon: ShoppingBag, label: "Paquetes", href: "/dashboard/packages" },
+      { icon: Wallet, label: "Retiros", href: "/dashboard/withdrawals" },
+    ],
   },
   {
     section: "COMUNICACION",

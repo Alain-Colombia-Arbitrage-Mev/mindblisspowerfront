@@ -59,24 +59,32 @@ export async function GET() {
 
     const root = me[0];
 
-    // Subárbol descendente: 3 niveles bajo el miembro. Solo identidad,
+    // Subárbol descendente: 3 niveles bajo el miembro vía CTE recursivo por
+    // parent_id (el árbol es profundo: sin GiST sobre path). Solo identidad,
     // pierna y rango — sin métricas de volumen.
     const descendants = await sql`
+      WITH RECURSIVE sub AS (
+        SELECT a.id, a.parent_id, a.position, a.status, a.current_rank_id, a.person_id, 1 AS level
+          FROM mlm.affiliate a
+         WHERE a.parent_id = ${root.id}
+        UNION ALL
+        SELECT a.id, a.parent_id, a.position, a.status, a.current_rank_id, a.person_id, sub.level + 1
+          FROM mlm.affiliate a
+          JOIN sub ON a.parent_id = sub.id
+         WHERE sub.level < 3
+      )
       SELECT d.id,
              d.parent_id,
              d.position,
-             d.depth - ${root.depth} AS level,
+             d.level,
              dp.first_name || ' ' || split_part(dp.last_name, ' ', 1) AS display_name,
              dr.code    AS rank_code,
              dr.name_es AS rank_name,
              d.status
-        FROM mlm.affiliate me
-        JOIN mlm.affiliate d  ON d.path <@ me.path AND d.id <> me.id
+        FROM sub d
         JOIN mlm.person dp    ON dp.id = d.person_id
         LEFT JOIN mlm.rank dr ON dr.id = d.current_rank_id
-       WHERE me.id = ${root.id}
-         AND d.depth <= me.depth + 3
-       ORDER BY d.depth, d.position NULLS FIRST
+       ORDER BY d.level, d.position NULLS FIRST
        LIMIT 500`;
 
     return NextResponse.json({
