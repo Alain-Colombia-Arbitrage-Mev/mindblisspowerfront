@@ -19,8 +19,8 @@ export default function ReferralShareModal({ isOpen, onClose, code }) {
   const [copied, setCopied] = useState(null);
   const [sharing, setSharing] = useState(null);
 
-  const referralLink = `https://vicion.app/register?ref=${code}`;
-  const shareText = `Únete a mi red en Vicion usando mi código de referido: ${code}. ${referralLink}`;
+  const referralLink = `https://app.mindblisspower.com/register?ref=${code}`;
+  const shareText = `Únete a mi red en Mindbliss Power usando mi código de referido: ${code}. ${referralLink}`;
 
   const handleShare = (type) => {
     setSharing(type);

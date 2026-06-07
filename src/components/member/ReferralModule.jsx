@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ArrowRight, Check, Clock, Copy, RotateCw, Share2, Users } from 'lucide-react';
 import { motion } from 'framer-motion';
 import ReferralShareModal from './ReferralShareModal';
@@ -46,12 +46,27 @@ const buttonBase = {
 
 export default function ReferralModule() {
   const [referralCode, setReferralCode] = useState('823649');
+  const [referralLink, setReferralLink] = useState('https://app.mindblisspower.com/register?ref=823649');
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [generating, setGenerating] = useState(false);
 
-  const referralLink = `https://vicion.app/register?ref=${referralCode}`;
+  // Código real de referido desde RDS (mlm.affiliate.invitation_link).
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/member/referral')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled || !data?.code) return;
+        setReferralCode(data.code);
+        setReferralLink(data.link);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const metrics = useMemo(() => ({
     total: SIMULATED_REFERRALS.length,
@@ -71,10 +86,19 @@ export default function ReferralModule() {
     setTimeout(() => setLinkCopied(false), 2500);
   };
 
+  // Re-sincroniza el código real desde el servidor (es estable por afiliado).
   const generateCode = async () => {
     setGenerating(true);
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    setReferralCode(Math.floor(Math.random() * 900000 + 100000).toString());
+    try {
+      const response = await fetch('/api/member/referral');
+      const data = response.ok ? await response.json() : null;
+      if (data?.code) {
+        setReferralCode(data.code);
+        setReferralLink(data.link);
+      }
+    } catch {
+      // mantiene el código actual si falla
+    }
     setGenerating(false);
   };
 

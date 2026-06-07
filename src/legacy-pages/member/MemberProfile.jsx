@@ -36,7 +36,7 @@ const IDENTITY = {
 };
 
 const REFERRAL_CODE = '823649';
-const REFERRAL_URL = `https://vicion.app/register?ref=${REFERRAL_CODE}`;
+const REFERRAL_URL = `https://app.mindblisspower.com/register?ref=${REFERRAL_CODE}`;
 
 const surface = {
   background: 'var(--vp-surface)',
