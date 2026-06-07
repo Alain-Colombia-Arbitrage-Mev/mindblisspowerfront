@@ -24,7 +24,7 @@ export default function LegalDocumentManager() {
     const signature = legal.simulateSignature(contractId, {
       id: 'ADMIN-001',
       name: 'Admin User',
-      email: 'admin@vicion.app',
+      email: 'admin@mindblisspower.com',
     }, 'administrator');
 
     loadContracts();

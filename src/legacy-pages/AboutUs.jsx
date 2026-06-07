@@ -39,7 +39,7 @@ export default function AboutUs() {
       {/* ══ HERO ══════════════════════════════════════════════════════ */}
       <section className="pt-32 pb-0 bg-vicion-deep text-white relative overflow-hidden min-h-[72vh] flex items-end">
         <div className="absolute inset-0">
-          <img src={OFFICE_IMG} alt="Vicion Power" className="w-full h-full object-cover opacity-20" />
+          <img src={OFFICE_IMG} alt="Mindbliss Power" className="w-full h-full object-cover opacity-20" />
           <div className="absolute inset-0 bg-gradient-to-r from-vicion-deep via-vicion-deep/85 to-vicion-deep/60" />
           <div className="absolute inset-0 bg-gradient-to-t from-vicion-deep via-transparent to-transparent" />
         </div>
@@ -49,7 +49,7 @@ export default function AboutUs() {
             <h1 className="font-montserrat font-black text-5xl sm:text-6xl lg:text-7xl mb-6 leading-tight">
               Somos{' '}
               <span style={{ background: 'linear-gradient(90deg,#3b82f6,#60a5fa)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                Vicion Power
+                Mindbliss Power
               </span>
             </h1>
             <p className="text-white/65 text-xl leading-relaxed max-w-2xl">
@@ -78,7 +78,7 @@ export default function AboutUs() {
                 Una visión que une estructura, comunidad y proyección
               </h2>
               <p className="text-gray-500 text-lg leading-relaxed">
-                Vicion Power surge con el propósito de crear una plataforma más clara, más sólida y más escalable para personas que buscan avanzar dentro de una experiencia organizada. Nuestra propuesta integra tecnología, participación, beneficios y desarrollo humano en una sola dirección.
+                Mindbliss Power surge con el propósito de crear una plataforma más clara, más sólida y más escalable para personas que buscan avanzar dentro de una experiencia organizada. Nuestra propuesta integra tecnología, participación, beneficios y desarrollo humano en una sola dirección.
               </p>
             </motion.div>
             <motion.div variants={fadeUp} initial="hidden" whileInView="visible" viewport={{ once: true }} transition={{ duration: 0.7, delay: 0.15 }}>
@@ -97,7 +97,7 @@ export default function AboutUs() {
           <motion.div variants={fadeUp} initial="hidden" whileInView="visible" viewport={{ once: true }} transition={{ duration: 0.7 }}
             className="text-center mb-16">
             <p className="text-vicion-blue font-montserrat font-bold text-xs tracking-[0.25em] uppercase mb-3">El Ecosistema</p>
-            <h2 className="font-montserrat font-black text-4xl sm:text-5xl text-vicion-deep">Cómo funciona Vicion Power</h2>
+            <h2 className="font-montserrat font-black text-4xl sm:text-5xl text-vicion-deep">Cómo funciona Mindbliss Power</h2>
           </motion.div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {[
@@ -195,7 +195,7 @@ export default function AboutUs() {
               <p className="text-vicion-blue font-montserrat font-bold text-xs tracking-[0.25em] uppercase mb-4">Tu Membresía</p>
               <h2 className="font-montserrat font-black text-4xl sm:text-5xl text-vicion-deep mb-6 leading-tight">Vicion Care Plan</h2>
               <p className="text-gray-600 text-lg leading-relaxed mb-6">
-                Es el punto de entrada al ecosistema. Un plan integral que te proporciona estructura, beneficios inmediatos y acceso a todas las herramientas para crecer dentro de Vicion Power.
+                Es el punto de entrada al ecosistema. Un plan integral que te proporciona estructura, beneficios inmediatos y acceso a todas las herramientas para crecer dentro de Mindbliss Power.
               </p>
               <div className="space-y-3 mb-8">
                 {[
@@ -221,7 +221,7 @@ export default function AboutUs() {
               <div>
                 <Award size={64} className="mx-auto mb-4" />
                 <h3 className="font-montserrat font-bold text-2xl mb-2">Tu Membresía</h3>
-                <p className="text-white/80 text-sm">Acceso completo al ecosistema Vicion Power</p>
+                <p className="text-white/80 text-sm">Acceso completo al ecosistema Mindbliss Power</p>
               </div>
             </motion.div>
           </div>
@@ -313,7 +313,7 @@ export default function AboutUs() {
             </span>
           </h2>
           <p className="text-white/55 text-lg mb-10 max-w-xl mx-auto leading-relaxed">
-           En Vicion Power creemos que el crecimiento real no se improvisa. Se diseña, se ordena y se sostiene con visión.
+           En Mindbliss Power creemos que el crecimiento real no se improvisa. Se diseña, se ordena y se sostiene con visión.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link to="/participar"

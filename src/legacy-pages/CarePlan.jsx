@@ -112,7 +112,7 @@ export default function CarePlan() {
             <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} transition={{ duration: 0.7, delay: 0.15 }}
               variants={fadeUp} className="space-y-8">
               <p className="text-lg text-gray-700 leading-relaxed">
-                Vicion Care Plan es la propuesta central del ecosistema Vicion Power.
+                Vicion Care Plan es la propuesta central del ecosistema Mindbliss Power.
               </p>
               <p className="text-lg text-gray-700 leading-relaxed">
                 Está concebido para quienes buscan una participación más clara, más estable y más sostenida dentro de un entorno con visión de largo plazo.

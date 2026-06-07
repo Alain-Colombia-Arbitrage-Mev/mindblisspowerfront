@@ -23,7 +23,7 @@ export default function PoliticaDeUso() {
 
           <motion.p initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.9, delay: 0.2 }}
             className="text-lg sm:text-xl text-white/85 leading-relaxed max-w-3xl mx-auto">
-            Directrices de conducta y uso responsable de la plataforma Vicion Power.
+            Directrices de conducta y uso responsable de la plataforma Mindbliss Power.
           </motion.p>
         </div>
       </section>
@@ -37,7 +37,7 @@ export default function PoliticaDeUso() {
             <div>
               <h2 className="text-2xl font-bold text-vicion-deep mb-4">1. Aceptación de Términos</h2>
               <p className="text-gray-700 leading-relaxed">
-                Al acceder y utilizar la plataforma Vicion Power, aceptas esta Política de Uso en su totalidad. Si no estás de acuerdo con alguno de los términos, no debes utilizar la plataforma.
+                Al acceder y utilizar la plataforma Mindbliss Power, aceptas esta Política de Uso en su totalidad. Si no estás de acuerdo con alguno de los términos, no debes utilizar la plataforma.
               </p>
             </div>
 
@@ -50,7 +50,7 @@ export default function PoliticaDeUso() {
                 {[
                   'Utilizar la plataforma de manera legal y ética',
                   'Proporcionar información verídica durante el registro',
-                  'Respetar la propiedad intelectual de Vicion Power',
+                  'Respetar la propiedad intelectual de Mindbliss Power',
                   'No interferir con el funcionamiento de la plataforma',
                   'Mantener la confidencialidad de credenciales de acceso',
                   'Cumplir con todas las políticas y normativas internas'
@@ -82,14 +82,14 @@ export default function PoliticaDeUso() {
             <div>
               <h2 className="text-2xl font-bold text-vicion-deep mb-4">4. Responsabilidad del Usuario</h2>
               <p className="text-gray-700 leading-relaxed">
-                Cada usuario es responsable de sus acciones dentro de la plataforma. Vicion Power se reserva el derecho de suspender o terminar cuentas que incumplan esta política.
+                Cada usuario es responsable de sus acciones dentro de la plataforma. Mindbliss Power se reserva el derecho de suspender o terminar cuentas que incumplan esta política.
               </p>
             </div>
 
             <div>
               <h2 className="text-2xl font-bold text-vicion-deep mb-4">5. Modificaciones</h2>
               <p className="text-gray-700 leading-relaxed">
-                Vicion Power se reserva el derecho de modificar esta Política de Uso en cualquier momento. Las modificaciones serán efectivas inmediatamente después de su publicación.
+                Mindbliss Power se reserva el derecho de modificar esta Política de Uso en cualquier momento. Las modificaciones serán efectivas inmediatamente después de su publicación.
               </p>
             </div>
 

@@ -99,7 +99,7 @@ export default function Home() {
 
               <motion.p initial="hidden" whileInView="visible" viewport={{ once: true }} transition={{ duration: 0.7, delay: 0.1 }}
                 variants={fadeUp} className="text-lg text-vicion-deep leading-relaxed font-semibold">
-                Vicion Power decidió evolucionar.
+                Mindbliss Power decidió evolucionar.
               </motion.p>
 
               <motion.p initial="hidden" whileInView="visible" viewport={{ once: true }} transition={{ duration: 0.7, delay: 0.2 }}

@@ -22,27 +22,27 @@ const LEGAL_CONTENT = {
   'aviso-legal': {
     title: 'Aviso Legal',
     sections: [
-      { heading: '1. Identificación y Naturaleza', content: 'Vicion Power es una plataforma digital diseñada para la participación en un ecosistema de servicios financieros, educativos y de desarrollo comunitario. La plataforma es operada bajo regulaciones internacionales y se adhiere a estándares de transparencia, protección de datos y cumplimiento normativo.' },
-      { heading: '2. Aceptación de Términos', content: 'Al acceder y utilizar la plataforma Vicion Power, aceptas integralmente este aviso legal y todos los términos, condiciones y políticas asociadas. Si no estás de acuerdo con alguna parte, no debes utilizar la plataforma.' },
+      { heading: '1. Identificación y Naturaleza', content: 'Mindbliss Power es una plataforma digital diseñada para la participación en un ecosistema de servicios financieros, educativos y de desarrollo comunitario. La plataforma es operada bajo regulaciones internacionales y se adhiere a estándares de transparencia, protección de datos y cumplimiento normativo.' },
+      { heading: '2. Aceptación de Términos', content: 'Al acceder y utilizar la plataforma Mindbliss Power, aceptas integralmente este aviso legal y todos los términos, condiciones y políticas asociadas. Si no estás de acuerdo con alguna parte, no debes utilizar la plataforma.' },
       { heading: '3. Uso Permitido y Restricciones', content: 'La plataforma está destinada exclusivamente a uso legítimo y legal. Los usuarios se comprometen a no utilizar la plataforma para actividades ilegales o fraudulentas, no acceder sin autorización a sistemas o datos de terceros, no distribuir malware o contenido nocivo, no interferir con la operación normal de la plataforma, y cumplir con todas las leyes aplicables.' },
-      { heading: '4. Propiedad Intelectual', content: 'Todo el contenido de la plataforma, incluyendo texto, gráficos, logos, imágenes, software y bases de datos, es propiedad de Vicion Power o sus proveedores autorizados. Sin la autorización expresa escrita de Vicion Power, los usuarios no pueden reproducir, distribuir, modificar o transmitir cualquier material de la plataforma.' },
-      { heading: '5. Limitación de Responsabilidad', content: 'Vicion Power proporciona la plataforma "tal como está" sin garantías de ningún tipo, ni expresas ni implícitas. En la medida máxima permitida por la ley, Vicion Power no será responsable por daños indirectos, incidentales, especiales, consecuentes o punitivos.' },
+      { heading: '4. Propiedad Intelectual', content: 'Todo el contenido de la plataforma, incluyendo texto, gráficos, logos, imágenes, software y bases de datos, es propiedad de Mindbliss Power o sus proveedores autorizados. Sin la autorización expresa escrita de Mindbliss Power, los usuarios no pueden reproducir, distribuir, modificar o transmitir cualquier material de la plataforma.' },
+      { heading: '5. Limitación de Responsabilidad', content: 'Mindbliss Power proporciona la plataforma "tal como está" sin garantías de ningún tipo, ni expresas ni implícitas. En la medida máxima permitida por la ley, Mindbliss Power no será responsable por daños indirectos, incidentales, especiales, consecuentes o punitivos.' },
     ]
   },
   'terminos': {
     title: 'Términos y Condiciones',
     sections: [
-      { heading: '1. Definiciones', content: '"Plataforma": La aplicación web y servicios digitales operados por Vicion Power. "Usuario": Cualquier persona que accede y utiliza la Plataforma. "Participación": La activación formal dentro del ecosistema mediante la aceptación de estos términos.' },
+      { heading: '1. Definiciones', content: '"Plataforma": La aplicación web y servicios digitales operados por Mindbliss Power. "Usuario": Cualquier persona que accede y utiliza la Plataforma. "Participación": La activación formal dentro del ecosistema mediante la aceptación de estos términos.' },
       { heading: '2. Elegibilidad', content: 'Para utilizar la Plataforma debes: Tener al menos 18 años de edad, tener capacidad legal para celebrar un contrato vinculante, no estar restringido por ninguna ley o regulación, proporcionar información precisa y completa en tu registro, y mantener actualizada tu información.' },
       { heading: '3. Registro de Cuenta', content: 'Al registrarte eres responsable de mantener la confidencialidad de tus credenciales, notificar inmediatamente de acceso no autorizado, ser responsable de toda actividad en tu cuenta, y proporcionar información exacta y actualizada.' },
       { heading: '4. Participación Inicial', content: 'La Participación requiere: Aceptación formal de todos los términos, realización de una activación inicial mediante pago, cumplimiento de procedimientos de verificación de identidad (KYC/AML), y confirmación de comprensión de riesgos.' },
-      { heading: '5. Naturaleza No Garantizada de Beneficios', content: 'Los usuarios reconocen que los beneficios proyectados no están garantizados, dependen del desarrollo del ecosistema, Vicion Power no ofrece garantía de capital o retorno, y los escenarios simulados son proyecciones basadas en supuestos.' },
+      { heading: '5. Naturaleza No Garantizada de Beneficios', content: 'Los usuarios reconocen que los beneficios proyectados no están garantizados, dependen del desarrollo del ecosistema, Mindbliss Power no ofrece garantía de capital o retorno, y los escenarios simulados son proyecciones basadas en supuestos.' },
     ]
   },
   'privacidad': {
     title: 'Política de Privacidad',
     sections: [
-      { heading: '1. Introducción', content: 'Vicion Power está comprometida con la protección de tu privacidad. Esta Política de Privacidad describe cómo recopilamos, utilizamos, almacenamos y protegemos tu información personal cuando utilizas la Plataforma.' },
+      { heading: '1. Introducción', content: 'Mindbliss Power está comprometida con la protección de tu privacidad. Esta Política de Privacidad describe cómo recopilamos, utilizamos, almacenamos y protegemos tu información personal cuando utilizas la Plataforma.' },
       { heading: '2. Información que Recopilamos', content: 'Recopilamos: Información de Registro (nombre, email, teléfono, identificación, dirección, información bancaria). Información de Navegación (IP, tipo de navegador, páginas visitadas, geolocalización). Información de Participación (nivel, historial de transacciones, comunicaciones con soporte, datos de desempeño).' },
       { heading: '3. Uso de Información', content: 'Utilizamos tu información para: Crear y mantener tu cuenta, procesar transacciones, proporcionar soporte, verificar identidad, enviar comunicaciones, mejorar la plataforma, detectar fraude, y cumplir obligaciones legales.' },
       { heading: '4. Protección de Datos', content: 'Implementamos medidas de seguridad incluyendo: Encriptación de datos, acceso restringido, auditorías de seguridad, protocolos de autenticación robustos, y monitoreo de acceso no autorizado.' },
@@ -62,29 +62,29 @@ const LEGAL_CONTENT = {
   'aml-kyc': {
     title: 'AML / KYC – Cumplimiento Regulatorio',
     sections: [
-      { heading: '1. Marco Regulatorio', content: 'Vicion Power opera de conformidad con estándares internacionales incluyendo: Recomendaciones del GAFI, regulaciones anti-lavado de dinero (AML), políticas de conozca a su cliente (KYC), procedimientos de debida diligencia mejorada (EDD), y verificación de listas de sanciones.' },
+      { heading: '1. Marco Regulatorio', content: 'Mindbliss Power opera de conformidad con estándares internacionales incluyendo: Recomendaciones del GAFI, regulaciones anti-lavado de dinero (AML), políticas de conozca a su cliente (KYC), procedimientos de debida diligencia mejorada (EDD), y verificación de listas de sanciones.' },
       { heading: '2. Procedimiento KYC', content: 'Todos los usuarios deben completar el proceso KYC antes de participar activamente. Este incluye: Nivel 1 (Verificación Básica), Nivel 2 (Verificación Mejorada), y Nivel 3 (Debida Diligencia Mejorada).' },
-      { heading: '3. Procedimiento AML', content: 'Vicion Power implementa controles robustos: Monitoreo de Transacciones, Reportes de Transacciones Sospechosas (SAR), Verificación de Listas OFAC, Umbrales de Alerta, y Análisis de Riesgo continuo.' },
+      { heading: '3. Procedimiento AML', content: 'Mindbliss Power implementa controles robustos: Monitoreo de Transacciones, Reportes de Transacciones Sospechosas (SAR), Verificación de Listas OFAC, Umbrales de Alerta, y Análisis de Riesgo continuo.' },
       { heading: '4. Fuente de Fondos', content: 'Los usuarios deben proporcionar documentación verificable de la fuente de fondos incluyendo: Extractos bancarios, certificados de ingresos, documentos de herencia, registros de ventas de activos, y otros documentos relevantes.' },
-      { heading: '5. Listas de Control Sancionadas', content: 'Vicion Power verifica regularmente contra: Lista OFAC, listas de la Unión Europea, listados de Naciones Unidas, listas de países sancionados, y bases de datos de personas políticamente expuestas (PEP).' },
+      { heading: '5. Listas de Control Sancionadas', content: 'Mindbliss Power verifica regularmente contra: Lista OFAC, listas de la Unión Europea, listados de Naciones Unidas, listas de países sancionados, y bases de datos de personas políticamente expuestas (PEP).' },
     ]
   },
   'politica-uso': {
     title: 'Política de Uso',
     sections: [
-      { heading: '1. Aceptación de Términos', content: 'Al acceder y utilizar la plataforma Vicion Power, aceptas esta Política de Uso en su totalidad. Si no estás de acuerdo con alguno de los términos, no debes utilizar la plataforma.' },
+      { heading: '1. Aceptación de Términos', content: 'Al acceder y utilizar la plataforma Mindbliss Power, aceptas esta Política de Uso en su totalidad. Si no estás de acuerdo con alguno de los términos, no debes utilizar la plataforma.' },
       { heading: '2. Conducta de Usuarios', content: 'Los usuarios se comprometen a: Utilizar la plataforma de manera legal y ética, proporcionar información verídica, respetar la propiedad intelectual, no interferir con la plataforma, mantener confidencialidad de credenciales, y cumplir con políticas internas.' },
       { heading: '3. Prohibiciones Expresas', content: 'Se prohíbe: Actividades ilícitas o fraudulentas, compartir credenciales, realizar operaciones no autorizadas, acosar a otros usuarios, publicar contenido ilegal, e intentar eludir medidas de seguridad.' },
-      { heading: '4. Responsabilidad del Usuario', content: 'Cada usuario es responsable de sus acciones dentro de la plataforma. Vicion Power se reserva el derecho de suspender o terminar cuentas que incumplan esta política.' },
-      { heading: '5. Modificaciones', content: 'Vicion Power se reserva el derecho de modificar esta Política en cualquier momento. Las modificaciones serán efectivas inmediatamente después de su publicación.' },
+      { heading: '4. Responsabilidad del Usuario', content: 'Cada usuario es responsable de sus acciones dentro de la plataforma. Mindbliss Power se reserva el derecho de suspender o terminar cuentas que incumplan esta política.' },
+      { heading: '5. Modificaciones', content: 'Mindbliss Power se reserva el derecho de modificar esta Política en cualquier momento. Las modificaciones serán efectivas inmediatamente después de su publicación.' },
     ]
   },
   'codigo-conducta': {
     title: 'Código de Conducta',
     sections: [
       { heading: '1. Principios Fundamentales', content: 'El Código se fundamenta en: Integridad (actúa con honestidad), Responsabilidad (asume responsabilidad), Respeto (trata con dignidad), Cumplimiento (adhiere a leyes), y Diligencia (trabajo profesional).' },
-      { heading: '2. Comunicación Responsable', content: 'Debes comunicar responsablemente sobre Vicion Power: Proporciona información precisa, no prometas resultados garantizados, presenta contexto completo incluyendo riesgos, utiliza materiales oficiales, y nunca hagas afirmaciones falsas.' },
-      { heading: '3. Respeto por Información Oficial', content: 'Todos los participantes deben: Reconocer a Vicion Power como única fuente autorizada, no producir información no aprobada, respetar comunicaciones oficiales, corregir información incorrecta, y contactar al equipo sobre dudas.' },
+      { heading: '2. Comunicación Responsable', content: 'Debes comunicar responsablemente sobre Mindbliss Power: Proporciona información precisa, no prometas resultados garantizados, presenta contexto completo incluyendo riesgos, utiliza materiales oficiales, y nunca hagas afirmaciones falsas.' },
+      { heading: '3. Respeto por Información Oficial', content: 'Todos los participantes deben: Reconocer a Mindbliss Power como única fuente autorizada, no producir información no aprobada, respetar comunicaciones oficiales, corregir información incorrecta, y contactar al equipo sobre dudas.' },
       { heading: '4. Conducta Dentro del Ecosistema', content: 'Debes mantener conducta profesional y ética: Trata a otros con respeto, no hagas afirmaciones discriminatorias, resuelve conflictos profesionalmente, reporta conducta inapropiada, y participa activamente.' },
       { heading: '5. Prohibiciones Explícitas', content: 'Se prohíbe: Fraude, manipulación, discriminación, acoso, actividades ilegales, cibercrimen, lavado de dinero, y financiamiento del terrorismo.' },
     ]
@@ -92,9 +92,9 @@ const LEGAL_CONTENT = {
   'transparencia': {
     title: 'Transparencia y Cumplimiento',
     sections: [
-      { heading: 'Estructura del Ecosistema', content: 'Vicion Power opera como un ecosistema integrado con: Infraestructura tecnológica descentralizada, operación activa con ejecución continua, y marco regulatorio que guía operaciones.' },
+      { heading: 'Estructura del Ecosistema', content: 'Mindbliss Power opera como un ecosistema integrado con: Infraestructura tecnológica descentralizada, operación activa con ejecución continua, y marco regulatorio que guía operaciones.' },
       { heading: 'Naturaleza del Modelo', content: 'Los participantes acceden a beneficios basados en su nivel de participación y actividad. El modelo incentiva crecimiento mediante acceso progresivo a servicios. Todos los beneficios mostrados son estimaciones sujetas a evolución del ecosistema.' },
-      { heading: 'Proceso Regulatorio', content: 'Vicion Power opera bajo marco de cumplimiento activo en proceso de fortalecer posición regulatoria. Implementa: Cumplimiento activo, comunicación con autoridades, obtención de certificaciones, y auditorías periódicas.' },
+      { heading: 'Proceso Regulatorio', content: 'Mindbliss Power opera bajo marco de cumplimiento activo en proceso de fortalecer posición regulatoria. Implementa: Cumplimiento activo, comunicación con autoridades, obtención de certificaciones, y auditorías periódicas.' },
       { heading: 'Políticas AML/KYC', content: 'Implementamos procedimientos: Verificación de identidad obligatoria, verificación de origen de fondos, monitoreo continuo de actividades, y reportes de actividades sospechosas a autoridades.' },
       { heading: 'Gestión de Riesgos', content: 'Identificamos y manejamos: Riesgo de mercado, riesgo operacional, riesgo regulatorio, riesgo de fraude, y riesgo de liquidez mediante planificación continua.' },
     ]
@@ -107,7 +107,7 @@ const LEGAL_CONTENT = {
 
 Entre:
 
-VICION POWER INC, sociedad constituida bajo las leyes del Estado de Massachusetts, Estados Unidos de América, representada por su Presidente, el Sr. GABRIEL RAMON GARCIA LUCERO, en adelante la "COMPAÑÍA";
+MINDBLISS POWER INC, sociedad constituida bajo las leyes del Estado de Massachusetts, Estados Unidos de América, representada por su Presidente, el Sr. GABRIEL RAMON GARCIA LUCERO, en adelante la "COMPAÑÍA";
 
 y
 
@@ -370,7 +370,7 @@ Contrato Activo y Validado
 
 ---
 
-"Este contrato ha sido generado automáticamente y validado dentro del sistema de VICION POWER INC, constituyendo un acuerdo legal entre las partes."`,
+"Este contrato ha sido generado automáticamente y validado dentro del sistema de MINDBLISS POWER INC, constituyendo un acuerdo legal entre las partes."`,
   },
 };
 
@@ -401,7 +401,7 @@ export default function MemberLegalCenter() {
         <div style={{ maxWidth: 1400, margin: '0 auto' }}>
           <p style={{ color: 'rgba(59,130,246,0.5)', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '2px', margin: '0 0 8px 0' }}>Control Personal</p>
           <h1 style={{ color: 'white', fontSize: 28, fontWeight: 900, margin: '0 0 4px 0', letterSpacing: '-0.5px' }}>Centro Legal</h1>
-          <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, margin: 0 }}>Documentos legales, términos y políticas del ecosistema Vicion Power</p>
+          <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, margin: 0 }}>Documentos legales, términos y políticas del ecosistema Mindbliss Power</p>
         </div>
       </motion.div>
 
@@ -606,7 +606,7 @@ export default function MemberLegalCenter() {
                         Representación Legal
                       </p>
                       <p style={{ color: '#E2E8F0', fontSize: 11, fontWeight: 700, margin: '0 0 2px 0', letterSpacing: '0.2px' }}>
-                        VICION POWER INC
+                        MINDBLISS POWER INC
                       </p>
                       <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 10, margin: 0 }}>
                         Representado por Gabriel Ramón García Lucero
@@ -703,7 +703,7 @@ export default function MemberLegalCenter() {
 
                     <div style={{ padding: '16px 18px', borderRadius: 10, background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.18)' }}>
                       <p style={{ color: '#93C5FD', fontSize: 10, margin: 0, lineHeight: 1.6, fontWeight: 500 }}>
-                        "Este contrato ha sido generado automáticamente y validado dentro del sistema de VICION POWER INC, constituyendo un acuerdo legal entre las partes."
+                        "Este contrato ha sido generado automáticamente y validado dentro del sistema de MINDBLISS POWER INC, constituyendo un acuerdo legal entre las partes."
                       </p>
                     </div>
                   </div>
@@ -771,13 +771,13 @@ export default function MemberLegalCenter() {
 
                     {/* Vicion Signature */}
                     <div>
-                      <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 10, fontWeight: 700, margin: '0 0 12px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Vicion Power</p>
+                      <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 10, fontWeight: 700, margin: '0 0 12px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Mindbliss Power</p>
                       <div style={{
                         padding: '24px', borderRadius: 10,
                         background: 'rgba(124,58,237,0.05)', border: '1px solid rgba(124,58,237,0.18)',
                         minHeight: 60, display: 'flex', alignItems: 'center', justifyContent: 'center',
                       }}>
-                        <p style={{ fontFamily: 'cursive', fontSize: 20, color: '#7C3AED', margin: 0, fontWeight: 300 }}>Vicion Power</p>
+                        <p style={{ fontFamily: 'cursive', fontSize: 20, color: '#7C3AED', margin: 0, fontWeight: 300 }}>Mindbliss Power</p>
                       </div>
                       <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: 9, margin: '8px 0 0 0' }}>Autoridad certificante</p>
                     </div>

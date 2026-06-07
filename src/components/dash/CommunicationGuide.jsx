@@ -19,7 +19,7 @@ export default function CommunicationGuide() {
           Guía oficial de comunicación
         </h2>
         <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14, lineHeight: 1.7, margin: 0 }}>
-          Esta guía define el lenguaje permitido y prohibido dentro de Vicion Power. Su cumplimiento es obligatorio para mantener la integridad del ecosistema.
+          Esta guía define el lenguaje permitido y prohibido dentro de Mindbliss Power. Su cumplimiento es obligatorio para mantener la integridad del ecosistema.
         </p>
       </motion.div>
 
@@ -145,7 +145,7 @@ export default function CommunicationGuide() {
           Comprendo y acepto la guía de comunicación
         </p>
         <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, lineHeight: 1.6, margin: 0 }}>
-          Al participar en Vicion Power, confirmo que he leído esta guía, comprendo las reglas de comunicación y asumo la responsabilidad de cumplirlas. El sistema será monitoreado para garantizar la coherencia y protección legal del ecosistema.
+          Al participar en Mindbliss Power, confirmo que he leído esta guía, comprendo las reglas de comunicación y asumo la responsabilidad de cumplirlas. El sistema será monitoreado para garantizar la coherencia y protección legal del ecosistema.
         </p>
       </motion.div>
 

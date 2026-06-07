@@ -16,7 +16,7 @@ export default function CodigoConducta() {
           </motion.h1>
           <motion.p initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, delay: 0.2 }}
             className="text-lg text-white/80">
-            Marco legal y operativo del ecosistema Vicion Power
+            Marco legal y operativo del ecosistema Mindbliss Power
           </motion.p>
         </div>
       </section>
@@ -28,7 +28,7 @@ export default function CodigoConducta() {
             variants={fadeUp} className="prose prose-lg max-w-none text-gray-700">
 
             <h2 className="font-montserrat font-bold text-3xl text-vicion-deep mt-12 mb-6">1. Principios Fundamentales</h2>
-            <p>El Código de Conducta de Vicion Power se fundamenta en estos principios:</p>
+            <p>El Código de Conducta de Mindbliss Power se fundamenta en estos principios:</p>
             <ul className="list-disc pl-6 space-y-2">
               <li><strong>Integridad:</strong> Actúa con honestidad y transparencia en todas las interacciones</li>
               <li><strong>Responsabilidad:</strong> Asume responsabilidad por tus acciones y decisiones</li>
@@ -38,19 +38,19 @@ export default function CodigoConducta() {
             </ul>
 
             <h2 className="font-montserrat font-bold text-3xl text-vicion-deep mt-12 mb-6">2. Comunicación Responsable</h2>
-            <p>Los participantes deben comunicar sobre Vicion Power de manera responsable:</p>
+            <p>Los participantes deben comunicar sobre Mindbliss Power de manera responsable:</p>
             <ul className="list-disc pl-6 space-y-2">
               <li><strong>Veracidad:</strong> Proporciona información precisa y verificable sobre el ecosistema</li>
               <li><strong>No Exageración:</strong> No prometas resultados garantizados ni insinúes ganancias seguras</li>
               <li><strong>Contexto Completo:</strong> Presenta la información con contexto adecuado incluyendo riesgos</li>
-              <li><strong>Fuentes Oficiales:</strong> Utiliza materiales oficiales de Vicion Power cuando hables del ecosistema</li>
+              <li><strong>Fuentes Oficiales:</strong> Utiliza materiales oficiales de Mindbliss Power cuando hables del ecosistema</li>
               <li><strong>Prohibición de Falsedad:</strong> Nunca hagas afirmaciones falsas o engañosas</li>
             </ul>
 
             <h2 className="font-montserrat font-bold text-3xl text-vicion-deep mt-12 mb-6">3. Respeto por Información Oficial</h2>
             <p>Todos los participantes deben:</p>
             <ul className="list-disc pl-6 space-y-2">
-              <li>Reconocer a Vicion Power como la única fuente autorizada de información oficial</li>
+              <li>Reconocer a Mindbliss Power como la única fuente autorizada de información oficial</li>
               <li>No producir ni distribuir información sobre el ecosistema que no esté aprobada</li>
               <li>Respetar actualizaciones y comunicaciones oficiales</li>
               <li>Corregir información incorrecta si la esparcen o la ven esparcida</li>
@@ -58,7 +58,7 @@ export default function CodigoConducta() {
             </ul>
 
             <h2 className="font-montserrat font-bold text-3xl text-vicion-deep mt-12 mb-6">4. Coexistencia Material</h2>
-            <p>Cuando comuniques sobre Vicion Power:</p>
+            <p>Cuando comuniques sobre Mindbliss Power:</p>
             <ul className="list-disc pl-6 space-y-2">
               <li>Asegúrate de que todos los materiales sean precisos y coherentes con comunicaciones oficiales</li>
               <li>Si creas presentaciones, usa marcas registradas correctamente</li>
@@ -82,7 +82,7 @@ export default function CodigoConducta() {
             <ul className="list-disc pl-6 space-y-2">
               <li>Divulgar conflictos de intereses relevantes</li>
               <li>Recusarse de decisiones donde exista conflicto</li>
-              <li>No utilizar información de Vicion Power para beneficio personal indebido</li>
+              <li>No utilizar información de Mindbliss Power para beneficio personal indebido</li>
               <li>Mantener objetividad en evaluaciones de participantes o programas</li>
               <li>No permitir que intereses personales comprometan juicio profesional</li>
             </ul>
@@ -92,7 +92,7 @@ export default function CodigoConducta() {
             <ul className="list-disc pl-6 space-y-2">
               <li>Información personal de otros participantes</li>
               <li>Datos financieros y de transacciones</li>
-              <li>Información de negocios confidencial de Vicion Power</li>
+              <li>Información de negocios confidencial de Mindbliss Power</li>
               <li>Estrategias de desarrollo no publicadas</li>
               <li>Credenciales de acceso propias y de otros</li>
             </ul>
@@ -111,7 +111,7 @@ export default function CodigoConducta() {
             </ul>
 
             <h2 className="font-montserrat font-bold text-3xl text-vicion-deep mt-12 mb-6">9. Reportes y Denuncias</h2>
-            <p>Vicion Power alienta el reporte de conducta inapropiada:</p>
+            <p>Mindbliss Power alienta el reporte de conducta inapropiada:</p>
             <ul className="list-disc pl-6 space-y-2">
               <li>Reporta violaciones a través de canales designados</li>
               <li>Los reportes se investigarán de manera confidencial</li>
@@ -132,7 +132,7 @@ export default function CodigoConducta() {
             </ul>
 
             <h2 className="font-montserrat font-bold text-3xl text-vicion-deep mt-12 mb-6">11. Educación y Conciencia</h2>
-            <p>Vicion Power proporciona:</p>
+            <p>Mindbliss Power proporciona:</p>
             <ul className="list-disc pl-6 space-y-2">
               <li>Capacitación regular sobre este Código de Conducta</li>
               <li>Actualizaciones sobre cambios en políticas</li>
@@ -144,14 +144,14 @@ export default function CodigoConducta() {
             <p>Este Código se aplica a:</p>
             <ul className="list-disc pl-6 space-y-2">
               <li>Todos los participantes activos</li>
-              <li>Empleados y contratistas de Vicion Power</li>
+              <li>Empleados y contratistas de Mindbliss Power</li>
               <li>Comunicaciones públicas sobre el ecosistema</li>
-              <li>Interacciones dentro de canales de Vicion Power</li>
+              <li>Interacciones dentro de canales de Mindbliss Power</li>
               <li>Actividades privadas que afecten la reputación del ecosistema</li>
             </ul>
 
             <h2 className="font-montserrat font-bold text-3xl text-vicion-deep mt-12 mb-6">13. Enmiendas</h2>
-            <p>Vicion Power se reserva el derecho de enmendar este Código de Conducta en cualquier momento. Los cambios serán comunicados oficialmente. La continuación de participación constituye aceptación de cambios.</p>
+            <p>Mindbliss Power se reserva el derecho de enmendar este Código de Conducta en cualquier momento. Los cambios serán comunicados oficialmente. La continuación de participación constituye aceptación de cambios.</p>
 
             <p className="text-sm text-gray-500 mt-12 pt-6 border-t">
               Última actualización: {new Date().toLocaleDateString('es-ES')}

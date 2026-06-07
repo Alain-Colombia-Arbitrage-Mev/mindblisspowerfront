@@ -52,7 +52,7 @@ export default function State3Activation({ userId, onComplete }) {
           <Zap size={24} style={{ color: '#3b82f6' }} />
         </div>
         <h1 className="font-montserrat font-black text-3xl text-white mb-3">Activa tu participación</h1>
-        <p className="text-white/50 text-base max-w-xl mx-auto">Selecciona cómo deseas comenzar dentro del ecosistema Vicion Power</p>
+        <p className="text-white/50 text-base max-w-xl mx-auto">Selecciona cómo deseas comenzar dentro del ecosistema Mindbliss Power</p>
       </div>
 
       {success ? (

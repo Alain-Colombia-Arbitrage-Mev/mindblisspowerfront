@@ -6,10 +6,10 @@ import { useEffect, useState } from "react";
 const STORAGE_KEY = "vp-theme";
 
 export default function ThemeToggle({ compact = false }) {
-  const [theme, setTheme] = useState("light");
+  const [theme, setTheme] = useState("dark");
 
   useEffect(() => {
-    const storedTheme = localStorage.getItem(STORAGE_KEY) || "light";
+    const storedTheme = localStorage.getItem(STORAGE_KEY) || "dark";
     applyTheme(storedTheme);
     setTheme(storedTheme);
   }, []);

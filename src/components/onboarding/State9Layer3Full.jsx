@@ -41,7 +41,7 @@ export default function State9Layer3Full({ userId, onDashboardReady }) {
           </span>
         </h1>
         <p className="text-white/50 text-base max-w-xl mx-auto">
-          Tu cuenta está lista. Accede a todos los módulos y comienza tu construcción dentro de Vicion Power.
+          Tu cuenta está lista. Accede a todos los módulos y comienza tu construcción dentro de Mindbliss Power.
         </p>
       </div>
 

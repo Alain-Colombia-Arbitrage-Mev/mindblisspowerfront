@@ -16,7 +16,7 @@ export default function Privacidad() {
           </motion.h1>
           <motion.p initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, delay: 0.2 }}
             className="text-lg text-white/80">
-            Marco legal y operativo del ecosistema Vicion Power
+            Marco legal y operativo del ecosistema Mindbliss Power
           </motion.p>
         </div>
       </section>
@@ -28,7 +28,7 @@ export default function Privacidad() {
             variants={fadeUp} className="prose prose-lg max-w-none text-gray-700">
 
             <h2 className="font-montserrat font-bold text-3xl text-vicion-deep mt-12 mb-6">1. Introducción</h2>
-            <p>Vicion Power está comprometida con la protección de tu privacidad. Esta Política de Privacidad describe cómo recopilamos, utilizamos, almacenamos y protegemos tu información personal cuando utilizas la Plataforma.</p>
+            <p>Mindbliss Power está comprometida con la protección de tu privacidad. Esta Política de Privacidad describe cómo recopilamos, utilizamos, almacenamos y protegemos tu información personal cuando utilizas la Plataforma.</p>
 
             <h2 className="font-montserrat font-bold text-3xl text-vicion-deep mt-12 mb-6">2. Información que Recopilamos</h2>
             <p><strong>Información de Registro:</strong></p>
@@ -72,7 +72,7 @@ export default function Privacidad() {
             </ul>
 
             <h2 className="font-montserrat font-bold text-3xl text-vicion-deep mt-12 mb-6">4. Protección de Datos</h2>
-            <p>Vicion Power implementa medidas de seguridad técnicas y administrativas para proteger tu información, incluyendo:</p>
+            <p>Mindbliss Power implementa medidas de seguridad técnicas y administrativas para proteger tu información, incluyendo:</p>
             <ul className="list-disc pl-6 space-y-2">
               <li>Encriptación de datos en tránsito y en reposo</li>
               <li>Acceso restringido a información personal</li>
@@ -82,7 +82,7 @@ export default function Privacidad() {
             </ul>
 
             <h2 className="font-montserrat font-bold text-3xl text-vicion-deep mt-12 mb-6">5. Compartir Información</h2>
-            <p>Vicion Power puede compartir tu información con:</p>
+            <p>Mindbliss Power puede compartir tu información con:</p>
             <ul className="list-disc pl-6 space-y-2">
               <li>Proveedores de servicios que nos ayudan a operar la Plataforma</li>
               <li>Autoridades regulatorias cuando sea requerido por ley</li>
@@ -119,10 +119,10 @@ export default function Privacidad() {
             <p>La Plataforma no está dirigida a menores de 18 años. Si descubrimos que hemos recopilado información de un menor, la eliminaremos inmediatamente. Los padres o tutores que crean que su menor ha proporcionado información deben contactarnos inmediatamente.</p>
 
             <h2 className="font-montserrat font-bold text-3xl text-vicion-deep mt-12 mb-6">10. Cambios en esta Política</h2>
-            <p>Vicion Power se reserva el derecho de actualizar esta Política de Privacidad en cualquier momento. Los cambios serán publicados con una fecha de última actualización. Tu uso continuado de la Plataforma después de cambios constituye aceptación de la política actualizada.</p>
+            <p>Mindbliss Power se reserva el derecho de actualizar esta Política de Privacidad en cualquier momento. Los cambios serán publicados con una fecha de última actualización. Tu uso continuado de la Plataforma después de cambios constituye aceptación de la política actualizada.</p>
 
             <h2 className="font-montserrat font-bold text-3xl text-vicion-deep mt-12 mb-6">11. Contacto</h2>
-            <p>Para preguntas sobre privacidad o para ejercer tus derechos, contacta a nuestro equipo de protección de datos a través de los canales oficiales de Vicion Power.</p>
+            <p>Para preguntas sobre privacidad o para ejercer tus derechos, contacta a nuestro equipo de protección de datos a través de los canales oficiales de Mindbliss Power.</p>
 
             <p className="text-sm text-gray-500 mt-12 pt-6 border-t">
               Última actualización: {new Date().toLocaleDateString('es-ES')}

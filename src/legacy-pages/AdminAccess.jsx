@@ -225,7 +225,7 @@ export default function AdminAccess() {
                   color: 'rgba(255,255,255,0.4)',
                   margin: '8px 0 0 0',
                   fontWeight: 300
-                }}>Portal Administrativo Vicion Power</p>
+                }}>Portal Administrativo Mindbliss Power</p>
               </motion.div>
 
               <motion.div variants={fadeUp} className="space-y-4 mb-12">

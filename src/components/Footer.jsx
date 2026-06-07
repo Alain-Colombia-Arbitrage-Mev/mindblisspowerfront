@@ -10,7 +10,7 @@ export default function Footer() {
           {/* Brand */}
           <div className="lg:col-span-1">
             <div className="flex items-center gap-3 mb-4">
-              <img src={LOGO_URL} alt="Vicion Power" className="h-10 w-10 object-contain" />
+              <img src={LOGO_URL} alt="Mindbliss Power" className="h-10 w-10 object-contain" />
               <span className="font-display text-lg font-bold text-foreground">
                 VICION <span className="text-primary">POWER</span>
               </span>
@@ -66,13 +66,13 @@ export default function Footer() {
             <Link to="/compliance" className="text-sm text-primary font-semibold hover:text-blue-400 transition-colors inline-block">Transparencia →</Link>
           </div>
           <p className="text-xs text-muted-foreground leading-relaxed max-w-2xl">
-            Vicion Power opera bajo estándares internacionales de cumplimiento y en procesos activos de adecuación regulatoria.
+            Mindbliss Power opera bajo estándares internacionales de cumplimiento y en procesos activos de adecuación regulatoria.
           </p>
         </div>
 
         <div className="mt-12 pt-8 border-t border-border/50 flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-xs text-muted-foreground">
-            © {new Date().getFullYear()} Vicion Power. All rights reserved.
+            © {new Date().getFullYear()} Mindbliss Power. All rights reserved.
           </p>
           <p className="text-xs text-muted-foreground max-w-md text-center sm:text-right">
             Plataforma de participación colectiva orientada al desarrollo de proyectos, acceso a herramientas y crecimiento dentro de un ecosistema estructurado.

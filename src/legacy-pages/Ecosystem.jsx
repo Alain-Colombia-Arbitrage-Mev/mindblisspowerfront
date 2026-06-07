@@ -92,7 +92,7 @@ export default function Ecosystem() {
               </span>
             </h1>
             <p className="text-white/60 text-xl leading-relaxed max-w-3xl mx-auto mb-12">
-              Vicion Power conecta diferentes áreas de desarrollo para construir una propuesta sólida, escalable y con valor tangible.
+              Mindbliss Power conecta diferentes áreas de desarrollo para construir una propuesta sólida, escalable y con valor tangible.
             </p>
             {/* Sector pills */}
             <div className="flex flex-wrap items-center justify-center gap-3">
@@ -119,7 +119,7 @@ export default function Ecosystem() {
               <div>
                 <div className="font-montserrat font-black text-vicion-deep text-xl mb-1">La fuerza está en la integración</div>
                 <div className="text-gray-500 text-sm leading-relaxed">
-                  Vicion Power no se limita a una sola categoría. Su visión integra distintas áreas que fortalecen la experiencia del miembro y amplían el valor del ecosistema, generando una propuesta con mayor profundidad, proyección y respaldo.
+                  Mindbliss Power no se limita a una sola categoría. Su visión integra distintas áreas que fortalecen la experiencia del miembro y amplían el valor del ecosistema, generando una propuesta con mayor profundidad, proyección y respaldo.
                 </div>
               </div>
             </div>
@@ -191,7 +191,7 @@ export default function Ecosystem() {
             </span>
           </h2>
           <p className="text-white/55 text-lg mb-10 max-w-2xl mx-auto leading-relaxed">
-            Cada área del ecosistema fortalece la propuesta general de Vicion Power. El resultado es una plataforma con mayor capacidad de evolución, mayor percepción de respaldo y una experiencia más rica para quienes participan en ella.
+            Cada área del ecosistema fortalece la propuesta general de Mindbliss Power. El resultado es una plataforma con mayor capacidad de evolución, mayor percepción de respaldo y una experiencia más rica para quienes participan en ella.
           </p>
           <Link to="/participar"
             className="inline-flex items-center gap-3 bg-vicion-blue hover:bg-blue-500 text-white font-bold font-montserrat px-10 py-4 rounded-xl transition-all duration-200 text-base shadow-xl shadow-blue-600/30">

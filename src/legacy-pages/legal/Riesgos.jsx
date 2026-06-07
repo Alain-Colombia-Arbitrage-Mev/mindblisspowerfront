@@ -19,7 +19,7 @@ export default function Riesgos() {
           </motion.div>
           <motion.p initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, delay: 0.2 }}
             className="text-lg text-white/80">
-            Marco legal y operativo del ecosistema Vicion Power
+            Marco legal y operativo del ecosistema Mindbliss Power
           </motion.p>
         </div>
       </section>
@@ -32,7 +32,7 @@ export default function Riesgos() {
 
             <div className="bg-red-50 border-l-4 border-red-600 p-6 rounded mb-12">
               <p className="font-bold text-red-900 m-0">
-                LECTURA OBLIGATORIA: Esta sección describe riesgos materiales asociados con la participación en el ecosistema Vicion Power. Los usuarios deben leer cuidadosamente y entender estos riesgos antes de participar.
+                LECTURA OBLIGATORIA: Esta sección describe riesgos materiales asociados con la participación en el ecosistema Mindbliss Power. Los usuarios deben leer cuidadosamente y entender estos riesgos antes de participar.
               </p>
             </div>
 
@@ -42,7 +42,7 @@ export default function Riesgos() {
             <p><strong>Mitigación:</strong> Participa solo con fondos que puedas permitirte perder completamente. No utilices fondos esenciales para subsistencia, educación de dependientes o necesidades críticas.</p>
 
             <h2 className="font-montserrat font-bold text-3xl text-vicion-deep mt-12 mb-6">2. Riesgo Regulatorio y Legal</h2>
-            <p><strong>Naturaleza del Riesgo:</strong> El marco regulatorio para ecosistemas como Vicion Power está en evolución. Cambios regulatorios pueden afectar significativamente la operación y beneficios.</p>
+            <p><strong>Naturaleza del Riesgo:</strong> El marco regulatorio para ecosistemas como Mindbliss Power está en evolución. Cambios regulatorios pueden afectar significativamente la operación y beneficios.</p>
             <p><strong>Escenario de Riesgo:</strong> Autoridades regulatorias pueden:</p>
             <ul className="list-disc pl-6 space-y-2">
               <li>Requerir cambios operacionales significativos</li>
@@ -51,7 +51,7 @@ export default function Riesgos() {
               <li>Requerir devolución de fondos o beneficios</li>
               <li>Investigar la plataforma o la empresa</li>
             </ul>
-            <p><strong>Mitigación:</strong> Monitorea cambios regulatorios en tu jurisdicción. Mantente informado de actualizaciones legales de Vicion Power.</p>
+            <p><strong>Mitigación:</strong> Monitorea cambios regulatorios en tu jurisdicción. Mantente informado de actualizaciones legales de Mindbliss Power.</p>
 
             <h2 className="font-montserrat font-bold text-3xl text-vicion-deep mt-12 mb-6">3. Riesgo de Liquidez</h2>
             <p><strong>Naturaleza del Riesgo:</strong> Tu participación no es fácilmente convertible a efectivo. Los beneficios pueden estar bloqueados o limitados en disponibilidad.</p>
@@ -74,7 +74,7 @@ export default function Riesgos() {
               <li>Errores humanos en procesamiento de transacciones</li>
               <li>Incapacidad de contactar con equipo de soporte</li>
             </ul>
-            <p><strong>Mitigación:</strong> Vicion Power implementa medidas de seguridad y redundancia. Sin embargo, ningún sistema es completamente inmune a fallos.</p>
+            <p><strong>Mitigación:</strong> Mindbliss Power implementa medidas de seguridad y redundancia. Sin embargo, ningún sistema es completamente inmune a fallos.</p>
 
             <h2 className="font-montserrat font-bold text-3xl text-vicion-deep mt-12 mb-6">5. Riesgo de Mercado y Volatilidad</h2>
             <p><strong>Naturaleza del Riesgo:</strong> El valor de tu participación y beneficios puede fluctuar basado en condiciones de mercado económicas globales.</p>
@@ -85,26 +85,26 @@ export default function Riesgos() {
               <li>Cambios en condiciones económicas globales</li>
               <li>Ciclos económicos que afectan viabilidad del ecosistema</li>
             </ul>
-            <p><strong>Mitigación:</strong> Diversifica tus inversiones más allá de Vicion Power. No confíes exclusivamente en este ecosistema para tu seguridad financiera.</p>
+            <p><strong>Mitigación:</strong> Diversifica tus inversiones más allá de Mindbliss Power. No confíes exclusivamente en este ecosistema para tu seguridad financiera.</p>
 
             <h2 className="font-montserrat font-bold text-3xl text-vicion-deep mt-12 mb-6">6. Riesgo de Crédito y Contraparte</h2>
-            <p><strong>Naturaleza del Riesgo:</strong> Existe riesgo de que Vicion Power u otras contrapartes clave incumplan sus obligaciones.</p>
+            <p><strong>Naturaleza del Riesgo:</strong> Existe riesgo de que Mindbliss Power u otras contrapartes clave incumplan sus obligaciones.</p>
             <p><strong>Escenario de Riesgo:</strong></p>
             <ul className="list-disc pl-6 space-y-2">
-              <li>Vicion Power entra en insolvencia</li>
+              <li>Mindbliss Power entra en insolvencia</li>
               <li>Proveedores de servicios clave fallan</li>
-              <li>Incapacidad de Vicion Power para pagar beneficios comprometidos</li>
+              <li>Incapacidad de Mindbliss Power para pagar beneficios comprometidos</li>
               <li>Disputas sobre obligaciones contractuales</li>
             </ul>
-            <p><strong>Mitigación:</strong> Realiza diligencia debida sobre la solidez financiera de Vicion Power. Mantente informado del estado operativo.</p>
+            <p><strong>Mitigación:</strong> Realiza diligencia debida sobre la solidez financiera de Mindbliss Power. Mantente informado del estado operativo.</p>
 
             <h2 className="font-montserrat font-bold text-3xl text-vicion-deep mt-12 mb-6">7. Riesgo de Fraude y Seguridad</h2>
-            <p><strong>Naturaleza del Riesgo:</strong> Aunque Vicion Power implementa medidas de seguridad, existe riesgo residual de fraude.</p>
+            <p><strong>Naturaleza del Riesgo:</strong> Aunque Mindbliss Power implementa medidas de seguridad, existe riesgo residual de fraude.</p>
             <p><strong>Escenario de Riesgo:</strong></p>
             <ul className="list-disc pl-6 space-y-2">
               <li>Ciberdelincuentes acceden a tu cuenta</li>
               <li>Robo de identidad o información personal</li>
-              <li>Fraude interno por empleados de Vicion Power</li>
+              <li>Fraude interno por empleados de Mindbliss Power</li>
               <li>Phishing o ingeniería social dirigida a ti</li>
             </ul>
             <p><strong>Mitigación:</strong> Utiliza contraseñas fuertes, autenticación de dos factores. Sé vigilante contra intentos de fraude. Reporta actividad sospechosa inmediatamente.</p>
@@ -126,7 +126,7 @@ export default function Riesgos() {
             <p><strong>Mitigación:</strong> Mantente informado sobre decisiones y cambios de gestión. Participa en mecanismos de gobernanza cuando estén disponibles.</p>
 
             <h2 className="font-montserrat font-bold text-3xl text-vicion-deep mt-12 mb-6">10. Riesgo de Cambio de Política</h2>
-            <p><strong>Naturaleza del Riesgo:</strong> Vicion Power puede cambiar términos, políticas y estructura de beneficios con poca notificación.</p>
+            <p><strong>Naturaleza del Riesgo:</strong> Mindbliss Power puede cambiar términos, políticas y estructura de beneficios con poca notificación.</p>
             <p><strong>Escenario de Riesgo:</strong> Cambios pueden incluir:</p>
             <ul className="list-disc pl-6 space-y-2">
               <li>Modificación de estructura de beneficios</li>
@@ -134,15 +134,15 @@ export default function Riesgos() {
               <li>Nuevas restricciones sobre retiros</li>
               <li>Cambios en términos de participación</li>
             </ul>
-            <p><strong>Mitigación:</strong> Lee todos los comunicados de Vicion Power cuidadosamente. Entiende que estos cambios pueden ocurrir.</p>
+            <p><strong>Mitigación:</strong> Lee todos los comunicados de Mindbliss Power cuidadosamente. Entiende que estos cambios pueden ocurrir.</p>
 
             <div className="bg-yellow-50 border-l-4 border-yellow-600 p-6 rounded my-12">
               <h3 className="font-bold text-yellow-900 mt-0">RECONOCIMIENTO IMPORTANTE</h3>
-              <p className="m-0">Al participar en Vicion Power, reconoces que:</p>
+              <p className="m-0">Al participar en Mindbliss Power, reconoces que:</p>
               <ul className="list-disc pl-6 space-y-2 mt-3 mb-0">
                 <li>Has leído y comprendido todos estos riesgos</li>
                 <li>Aceptas estos riesgos como condición de participación</li>
-                <li>No culparás a Vicion Power por resultados negativos relacionados con estos riesgos</li>
+                <li>No culparás a Mindbliss Power por resultados negativos relacionados con estos riesgos</li>
                 <li>Eres responsable de tus propias decisiones de inversión</li>
               </ul>
             </div>

@@ -134,7 +134,7 @@ async function insertOneMember({ userId, sponsorId, investment = 1000, name, ema
         platformDataCore.users.push({
           id: userId,
           name: name || `Member ${userId}`,
-          email: email || `${userId}@vicion.app`,
+          email: email || `${userId}@mindblisspower.com`,
           phone: phone || '+00 000 000 0000',
           country,
           role: 'inversor',

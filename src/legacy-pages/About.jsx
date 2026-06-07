@@ -27,7 +27,7 @@ export default function About() {
           >
             <span className="text-primary text-sm font-semibold uppercase tracking-wider">Who We Are</span>
             <h1 className="font-display text-5xl sm:text-6xl font-bold text-foreground mt-3 mb-6">
-              About <span className="text-primary">Vicion Power</span>
+              About <span className="text-primary">Mindbliss Power</span>
             </h1>
             <p className="text-xl text-muted-foreground leading-relaxed">
               A global platform built on the belief that everyone deserves access to structured opportunity and community-driven growth.
@@ -126,7 +126,7 @@ export default function About() {
             </div>
             <h2 className="font-display text-4xl font-bold text-foreground mb-6">Global Presence</h2>
             <p className="text-muted-foreground text-lg leading-relaxed mb-8">
-              Vicion Power operates across Latin America, the United States, and Europe — with a growing footprint in emerging markets. 
+              Mindbliss Power operates across Latin America, the United States, and Europe — with a growing footprint in emerging markets. 
               Our platform is designed to be accessible, scalable, and impactful regardless of geography.
             </p>
             <div className="grid grid-cols-3 gap-8 max-w-md mx-auto">
@@ -149,7 +149,7 @@ export default function About() {
       <section className="py-20 bg-secondary/20">
         <div className="max-w-3xl mx-auto px-4 text-center">
           <h2 className="font-display text-4xl font-bold text-foreground mb-6">Join Our Story</h2>
-          <p className="text-muted-foreground mb-8">Be part of something bigger. Start building with Vicion Power today.</p>
+          <p className="text-muted-foreground mb-8">Be part of something bigger. Start building with Mindbliss Power today.</p>
           <Link
             to="/opportunity"
             className="group inline-flex items-center gap-2 px-8 py-4 bg-primary text-primary-foreground rounded-xl font-semibold hover:bg-primary/90 transition-all glow-blue"

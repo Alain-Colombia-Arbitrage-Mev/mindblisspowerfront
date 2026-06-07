@@ -1,5 +1,5 @@
 /**
- * Vicion Power - Movement Identity Language
+ * Mindbliss Power - Movement Identity Language
  * Core terms that define our community narrative
  */
 

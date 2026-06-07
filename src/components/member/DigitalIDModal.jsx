@@ -86,7 +86,7 @@ export default function DigitalIDModal({ onClose }) {
         >
           <div>
             <p style={{ color: 'var(--vp-subtle)', fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '1.5px', margin: '0 0 5px' }}>
-              Vicion Power
+              Mindbliss Power
             </p>
             <h2 style={{ color: 'var(--vp-text)', fontSize: 17, fontWeight: 900, margin: 0 }}>ID Digital Oficial</h2>
           </div>

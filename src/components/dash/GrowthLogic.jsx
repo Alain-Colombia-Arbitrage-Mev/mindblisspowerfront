@@ -19,7 +19,7 @@ export default function GrowthLogic() {
           Cómo crece tu posición
         </h2>
         <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14, lineHeight: 1.7, margin: 0 }}>
-          El crecimiento en Vicion Power no se trata de invitar más personas. Se trata de desarrollar tu capacidad de liderazgo y guiar a otros hacia el éxito dentro de la estructura.
+          El crecimiento en Mindbliss Power no se trata de invitar más personas. Se trata de desarrollar tu capacidad de liderazgo y guiar a otros hacia el éxito dentro de la estructura.
         </p>
       </motion.div>
 
@@ -80,7 +80,7 @@ export default function GrowthLogic() {
               El crecimiento depende de tu capacidad de guiar, no de invitar.
             </p>
             <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, lineHeight: 1.7, margin: 0 }}>
-              Cualquiera puede pedir a alguien que se una. Pero construir un equipo que progresa, que entiende el sistema y que crece junto contigo — eso es liderazgo real. Eso es lo que te hace crecer dentro de Vicion Power.
+              Cualquiera puede pedir a alguien que se una. Pero construir un equipo que progresa, que entiende el sistema y que crece junto contigo — eso es liderazgo real. Eso es lo que te hace crecer dentro de Mindbliss Power.
             </p>
           </div>
         </div>

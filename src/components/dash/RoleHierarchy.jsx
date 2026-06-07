@@ -107,7 +107,7 @@ export default function RoleHierarchy() {
           Progresión profesional
         </h2>
         <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14, lineHeight: 1.7, margin: 0 }}>
-          Tu rol dentro de Vicion Power se define por tu actividad, formación y estructura — no solo por dinero. Cada rol te da más herramientas, visibilidad y responsabilidad.
+          Tu rol dentro de Mindbliss Power se define por tu actividad, formación y estructura — no solo por dinero. Cada rol te da más herramientas, visibilidad y responsabilidad.
         </p>
       </motion.div>
 

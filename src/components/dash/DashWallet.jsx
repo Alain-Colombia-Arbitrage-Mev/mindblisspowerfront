@@ -32,7 +32,7 @@ export default function DashWallet() {
       <div style={{ background: 'rgba(59,130,246,0.07)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: 12, padding: '12px 16px', display: 'flex', gap: 10 }}>
         <Shield size={16} style={{ color: '#3b82f6', flexShrink: 0, marginTop: 1 }} />
         <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: 11, lineHeight: 1.5 }}>
-          Payout processing may be subject to account verification, compliance review, regional limitations, and external platform availability. Vicion Power does not hold financial custody of participant balances.
+          Payout processing may be subject to account verification, compliance review, regional limitations, and external platform availability. Mindbliss Power does not hold financial custody of participant balances.
         </p>
       </div>
 

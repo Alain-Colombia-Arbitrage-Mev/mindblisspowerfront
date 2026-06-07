@@ -28,7 +28,7 @@ export default function AlertDisplay({ compact = false, maxAlerts = 5 }) {
   }, [maxAlerts]);
 
   const handleAcknowledge = (alertId) => {
-    SecurityAlertSystem.acknowledgeAlert(alertId, 'admin@vicion.app');
+    SecurityAlertSystem.acknowledgeAlert(alertId, 'admin@mindblisspower.com');
   };
 
   const formatTime = (timestamp) => {

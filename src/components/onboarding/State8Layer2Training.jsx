@@ -7,7 +7,7 @@ const courses = [
   {
     id: 1,
     title: 'Introducción al sistema',
-    desc: 'Aprende cómo funciona Vicion Power y sus pilares fundamentales',
+    desc: 'Aprende cómo funciona Mindbliss Power y sus pilares fundamentales',
     completed: false,
   },
   {

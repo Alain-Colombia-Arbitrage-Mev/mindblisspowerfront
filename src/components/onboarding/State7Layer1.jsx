@@ -33,7 +33,7 @@ export default function State7Layer1({ userId, onComplete }) {
           <CheckCircle size={32} style={{ color: '#10b981' }} />
         </div>
         <h1 className="font-montserrat font-black text-3xl text-white mb-3">Tu participación está activa</h1>
-        <p className="text-white/50 text-base">Bienvenido a Vicion Power</p>
+        <p className="text-white/50 text-base">Bienvenido a Mindbliss Power</p>
       </div>
 
       {/* Timeline */}

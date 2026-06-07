@@ -12,7 +12,7 @@ const sectionImages = [
 ];
 
 const accesoFAQs = [
-  { id: 1, q: '¿Qué es Vicion Power?', a: 'Vicion Power es una plataforma global de participación estructurada que te abre las puertas a un ecosistema de beneficios progresivos. No es un producto de "compra y olvida"—es un sistema diseñado para que construyas valor en el tiempo, accediendo a beneficios según tu nivel de participación, tu permanencia en la plataforma y tu actividad continua. Es para personas que buscan estructura, no resultados inmediatos.' },
+  { id: 1, q: '¿Qué es Mindbliss Power?', a: 'Mindbliss Power es una plataforma global de participación estructurada que te abre las puertas a un ecosistema de beneficios progresivos. No es un producto de "compra y olvida"—es un sistema diseñado para que construyas valor en el tiempo, accediendo a beneficios según tu nivel de participación, tu permanencia en la plataforma y tu actividad continua. Es para personas que buscan estructura, no resultados inmediatos.' },
   { id: 2, q: '¿Qué estoy activando exactamente?', a: 'Al activar tu participación, no estás comprando un producto tradicional. Estás abriendo acceso a un nivel dentro de un ecosistema organizado. Con eso viene: acceso a herramientas de crecimiento, opciones para desarrollar estructura, visualización de tu progreso en tiempo real, y elegibilidad para múltiples beneficios que se desbloquean progresivamente. Es un ticket de entrada a una red de oportunidades.' },
   { id: 3, q: '¿Es esto una inversión?', a: 'No en el sentido tradicional. Es una participación. Activas tu membresía para acceder a beneficios dentro de una estructura organizada. La diferencia clave es que no hay promesas de retorno automático—hay acceso a un sistema donde el valor se construye con el tiempo, tu participación activa, y tu permanencia.' },
   { id: 4, q: '¿Cómo se generan los beneficios?', a: 'Los beneficios emergen de múltiples fuentes dentro del ecosistema: el funcionamiento interno de la plataforma, la participación de otros miembros, tu actividad personal, tu permanencia en el sistema, y la estructura que construyas si decides crecer. Cada nivel de participación tiene beneficios específicos que se activan automáticamente cuando cumples las condiciones.' },
@@ -195,7 +195,7 @@ export default function FAQ() {
               Transparencia total
             </h1>
             <p className="text-white/65 text-lg leading-relaxed max-w-3xl">
-              Todo lo que necesitas saber sobre cómo funciona Vicion Power, cómo acceder, y cómo construir dentro del sistema.
+              Todo lo que necesitas saber sobre cómo funciona Mindbliss Power, cómo acceder, y cómo construir dentro del sistema.
             </p>
           </motion.div>
         </div>

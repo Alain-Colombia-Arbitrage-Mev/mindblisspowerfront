@@ -70,7 +70,7 @@ export default function DataRoom() {
             Data Room
           </h1>
           <p className="text-lg text-gray-600 max-w-2xl">
-            Documentación institucional y acceso a información operativa del ecosistema Vicion Power.
+            Documentación institucional y acceso a información operativa del ecosistema Mindbliss Power.
           </p>
           <p className="text-sm text-gray-500 mt-2 font-medium">
             Para instituciones financieras, auditores y usuarios calificados.
@@ -159,7 +159,7 @@ export default function DataRoom() {
           variants={fadeUp}
           className="mt-16 p-6 rounded-xl border border-gray-200 bg-gray-50/50">
           <p className="text-sm text-gray-600 leading-relaxed">
-            <span className="font-semibold text-vicion-deep">Acceso restringido:</span> Esta sección está diseñada para instituciones financieras, auditores y usuarios institucionales calificados. La documentación refleja el estado operativo actual del ecosistema Vicion Power bajo estándares de cumplimiento internacional.
+            <span className="font-semibold text-vicion-deep">Acceso restringido:</span> Esta sección está diseñada para instituciones financieras, auditores y usuarios institucionales calificados. La documentación refleja el estado operativo actual del ecosistema Mindbliss Power bajo estándares de cumplimiento internacional.
           </p>
         </motion.div>
 

@@ -31,7 +31,7 @@ export default function LogoWrapper({ src, size = 160, className = '', onClick }
     >
       <img 
         src={src} 
-        alt="Vicion Power" 
+        alt="Mindbliss Power" 
         style={{
           width: size * 0.65,
           height: size * 0.65,

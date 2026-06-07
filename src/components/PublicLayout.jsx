@@ -224,7 +224,7 @@ export default function PublicLayout() {
             {/* Brand col */}
             <div className="lg:col-span-2">
              <div className="mb-5" onClick={handleBrandClick} style={{ cursor: 'pointer' }}>
-               <div className="font-montserrat font-black text-white text-base tracking-widest">VICION POWER</div>
+               <div className="font-montserrat font-black text-white text-base tracking-widest">MINDBLISS POWER</div>
                <div className="text-vicion-electric text-[9px] tracking-[0.25em] uppercase font-montserrat">GLOBAL PLATFORM</div>
              </div>
               <p className="text-white/40 text-sm leading-relaxed mb-6 max-w-xs">
@@ -261,7 +261,7 @@ export default function PublicLayout() {
             <p className="text-gray-400 text-sm leading-relaxed max-w-md">
               Plataforma de participación estructurada orientada al desarrollo de proyectos, acceso a herramientas y construcción de valor en el tiempo.
             </p>
-            <p className="text-white/25 text-xs">© Vicion Power. Todos los derechos reservados.</p>
+            <p className="text-white/25 text-xs">© Mindbliss Power. Todos los derechos reservados.</p>
           </div>
         </div>
       </footer>

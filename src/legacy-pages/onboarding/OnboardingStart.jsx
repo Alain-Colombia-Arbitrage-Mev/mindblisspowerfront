@@ -604,7 +604,7 @@ function StepWelcome({ onNext, data }) {
             ¡Bienvenido, {data.nombre || 'participante'}!
           </h2>
           <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 14, lineHeight: 1.6, maxWidth: 360, margin: '0 auto' }}>
-            Tu participación ha sido registrada. Ahora eres parte del ecosistema Vicion Power.
+            Tu participación ha sido registrada. Ahora eres parte del ecosistema Mindbliss Power.
           </p>
         </div>
 
@@ -695,7 +695,7 @@ function StepTraining({ onNext, data }) {
   const isNetwork = data.path === 'network';
 
   const modules = [
-    { id: 'what', title: '¿Qué es Vicion Power?', desc: 'Estructura, misión y propósito del ecosistema.', icon: '🌐' },
+    { id: 'what', title: '¿Qué es Mindbliss Power?', desc: 'Estructura, misión y propósito del ecosistema.', icon: '🌐' },
     { id: 'how', title: 'Cómo funciona el sistema', desc: 'Mecánica de participación, acceso y beneficios.', icon: '⚙️' },
     { id: 'benefits', title: 'Tu acceso y beneficios', desc: 'Lo que desbloqueas con tu nivel de participación.', icon: '⭐' },
     ...(isNetwork ? [
@@ -926,7 +926,7 @@ export default function OnboardingStart() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <img src={LOGO} alt="VP" style={{ height: 28, objectFit: 'contain', filter: 'brightness(0) invert(1) opacity(0.9)' }} />
           <div>
-            <div style={{ fontFamily: 'Montserrat,sans-serif', fontWeight: 900, color: 'white', fontSize: 11, letterSpacing: 2 }}>VICION POWER</div>
+            <div style={{ fontFamily: 'Montserrat,sans-serif', fontWeight: 900, color: 'white', fontSize: 11, letterSpacing: 2 }}>MINDBLISS POWER</div>
             <div style={{ fontFamily: 'Montserrat,sans-serif', fontWeight: 600, color: '#3b82f6', fontSize: 7, letterSpacing: 2 }}>ACCESO</div>
           </div>
         </div>

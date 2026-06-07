@@ -1,4 +1,4 @@
-// Status & Reputation Engine for Vicion Power
+// Status & Reputation Engine for Mindbliss Power
 // Prestige-based system measuring evolution, trust, and participation
 
 export const STATUS_LEVELS = {

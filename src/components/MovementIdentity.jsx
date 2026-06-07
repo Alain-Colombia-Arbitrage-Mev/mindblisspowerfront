@@ -46,7 +46,7 @@ export default function MovementIdentity() {
           marginLeft: 'auto',
           marginRight: 'auto'
         }}>
-          Vicion Power no es un negocio tradicional. Es un movimiento global de {MOVEMENT_TERMS.participants} que construyen {MOVEMENT_TERMS.teamStructure} auténticas y generan valor juntos.
+          Mindbliss Power no es un negocio tradicional. Es un movimiento global de {MOVEMENT_TERMS.participants} que construyen {MOVEMENT_TERMS.teamStructure} auténticas y generan valor juntos.
         </p>
       </motion.section>
 

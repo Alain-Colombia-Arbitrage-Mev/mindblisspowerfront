@@ -44,7 +44,7 @@ export default function DashEstatus({ user }) {
         className="text-center mb-12"
       >
         <p className="text-vicion-electric font-montserrat font-bold text-xs tracking-[0.3em] uppercase mb-4">Tu Identidad</p>
-        <h1 className="font-montserrat font-black text-4xl sm:text-5xl text-white mb-4">Tu Estatus dentro de Vicion Power</h1>
+        <h1 className="font-montserrat font-black text-4xl sm:text-5xl text-white mb-4">Tu Estatus dentro de Mindbliss Power</h1>
         <p className="text-white/60 text-lg max-w-2xl mx-auto">
           Visualiza tu evolución, reputación y progreso dentro del ecosistema.
         </p>

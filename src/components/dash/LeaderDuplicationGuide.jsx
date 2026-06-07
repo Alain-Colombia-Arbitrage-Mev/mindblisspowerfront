@@ -8,7 +8,7 @@ const STEPS = [
     num: 1,
     icon: BookOpen,
     title: 'Entender el sistema',
-    content: 'Vicion Power es una estructura de participación ordenada. No es inversión ni garantía de retorno. Es un ecosistema donde la progresión depende de tu actividad, compromiso y capacidad de liderar. Entiende esto profundamente antes de explicarlo a otros.',
+    content: 'Mindbliss Power es una estructura de participación ordenada. No es inversión ni garantía de retorno. Es un ecosistema donde la progresión depende de tu actividad, compromiso y capacidad de liderar. Entiende esto profundamente antes de explicarlo a otros.',
     key_points: [
       'Participación estructurada, no inversión',
       'Resultados dependen de evolución del ecosistema',
@@ -34,7 +34,7 @@ const STEPS = [
     num: 3,
     icon: AlertTriangle,
     title: 'Qué NO decir',
-    content: 'No prometas dinero fácil, no uses palabras como "inversión", "retorno garantizado", "dinero pasivo", "duplicación de capital". No compares con esquemas ilegales. No presiones a nadie. La integridad es lo que mantiene a Vicion Power en pie. Si rompes esto, rompes el sistema.',
+    content: 'No prometas dinero fácil, no uses palabras como "inversión", "retorno garantizado", "dinero pasivo", "duplicación de capital". No compares con esquemas ilegales. No presiones a nadie. La integridad es lo que mantiene a Mindbliss Power en pie. Si rompes esto, rompes el sistema.',
     prohibitedTerms: [
       'Garantizado',
       'Dinero fácil',

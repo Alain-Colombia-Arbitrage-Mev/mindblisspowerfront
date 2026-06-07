@@ -536,7 +536,7 @@ function StepAcademy({ onNext }) {
   return (
     <StepShell title="Módulos de formación" subtitle="Completa los módulos para desbloquear el sistema completo." api="GET /academy/modules">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginBottom: 16 }}>
-        {['Qué es Vicion Power', 'Cómo funciona el sistema', 'Cómo explicarlo', 'Qué no decir', 'Cómo invitar'].map((m, i) => (
+        {['Qué es Mindbliss Power', 'Cómo funciona el sistema', 'Cómo explicarlo', 'Qué no decir', 'Cómo invitar'].map((m, i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)' }}>
             <div style={{ width: 20, height: 20, borderRadius: '50%', background: 'rgba(245,158,11,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <span style={{ color: '#f59e0b', fontSize: 9, fontWeight: 700 }}>{i + 1}</span>
@@ -642,7 +642,7 @@ export default function Onboarding() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, marginLeft: 24 }}>
           <img src={LOGO} alt="VP" style={{ height: 32, width: 32, objectFit: 'contain', filter: 'brightness(0) invert(1) opacity(0.9)' }} />
           <div>
-            <div style={{ fontFamily: 'Montserrat,sans-serif', fontWeight: 900, color: 'white', fontSize: 12, letterSpacing: 2 }}>VICION POWER</div>
+            <div style={{ fontFamily: 'Montserrat,sans-serif', fontWeight: 900, color: 'white', fontSize: 12, letterSpacing: 2 }}>MINDBLISS POWER</div>
             <div style={{ fontFamily: 'Montserrat,sans-serif', fontWeight: 600, color: '#3b82f6', fontSize: 7, letterSpacing: 2 }}>ACCESO</div>
           </div>
         </div>

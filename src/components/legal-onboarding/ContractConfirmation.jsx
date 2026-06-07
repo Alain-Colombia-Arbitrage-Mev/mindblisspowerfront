@@ -57,7 +57,7 @@ export default function ContractConfirmation({ onNext, onBack, participationLeve
           <motion.div initial="hidden" animate="visible" transition={{ duration: 0.7, delay: 0.2 }}
             variants={fadeUp} className="p-6 rounded-2xl bg-gray-50 border border-gray-200">
             <p className="text-gray-700 leading-relaxed">
-              Estás a punto de <span className="font-semibold">activar tu participación</span> dentro del ecosistema Vicion Power. 
+              Estás a punto de <span className="font-semibold">activar tu participación</span> dentro del ecosistema Mindbliss Power. 
               Después de este paso, recibirás un contrato firmado en tu email y acceso al simulador avanzado.
             </p>
           </motion.div>

@@ -17,7 +17,7 @@ export default function DashWithdrawal() {
           <div>
             <h3 className="font-montserrat font-bold text-white text-lg mb-2">External Platform Management</h3>
             <p className="text-white/60 leading-relaxed text-sm">
-              Withdrawals and credit management are handled through external platforms authorized by Vicion Power. Access is granted based on your activity level and participation status.
+              Withdrawals and credit management are handled through external platforms authorized by Mindbliss Power. Access is granted based on your activity level and participation status.
             </p>
           </div>
         </div>
@@ -69,7 +69,7 @@ export default function DashWithdrawal() {
       <div className="flex items-start gap-3 p-5 rounded-xl bg-white/3 border border-white/10">
         <AlertCircle className="text-white/30 flex-shrink-0" size={18} />
         <p className="text-white/30 text-xs leading-relaxed">
-          Credit management and withdrawal processes are subject to platform terms and applicable regulations. Vicion Power does not guarantee specific withdrawal amounts. All activity-based credits are earned through participation and are subject to verification. This is not a financial product.
+          Credit management and withdrawal processes are subject to platform terms and applicable regulations. Mindbliss Power does not guarantee specific withdrawal amounts. All activity-based credits are earned through participation and are subject to verification. This is not a financial product.
         </p>
       </div>
     </div>

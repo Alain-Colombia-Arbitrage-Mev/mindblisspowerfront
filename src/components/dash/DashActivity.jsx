@@ -5,7 +5,7 @@ import { DCard, PageHeader, SectionLabel, Badge, FilterBar, DisclaimerBox, Prima
 const eventTypes = { activation: { icon: Star, color: '#f59e0b' }, referral: { icon: UserPlus, color: '#22c55e' }, rank: { icon: Award, color: '#a78bfa' }, cycle: { icon: DollarSign, color: '#3b82f6' }, milestone: { icon: ArrowUp, color: '#60a5fa' } };
 
 const milestones = [
-  { date: 'Jan 15, 2025', type: 'activation', label: 'Account Activated', detail: 'Initial activation confirmed — welcome to Vicion Power.' },
+  { date: 'Jan 15, 2025', type: 'activation', label: 'Account Activated', detail: 'Initial activation confirmed — welcome to Mindbliss Power.' },
   { date: 'Jan 28, 2025', type: 'referral', label: 'First Direct Referral', detail: 'M. Rodríguez joined via your referral link — Left side placement.' },
   { date: 'Feb 10, 2025', type: 'cycle', label: 'First Cycle Match', detail: 'Cycle C-001 completed — first incentive calculation processed.' },
   { date: 'Feb 22, 2025', type: 'rank', label: 'Bronze → Silver Rank', detail: 'Achieved Silver rank after reaching 3 direct active members.' },

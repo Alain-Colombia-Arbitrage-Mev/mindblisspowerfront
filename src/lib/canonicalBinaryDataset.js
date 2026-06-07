@@ -93,7 +93,7 @@ function generateMember(index, uplineId, rootSide, localSide, depth) {
     user_id:           `cm-${index}`,
     full_name:         fullName,
     name:              fullName,
-    email:             `${slug}@vicion.app`,
+    email:             `${slug}@mindblisspower.com`,
     phone:             `+57 3${String(10 + (index % 89)).padStart(2,'0')} ${String(1000 + (index % 8999)).padStart(4,'0')}`,
     country,
     country_name:      COUNTRY_NAMES[country] || country,

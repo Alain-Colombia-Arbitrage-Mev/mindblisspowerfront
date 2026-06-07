@@ -35,7 +35,7 @@ class MVPMasterDatasetBuilder {
 
   generateEmail(name) {
     const [first, last] = name.toLowerCase().split(' ');
-    return `${first}.${last}@vicion.app`;
+    return `${first}.${last}@mindblisspower.com`;
   }
 
   generatePhone(country) {
@@ -135,7 +135,7 @@ class MVPMasterDatasetBuilder {
       id: 'master-cuenta-mvp-principal',
       full_name: 'Cuenta MVP Principal',
       display_name: 'E. Corona',
-      email: 'master@vicion.app',
+      email: 'master@mindblisspower.com',
       phone: '+57-301-1000000',
       country: 'CO',
       city: 'Bogotá',

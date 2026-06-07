@@ -19,7 +19,7 @@ export default function Transparencia() {
 
           <motion.p initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.9, delay: 0.2 }}
             className="text-lg text-white/70 mb-8 leading-relaxed max-w-3xl mx-auto">
-            Marco institucional, estructura regulatoria y políticas que sustentan el ecosistema Vicion Power.
+            Marco institucional, estructura regulatoria y políticas que sustentan el ecosistema Mindbliss Power.
           </motion.p>
 
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.9, delay: 0.4 }}
@@ -50,7 +50,7 @@ export default function Transparencia() {
               <h2 className="font-montserrat font-black text-4xl text-vicion-deep">Estructura del ecosistema</h2>
             </div>
             <p className="text-lg text-gray-700 leading-relaxed">
-              Vicion Power opera como un ecosistema integrado de servicios y plataformas tecnológicas diseñado para facilitar participación, crecimiento y acceso a beneficios dentro de una estructura organizacional clara.
+              Mindbliss Power opera como un ecosistema integrado de servicios y plataformas tecnológicas diseñado para facilitar participación, crecimiento y acceso a beneficios dentro de una estructura organizacional clara.
             </p>
           </motion.div>
 
@@ -110,7 +110,7 @@ export default function Transparencia() {
               <h2 className="font-montserrat font-black text-4xl text-vicion-deep">Proceso regulatorio</h2>
             </div>
             <p className="text-gray-600 leading-relaxed">
-              Vicion Power opera bajo un marco de cumplimiento activo y está en proceso de fortalecer su posición regulatoria con autoridades competentes.
+              Mindbliss Power opera bajo un marco de cumplimiento activo y está en proceso de fortalecer su posición regulatoria con autoridades competentes.
             </p>
           </motion.div>
 
@@ -213,7 +213,7 @@ export default function Transparencia() {
 
           <motion.p initial="hidden" whileInView="visible" viewport={{ once: true }} transition={{ duration: 0.7, delay: 0.1 }}
             variants={fadeUp} className="text-white/70 mb-10 leading-relaxed text-lg">
-            Vicion Power se compromete a mantener claridad, cumplimiento regulatorio y responsabilidad en todas sus operaciones. Esta información está disponible para que los participantes tomen decisiones informadas.
+            Mindbliss Power se compromete a mantener claridad, cumplimiento regulatorio y responsabilidad en todas sus operaciones. Esta información está disponible para que los participantes tomen decisiones informadas.
           </motion.p>
 
           <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} transition={{ duration: 0.7, delay: 0.2 }}

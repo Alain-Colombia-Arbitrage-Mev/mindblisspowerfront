@@ -21,7 +21,7 @@ const RANKS = [
   { level: 7,  name: 'Ambassador',     color: '#a78bfa', glow: '#a78bfa',  desc: 'Brand representative — large influence & international reach',    criteria: ['50 direct members', '50,000 structure pts', '3 Executive legs'] },
   { level: 8,  name: 'Presidential',   color: '#ef4444', glow: '#ef4444',  desc: 'Elite leadership — top-tier structure control & recognition',     criteria: ['80 direct members', '100,000 structure pts', '2 Ambassador legs'] },
   { level: 9,  name: 'Global Leader',  color: '#d4af37', glow: '#d4af37',  desc: 'International impact — highest field leadership recognition',     criteria: ['120 direct members', '250,000 structure pts', '3 Presidential legs'] },
-  { level: 10, name: 'Chairman',       color: '#f8fafc', glow: '#e2e8f0',  desc: 'Legacy status — pinnacle of the Vicion Power structure',         criteria: ['200+ direct members', '500,000+ structure pts', 'Global presence'] },
+  { level: 10, name: 'Chairman',       color: '#f8fafc', glow: '#e2e8f0',  desc: 'Legacy status — pinnacle of the Mindbliss Power structure',         criteria: ['200+ direct members', '500,000+ structure pts', 'Global presence'] },
 ];
 
 // Current user is Director (level 5) — simulate unlock up to level 5

@@ -55,7 +55,7 @@ La realidad es que la mayoría de personas nunca ha tenido acceso a una estructu
 
 Y por eso empiezan… pero no continúan.
 
-Lo que estamos haciendo con Vicion Power es diferente.
+Lo que estamos haciendo con Mindbliss Power es diferente.
 
 No es un banco.
 No es una inversión.
@@ -93,7 +93,7 @@ Sin herramientas.
 Sin respaldo.
 Sin un sistema que nos ayude a sostener lo que hacemos."`;
 
-const PHASE_3 = `"Vicion Power nace precisamente para eso.
+const PHASE_3 = `"Mindbliss Power nace precisamente para eso.
 
 No es un banco.
 No es una inversión.

@@ -14,7 +14,7 @@ export default function Step4Compliance({ onNext, onBack }) {
         </h1>
 
         <p className="text-lg text-gray-700 leading-relaxed mb-12">
-          Vicion Power implementa procesos de validación, control y cumplimiento conforme a estándares internacionales, incluyendo políticas AML y KYC.
+          Mindbliss Power implementa procesos de validación, control y cumplimiento conforme a estándares internacionales, incluyendo políticas AML y KYC.
         </p>
 
         <div className="space-y-4 mb-12">

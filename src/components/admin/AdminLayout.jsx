@@ -118,7 +118,7 @@ function AdminLayoutGuard({ onLogout }) {
 
 // Main layout content with all hooks
 function AdminLayoutContent({ onLogout }) {
-  const { activeSessions, currentSession } = useAdminSession('admin-001', { name: 'Current Admin', email: 'admin@vicion.app', role: 'admin' });
+  const { activeSessions, currentSession } = useAdminSession('admin-001', { name: 'Current Admin', email: 'admin@mindblisspower.com', role: 'admin' });
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [canGoBack, setCanGoBack] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);

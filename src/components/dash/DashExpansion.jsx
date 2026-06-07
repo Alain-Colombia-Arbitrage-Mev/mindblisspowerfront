@@ -62,7 +62,7 @@ const duplicationSteps = [
 ];
 
 const onboarding = [
-  { day: 'Day 1', color: '#3b82f6', text: 'Welcome message + What is Vicion Power' },
+  { day: 'Day 1', color: '#3b82f6', text: 'Welcome message + What is Mindbliss Power' },
   { day: 'Day 2', color: '#10b981', text: 'How the system works — structure overview' },
   { day: 'Day 3', color: '#f59e0b', text: 'How to invite — tools, scripts, channels' },
   { day: 'Day 4', color: '#a78bfa', text: 'First actions — activate, place, share' },

@@ -16,7 +16,7 @@ export default function TerminosCondiciones() {
           </motion.h1>
           <motion.p initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, delay: 0.2 }}
             className="text-lg text-white/80">
-            Marco legal y operativo del ecosistema Vicion Power
+            Marco legal y operativo del ecosistema Mindbliss Power
           </motion.p>
         </div>
       </section>
@@ -28,7 +28,7 @@ export default function TerminosCondiciones() {
             variants={fadeUp} className="prose prose-lg max-w-none text-gray-700">
 
             <h2 className="font-montserrat font-bold text-3xl text-vicion-deep mt-12 mb-6">1. Definiciones</h2>
-            <p><strong>"Plataforma":</strong> La aplicación web y servicios digitales operados por Vicion Power.</p>
+            <p><strong>"Plataforma":</strong> La aplicación web y servicios digitales operados por Mindbliss Power.</p>
             <p><strong>"Usuario":</strong> Cualquier persona que accede y utiliza la Plataforma.</p>
             <p><strong>"Participación":</strong> La activación formal dentro del ecosistema mediante la aceptación de estos términos y la realización de una activación inicial.</p>
             <p><strong>"Servicios":</strong> Todos los servicios, herramientas, beneficios y acceso proporcionados a través de la Plataforma.</p>
@@ -47,7 +47,7 @@ export default function TerminosCondiciones() {
             <p>Al registrarte en la Plataforma, eres responsable de:</p>
             <ul className="list-disc pl-6 space-y-2">
               <li>Mantener la confidencialidad de tus credenciales de acceso</li>
-              <li>Notificar inmediatamente a Vicion Power de cualquier acceso no autorizado</li>
+              <li>Notificar inmediatamente a Mindbliss Power de cualquier acceso no autorizado</li>
               <li>Ser responsable de toda actividad en tu cuenta</li>
               <li>Proporcionar información exacta y actualizada</li>
             </ul>
@@ -66,7 +66,7 @@ export default function TerminosCondiciones() {
             <ul className="list-disc pl-6 space-y-2">
               <li>Los beneficios proyectados no están garantizados y dependen del desarrollo del ecosistema</li>
               <li>Los ingresos, acceso a servicios y cualquier retorno dependen de la continuidad y performance del sistema</li>
-              <li>Vicion Power no ofrece garantía de capital, retorno o protección de inversión</li>
+              <li>Mindbliss Power no ofrece garantía de capital, retorno o protección de inversión</li>
               <li>Los escenarios simulados son proyecciones basadas en supuestos que pueden no realizarse</li>
             </ul>
 
@@ -82,7 +82,7 @@ export default function TerminosCondiciones() {
             </ul>
 
             <h2 className="font-montserrat font-bold text-3xl text-vicion-deep mt-12 mb-6">7. Cambios en Servicios y Términos</h2>
-            <p>Vicion Power se reserva el derecho a:</p>
+            <p>Mindbliss Power se reserva el derecho a:</p>
             <ul className="list-disc pl-6 space-y-2">
               <li>Modificar, suspender o discontinuar Servicios en cualquier momento</li>
               <li>Cambiar los términos de participación con notificación previa</li>
@@ -91,16 +91,16 @@ export default function TerminosCondiciones() {
             </ul>
 
             <h2 className="font-montserrat font-bold text-3xl text-vicion-deep mt-12 mb-6">8. Responsabilidad Limitada</h2>
-            <p>Vicion Power no será responsable por:</p>
+            <p>Mindbliss Power no será responsable por:</p>
             <ul className="list-disc pl-6 space-y-2">
               <li>Pérdida de ingresos, datos o información personal</li>
               <li>Daños consecuentes, indirectos o punitivos</li>
               <li>Rendimiento del ecosistema o variación en beneficios</li>
-              <li>Cualquier causa fuera del control razonable de Vicion Power</li>
+              <li>Cualquier causa fuera del control razonable de Mindbliss Power</li>
             </ul>
 
             <h2 className="font-montserrat font-bold text-3xl text-vicion-deep mt-12 mb-6">9. Terminación de Participación</h2>
-            <p>Vicion Power se reserva el derecho de terminar la Participación de un usuario:</p>
+            <p>Mindbliss Power se reserva el derecho de terminar la Participación de un usuario:</p>
             <ul className="list-disc pl-6 space-y-2">
               <li>Por violación de estos términos</li>
               <li>Por conducta fraudulenta o ilegal</li>
@@ -109,7 +109,7 @@ export default function TerminosCondiciones() {
             </ul>
 
             <h2 className="font-montserrat font-bold text-3xl text-vicion-deep mt-12 mb-6">10. Ley Aplicable</h2>
-            <p>Estos Términos y Condiciones se rigen por la ley aplicable en el contexto de operación de Vicion Power. Cualquier disputa será resuelta conforme a la ley competente.</p>
+            <p>Estos Términos y Condiciones se rigen por la ley aplicable en el contexto de operación de Mindbliss Power. Cualquier disputa será resuelta conforme a la ley competente.</p>
 
             <p className="text-sm text-gray-500 mt-12 pt-6 border-t">
               Última actualización: {new Date().toLocaleDateString('es-ES')}

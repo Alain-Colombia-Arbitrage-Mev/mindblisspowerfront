@@ -1,4 +1,4 @@
-// Iconos clave de Vicion Power
+// Iconos clave de Mindbliss Power
 // Cada icono representa un concepto fundamental de la plataforma
 
 export const VICION_ICONS = {

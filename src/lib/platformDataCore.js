@@ -109,7 +109,7 @@ class PlatformDataCore {
       const user = {
         id: userId,
         name: leaderData.name,
-        email: `${leaderData.name.toLowerCase().replace(/ /g, '.')}@vicion.app`,
+        email: `${leaderData.name.toLowerCase().replace(/ /g, '.')}@mindblisspower.com`,
         phone: `+57 ${300 + idx} ${1000 + idx} ${5000 + idx * 100}`,
         country: leaderData.country,
         role: 'lider',
@@ -187,7 +187,7 @@ class PlatformDataCore {
         const descendantUser = {
           id: descendantUserId,
           name: `${leaderData.name.split(' ')[0]} Descendant ${d + 1}`,
-          email: `descendant-${nodeId}@vicion.app`,
+          email: `descendant-${nodeId}@mindblisspower.com`,
           phone: `+57 ${310 + nodeId} ${2000 + nodeId} ${6000 + nodeId * 50}`,
           country: leaderData.country,
           role: 'inversor',

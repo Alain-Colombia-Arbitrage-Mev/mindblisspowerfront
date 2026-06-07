@@ -5,7 +5,7 @@ import { ArrowRight, AlertCircle } from 'lucide-react';
 const cards = [
   {
     title: 'Esto no es para resultados inmediatos',
-    text: 'Vicion Power no está diseñado para quienes buscan resultados rápidos. Es un sistema basado en continuidad, participación y evolución dentro del tiempo.',
+    text: 'Mindbliss Power no está diseñado para quienes buscan resultados rápidos. Es un sistema basado en continuidad, participación y evolución dentro del tiempo.',
     icon: '⏳',
   },
   {

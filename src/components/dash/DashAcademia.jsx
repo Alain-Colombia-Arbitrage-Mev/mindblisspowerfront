@@ -4,7 +4,7 @@ import { BookOpen, CheckCircle, Lock, Play, Star, Award, ChevronRight } from 'lu
 const courses = [
   {
     id: 1,
-    title: 'Introducción a Vicion Power',
+    title: 'Introducción a Mindbliss Power',
     desc: 'Comprende el sistema desde sus bases.',
     color: '#3b82f6',
     progress: 100,

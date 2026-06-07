@@ -10,11 +10,11 @@ export default function Step2Nature({ onNext, onBack }) {
         variants={fadeUp} className="max-w-2xl w-full">
         
         <h1 className="font-montserrat font-black text-5xl text-vicion-deep mb-6">
-          Cómo funciona Vicion Power
+          Cómo funciona Mindbliss Power
         </h1>
 
         <p className="text-lg text-gray-700 leading-relaxed mb-8">
-          Vicion Power es un ecosistema que integra tecnología, proyectos y estructuras de desarrollo.
+          Mindbliss Power es un ecosistema que integra tecnología, proyectos y estructuras de desarrollo.
         </p>
 
         <p className="text-base text-gray-600 leading-relaxed mb-8 max-w-md">

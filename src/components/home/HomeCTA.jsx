@@ -23,7 +23,7 @@ export default function HomeCTA() {
             <span className="text-primary text-glow">You need the right structure.</span>
           </h2>
           <p className="text-muted-foreground text-lg mb-10 max-w-xl mx-auto">
-            Join thousands of people worldwide who are building something meaningful through Vicion Power.
+            Join thousands of people worldwide who are building something meaningful through Mindbliss Power.
           </p>
           <Link
             to="/dashboard"

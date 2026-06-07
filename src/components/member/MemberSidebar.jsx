@@ -234,7 +234,7 @@ export default function MemberSidebar() {
         style={{ borderColor: 'rgba(59,130,246,0.08)' }}
       >
         <div style={{ fontSize: 8, color: 'rgba(255,255,255,0.15)', textAlign: 'center', lineHeight: 1.6 }}>
-          <p style={{ margin: '0 0 2px 0', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>VICION POWER</p>
+          <p style={{ margin: '0 0 2px 0', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>MINDBLISS POWER</p>
           <p style={{ margin: 0, fontWeight: 500 }}>Member Platform v2.0</p>
         </div>
       </motion.div>

@@ -17,7 +17,7 @@ const SPONSORS = {
   'REF999': { name: 'Andrés Gómez', country: 'Colombia', status: 'Activo', team: '31 personas', channel: 'WhatsApp +57 300 123 456' },
   // MVP demo codes
   '123456': { name: 'Representante Vicion', country: 'Internacional', status: 'Activo', team: 'Estructura general', channel: 'soporte@vicion.com' },
-  '111111': { name: 'Equipo Vicion Power', country: 'Internacional', status: 'Activo', team: 'Estructura general', channel: 'soporte@vicion.com' },
+  '111111': { name: 'Equipo Mindbliss Power', country: 'Internacional', status: 'Activo', team: 'Estructura general', channel: 'soporte@vicion.com' },
   '000000': { name: 'Acceso Directo VP', country: 'Internacional', status: 'Activo', team: 'Estructura general', channel: 'soporte@vicion.com' },
 };
 
@@ -552,7 +552,7 @@ function Step8_Payment({ data, onNext, setData }) {
 
       <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', marginBottom: 16 }}>
         <input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} style={{ width: 16, height: 16, marginTop: 2, accentColor: '#3b82f6', cursor: 'pointer' }} />
-        <span style={{ color: 'rgba(255,255,255,0.55)', fontSize: 11, lineHeight: 1.5 }}>He revisado el resumen y acepto los términos de participación del ecosistema Vicion Power.</span>
+        <span style={{ color: 'rgba(255,255,255,0.55)', fontSize: 11, lineHeight: 1.5 }}>He revisado el resumen y acepto los términos de participación del ecosistema Mindbliss Power.</span>
       </label>
 
       <PrimaryBtn disabled={!method || !confirmed} loading={loading} success={success}
@@ -657,7 +657,7 @@ function Step11_Training({ data, onNext, setData }) {
   const [activeCard, setActiveCard] = useState(0);
   const isNetwork = data.path === 'network';
   const modules = [
-    { icon: Globe, title: 'Qué es Vicion Power', body: 'Un ecosistema de participación estructurada con beneficios progresivos. No es una inversión tradicional: es un sistema de acceso con valor en el tiempo.' },
+    { icon: Globe, title: 'Qué es Mindbliss Power', body: 'Un ecosistema de participación estructurada con beneficios progresivos. No es una inversión tradicional: es un sistema de acceso con valor en el tiempo.' },
     { icon: Zap, title: 'Cómo funciona la participación', body: 'Al activar tu participación, accedes a beneficios según tu nivel, permanencia y actividad. El sistema recompensa la constancia.' },
     { icon: TrendingUp, title: 'Cómo crece tu posición', body: 'Tu posición evoluciona con el tiempo, la actividad y opcionalmente la construcción de estructura. No hay atajos, pero sí un camino claro.' },
     { icon: Shield, title: 'Lo que debes saber', body: 'No existen rendimientos garantizados. Los beneficios dependen del sistema y tu participación activa. Actúa con claridad y sin expectativas equivocadas.' },
@@ -852,7 +852,7 @@ export default function OnboardingStart() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <img src={LOGO} alt="VP" style={{ height: 28, objectFit: 'contain', filter: 'brightness(0) invert(1) opacity(0.85)' }} />
           <div>
-            <div style={{ fontFamily: 'Montserrat,sans-serif', fontWeight: 900, color: 'white', fontSize: 11, letterSpacing: 2 }}>VICION POWER</div>
+            <div style={{ fontFamily: 'Montserrat,sans-serif', fontWeight: 900, color: 'white', fontSize: 11, letterSpacing: 2 }}>MINDBLISS POWER</div>
             <div style={{ fontFamily: 'Montserrat,sans-serif', fontWeight: 600, color: '#3b82f6', fontSize: 7, letterSpacing: 2 }}>ACCESO</div>
           </div>
         </div>
@@ -904,7 +904,7 @@ export default function OnboardingStart() {
         </div>
 
         <p style={{ color: 'rgba(255,255,255,0.2)', fontSize: 10, marginTop: 24, textAlign: 'center' }}>
-          Vicion Power · Proceso seguro y guiado
+          Mindbliss Power · Proceso seguro y guiado
         </p>
       </div>
     </div>

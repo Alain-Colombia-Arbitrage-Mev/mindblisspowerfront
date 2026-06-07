@@ -33,11 +33,11 @@ const SCRIPTS = [
     scripts: [
       {
         name: 'Versión corta (5 min)',
-        text: 'Vicion Power es una plataforma de membresía estructurada. Accedes a beneficios, herramientas y progresión dentro de una comunidad ordenada. No es inversión ni garantía de dinero. Es un sistema donde tu crecimiento depende de tu actividad y capacidad de liderazgo. Los beneficios y acceso se van expandiendo a medida que progresas.',
+        text: 'Mindbliss Power es una plataforma de membresía estructurada. Accedes a beneficios, herramientas y progresión dentro de una comunidad ordenada. No es inversión ni garantía de dinero. Es un sistema donde tu crecimiento depende de tu actividad y capacidad de liderazgo. Los beneficios y acceso se van expandiendo a medida que progresas.',
       },
       {
         name: 'Versión completa (15 min)',
-        text: 'Vicion Power funciona así:\n\n1. QÚÉS ES: Una estructura de membresía con niveles (Member → Leader → Director). Cada nivel te da más herramientas, visibilidad y responsabilidad.\n\n2. CÓMO FUNCIONA: Participa, cumple requisitos de actividad y formación, construye tu red. Tu progresión es proporcional a tu compromiso y capacidad de guiar a otros.\n\n3. CÓMO CRECES: Desarrollando liderazgo. No se trata de invitar gente, sino de guiar correctamente. El sistema reconoce tu actividad, no promete resultados.\n\n4. PARA QUIÉN ES: Personas que buscan orden, desarrollo real y crecimiento estructurado. No es para quien busca ganar dinero rápido.',
+        text: 'Mindbliss Power funciona así:\n\n1. QÚÉS ES: Una estructura de membresía con niveles (Member → Leader → Director). Cada nivel te da más herramientas, visibilidad y responsabilidad.\n\n2. CÓMO FUNCIONA: Participa, cumple requisitos de actividad y formación, construye tu red. Tu progresión es proporcional a tu compromiso y capacidad de guiar a otros.\n\n3. CÓMO CRECES: Desarrollando liderazgo. No se trata de invitar gente, sino de guiar correctamente. El sistema reconoce tu actividad, no promete resultados.\n\n4. PARA QUIÉN ES: Personas que buscan orden, desarrollo real y crecimiento estructurado. No es para quien busca ganar dinero rápido.',
       },
       {
         name: 'Diferenciador clave',
@@ -129,7 +129,7 @@ export default function CommunicationScripts() {
           Scripts listos para copiar
         </h2>
         <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14, lineHeight: 1.7, margin: 0 }}>
-          Conversaciones probadas y alineadas con la filosofía de Vicion Power. Copia, adapta a tu estilo y usa directamente.
+          Conversaciones probadas y alineadas con la filosofía de Mindbliss Power. Copia, adapta a tu estilo y usa directamente.
         </p>
       </motion.div>
 

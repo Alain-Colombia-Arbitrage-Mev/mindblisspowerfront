@@ -24,7 +24,7 @@ export default function Step1Intro({ onNext }) {
           </h1>
 
           <p className="text-lg text-gray-700 leading-relaxed mb-8">
-            Estás a punto de acceder a un sistema estructurado de participación dentro del ecosistema Vicion Power.
+            Estás a punto de acceder a un sistema estructurado de participación dentro del ecosistema Mindbliss Power.
           </p>
 
           <p className="text-lg text-gray-700 leading-relaxed mb-12">

@@ -7,13 +7,13 @@ const modules = [
     id: 'intro',
     icon: BookOpen,
     title: '1. Introducción',
-    content: 'Bienvenido al proceso de formación de Vicion Power. Este módulo te dará una visión completa del ecosistema: su estructura, su propósito y cómo funciona la participación dentro del sistema.',
+    content: 'Bienvenido al proceso de formación de Mindbliss Power. Este módulo te dará una visión completa del ecosistema: su estructura, su propósito y cómo funciona la participación dentro del sistema.',
   },
   {
     id: 'how',
     icon: Target,
     title: '2. Cómo funciona',
-    content: 'Vicion Power es una plataforma de membresía estructurada. Los miembros acceden a beneficios, herramientas y progresión según su nivel de participación. El sistema reconoce la actividad, no promete resultados.',
+    content: 'Mindbliss Power es una plataforma de membresía estructurada. Los miembros acceden a beneficios, herramientas y progresión según su nivel de participación. El sistema reconoce la actividad, no promete resultados.',
   },
   {
     id: 'nono',
@@ -61,7 +61,7 @@ const modules = [
     ],
     script: '«Esto no es staking. Es un sistema donde tu participación te permite acceder a beneficios dentro del tiempo. Mientras más te mantienes, más acceso tienes. Y si decides construir, puedes crecer dentro del sistema.»',
     correct: [
-      'Vicion Power es un sistema de participación estructurada donde puedes acceder a beneficios dentro del tiempo.',
+      'Mindbliss Power es un sistema de participación estructurada donde puedes acceder a beneficios dentro del tiempo.',
       'Aquí no se trata de ganar rápido.',
       'Se trata de construir acceso a valor dentro de una estructura real.',
     ],

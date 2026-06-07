@@ -23,7 +23,7 @@ export default function AdminUsersPanel() {
     const master = {
       id: 'master-cuenta-mvp-principal',
       full_name: 'Cuenta MVP Principal',
-      email: 'master@vicion.app',
+      email: 'master@mindblisspower.com',
       phone: '+57-301-1000000',
       country: 'CO',
       city: 'Bogotá',

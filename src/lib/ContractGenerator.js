@@ -72,7 +72,7 @@ class ContractGenerator {
         },
         {
           type: 'platform',
-          name: 'VICION POWER',
+          name: 'MINDBLISS POWER',
           representative: 'Admin',
         },
       ],
@@ -124,7 +124,7 @@ class ContractGenerator {
         },
         {
           type: 'platform',
-          name: 'VICION POWER',
+          name: 'MINDBLISS POWER',
           representative: 'Admin',
         },
       ],
@@ -179,7 +179,7 @@ class ContractGenerator {
         },
         {
           type: 'platform',
-          name: 'VICION POWER',
+          name: 'MINDBLISS POWER',
           representative: 'Admin',
         },
       ],
@@ -423,7 +423,7 @@ PARTIES INVOLVED
 ================================================================================
 
 1. Individual: ${partyName}
-2. Platform: VICION POWER
+2. Platform: MINDBLISS POWER
 
 ================================================================================
 TERMS & CONDITIONS

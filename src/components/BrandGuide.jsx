@@ -10,7 +10,7 @@ export default function BrandGuide() {
         className="pt-12"
       >
         <h1 style={{ color: '#0F1419', fontSize: 40, fontWeight: 900, fontFamily: 'Inter, sans-serif', margin: '0 0 12px 0', letterSpacing: -0.5 }}>
-          Vicion Power
+          Mindbliss Power
         </h1>
         <p style={{ color: '#4b5563', fontSize: 16, fontWeight: 400, margin: '0 0 24px 0', lineHeight: 1.6 }}>
           Brand identity guidelines · Minimalista · Premium · Fintech-inspired
@@ -89,7 +89,7 @@ export default function BrandGuide() {
 
         <div className="space-y-8">
           {[
-            { label: 'Display Large', size: 40, weight: 900, text: 'Vicion Power' },
+            { label: 'Display Large', size: 40, weight: 900, text: 'Mindbliss Power' },
             { label: 'Heading 1', size: 28, weight: 700, text: 'Building Global Networks' },
             { label: 'Heading 2', size: 20, weight: 700, text: 'Transparent Growth' },
             { label: 'Body Regular', size: 14, weight: 400, text: 'Professional and accessible communication for all members' },
@@ -258,7 +258,7 @@ export default function BrandGuide() {
       {/* Footer */}
       <div style={{ paddingTop: 32, borderTop: '1px solid #e5e7eb', textAlign: 'center' }}>
         <p style={{ color: '#9ca3af', fontSize: 12, margin: 0 }}>
-          Vicion Power Brand Guide v1.0 · 2026
+          Mindbliss Power Brand Guide v1.0 · 2026
         </p>
       </div>
     </div>

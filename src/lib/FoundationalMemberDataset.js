@@ -41,7 +41,7 @@ class FoundationalMemberDataset {
 
   generateRealisticEmail(name, country) {
     const [first, last] = name.toLowerCase().split(' ');
-    const domains = ['gmail.com', 'outlook.com', 'vicion.app', 'hotmail.com'];
+    const domains = ['gmail.com', 'outlook.com', 'mindblisspower.com', 'hotmail.com'];
     const domain = domains[Math.floor(Math.random() * domains.length)];
     return `${first}.${last}@${domain}`;
   }

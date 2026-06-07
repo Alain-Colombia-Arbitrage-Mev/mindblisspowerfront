@@ -67,7 +67,7 @@ export default function NotForEveryone() {
               marginRight: 'auto'
             }}
           >
-            Vicion Power no es para quienes buscan resultados rápidos.
+            Mindbliss Power no es para quienes buscan resultados rápidos.
             <br />
             <br />
             <span style={{ fontWeight: 700, color: '#FFFFFF' }}>

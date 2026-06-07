@@ -22,7 +22,7 @@ export default function KYCApprovalDialog({ userId, onClose, onStatusChange }) {
 
   const handleApprove = async () => {
     setLoading(true);
-    const result = KYCManager.approveKYC(userId, 'admin@vicion.app');
+    const result = KYCManager.approveKYC(userId, 'admin@mindblisspower.com');
     if (result.success) {
       onStatusChange?.();
       setTimeout(() => onClose(), 500);
@@ -36,7 +36,7 @@ export default function KYCApprovalDialog({ userId, onClose, onStatusChange }) {
       return;
     }
     setLoading(true);
-    const result = KYCManager.rejectKYC(userId, 'admin@vicion.app', rejectionReason);
+    const result = KYCManager.rejectKYC(userId, 'admin@mindblisspower.com', rejectionReason);
     if (result.success) {
       onStatusChange?.();
       setTimeout(() => onClose(), 500);
@@ -50,7 +50,7 @@ export default function KYCApprovalDialog({ userId, onClose, onStatusChange }) {
       return;
     }
     setLoading(true);
-    const result = KYCManager.requestReview(userId, 'admin@vicion.app', reviewNotes);
+    const result = KYCManager.requestReview(userId, 'admin@mindblisspower.com', reviewNotes);
     if (result.success) {
       onStatusChange?.();
       setTimeout(() => onClose(), 500);

@@ -161,7 +161,7 @@ function BasicContent({ color, colorDim, colorBorder, onGrow, user }) {
 }
 
 function TrainingContent({ color, colorDim, colorBorder, onComplete }) {
-  const modules = ['Qué es Vicion Power', 'Cómo funciona', 'Cómo explicar', 'Qué no decir', 'Cómo invitar'];
+  const modules = ['Qué es Mindbliss Power', 'Cómo funciona', 'Cómo explicar', 'Qué no decir', 'Cómo invitar'];
   return (
     <>
       <div style={{ marginBottom: 20 }}>

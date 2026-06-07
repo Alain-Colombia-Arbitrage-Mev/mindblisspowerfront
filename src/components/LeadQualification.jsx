@@ -91,7 +91,7 @@ export default function LeadQualification({ onNavigate }) {
   const stageMessages = {
     understand: {
       title: 'Vamos a explorar juntos',
-      narrative: 'Sin presión. Sin venta. Solo claridad sobre cómo funciona Vicion Power y si es para ti.',
+      narrative: 'Sin presión. Sin venta. Solo claridad sobre cómo funciona Mindbliss Power y si es para ti.',
       cta: 'Ver la plataforma',
     },
     participate: {

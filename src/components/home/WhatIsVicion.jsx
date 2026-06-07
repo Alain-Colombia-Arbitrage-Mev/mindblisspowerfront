@@ -24,7 +24,7 @@ export default function WhatIsVicion() {
               More than a platform
             </h2>
             <p className="text-muted-foreground text-lg leading-relaxed mb-8">
-              Vicion Power is a global ecosystem that connects people with structured systems, access to opportunities, and a scalable participation model designed for long-term development.
+              Mindbliss Power is a global ecosystem that connects people with structured systems, access to opportunities, and a scalable participation model designed for long-term development.
             </p>
             <div className="h-1 w-20 bg-primary rounded-full" />
           </motion.div>

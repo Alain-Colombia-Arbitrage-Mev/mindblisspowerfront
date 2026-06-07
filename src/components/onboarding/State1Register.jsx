@@ -40,7 +40,7 @@ export default function State1Register({ onComplete }) {
           <User size={24} style={{ color: '#3b82f6' }} />
         </div>
         <h1 className="font-montserrat font-black text-2xl text-white mb-2">Crea tu cuenta</h1>
-        <p className="text-white/50 text-sm">Inicia tu participación en Vicion Power</p>
+        <p className="text-white/50 text-sm">Inicia tu participación en Mindbliss Power</p>
       </div>
 
       {success ? (

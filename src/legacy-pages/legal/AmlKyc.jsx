@@ -16,7 +16,7 @@ export default function AmlKyc() {
           </motion.h1>
           <motion.p initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, delay: 0.2 }}
             className="text-lg text-white/80">
-            Marco legal y operativo del ecosistema Vicion Power
+            Marco legal y operativo del ecosistema Mindbliss Power
           </motion.p>
         </div>
       </section>
@@ -28,7 +28,7 @@ export default function AmlKyc() {
             variants={fadeUp} className="prose prose-lg max-w-none text-gray-700">
 
             <h2 className="font-montserrat font-bold text-3xl text-vicion-deep mt-12 mb-6">1. Marco Regulatorio</h2>
-            <p>Vicion Power opera de conformidad con estándares internacionales de cumplimiento, incluyendo:</p>
+            <p>Mindbliss Power opera de conformidad con estándares internacionales de cumplimiento, incluyendo:</p>
             <ul className="list-disc pl-6 space-y-2">
               <li>Recomendaciones del Grupo de Acción Financiera Internacional (GAFI)</li>
               <li>Regulaciones anti-lavado de dinero (AML)</li>
@@ -69,7 +69,7 @@ export default function AmlKyc() {
             </ul>
 
             <h2 className="font-montserrat font-bold text-3xl text-vicion-deep mt-12 mb-6">3. Procedimiento AML (Anti-Lavado de Dinero)</h2>
-            <p>Vicion Power implementa controles AML robustos:</p>
+            <p>Mindbliss Power implementa controles AML robustos:</p>
             <ul className="list-disc pl-6 space-y-2">
               <li><strong>Monitoreo de Transacciones:</strong> Análisis continuo de patrones de actividad para detectar comportamiento inusual</li>
               <li><strong>Reportes de Transacciones Sospechosas (SAR):</strong> Reporte a autoridades competentes de actividades potencialmente ilícitas</li>
@@ -89,7 +89,7 @@ export default function AmlKyc() {
             </ul>
 
             <h2 className="font-montserrat font-bold text-3xl text-vicion-deep mt-12 mb-6">5. Listas de Control Sancionadas</h2>
-            <p>Vicion Power verifica regularmente contra:</p>
+            <p>Mindbliss Power verifica regularmente contra:</p>
             <ul className="list-disc pl-6 space-y-2">
               <li>Lista OFAC (Oficina de Control de Activos Extranjeros - EEUU)</li>
               <li>Listas de la Unión Europea</li>
@@ -99,7 +99,7 @@ export default function AmlKyc() {
             </ul>
 
             <h2 className="font-montserrat font-bold text-3xl text-vicion-deep mt-12 mb-6">6. Políticas de Rechazo</h2>
-            <p>Vicion Power rechazará la participación o suspenderá cuentas de usuarios que:</p>
+            <p>Mindbliss Power rechazará la participación o suspenderá cuentas de usuarios que:</p>
             <ul className="list-disc pl-6 space-y-2">
               <li>No completen verificación KYC</li>
               <li>Proporcionen información falsa o fraudulenta</li>
@@ -110,7 +110,7 @@ export default function AmlKyc() {
             </ul>
 
             <h2 className="font-montserrat font-bold text-3xl text-vicion-deep mt-12 mb-6">7. Reportes Obligatorios</h2>
-            <p>Vicion Power reportará a autoridades competentes:</p>
+            <p>Mindbliss Power reportará a autoridades competentes:</p>
             <ul className="list-disc pl-6 space-y-2">
               <li>Transacciones sospechosas (SAR)</li>
               <li>Transacciones de efectivo sobre umbrales regulatorios</li>
@@ -129,17 +129,17 @@ export default function AmlKyc() {
             </ul>
 
             <h2 className="font-montserrat font-bold text-3xl text-vicion-deep mt-12 mb-6">9. Confidencialidad y Protección de Denunciantes</h2>
-            <p>Vicion Power mantiene la confidencialidad de:</p>
+            <p>Mindbliss Power mantiene la confidencialidad de:</p>
             <ul className="list-disc pl-6 space-y-2">
               <li>Reportes de transacciones sospechosas</li>
               <li>Investigaciones de cumplimiento</li>
               <li>Información de denunciantes internos</li>
               <li>Información sensible relacionada con seguridad</li>
             </ul>
-            <p>Los empleados de Vicion Power están protegidos por leyes de protección de denunciantes cuando reportan violaciones de AML/KYC.</p>
+            <p>Los empleados de Mindbliss Power están protegidos por leyes de protección de denunciantes cuando reportan violaciones de AML/KYC.</p>
 
             <h2 className="font-montserrat font-bold text-3xl text-vicion-deep mt-12 mb-6">10. Capacitación y Cumplimiento Interno</h2>
-            <p>Vicion Power implementa:</p>
+            <p>Mindbliss Power implementa:</p>
             <ul className="list-disc pl-6 space-y-2">
               <li>Capacitación regular de AML/KYC para todos los empleados</li>
               <li>Programas de cumplimiento continuo</li>

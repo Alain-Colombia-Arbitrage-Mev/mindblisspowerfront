@@ -4,10 +4,10 @@ import { useState } from 'react';
 
 const fadeUp = { hidden: { opacity: 0, y: 36 }, visible: { opacity: 1, y: 0 } };
 
-const CONTRACT_TEXT = `ACUERDO DE PARTICIPACIÓN - VICION POWER
+const CONTRACT_TEXT = `ACUERDO DE PARTICIPACIÓN - MINDBLISS POWER
 
 1. NATURALEZA DEL SISTEMA
-Vicion Power es un ecosistema integrado de tecnología, proyectos y estructuras de desarrollo. La participación se basa en acceso a beneficios dentro del sistema, no en la adquisición de productos financieros tradicionales.
+Mindbliss Power es un ecosistema integrado de tecnología, proyectos y estructuras de desarrollo. La participación se basa en acceso a beneficios dentro del sistema, no en la adquisición de productos financieros tradicionales.
 
 2. PARTICIPACIÓN Y BENEFICIOS
 Los participantes acceden a beneficios basados en su nivel de participación, actividad dentro del ecosistema y desarrollo del mismo. El acceso a beneficios es progresivo y está sujeto a las condiciones establecidas en el plan seleccionado.
@@ -26,16 +26,16 @@ El usuario comprende que:
 - No existe garantía de retorno o recuperación de inversión
 
 6. CUMPLIMIENTO Y VALIDACIÓN
-Vicion Power implementa procesos de validación, control y cumplimiento conforme a estándares internacionales, incluyendo políticas AML y KYC. El usuario acepta someterse a estos procesos de verificación.
+Mindbliss Power implementa procesos de validación, control y cumplimiento conforme a estándares internacionales, incluyendo políticas AML y KYC. El usuario acepta someterse a estos procesos de verificación.
 
 7. DATOS Y PRIVACIDAD
-El usuario autoriza el tratamiento de sus datos personales conforme a la Política de Privacidad. Vicion Power implementa medidas de seguridad para proteger la información del usuario.
+El usuario autoriza el tratamiento de sus datos personales conforme a la Política de Privacidad. Mindbliss Power implementa medidas de seguridad para proteger la información del usuario.
 
 8. MODIFICACIONES
-Vicion Power se reserva el derecho de modificar las condiciones del sistema, planes y beneficios. El usuario será notificado de cambios significativos y deberá aceptar nuevas condiciones para continuar.
+Mindbliss Power se reserva el derecho de modificar las condiciones del sistema, planes y beneficios. El usuario será notificado de cambios significativos y deberá aceptar nuevas condiciones para continuar.
 
 9. RESOLUCIÓN DE CONFLICTOS
-Cualquier disputa será resuelta conforme a los procedimientos establecidos por Vicion Power y la jurisdicción aplicable.
+Cualquier disputa será resuelta conforme a los procedimientos establecidos por Mindbliss Power y la jurisdicción aplicable.
 
 10. ACEPTACIÓN
 Al aceptar este acuerdo, el usuario confirma que ha leído, comprende y acepta todos los términos y condiciones establecidos.

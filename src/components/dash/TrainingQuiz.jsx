@@ -4,7 +4,7 @@ import { CheckCircle, XCircle } from 'lucide-react';
 const QUIZ_QUESTIONS = [
   {
     id: 1,
-    question: '¿Qué es Vicion Power?',
+    question: '¿Qué es Mindbliss Power?',
     options: [
       'Una plataforma de membresía estructurada con beneficios y progresión',
       'Una inversión garantizada con retornos fijos',

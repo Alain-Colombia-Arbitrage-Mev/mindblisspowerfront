@@ -1,5 +1,5 @@
 /**
- * Vicion Power – Viral Narrative System
+ * Mindbliss Power – Viral Narrative System
  * 15-30 second video scripts
  * 
  * Structure: Hook → Problem → Insight → Soft CTA

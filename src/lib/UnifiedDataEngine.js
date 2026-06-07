@@ -58,7 +58,7 @@ class UnifiedDataEngine {
     this.masterUser = this.createUser({
       id: 'user-001',
       name: 'Roberto Díaz',
-      email: 'roberto@vicion.app',
+      email: 'roberto@mindblisspower.com',
       phone: '+57 300 123 4567',
       country: 'CO',
       role: 'leader',
@@ -130,7 +130,7 @@ class UnifiedDataEngine {
       const leftUser = this.createUser({
         id: `user-${Math.random().toString(36).substr(2, 9)}`,
         name: this.generateName(),
-        email: `user-${Math.random().toString(36).substr(2, 5)}@vicion.app`,
+        email: `user-${Math.random().toString(36).substr(2, 5)}@mindblisspower.com`,
         phone: this.generatePhone(),
         country: this.randomCountry(),
         role: depth <= 2 ? 'leader' : 'inversor',
@@ -163,7 +163,7 @@ class UnifiedDataEngine {
       const rightUser = this.createUser({
         id: `user-${Math.random().toString(36).substr(2, 9)}`,
         name: this.generateName(),
-        email: `user-${Math.random().toString(36).substr(2, 5)}@vicion.app`,
+        email: `user-${Math.random().toString(36).substr(2, 5)}@mindblisspower.com`,
         phone: this.generatePhone(),
         country: this.randomCountry(),
         role: depth <= 2 ? 'leader' : 'inversor',

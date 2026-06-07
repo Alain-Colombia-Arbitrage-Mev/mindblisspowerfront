@@ -25,10 +25,10 @@ export default function RootLayout({ children }) {
             __html: `
               (function () {
                 try {
-                  var theme = localStorage.getItem('vp-theme') || 'light';
-                  document.documentElement.dataset.theme = theme === 'dark' ? 'dark' : 'light';
+                  var theme = localStorage.getItem('vp-theme') || 'dark';
+                  document.documentElement.dataset.theme = theme === 'light' ? 'light' : 'dark';
                 } catch (error) {
-                  document.documentElement.dataset.theme = 'light';
+                  document.documentElement.dataset.theme = 'dark';
                 }
               })();
             `,

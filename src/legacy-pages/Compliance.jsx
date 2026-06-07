@@ -30,7 +30,7 @@ const conductItems = [
   { icon: FileText, label: 'Comunicación responsable', desc: 'Usar lenguaje claro, veraz y alineado con los materiales oficiales.' },
   { icon: Eye, label: 'Respeto por la información oficial', desc: 'No distorsionar ni ampliar promesas más allá de lo establecido.' },
   { icon: Layers, label: 'Coherencia en materiales', desc: 'Utilizar únicamente recursos aprobados por la plataforma.' },
-  { icon: Users, label: 'Directrices internas', desc: 'Seguir los lineamientos de participación definidos por Vicion Power.' },
+  { icon: Users, label: 'Directrices internas', desc: 'Seguir los lineamientos de participación definidos por Mindbliss Power.' },
 ];
 
 export default function Compliance() {
@@ -58,7 +58,7 @@ export default function Compliance() {
               </span>
             </h1>
             <p className="text-white/65 text-xl leading-relaxed max-w-2xl">
-              Vicion Power promueve una experiencia de participación basada en transparencia, comunicación clara y uso responsable de la plataforma.
+              Mindbliss Power promueve una experiencia de participación basada en transparencia, comunicación clara y uso responsable de la plataforma.
             </p>
           </motion.div>
         </div>
@@ -74,7 +74,7 @@ export default function Compliance() {
                 Compromiso con una experiencia clara
               </h2>
               <p className="text-gray-500 text-lg leading-relaxed">
-                Vicion Power presenta su ecosistema, programas y oportunidades de forma estructurada, procurando que cada miembro comprenda la naturaleza de su participación, los beneficios disponibles y el funcionamiento general de la plataforma.
+                Mindbliss Power presenta su ecosistema, programas y oportunidades de forma estructurada, procurando que cada miembro comprenda la naturaleza de su participación, los beneficios disponibles y el funcionamiento general de la plataforma.
               </p>
               <motion.p initial="hidden" whileInView="visible" viewport={{ once: true }} transition={{ duration: 0.7, delay: 0.2 }}
                 variants={fadeUp} className="text-gray-500 text-sm leading-relaxed max-w-xl mt-3">
@@ -145,7 +145,7 @@ export default function Compliance() {
             <p className="text-vicion-electric font-montserrat font-bold text-xs tracking-[0.25em] uppercase mb-3">Conducta</p>
             <h2 className="font-montserrat font-black text-4xl sm:text-5xl mb-4">Uso responsable de la plataforma</h2>
             <p className="text-white/50 text-lg max-w-2xl mx-auto leading-relaxed">
-              La comunidad Vicion Power debe desarrollarse con comunicación responsable, respeto por la información oficial, coherencia en el uso de materiales y apego a las directrices internas de participación.
+              La comunidad Mindbliss Power debe desarrollarse con comunicación responsable, respeto por la información oficial, coherencia en el uso de materiales y apego a las directrices internas de participación.
             </p>
           </motion.div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
@@ -181,7 +181,7 @@ export default function Compliance() {
               Una plataforma seria comienza con reglas claras
             </h2>
             <p className="text-gray-500 text-lg leading-relaxed max-w-2xl mx-auto">
-              La confianza se construye con orden, estructura y consistencia. Por eso, Vicion Power integra criterios de claridad operativa y lineamientos visibles para fortalecer la experiencia de todos sus miembros.
+              La confianza se construye con orden, estructura y consistencia. Por eso, Mindbliss Power integra criterios de claridad operativa y lineamientos visibles para fortalecer la experiencia de todos sus miembros.
             </p>
           </motion.div>
         </div>

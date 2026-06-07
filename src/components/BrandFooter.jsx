@@ -149,7 +149,7 @@ export default function BrandFooter() {
           gap: 24
         }}>
           <p style={{ color: '#6b7280', fontSize: 12, margin: 0 }}>
-            © 2026 Vicion Power. All rights reserved.
+            © 2026 Mindbliss Power. All rights reserved.
           </p>
           <div style={{ display: 'flex', gap: 16 }}>
             {['Twitter', 'LinkedIn', 'Discord'].map((social) => (
