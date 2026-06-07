@@ -17,6 +17,9 @@ export function memberDb() {
       idle_timeout: 30,
       max_lifetime: 60 * 15,
       ssl: "require",
+      // Falla rápido si una tabla está bloqueada (p.ej. durante migraciones con
+      // ALTER TABLE) en vez de colgar la petición y agotar el pool.
+      connection: { statement_timeout: 8000 },
     });
   }
   return globalRef.__vpMemberDb;
