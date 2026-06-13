@@ -20,9 +20,14 @@ export async function GET() {
     (email ? email.split("@")[0] : "");
 
   let isAdmin = false;
+  let realCode = "";
   if (email) {
-    const { ok, data } = await callPayments(`/api/admin/check?email=${encodeURIComponent(email)}`);
-    if (ok) isAdmin = Boolean(data.is_admin);
+    const [adm, ref] = await Promise.all([
+      callPayments(`/api/admin/check?email=${encodeURIComponent(email)}`),
+      callPayments(`/api/member/referral?email=${encodeURIComponent(email)}`),
+    ]);
+    if (adm.ok) isAdmin = Boolean(adm.data.is_admin);
+    if (ref.ok && ref.data.referral_code) realCode = ref.data.referral_code;
   }
 
   return NextResponse.json({
@@ -31,8 +36,24 @@ export async function GET() {
     name: name || null,
     email: email || null,
     givenName: claims.given_name || null,
+    // Código REAL del afiliado (invitation_link); si aún no tiene (no colocado),
+    // se muestra uno derivado estable por usuario.
+    referralCode: realCode || referralCode(claims.sub || email || ""),
     isAdmin,
   });
+}
+
+// Código de referido único y estable por usuario (derivado del sub de Cognito).
+// Determinista → siempre el mismo para el mismo usuario, distinto entre usuarios.
+function referralCode(seed) {
+  if (!seed) return null;
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  const code = (h >>> 0).toString(36).toUpperCase().padStart(7, "0").slice(-7);
+  return `MP${code}`;
 }
 
 function decodeJwt(token) {
