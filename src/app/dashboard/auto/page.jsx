@@ -1,5 +1,5 @@
-import LegacyMemberPage from "../_components/LegacyMemberPage";
+import { AutoModeDashboardPage } from "../_components/ExecutiveDashboardPages";
 
 export default function AutoPage() {
-  return <LegacyMemberPage page="auto" />;
+  return <AutoModeDashboardPage />;
 }

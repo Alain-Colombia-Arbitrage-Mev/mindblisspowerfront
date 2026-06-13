@@ -307,9 +307,9 @@ function MemberNetwork() {
               style={{
                 display: 'flex', alignItems: 'center', gap: 5,
                 padding: '5px 12px', borderRadius: 7, border: 'none',
-                background: viewMode === key ? 'var(--vp-accent-muted)' : 'transparent',
-                color: viewMode === key ? 'var(--vp-accent)' : 'var(--vp-muted)',
-                fontSize: 10, fontWeight: 700, cursor: 'pointer',
+                background: viewMode === key ? 'var(--vp-accent)' : 'transparent',
+                color: viewMode === key ? '#1b1b1c' : 'var(--vp-muted)',
+                fontSize: 10, fontWeight: 800, cursor: 'pointer',
                 transition: 'all 0.15s',
               }}
             >

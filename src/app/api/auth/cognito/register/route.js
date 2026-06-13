@@ -54,7 +54,9 @@ export async function POST(request) {
     { Name: "zoneinfo", Value: "America/Bogota" },
     { Name: "locale", Value: preferredLanguage || "es" },
     { Name: "address", Value: city || country ? `${city}${city && country ? ", " : ""}${country}` : "-" },
-    { Name: "updated_at", Value: String(Math.floor(Date.now() / 1000)) },
+    // NOTA: `updated_at` es Required en el pool PERO Cognito no permite escribirlo
+    // (es un atributo gestionado). Enviarlo causa InvalidParameterException. Cognito
+    // lo auto-rellena, así que NO se incluye aquí. (sub también es auto.)
   ];
 
   if (phone) {

@@ -1,5 +1,5 @@
-import LegacyMemberPage from "../_components/LegacyMemberPage";
+import { ReferralsDashboardPage } from "../_components/ExecutiveDashboardPages";
 
 export default function ReferralsPage() {
-  return <LegacyMemberPage page="referrals" />;
+  return <ReferralsDashboardPage />;
 }

@@ -302,48 +302,33 @@ export default function OnboardingPage() {
                   Bienvenido a Mindbliss Power
                 </div>
                 <p className="text-sm leading-6" style={{ color: "var(--vp-text-soft)" }}>
-                  Esta información crea tu perfil de miembro y permite que el equipo te acompañe desde el primer contacto.
+                  Confirmamos los datos de tu registro. Solo completa lo que falta para activar tu perfil.
                 </p>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field
-                  id="fullName"
-                  label="Nombre completo"
-                  value={data.fullName}
-                  onChange={(event) => updateField("fullName", event.target.value)}
-                  error={errors.fullName}
-                  autoComplete="name"
-                  required
-                />
-                <Field
-                  id="email"
-                  label="Email"
-                  type="email"
-                  value={data.email}
-                  onChange={(event) => updateField("email", event.target.value)}
-                  error={errors.email}
-                  autoComplete="email"
-                  required
-                />
-                <Field
-                  id="phone"
-                  label="Teléfono"
-                  type="tel"
-                  value={data.phone}
-                  onChange={(event) => updateField("phone", event.target.value)}
-                  error={errors.phone}
-                  autoComplete="tel"
-                  required
-                />
-                <SelectField
-                  id="communicationChannel"
-                  label="Canal de contacto"
-                  value={data.communicationChannel}
-                  onChange={(event) => updateField("communicationChannel", event.target.value)}
-                  options={channels}
-                />
-              </div>
+              {!data.email ? (
+                <div className="rounded-lg p-4 text-sm font-semibold" style={{ color: "var(--vp-danger)", background: "var(--vp-danger-muted)", border: "1px solid var(--vp-danger-border)" }}>
+                  No encontramos tus datos de registro. <Link href="/register" style={{ color: "var(--vp-accent)", textDecoration: "underline" }}>Crea tu cuenta primero</Link>.
+                </div>
+              ) : (
+                <>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <SummaryItem label="Nombre" value={data.fullName || "—"} />
+                    <SummaryItem label="Email" value={data.email} />
+                    <SummaryItem label="Teléfono" value={data.phone || "—"} />
+                    <SelectField
+                      id="communicationChannel"
+                      label="Canal de contacto"
+                      value={data.communicationChannel}
+                      onChange={(event) => updateField("communicationChannel", event.target.value)}
+                      options={channels}
+                    />
+                  </div>
+                  <p className="text-xs" style={{ color: "var(--vp-subtle)" }}>
+                    ¿Algún dato incorrecto? <Link href="/register" style={{ color: "var(--vp-accent)", textDecoration: "underline" }}>Edítalo en tu registro</Link>.
+                  </p>
+                </>
+              )}
             </div>
           )}
 

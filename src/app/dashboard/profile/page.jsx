@@ -1,5 +1,5 @@
-import LegacyMemberPage from "../_components/LegacyMemberPage";
+import { ProfileDashboardPage } from "../_components/ExecutiveDashboardPages";
 
 export default function ProfilePage() {
-  return <LegacyMemberPage page="profile" />;
+  return <ProfileDashboardPage />;
 }

@@ -1,5 +1,5 @@
-import LegacyMemberPage from "../_components/LegacyMemberPage";
+import { CommunicationsDashboardPage } from "../_components/ExecutiveDashboardPages";
 
 export default function CommunicationsPage() {
-  return <LegacyMemberPage page="communications" />;
+  return <CommunicationsDashboardPage />;
 }

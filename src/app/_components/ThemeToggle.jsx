@@ -1,48 +1,20 @@
 "use client";
 
-import { Moon, Sun } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
-const STORAGE_KEY = "vp-theme";
-
-export default function ThemeToggle({ compact = false }) {
-  const [theme, setTheme] = useState("dark");
-
+/**
+ * Light mode DESACTIVADO temporalmente: forzamos dark y ocultamos el toggle.
+ * (Para reactivar light: restaurar el toggle y el script en layout.jsx.)
+ */
+export default function ThemeToggle() {
   useEffect(() => {
-    const storedTheme = localStorage.getItem(STORAGE_KEY) || "dark";
-    applyTheme(storedTheme);
-    setTheme(storedTheme);
+    document.documentElement.dataset.theme = "dark";
+    try {
+      localStorage.setItem("vp-theme", "dark");
+    } catch {
+      /* ignore */
+    }
   }, []);
 
-  function toggleTheme() {
-    const nextTheme = theme === "light" ? "dark" : "light";
-    applyTheme(nextTheme);
-    localStorage.setItem(STORAGE_KEY, nextTheme);
-    setTheme(nextTheme);
-  }
-
-  const isLight = theme === "light";
-
-  return (
-    <button
-      type="button"
-      onClick={toggleTheme}
-      title={isLight ? "Cambiar a dark" : "Cambiar a light"}
-      aria-label={isLight ? "Cambiar a dark" : "Cambiar a light"}
-      className="inline-flex items-center justify-center rounded-lg transition"
-      style={{
-        width: compact ? 36 : 40,
-        height: compact ? 36 : 40,
-        color: "var(--vp-muted)",
-        background: "var(--vp-surface)",
-        border: "1px solid var(--vp-border)",
-      }}
-    >
-      {isLight ? <Moon size={16} /> : <Sun size={16} />}
-    </button>
-  );
-}
-
-function applyTheme(theme) {
-  document.documentElement.dataset.theme = theme === "dark" ? "dark" : "light";
+  return null;
 }

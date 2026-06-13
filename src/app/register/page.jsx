@@ -6,46 +6,49 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import AuthShell from "../_components/AuthShell";
 
+// Registro MÍNIMO: solo lo esencial para crear la cuenta. El resto del perfil
+// (país, ciudad, documento, fecha, preferencias) se completa en el onboarding.
 const initialForm = {
   fullName: "",
   email: "",
   password: "",
   confirmPassword: "",
+  dialCode: "+57",
   phone: "",
-  country: "Colombia",
-  city: "",
-  documentType: "cc",
-  documentNumber: "",
-  birthDate: "",
-  preferredLanguage: "es",
-  communicationChannel: "whatsapp",
   acceptsPrivacy: false,
 };
 
+// Códigos de país comunes (LatAm + US/ES). value = prefijo E.164.
+const dialCodes = [
+  ["+57", "🇨🇴 Colombia (+57)"],
+  ["+52", "🇲🇽 México (+52)"],
+  ["+1", "🇺🇸 EE.UU./Canadá (+1)"],
+  ["+51", "🇵🇪 Perú (+51)"],
+  ["+593", "🇪🇨 Ecuador (+593)"],
+  ["+58", "🇻🇪 Venezuela (+58)"],
+  ["+54", "🇦🇷 Argentina (+54)"],
+  ["+56", "🇨🇱 Chile (+56)"],
+  ["+591", "🇧🇴 Bolivia (+591)"],
+  ["+507", "🇵🇦 Panamá (+507)"],
+  ["+502", "🇬🇹 Guatemala (+502)"],
+  ["+34", "🇪🇸 España (+34)"],
+];
+
+// Combina código de país + número local en E.164 (lo que acepta Cognito).
+function composePhone(dialCode, local) {
+  const digits = String(local || "").replace(/\D/g, "").replace(/^0+/, "");
+  return `${dialCode}${digits}`;
+}
+
 const sideKpis = [
-  { value: "4", label: "secciones" },
+  { value: "1 min", label: "registro" },
   { value: "1", label: "perfil" },
   { value: "100%", label: "personal" },
 ];
 
-const documentTypes = [
-  ["cc", "Cédula de ciudadanía"],
-  ["ce", "Cédula de extranjería"],
-  ["passport", "Pasaporte"],
-  ["dni", "Documento nacional"],
-];
-
-const languages = [
-  ["es", "Español"],
-  ["en", "Inglés"],
-  ["pt", "Portugués"],
-];
-
-const channels = [
-  ["whatsapp", "WhatsApp"],
-  ["email", "Email"],
-  ["phone", "Llamada"],
-];
+function isValidE164(phone) {
+  return /^\+[1-9]\d{7,14}$/.test(phone);
+}
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -89,9 +92,11 @@ export default function RegisterPage() {
     if (form.confirmPassword !== form.password) {
       nextErrors.confirmPassword = "Las contraseñas no coinciden.";
     }
-    if (!form.phone.trim()) nextErrors.phone = "El teléfono es requerido.";
-    if (!form.country.trim()) nextErrors.country = "El país es requerido.";
-    if (!form.city.trim()) nextErrors.city = "La ciudad es requerida.";
+    if (!form.phone.trim()) {
+      nextErrors.phone = "El teléfono es requerido.";
+    } else if (!isValidE164(composePhone(form.dialCode, form.phone))) {
+      nextErrors.phone = "Número inválido. Ingresa solo el número (sin el código de país).";
+    }
     if (!form.acceptsPrivacy) nextErrors.acceptsPrivacy = "Debes autorizar el tratamiento de datos.";
 
     return nextErrors;
@@ -109,14 +114,7 @@ export default function RegisterPage() {
     const draft = {
       fullName: form.fullName.trim(),
       email: form.email.trim().toLowerCase(),
-      phone: form.phone.trim(),
-      country: form.country.trim(),
-      city: form.city.trim(),
-      documentType: form.documentType,
-      documentNumber: form.documentNumber.trim(),
-      birthDate: form.birthDate,
-      preferredLanguage: form.preferredLanguage,
-      communicationChannel: form.communicationChannel,
+      phone: composePhone(form.dialCode, form.phone),
       acceptsPrivacy: form.acceptsPrivacy,
       company: "Mindbliss Power",
       createdAt: new Date().toISOString(),
@@ -374,76 +372,44 @@ export default function RegisterPage() {
               autoComplete="new-password"
               required
             />
-            <Field
-              id="phone"
-              label="Teléfono"
-              type="tel"
-              value={form.phone}
-              onChange={(event) => updateField("phone", event.target.value)}
-              error={errors.phone}
-              autoComplete="tel"
-              required
-            />
-            <Field
-              id="birthDate"
-              label="Fecha de nacimiento"
-              type="date"
-              value={form.birthDate}
-              onChange={(event) => updateField("birthDate", event.target.value)}
-              autoComplete="bday"
-            />
-            <Field
-              id="country"
-              label="País"
-              value={form.country}
-              onChange={(event) => updateField("country", event.target.value)}
-              error={errors.country}
-              autoComplete="country-name"
-              required
-            />
-            <Field
-              id="city"
-              label="Ciudad"
-              value={form.city}
-              onChange={(event) => updateField("city", event.target.value)}
-              error={errors.city}
-              autoComplete="address-level2"
-              required
-            />
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <SelectField
-              id="documentType"
-              label="Tipo de documento"
-              value={form.documentType}
-              onChange={(event) => updateField("documentType", event.target.value)}
-              options={documentTypes}
-            />
-            <Field
-              id="documentNumber"
-              label="Número de documento"
-              value={form.documentNumber}
-              onChange={(event) => updateField("documentNumber", event.target.value)}
-              autoComplete="off"
-            />
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <SelectField
-              id="preferredLanguage"
-              label="Idioma preferido"
-              value={form.preferredLanguage}
-              onChange={(event) => updateField("preferredLanguage", event.target.value)}
-              options={languages}
-            />
-            <SelectField
-              id="communicationChannel"
-              label="Canal de contacto"
-              value={form.communicationChannel}
-              onChange={(event) => updateField("communicationChannel", event.target.value)}
-              options={channels}
-            />
+            <div>
+              <label className="mb-2 block text-xs font-bold" htmlFor="phone" style={{ color: "var(--vp-muted)" }}>
+                Teléfono
+              </label>
+              <div className="flex gap-2">
+                <select
+                  aria-label="Código de país"
+                  value={form.dialCode}
+                  onChange={(event) => updateField("dialCode", event.target.value)}
+                  className="min-h-12 rounded-lg px-2 text-sm font-semibold outline-none"
+                  style={{ color: "var(--vp-text)", background: "var(--vp-surface-raised)", border: "1px solid var(--vp-border)", maxWidth: 150 }}
+                >
+                  {dialCodes.map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+                <input
+                  id="phone"
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel-national"
+                  value={form.phone}
+                  onChange={(event) => updateField("phone", event.target.value)}
+                  placeholder="300 123 4567"
+                  className="min-h-12 w-full rounded-lg px-3 text-sm font-semibold outline-none"
+                  style={{
+                    color: "var(--vp-text)",
+                    background: "var(--vp-surface-raised)",
+                    border: errors.phone ? "1px solid var(--vp-danger)" : "1px solid var(--vp-border)",
+                  }}
+                />
+              </div>
+              {errors.phone ? (
+                <p className="mt-2 text-xs font-semibold" style={{ color: "var(--vp-danger)" }}>{errors.phone}</p>
+              ) : (
+                <p className="mt-2 text-xs leading-5" style={{ color: "var(--vp-subtle)" }}>Solo el número, sin el código de país.</p>
+              )}
+            </div>
           </div>
 
           <CheckRow
