@@ -518,10 +518,13 @@ export function FinanceDashboardPage() {
   );
 }
 
+const PLAN_LABEL = { passive_investor: "Inversionista pasivo", network: "Red" };
+
 export function ProfileDashboardPage() {
   const [twoFactor, setTwoFactor] = useState(false);
   const [digest, setDigest] = useState(true);
   const [me, setMe] = useState({ name: "", email: "", referralCode: "" });
+  const [summary, setSummary] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -531,6 +534,10 @@ export function ProfileDashboardPage() {
         if (!cancelled && d) setMe({ name: d.name || "", email: d.email || "", referralCode: d.referralCode || "" });
       })
       .catch(() => {});
+    fetch("/api/payments/me", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!cancelled && d && !d.error) setSummary(d); })
+      .catch(() => {});
     return () => { cancelled = true; };
   }, []);
 
@@ -538,6 +545,12 @@ export function ProfileDashboardPage() {
   const displayEmail = me.email || member.email;
   const displayReferral = me.referralCode || member.referralCode;
   const displayInitial = (displayName || "M").trim().charAt(0).toUpperCase();
+  const displayRank = summary?.rank && summary.rank !== "—" ? summary.rank : member.rank;
+  const displayJoined = summary?.joined_at || member.joined;
+  const displayPlan = summary?.plan ? (PLAN_LABEL[summary.plan] || summary.plan) : member.plan;
+  const displayBalance = summary
+    ? `$${Number(summary.wallet_balance_usd ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    : null;
 
   return (
     <section className="executive-page">
@@ -569,21 +582,29 @@ export function ProfileDashboardPage() {
                 {displayEmail}
               </p>
               <div className="mt-5 flex justify-center">
-                <StatusPill tone="warning">{member.rank}</StatusPill>
+                <StatusPill tone="warning">{displayRank}</StatusPill>
               </div>
               <div className="mt-7 grid grid-cols-2 gap-4 border-t pt-5 text-left" style={{ borderColor: "var(--vp-border)" }}>
                 <div>
                   <p className="executive-card-label mb-1">Registro</p>
                   <p className="m-0 text-sm font-semibold" style={{ color: "var(--vp-text)" }}>
-                    {member.joined}
+                    {displayJoined}
                   </p>
                 </div>
                 <div>
                   <p className="executive-card-label mb-1">Plan</p>
                   <p className="m-0 text-sm font-semibold" style={{ color: "var(--vp-text)" }}>
-                    {member.plan}
+                    {displayPlan}
                   </p>
                 </div>
+                {displayBalance != null && (
+                  <div className="col-span-2">
+                    <p className="executive-card-label mb-1">Balance billetera</p>
+                    <p className="m-0 text-lg font-semibold" style={{ color: "var(--vp-accent)" }}>
+                      {displayBalance}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
 
