@@ -1,6 +1,6 @@
 import { Package, ShieldCheck, Sparkles, Trophy } from "lucide-react";
 
-import { memberDb } from "@/lib/member-db";
+import { getCatalog } from "@/lib/catalog";
 import ActivatePackageButton from "./ActivatePackageButton";
 import MyPaymentsPanel from "./MyPaymentsPanel";
 
@@ -16,16 +16,9 @@ export default async function PackagesPage() {
   let unavailable = false;
 
   try {
-    const sql = memberDb();
-    packages = await sql`
-      SELECT id, name, amount_usd, pv, type
-        FROM mlm.package
-       WHERE is_active
-       ORDER BY amount_usd ASC`;
-    ranks = await sql`
-      SELECT code, name_es, required_points, bonus_amount_usd
-        FROM mlm.rank
-       ORDER BY display_order ASC`;
+    const catalog = await getCatalog(); // cacheado 5 min (Next Data Cache, tag "catalog")
+    packages = catalog.packages;
+    ranks = catalog.ranks;
   } catch {
     unavailable = true;
   }
