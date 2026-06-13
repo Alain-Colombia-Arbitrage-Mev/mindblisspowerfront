@@ -13,22 +13,29 @@ export async function GET() {
 
   const claims = decodeJwt(idToken);
   const email = claims.email ? String(claims.email).toLowerCase() : null;
-  const name =
+  const tokenName =
     claims.name ||
     [claims.given_name, claims.family_name].filter(Boolean).join(" ") ||
     claims.nickname ||
-    (email ? email.split("@")[0] : "");
+    "";
 
   let isAdmin = false;
   let realCode = "";
+  let realName = "";
   if (email) {
     const [adm, ref] = await Promise.all([
       callPayments(`/api/admin/check?email=${encodeURIComponent(email)}`),
       callPayments(`/api/member/referral?email=${encodeURIComponent(email)}`),
     ]);
     if (adm.ok) isAdmin = Boolean(adm.data.is_admin);
-    if (ref.ok && ref.data.referral_code) realCode = ref.data.referral_code;
+    if (ref.ok) {
+      if (ref.data.referral_code) realCode = ref.data.referral_code;
+      if (ref.data.name) realName = ref.data.name;
+    }
   }
+
+  // Nombre: RDS (autoritativo para migrados) → token Cognito → parte local del email.
+  const name = realName || tokenName || (email ? email.split("@")[0] : "");
 
   return NextResponse.json({
     authenticated,
@@ -37,23 +44,10 @@ export async function GET() {
     email: email || null,
     givenName: claims.given_name || null,
     // Código REAL del afiliado (invitation_link); si aún no tiene (no colocado),
-    // se muestra uno derivado estable por usuario.
+    // se usa uno derivado estable por usuario.
     referralCode: realCode || referralCode(claims.sub || email || ""),
     isAdmin,
   });
-}
-
-// Código de referido único y estable por usuario (derivado del sub de Cognito).
-// Determinista → siempre el mismo para el mismo usuario, distinto entre usuarios.
-function referralCode(seed) {
-  if (!seed) return null;
-  let h = 2166136261;
-  for (let i = 0; i < seed.length; i++) {
-    h ^= seed.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  const code = (h >>> 0).toString(36).toUpperCase().padStart(7, "0").slice(-7);
-  return `MP${code}`;
 }
 
 function decodeJwt(token) {
@@ -65,4 +59,16 @@ function decodeJwt(token) {
   } catch {
     return {};
   }
+}
+
+// Código de referido único y estable por usuario (fallback si aún no hay uno real).
+function referralCode(seed) {
+  if (!seed) return null;
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  const code = (h >>> 0).toString(36).toUpperCase().padStart(7, "0").slice(-7);
+  return `MP${code}`;
 }
