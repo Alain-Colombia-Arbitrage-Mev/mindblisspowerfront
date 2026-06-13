@@ -8,9 +8,10 @@ const sideKpis = [
   { value: "100%", label: "tuyo" },
 ];
 
-export default function LoginPage({ searchParams }) {
-  const authState = searchParams?.auth;
-  const initialEmail = typeof searchParams?.email === "string" ? searchParams.email : "";
+export default async function LoginPage({ searchParams }) {
+  const sp = (await searchParams) ?? {};
+  const authState = sp.auth;
+  const initialEmail = typeof sp.email === "string" ? sp.email : "";
 
   return (
     <AuthShell

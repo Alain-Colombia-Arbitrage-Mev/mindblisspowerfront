@@ -1,5 +1,5 @@
-import LegacyMemberPage from "../_components/LegacyMemberPage";
+import { ProductsDashboardPage } from "../_components/ExecutiveDashboardPages";
 
 export default function ProductsPage() {
-  return <LegacyMemberPage page="products" />;
+  return <ProductsDashboardPage />;
 }

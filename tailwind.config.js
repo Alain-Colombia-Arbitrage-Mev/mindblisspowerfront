@@ -8,8 +8,8 @@ const config = {
   	extend: {
       fontFamily: {
         montserrat: ['Montserrat', 'sans-serif'],
-        inter: ['Archivo', 'IBM Plex Sans', 'Inter', 'sans-serif'],
-        display: ['Anton', 'Archivo', 'sans-serif'],
+        inter: ['Montserrat', 'IBM Plex Sans', 'Inter', 'sans-serif'],
+        display: ['Montserrat', 'Archivo', 'sans-serif'],
       },
   		borderRadius: {
   			lg: 'var(--radius)',

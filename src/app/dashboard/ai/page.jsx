@@ -1,5 +1,5 @@
-import LegacyMemberPage from "../_components/LegacyMemberPage";
+import { AiAdvisorDashboardPage } from "../_components/ExecutiveDashboardPages";
 
 export default function AIPage() {
-  return <LegacyMemberPage page="aiAnalysis" />;
+  return <AiAdvisorDashboardPage />;
 }

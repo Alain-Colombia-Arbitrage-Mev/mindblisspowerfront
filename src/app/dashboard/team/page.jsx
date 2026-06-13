@@ -1,5 +1,5 @@
-import LegacyMemberPage from "../_components/LegacyMemberPage";
+import { TeamDashboardPage } from "../_components/ExecutiveDashboardPages";
 
 export default function TeamPage() {
-  return <LegacyMemberPage page="teamPro" />;
+  return <TeamDashboardPage />;
 }

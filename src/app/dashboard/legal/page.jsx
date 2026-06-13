@@ -1,5 +1,5 @@
-import LegacyMemberPage from "../_components/LegacyMemberPage";
+import { LegalDashboardPage } from "../_components/ExecutiveDashboardPages";
 
 export default function LegalPage() {
-  return <LegacyMemberPage page="legal" />;
+  return <LegalDashboardPage />;
 }

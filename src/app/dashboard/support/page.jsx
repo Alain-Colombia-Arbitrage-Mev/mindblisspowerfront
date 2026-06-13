@@ -1,5 +1,5 @@
-import LegacyMemberPage from "../_components/LegacyMemberPage";
+import { SupportDashboardPage } from "../_components/ExecutiveDashboardPages";
 
 export default function SupportPage() {
-  return <LegacyMemberPage page="support" />;
+  return <SupportDashboardPage />;
 }

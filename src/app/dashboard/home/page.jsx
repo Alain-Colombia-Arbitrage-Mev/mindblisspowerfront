@@ -1,5 +1,5 @@
-import LegacyMemberPage from "../_components/LegacyMemberPage";
+import { DashboardOverviewPage } from "../_components/ExecutiveDashboardPages";
 
 export default function HomePage() {
-  return <LegacyMemberPage page="home" />;
+  return <DashboardOverviewPage />;
 }

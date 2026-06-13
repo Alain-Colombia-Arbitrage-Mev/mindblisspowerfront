@@ -1,5 +1,5 @@
-import LegacyMemberPage from "../_components/LegacyMemberPage";
+import { BonusesDashboardPage } from "../_components/ExecutiveDashboardPages";
 
 export default function BonusesPage() {
-  return <LegacyMemberPage page="bonuses" />;
+  return <BonusesDashboardPage />;
 }

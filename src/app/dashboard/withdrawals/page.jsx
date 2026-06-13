@@ -1,5 +1,5 @@
-import LegacyMemberPage from "../_components/LegacyMemberPage";
+import { FinanceDashboardPage } from "../_components/ExecutiveDashboardPages";
 
 export default function WithdrawalsPage() {
-  return <LegacyMemberPage page="withdrawals" />;
+  return <FinanceDashboardPage />;
 }

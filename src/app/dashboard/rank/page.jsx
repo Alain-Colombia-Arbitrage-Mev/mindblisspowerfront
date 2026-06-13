@@ -1,5 +1,5 @@
-import LegacyMemberPage from "../_components/LegacyMemberPage";
+import { RankDashboardPage } from "../_components/ExecutiveDashboardPages";
 
 export default function RankPage() {
-  return <LegacyMemberPage page="ranks" />;
+  return <RankDashboardPage />;
 }

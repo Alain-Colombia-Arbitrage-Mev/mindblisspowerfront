@@ -108,9 +108,9 @@ export default function MyPositionPanel() {
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Stat icon={ShieldCheck} label="Rango actual" value={me.rank ? me.rank.name : "Sin rango"} accent />
-        <Stat icon={Network} label="Profundidad" value={`Nivel ${me.depth}`} />
-        <Stat icon={GitBranch} label="Tu pierna" value={me.side === "L" ? "Izquierda" : me.side === "R" ? "Derecha" : "Raíz"} />
-        <Stat icon={UserCheck} label="Patrocinador" value={me.sponsor || "—"} />
+        <Stat icon={Network} label="Profundidad" value={`Nivel ${me.depth}`} accent />
+        <Stat icon={GitBranch} label="Tu pierna" value={me.side === "L" ? "Izquierda" : me.side === "R" ? "Derecha" : "Raíz"} accent />
+        <Stat icon={UserCheck} label="Patrocinador" value={me.sponsor || "—"} accent />
       </div>
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
@@ -196,8 +196,8 @@ function LegCard({ title, node }) {
           )}
         </div>
       ) : (
-        <span className="text-sm font-semibold" style={{ color: "var(--vp-subtle)" }}>
-          Posición disponible
+        <span className="text-base font-bold" style={{ color: "var(--vp-green, var(--vp-accent))" }}>
+          Disponible
         </span>
       )}
     </div>

@@ -1,5 +1,5 @@
-import LegacyMemberPage from "../_components/LegacyMemberPage";
+import { ActivityDashboardPage } from "../_components/ExecutiveDashboardPages";
 
 export default function ActivityPage() {
-  return <LegacyMemberPage page="activity" />;
+  return <ActivityDashboardPage />;
 }
