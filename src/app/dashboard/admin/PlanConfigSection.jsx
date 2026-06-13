@@ -151,9 +151,10 @@ export default function PlanConfigSection() {
           style={{ background: sim.solvent ? "var(--vp-accent-muted)" : "var(--vp-danger-muted)", border: `1px solid ${sim.solvent ? "var(--vp-accent-border)" : "var(--vp-danger-border)"}` }}>
           <Gauge size={14} style={{ color: sim.solvent ? "var(--vp-accent)" : "var(--vp-danger)" }} />
           <span style={{ color: "var(--vp-text)" }}>
-            θ proyectado <b style={{ color: sim.solvent ? "var(--vp-accent)" : "var(--vp-danger)" }}>{Number(sim.theta).toFixed(4)}</b> (piso {Number(sim.floor).toFixed(2)})
-            {sim.solvent ? " — pasa el lock de solvencia ✓" : " — el publish será BLOQUEADO ✗"}
-            <span style={{ color: "var(--vp-subtle)" }}> · {sim.note}</span>
+            θ forward <b style={{ color: sim.theta >= sim.floor ? "var(--vp-accent)" : "var(--vp-danger)" }}>{Number(sim.theta).toFixed(4)}</b>
+            {sim.canonical_ran && <> · θ canónico (motor) <b style={{ color: sim.canonical_solvent ? "var(--vp-accent)" : "var(--vp-danger)" }}>{Number(sim.canonical_worst_theta).toFixed(4)}</b></>}
+            {" "}(piso {Number(sim.floor).toFixed(2)})
+            <b style={{ color: sim.solvent ? "var(--vp-accent)" : "var(--vp-danger)" }}>{sim.solvent ? " — pasa el lock ✓" : " — publish BLOQUEADO ✗"}</b>
           </span>
         </div>
       )}
