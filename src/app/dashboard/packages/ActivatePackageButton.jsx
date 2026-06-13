@@ -15,10 +15,12 @@ export default function ActivatePackageButton({ packageId, featured }) {
     setLoading(true);
     setError("");
     try {
+      let ref = "";
+      try { ref = localStorage.getItem("mp_ref") || ""; } catch { /* ignore */ }
       const resp = await fetch("/api/payments/checkout", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ package_id: packageId }),
+        body: JSON.stringify({ package_id: packageId, ref }),
       });
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok || !data.url) {

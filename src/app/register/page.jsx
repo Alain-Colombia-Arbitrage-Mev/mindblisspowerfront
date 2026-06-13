@@ -65,6 +65,7 @@ export default function RegisterPage() {
     const stored = readStoredJson("mp_registration_draft");
     const legacyStored = readStoredJson("vp_registration_draft");
     setForm((current) => ({ ...current, ...legacyStored, ...stored }));
+    try { const r = new URLSearchParams(window.location.search).get("ref"); if (r) localStorage.setItem("mp_ref", r.trim().slice(0, 64)); } catch (e) { /* ignore */ }
   }, []);
 
   function updateField(field, value) {

@@ -31,6 +31,7 @@ export async function POST(request) {
   if (!Number.isInteger(packageId) || packageId <= 0) {
     return NextResponse.json({ error: "invalid-package" }, { status: 400 });
   }
+  const ref = String(body?.ref || "").trim().slice(0, 64);
 
   const base = process.env.VP_PAYMENTS_URL;
   const token = process.env.PAYMENTS_SERVICE_TOKEN;
@@ -45,7 +46,7 @@ export async function POST(request) {
         "content-type": "application/json",
         "X-VP-Service-Token": token,
       },
-      body: JSON.stringify({ email, package_id: packageId }),
+      body: JSON.stringify({ email, package_id: packageId, ref }),
       cache: "no-store",
     });
     const payload = await resp.json().catch(() => ({}));

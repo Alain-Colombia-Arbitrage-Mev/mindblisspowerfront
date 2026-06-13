@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -264,14 +263,7 @@ function DashboardNav({ authMode, pathname, isAdmin, onNavigate }) {
             className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl"
             style={{ background: "var(--vp-surface-raised)", border: "1px solid var(--vp-border)" }}
           >
-            <Image
-              src="/mindbliss/mindbliss-symbol.png"
-              alt=""
-              width={44}
-              height={44}
-              className="h-full w-full object-cover"
-              priority
-            />
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg font-black" style={{ background: "var(--vp-accent)", color: "#0a0a0a", fontSize: 18 }}>M</span>
           </span>
           <span className="flex flex-col">
             <span className="text-xl font-extrabold leading-none" style={{ color: "var(--vp-text)" }}>
@@ -326,13 +318,7 @@ function DashboardNav({ authMode, pathname, isAdmin, onNavigate }) {
 
       <div className="border-t px-5 py-5" style={{ borderColor: "var(--vp-border)" }}>
         <div className="flex items-center gap-3 rounded-2xl p-4 text-left" style={{ background: "var(--vp-surface)", border: "1px solid var(--vp-border)" }}>
-          <Image
-            src="/mindbliss/mindbliss-symbol.png"
-            alt=""
-            width={34}
-            height={34}
-            className="h-8 w-8 shrink-0 rounded-lg object-cover"
-          />
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg font-black" style={{ background: "var(--vp-accent)", color: "#0a0a0a", fontSize: 18 }}>M</span>
           <div className="min-w-0">
             <p className="mb-1 truncate text-[10px] font-extrabold uppercase" style={{ color: "var(--vp-text)", letterSpacing: "0.14em" }}>
               Mindbliss Power
