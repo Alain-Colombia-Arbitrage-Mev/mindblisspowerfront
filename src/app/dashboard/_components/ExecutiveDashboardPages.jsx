@@ -521,14 +521,14 @@ export function FinanceDashboardPage() {
 export function ProfileDashboardPage() {
   const [twoFactor, setTwoFactor] = useState(false);
   const [digest, setDigest] = useState(true);
-  const [me, setMe] = useState({ name: "", email: "" });
+  const [me, setMe] = useState({ name: "", email: "", referralCode: "" });
 
   useEffect(() => {
     let cancelled = false;
     fetch("/api/auth/session", { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => {
-        if (!cancelled && (d?.name || d?.email)) setMe({ name: d.name || "", email: d.email || "" });
+        if (!cancelled && d) setMe({ name: d.name || "", email: d.email || "", referralCode: d.referralCode || "" });
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -536,6 +536,7 @@ export function ProfileDashboardPage() {
 
   const displayName = me.name || member.name;
   const displayEmail = me.email || member.email;
+  const displayReferral = me.referralCode || member.referralCode;
   const displayInitial = (displayName || "M").trim().charAt(0).toUpperCase();
 
   return (
@@ -594,7 +595,7 @@ export function ProfileDashboardPage() {
               <div className="rounded-2xl p-4" style={{ background: "var(--vp-bg)", border: "1px solid var(--vp-border)" }}>
                 <p className="executive-card-label">Codigo unico</p>
                 <p className="m-0 text-4xl font-light" style={{ color: "var(--vp-text)" }}>
-                  {member.referralCode}
+                  {displayReferral}
                 </p>
               </div>
             </div>
@@ -608,13 +609,13 @@ export function ProfileDashboardPage() {
               </h2>
               <div className="grid gap-5 md:grid-cols-2">
                 <Field label="Nombre completo">
-                  <input className="executive-input" defaultValue={member.name} />
+                  <input className="executive-input" key={displayName} defaultValue={displayName} />
                 </Field>
                 <Field label="Usuario">
-                  <input className="executive-input" defaultValue={member.username} readOnly />
+                  <input className="executive-input" key={displayEmail} defaultValue={displayEmail ? displayEmail.split("@")[0] : member.username} readOnly />
                 </Field>
                 <Field label="Correo electronico">
-                  <input className="executive-input" defaultValue={member.email} readOnly type="email" />
+                  <input className="executive-input" key={displayEmail} defaultValue={displayEmail} readOnly type="email" />
                 </Field>
                 <Field label="Telefono">
                   <input className="executive-input" defaultValue={member.phone} type="tel" />
