@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Sliders, Loader2, CheckCircle2, XCircle, ShieldAlert, Send } from "lucide-react";
+import { Sliders, Loader2, CheckCircle2, XCircle, ShieldAlert, Send, Gauge } from "lucide-react";
 
 // Etiquetas legibles de los parámetros de comisión.
 const LABELS = {
@@ -32,6 +32,7 @@ export default function PlanConfigSection() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
+  const [sim, setSim] = useState(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -44,6 +45,22 @@ export default function PlanConfigSection() {
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  // Preview del lock de solvencia: simula θ cada vez que cambia el borrador.
+  useEffect(() => {
+    if (!data?.config) { setSim(null); return; }
+    const fld = (data.editable || []).filter((k) => !META.has(k));
+    const ch = {};
+    for (const k of fld) {
+      if (String(data.config[k]) !== String(draft[k])) ch[k] = coerce(data.config[k], draft[k]);
+    }
+    if (Object.keys(ch).length === 0) { setSim(null); return; }
+    const id = setTimeout(() => {
+      fetch("/api/admin/plan/simulate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ changes: ch }) })
+        .then((r) => (r.ok ? r.json() : null)).then((d) => setSim(d)).catch(() => {});
+    }, 500);
+    return () => clearTimeout(id);
+  }, [draft, data]);
 
   if (loading) return <div className="executive-panel mt-6"><Loader2 size={16} className="inline animate-spin" /> Cargando comisiones…</div>;
   if (!data?.config) {
@@ -128,6 +145,18 @@ export default function PlanConfigSection() {
         </button>
       </div>
       {msg && <p className="mt-2 text-xs font-semibold" style={{ color: msg.tone === "ok" ? "var(--vp-accent)" : "var(--vp-danger)" }}>{msg.text}</p>}
+
+      {sim && nChanges > 0 && (
+        <div className="mt-2 flex items-center gap-2 rounded-lg p-2 text-xs"
+          style={{ background: sim.solvent ? "var(--vp-accent-muted)" : "var(--vp-danger-muted)", border: `1px solid ${sim.solvent ? "var(--vp-accent-border)" : "var(--vp-danger-border)"}` }}>
+          <Gauge size={14} style={{ color: sim.solvent ? "var(--vp-accent)" : "var(--vp-danger)" }} />
+          <span style={{ color: "var(--vp-text)" }}>
+            θ proyectado <b style={{ color: sim.solvent ? "var(--vp-accent)" : "var(--vp-danger)" }}>{Number(sim.theta).toFixed(4)}</b> (piso {Number(sim.floor).toFixed(2)})
+            {sim.solvent ? " — pasa el lock de solvencia ✓" : " — el publish será BLOQUEADO ✗"}
+            <span style={{ color: "var(--vp-subtle)" }}> · {sim.note}</span>
+          </span>
+        </div>
+      )}
 
       {/* Propuestas */}
       {proposals.length > 0 && (
