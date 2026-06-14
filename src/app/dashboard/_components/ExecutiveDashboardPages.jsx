@@ -170,6 +170,16 @@ function Field({ label, children }) {
 }
 
 export function DashboardOverviewPage() {
+  const [referral, setReferral] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/auth/session", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => { if (!cancelled && d?.referralCode) setReferral(d.referralCode); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  const displayReferral = referral || member.referralCode;
   return (
     <section className="executive-page">
       <div className="executive-container">
@@ -248,7 +258,7 @@ export function DashboardOverviewPage() {
 
         <div className="executive-grid three">
           {[
-            { title: "Codigo de referido", value: member.referralCode, text: "Codigo unico para invitaciones." },
+            { title: "Codigo de referido", value: displayReferral, text: "Codigo unico para invitaciones." },
             { title: "KYC", value: "Pendiente", text: "Completa datos personales y documentos." },
             { title: "Rango", value: member.rank, text: "Seguimiento de progreso y requisitos." },
           ].map((item) => (
@@ -1089,7 +1099,24 @@ export function NetworkDashboardPage() {
 }
 
 export function ReferralsDashboardPage() {
-  return <ExecutiveModulePage config={moduleConfigs.referrals} />;
+  const [referral, setReferral] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/auth/session", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => { if (!cancelled && d?.referralCode) setReferral(d.referralCode); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  const code = referral || member.referralCode;
+  const config = {
+    ...moduleConfigs.referrals,
+    metrics: moduleConfigs.referrals.metrics.map((m) => (m.label === "Codigo" ? { ...m, value: code } : m)),
+    cards: moduleConfigs.referrals.cards.map((c) =>
+      c.title === "Enlace personal" ? { ...c, text: `https://app.mindblisspower.com/register?ref=${code}` } : c,
+    ),
+  };
+  return <ExecutiveModulePage config={config} />;
 }
 
 export function TeamDashboardPage() {
