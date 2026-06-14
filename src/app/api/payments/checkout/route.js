@@ -16,7 +16,8 @@ export async function POST(request) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }
 
-  const email = emailFromIdToken(idToken);
+  const claims = claimsFromIdToken(idToken);
+  const email = claims.email;
   if (!email) {
     return NextResponse.json({ error: "session-invalid" }, { status: 401 });
   }
@@ -46,7 +47,7 @@ export async function POST(request) {
         "content-type": "application/json",
         "X-VP-Service-Token": token,
       },
-      body: JSON.stringify({ email, package_id: packageId, ref }),
+      body: JSON.stringify({ email, package_id: packageId, ref, name: claims.name, phone: claims.phone }),
       cache: "no-store",
     });
     const payload = await resp.json().catch(() => ({}));
@@ -60,12 +61,16 @@ export async function POST(request) {
   }
 }
 
-function emailFromIdToken(token) {
+function claimsFromIdToken(token) {
   try {
     const payload = JSON.parse(Buffer.from(String(token).split(".")[1], "base64url").toString("utf8"));
-    if (payload.exp && payload.exp * 1000 < Date.now()) return "";
-    return String(payload.email || "").trim().toLowerCase();
+    if (payload.exp && payload.exp * 1000 < Date.now()) return { email: "" };
+    return {
+      email: String(payload.email || "").trim().toLowerCase(),
+      name: String(payload.name || "").trim(),
+      phone: String(payload.phone_number || "").trim(),
+    };
   } catch {
-    return "";
+    return { email: "" };
   }
 }

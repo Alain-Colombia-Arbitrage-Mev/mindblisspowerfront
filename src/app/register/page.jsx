@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ArrowRight, ClipboardCheck, Eye, EyeOff, Loader2, LogIn, UserPlus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import AuthShell from "../_components/AuthShell";
 
@@ -60,6 +60,9 @@ export default function RegisterPage() {
   const [confirmStep, setConfirmStep] = useState(false);
   const [confirmCode, setConfirmCode] = useState("");
   const [cognitoUsername, setCognitoUsername] = useState("");
+  // Guard síncrono anti doble-submit: evita un 2º SignUp que reenvía el código
+  // e invalida el primero (causa del "primer código inválido").
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     const stored = readStoredJson("mp_registration_draft");
@@ -105,12 +108,14 @@ export default function RegisterPage() {
 
   async function handleSubmit(event) {
     event.preventDefault();
+    if (submittingRef.current) return; // ya hay un registro en curso → no duplicar
     setSuccess("");
     const nextErrors = validateForm();
     setErrors(nextErrors);
 
     if (Object.keys(nextErrors).length > 0) return;
 
+    submittingRef.current = true;
     setLoading(true);
     const draft = {
       fullName: form.fullName.trim(),
@@ -153,6 +158,8 @@ export default function RegisterPage() {
     } catch {
       setErrors({ form: "No se pudo conectar con el servicio de registro." });
       setLoading(false);
+    } finally {
+      submittingRef.current = false;
     }
   }
 

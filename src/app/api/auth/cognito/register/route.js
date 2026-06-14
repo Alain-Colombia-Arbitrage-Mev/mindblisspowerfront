@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 
 import { buildCognitoSignUpPayload, getCognitoIdentityProviderConfig } from "@/lib/cognito";
@@ -29,7 +29,11 @@ export async function POST(request) {
   }
 
   // El pool usa email como ALIAS: el username no puede tener formato de email.
-  const username = `mp_${randomUUID().replaceAll("-", "")}`;
+  // DETERMINÍSTICO por email (no aleatorio): así un reintento de registro reusa
+  // el MISMO usuario Cognito en vez de crear huérfanos. Si el usuario ya existe
+  // y NO está confirmado, Cognito reenvía el código (último válido); si está
+  // confirmado, devuelve UsernameExistsException → "ya existe una cuenta".
+  const username = `mp_${createHash("sha256").update(email).digest("hex").slice(0, 40)}`;
 
   // El pool marca como required casi todos los atributos estándar (inmutable
   // post-creación), así que se completan todos con datos del formulario o
