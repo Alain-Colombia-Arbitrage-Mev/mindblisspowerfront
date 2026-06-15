@@ -1,0 +1,46 @@
+name: deploy
+
+# staging → EC2 staging · main → EC2 prod. Envía el código y construye Next en
+# el server (npm ci + build), luego reinicia mindbliss-web. Los .env.local viven
+# en el server (no en CI).
+on:
+  push:
+    branches: [main, staging]
+
+concurrency:
+  group: deploy-front-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve target host
+        id: t
+        run: |
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            echo "host=${{ vars.PROD_HOST }}" >> "$GITHUB_OUTPUT"; echo "env=prod" >> "$GITHUB_OUTPUT"
+          else
+            echo "host=${{ vars.STAGING_HOST }}" >> "$GITHUB_OUTPUT"; echo "env=staging" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy over SSH (${{ steps.t.outputs.env }})
+        env:
+          KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          HOST: ${{ steps.t.outputs.host }}
+          USER: ${{ vars.SSH_USER }}
+        run: |
+          mkdir -p ~/.ssh && printf '%s\n' "$KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
+          SSHO="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i $HOME/.ssh/deploy_key"
+          tar -czf /tmp/web.tar.gz --exclude=node_modules --exclude=.next --exclude=.git .
+          scp $SSHO /tmp/web.tar.gz "$USER@$HOST:/tmp/web.tar.gz"
+          ssh $SSHO "$USER@$HOST" 'set -e
+            cd /opt/mindbliss/web
+            tar -xzf /tmp/web.tar.gz -C /opt/mindbliss/web && rm -f /tmp/web.tar.gz
+            npm ci
+            npm run build
+            sudo systemctl restart mindbliss-web
+            sleep 3
+            curl -fsS http://127.0.0.1:3000/health >/dev/null && echo "mindbliss-web OK" || { echo "HEALTH FAIL"; exit 1; }'
