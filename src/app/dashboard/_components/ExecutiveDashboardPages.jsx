@@ -1151,7 +1151,7 @@ export function AiAdvisorDashboardPage() {
 
   const { analysis, rank_exposure } = data;
   const healthScore = typeof analysis.health_score === "number" ? `${Math.round(analysis.health_score)}%` : "—";
-  const riskCount = Array.isArray(analysis.findings) ? analysis.findings.filter((f) => f.severity === "high" || f.severity === "critical").length : "—";
+  const riskCount = Array.isArray(analysis.findings) ? analysis.findings.filter((f) => f.severity === "alta").length : "—";
   const actionCount = Array.isArray(analysis.actions) ? analysis.actions.length : "—";
 
   const exposureDetail = rank_exposure
@@ -1172,7 +1172,7 @@ export function AiAdvisorDashboardPage() {
           title: f.title,
           text: f.detail,
           icon: f.area === "solvencia" ? Shield : f.area === "balance_binario" ? Activity : Brain,
-          status: f.severity === "critical" ? "Critico" : f.severity === "high" ? "Alto" : f.severity === "medium" ? "Medio" : "Info",
+          status: f.severity === "alta" ? "Alto" : f.severity === "media" ? "Medio" : f.severity === "normal" ? "Info" : "Info",
         }))
       : moduleConfigs.ai.cards,
     rows: Array.isArray(analysis.actions) && analysis.actions.length > 0
