@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useNetworkHealth } from "@/lib/useNetworkHealth";
 import {
   Activity,
   Archive,
@@ -1124,7 +1125,62 @@ export function TeamDashboardPage() {
 }
 
 export function AiAdvisorDashboardPage() {
-  return <ExecutiveModulePage config={moduleConfigs.ai} />;
+  const { loading, data, error } = useNetworkHealth();
+
+  if (loading) {
+    const loadingConfig = {
+      ...moduleConfigs.ai,
+      metrics: moduleConfigs.ai.metrics.map((m) => ({ ...m, value: "…" })),
+    };
+    return <ExecutiveModulePage config={loadingConfig} />;
+  }
+
+  if (error || !data?.analysis) {
+    const errorConfig = {
+      ...moduleConfigs.ai,
+      subtitle: error ? `Error al cargar datos: ${error}` : "No se pudo obtener el veredicto de red.",
+      metrics: [
+        { label: "Sanidad", value: "—", detail: "sin datos", icon: ShieldCheck, tone: "muted" },
+        { label: "Riesgos", value: "—", detail: "sin datos", icon: Activity, tone: "muted" },
+        { label: "Acciones", value: "—", detail: "sin datos", icon: Sparkles, tone: "muted" },
+        { label: "Modelo", value: "—", detail: "sin datos", icon: Bot, tone: "muted" },
+      ],
+    };
+    return <ExecutiveModulePage config={errorConfig} />;
+  }
+
+  const { analysis, rank_exposure } = data;
+  const healthScore = typeof analysis.health_score === "number" ? `${Math.round(analysis.health_score)}%` : "—";
+  const riskCount = Array.isArray(analysis.findings) ? analysis.findings.filter((f) => f.severity === "high" || f.severity === "critical").length : "—";
+  const actionCount = Array.isArray(analysis.actions) ? analysis.actions.length : "—";
+
+  const exposureDetail = rank_exposure
+    ? `Exposición: ${rank_exposure.liability_usd ?? "—"}`
+    : "sin datos";
+
+  const liveConfig = {
+    ...moduleConfigs.ai,
+    subtitle: analysis.summary || moduleConfigs.ai.subtitle,
+    metrics: [
+      { label: "Sanidad", value: healthScore, detail: analysis.risk_level || "estimacion local", icon: ShieldCheck, tone: analysis.health_score >= 70 ? "success" : analysis.health_score >= 40 ? "warning" : "danger" },
+      { label: "Riesgos", value: String(riskCount), detail: `nivel: ${analysis.risk_level || "—"}`, icon: Activity, tone: riskCount === 0 ? "success" : "warning" },
+      { label: "Acciones", value: String(actionCount), detail: "recomendadas", icon: Sparkles, tone: "accent" },
+      { label: "Exposicion", value: rank_exposure ? String(rank_exposure.pending_installments ?? "—") : "—", detail: exposureDetail, icon: Bot, tone: "info" },
+    ],
+    cards: Array.isArray(analysis.findings) && analysis.findings.length > 0
+      ? analysis.findings.slice(0, 3).map((f) => ({
+          title: f.title,
+          text: f.detail,
+          icon: f.area === "solvencia" ? Shield : f.area === "balance_binario" ? Activity : Brain,
+          status: f.severity === "critical" ? "Critico" : f.severity === "high" ? "Alto" : f.severity === "medium" ? "Medio" : "Info",
+        }))
+      : moduleConfigs.ai.cards,
+    rows: Array.isArray(analysis.actions) && analysis.actions.length > 0
+      ? analysis.actions.map((a) => [a.title, a.detail?.slice(0, 40) ?? "—", a.priority ?? "—", a.target ?? "Red"])
+      : moduleConfigs.ai.rows,
+  };
+
+  return <ExecutiveModulePage config={liveConfig} />;
 }
 
 export function AutoModeDashboardPage() {
