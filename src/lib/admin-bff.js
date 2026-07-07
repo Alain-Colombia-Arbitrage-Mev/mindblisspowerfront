@@ -36,3 +36,14 @@ export async function callPayments(path, { method = "GET", body } = {}) {
     return { ok: false, status: 502, data: { error: "payments-unreachable" } };
   }
 }
+
+/** Verifica si el email corresponde a un admin (fail-closed: cualquier error → false). */
+export async function isAdminEmail(email) {
+  if (!email) return false;
+  try {
+    const result = await callPayments(`/api/admin/check?email=${encodeURIComponent(email)}`);
+    return Boolean(result.ok && result.data?.is_admin);
+  } catch {
+    return false;
+  }
+}
