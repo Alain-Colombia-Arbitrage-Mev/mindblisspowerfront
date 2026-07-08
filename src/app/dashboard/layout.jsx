@@ -1,14 +1,13 @@
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { sessionEmail } from "@/lib/admin-bff";
 
 import DashboardShell from "./_components/DashboardShell";
 
 export default async function DashboardLayout({ children }) {
-  try {
-    const email = await sessionEmail();
-    if (!email) redirect("/login");
-  } catch (err) {
-    if (err?.digest?.startsWith("NEXT_REDIRECT")) throw err;
+  const cookieStore = await cookies();
+  const hasSession = Boolean(cookieStore.get("vp_id_token")?.value || cookieStore.get("vp_access_token")?.value);
+
+  if (!hasSession) {
     redirect("/login");
   }
 
