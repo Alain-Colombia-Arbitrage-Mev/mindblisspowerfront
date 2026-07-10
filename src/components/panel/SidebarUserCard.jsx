@@ -1,8 +1,8 @@
 function initialsOf(name) {
   if (!name) return "MP";
-  return name
-    .split(/[\s._@-]+/)
-    .filter(Boolean)
+  const parts = name.split(/[\s._@-]+/).filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return parts
     .slice(0, 2)
     .map((part) => part[0])
     .join("")

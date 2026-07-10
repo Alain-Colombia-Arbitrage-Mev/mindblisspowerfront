@@ -18,7 +18,7 @@ import SidebarNavItem from "./SidebarNavItem";
 import SidebarUserCard from "./SidebarUserCard";
 
 const NAV_ITEMS = [
-  { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard", exact: true },
+  { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard", exact: true, also: ["/dashboard/home"] },
   {
     icon: Mail,
     label: "Communication",
@@ -65,7 +65,10 @@ export default function PanelSidebar({ pathname, isAdmin, member, onNavigate }) 
               icon={item.icon}
               label={item.label}
               href={item.href}
-              active={item.exact ? pathname === item.href : pathname.startsWith(item.href)}
+              active={
+                (item.exact ? pathname === item.href : pathname.startsWith(item.href)) ||
+                (item.also?.some((prefix) => pathname.startsWith(prefix)) ?? false)
+              }
               onNavigate={onNavigate}
             />
           )
