@@ -17,6 +17,12 @@ const PAGE_TITLES = [
   { prefix: "/dashboard/profile", title: "Profile" },
   { prefix: "/dashboard/rank", title: "Ranks" },
   { prefix: "/dashboard/team", title: "Team" },
+  {
+    prefix: "/dashboard/network",
+    title: "Motor de Crecimiento • Red Binaria",
+    subtitle:
+      "Cada persona que invitas construye tu red. Comparte tu código de referido con intención y convierte cada invitación en un activo permanente de tu estructura binaria.",
+  },
   { prefix: "/dashboard/admin", title: "Panel Admin" },
 ];
 
@@ -25,7 +31,7 @@ function pageTitleFor(pathname) {
     return { title: "Overview", subtitle: "Bienvenido de vuelta, gestiona tu red hoy." };
   }
   const match = PAGE_TITLES.find((entry) => pathname.startsWith(entry.prefix));
-  return { title: match?.title ?? "Dashboard", subtitle: null };
+  return { title: match?.title ?? "Dashboard", subtitle: match?.subtitle ?? null };
 }
 
 export default function DashboardShell({ authMode, children }) {
