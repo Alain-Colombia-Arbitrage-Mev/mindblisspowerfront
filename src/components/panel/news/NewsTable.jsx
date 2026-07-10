@@ -5,7 +5,7 @@ import NewsTableRow from "./NewsTableRow";
 
 const HEADERS = [
   { label: "No.", className: "w-12 text-left" },
-  { label: "Title", className: "text-left" },
+  { label: "Title", className: "min-w-60 text-left" },
   { label: "Expiration date", className: "w-32 text-center" },
   { label: "Pin new", className: "w-24 text-center" },
   { label: "Read conf. required", className: "w-40 text-center" },

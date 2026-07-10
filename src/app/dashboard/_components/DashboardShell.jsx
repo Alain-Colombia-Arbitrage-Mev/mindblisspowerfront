@@ -21,7 +21,7 @@ const PAGE_TITLES = [
 ];
 
 function pageTitleFor(pathname) {
-  if (pathname === "/dashboard") {
+  if (pathname === "/dashboard" || pathname.startsWith("/dashboard/home")) {
     return { title: "Overview", subtitle: "Bienvenido de vuelta, gestiona tu red hoy." };
   }
   const match = PAGE_TITLES.find((entry) => pathname.startsWith(entry.prefix));
