@@ -73,7 +73,9 @@ export default function NetworkPage() {
           <span className="text-sm font-semibold" style={{ color: "var(--vp-muted)" }}>
             {state.error === "tree-unavailable"
               ? "El árbol estará disponible cuando finalice la migración."
-              : state.error}
+              : /^[a-z0-9-]+$/.test(state.error)
+                ? "No se pudo cargar tu red en este momento. Intenta de nuevo más tarde."
+                : state.error}
           </span>
         </StatusCard>
       </div>

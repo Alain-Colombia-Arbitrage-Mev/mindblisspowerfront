@@ -23,6 +23,7 @@ const PAGE_TITLES = [
     subtitle:
       "Cada persona que invitas construye tu red. Comparte tu código de referido con intención y convierte cada invitación en un activo permanente de tu estructura binaria.",
   },
+  { prefix: "/dashboard/tools", title: "Tools", subtitle: "Configuraciones" },
   { prefix: "/dashboard/admin", title: "Panel Admin" },
 ];
 

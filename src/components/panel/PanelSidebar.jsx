@@ -3,6 +3,7 @@
 import {
   CreditCard,
   LayoutDashboard,
+  LogOut,
   Mail,
   Medal,
   Network,
@@ -10,6 +11,7 @@ import {
   Ticket,
   User,
   Wallet,
+  Wrench,
 } from "lucide-react";
 
 import SidebarLogo from "./SidebarLogo";
@@ -35,6 +37,7 @@ const NAV_ITEMS = [
   { icon: User, label: "Profile", href: "/dashboard/profile" },
   { icon: Medal, label: "Ranks", href: "/dashboard/rank" },
   { icon: Network, label: "Team / Network", href: "/dashboard/network", also: ["/dashboard/team"] },
+  { icon: Wrench, label: "Tools", href: "/dashboard/tools" },
 ];
 
 export default function PanelSidebar({ pathname, isAdmin, member, onNavigate }) {
@@ -48,7 +51,7 @@ export default function PanelSidebar({ pathname, isAdmin, member, onNavigate }) 
 
       <SidebarUserCard name={member?.name} email={member?.email} role={isAdmin ? "Administrator" : "Member"} />
 
-      <nav className="mt-4 flex flex-1 flex-col gap-2 overflow-y-auto px-4 pb-4 pt-2">
+      <nav className="mt-4 flex flex-1 flex-col gap-2 overflow-y-auto px-4 pt-2">
         {items.map((item) =>
           item.items ? (
             <SidebarNavGroup
@@ -74,6 +77,17 @@ export default function PanelSidebar({ pathname, isAdmin, member, onNavigate }) 
           )
         )}
       </nav>
+
+      <div className="border-t p-4" style={{ borderColor: "var(--vp-border)" }}>
+        <a
+          className="flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-medium no-underline"
+          href="/api/auth/logout"
+          style={{ color: "#f87171" }}
+        >
+          <LogOut size={16} />
+          Sign Out
+        </a>
+      </div>
     </div>
   );
 }
