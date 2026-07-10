@@ -34,7 +34,7 @@ const NAV_ITEMS = [
   { icon: CreditCard, label: "KYC", href: "/dashboard/kyc" },
   { icon: User, label: "Profile", href: "/dashboard/profile" },
   { icon: Medal, label: "Ranks", href: "/dashboard/rank" },
-  { icon: Network, label: "Team", href: "/dashboard/team" },
+  { icon: Network, label: "Team / Network", href: "/dashboard/network", also: ["/dashboard/team"] },
 ];
 
 export default function PanelSidebar({ pathname, isAdmin, member, onNavigate }) {
