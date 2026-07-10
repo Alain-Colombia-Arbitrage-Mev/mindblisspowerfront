@@ -1,8 +1,11 @@
 name: deploy
 
-# staging → EC2 staging · main → EC2 prod. Envía el código y construye Next en
-# el server (npm ci + build), luego reinicia mindbliss-web. Los .env.local viven
-# en el server (no en CI).
+# staging → EC2 staging · main → EC2 prod. Los boxes NO son alcanzables por SSH
+# desde los runners de GitHub (puerto 22 filtrado), así que el deploy va por
+# AWS SSM: tar del source → S3 (URL presignada) → RunShellScript en el box
+# (extraer + npm ci + build + restart mindbliss-web + health check).
+# Auth = OIDC → rol gh-mindbliss-front-deploy (sin llaves SSH ni access keys).
+# Los .env.local viven en el server (no en CI).
 on:
   push:
     branches: [main, staging]
@@ -11,39 +14,83 @@ concurrency:
   group: deploy-front-${{ github.ref_name }}
   cancel-in-progress: false
 
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  ARTIFACT_BUCKET: vp-deploy-artifacts-522814703714
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Resolve target host
+      - name: Resolve target instance
         id: t
         run: |
           if [ "${{ github.ref_name }}" = "main" ]; then
-            echo "host=${{ vars.PROD_HOST }}" >> "$GITHUB_OUTPUT"; echo "env=prod" >> "$GITHUB_OUTPUT"
+            echo "instance=i-060e76a6c26bded35" >> "$GITHUB_OUTPUT"; echo "env=prod" >> "$GITHUB_OUTPUT"
           else
-            echo "host=${{ vars.STAGING_HOST }}" >> "$GITHUB_OUTPUT"; echo "env=staging" >> "$GITHUB_OUTPUT"
+            echo "instance=i-0f7f6c73503537d73" >> "$GITHUB_OUTPUT"; echo "env=staging" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Deploy over SSH (${{ steps.t.outputs.env }})
-        env:
-          KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          HOST: ${{ steps.t.outputs.host }}
-          USER: ${{ vars.SSH_USER }}
-          HOSTKEY: ${{ github.ref_name == 'main' && secrets.PROD_HOST_KEY || secrets.STAGING_HOST_KEY }}
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::522814703714:role/gh-mindbliss-front-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Upload artifact to S3
+        id: art
         run: |
-          mkdir -p ~/.ssh && printf '%s\n' "$KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
-          # Pin de host key (anti-MITM): known_hosts = IP actual + clave pineada del server.
-          printf '%s %s\n' "$HOST" "$HOSTKEY" > ~/.ssh/known_hosts && chmod 644 ~/.ssh/known_hosts
-          SSHO="-o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts -i $HOME/.ssh/deploy_key"
           tar -czf /tmp/web.tar.gz --exclude=node_modules --exclude=.next --exclude=.git .
-          scp $SSHO /tmp/web.tar.gz "$USER@$HOST:/tmp/web.tar.gz"
-          ssh $SSHO "$USER@$HOST" 'set -e
-            cd /opt/mindbliss/web
-            tar -xzf /tmp/web.tar.gz -C /opt/mindbliss/web && rm -f /tmp/web.tar.gz
-            npm ci
-            npm run build
-            sudo systemctl restart mindbliss-web
-            sleep 3
-            curl -fsS http://127.0.0.1:3000/health >/dev/null && echo "mindbliss-web OK" || { echo "HEALTH FAIL"; exit 1; }'
+          KEY="front/${{ github.ref_name }}-${{ github.sha }}.tar.gz"
+          aws s3 cp /tmp/web.tar.gz "s3://$ARTIFACT_BUCKET/$KEY" --only-show-errors
+          URL=$(aws s3 presign "s3://$ARTIFACT_BUCKET/$KEY" --expires-in 1200)
+          echo "key=$KEY" >> "$GITHUB_OUTPUT"
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy via SSM (${{ steps.t.outputs.env }})
+        run: |
+          printf "ARTIFACT_URL='%s'\n" "${{ steps.art.outputs.url }}" > /tmp/deploy.sh
+          cat >> /tmp/deploy.sh <<'EOS'
+          set -e
+          curl -fsSL "$ARTIFACT_URL" -o /tmp/web.tar.gz
+          sudo -u ubuntu tar -xzf /tmp/web.tar.gz -C /opt/mindbliss/web
+          rm -f /tmp/web.tar.gz
+          sudo -u ubuntu bash -c 'cd /opt/mindbliss/web && npm ci --no-audit --no-fund && npm run build' > /tmp/web-build.log 2>&1 || { tail -40 /tmp/web-build.log; exit 1; }
+          systemctl restart mindbliss-web
+          sleep 6
+          curl -fsS http://127.0.0.1:3000/health >/dev/null && echo "mindbliss-web OK" || { echo "HEALTH FAIL"; journalctl -u mindbliss-web -n 20 --no-pager; exit 1; }
+          EOS
+          jq -Rn --rawfile script /tmp/deploy.sh '{commands: ($script | split("\n"))}' > /tmp/params.json
+
+          CMD_ID=$(aws ssm send-command \
+            --instance-ids "${{ steps.t.outputs.instance }}" \
+            --document-name AWS-RunShellScript \
+            --timeout-seconds 1500 \
+            --parameters file:///tmp/params.json \
+            --query "Command.CommandId" --output text)
+          echo "SSM command: $CMD_ID"
+
+          STATUS=InProgress
+          for i in $(seq 1 90); do
+            sleep 15
+            STATUS=$(aws ssm get-command-invocation --command-id "$CMD_ID" \
+              --instance-id "${{ steps.t.outputs.instance }}" --query Status --output text 2>/dev/null || echo Pending)
+            echo "[$i] status=$STATUS"
+            case "$STATUS" in InProgress|Pending|Delayed) continue ;; *) break ;; esac
+          done
+
+          aws ssm get-command-invocation --command-id "$CMD_ID" \
+            --instance-id "${{ steps.t.outputs.instance }}" \
+            --query "{Status:Status,Stdout:StandardOutputContent,Stderr:StandardErrorContent}" --output json | tee /tmp/result.json
+          test "$(jq -r .Status /tmp/result.json)" = "Success"
+          jq -r .Stdout /tmp/result.json | grep -q "mindbliss-web OK"
+
+      - name: Cleanup artifact
+        if: always()
+        run: aws s3 rm "s3://$ARTIFACT_BUCKET/${{ steps.art.outputs.key }}" --only-show-errors || true
