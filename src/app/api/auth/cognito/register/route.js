@@ -58,9 +58,11 @@ export async function POST(request) {
     { Name: "zoneinfo", Value: "America/Bogota" },
     { Name: "locale", Value: preferredLanguage || "es" },
     { Name: "address", Value: city || country ? `${city}${city && country ? ", " : ""}${country}` : "-" },
-    // NOTA: `updated_at` es Required en el pool PERO Cognito no permite escribirlo
-    // (es un atributo gestionado). Enviarlo causa InvalidParameterException. Cognito
-    // lo auto-rellena, así que NO se incluye aquí. (sub también es auto.)
+    // `updated_at` es Required en el pool y Cognito SÍ exige enviarlo en el
+    // SignUp (verificado 2026-07-13: omitirlo produce InvalidParameterException
+    // "aws:cognito:system.updated_at is required" y rechaza TODOS los registros).
+    // Formato estándar OIDC: epoch en segundos, como string. (sub sí es auto.)
+    { Name: "updated_at", Value: String(Math.floor(Date.now() / 1000)) },
   ];
 
   if (phone) {
