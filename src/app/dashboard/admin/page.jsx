@@ -5,6 +5,7 @@ import PaymentsSection from "./PaymentsSection";
 import FinanceSection from "./FinanceSection";
 import PlanConfigSection from "./PlanConfigSection";
 import ActivityFeed from "./ActivityFeed";
+import SalesSection from "./SalesSection";
 import { ShieldCheck, Users, DollarSign, Ban, CheckCircle2, Search, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 
 const money = (v) => `$${Number(v ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -112,7 +113,10 @@ export default function AdminPage() {
       {/* Finanzas + monitor de solvencia (live) */}
       <FinanceSection />
 
-      {/* Actividad reciente (eventos de dominio) */}
+      {/* Ventas de paquetes (PACK MINDBLISS por tier) */}
+      <SalesSection />
+
+      {/* Actividad reciente (eventos de dominio, incluye member.registered) */}
       <ActivityFeed />
 
       {/* Editor de comisiones (four-eyes) */}

@@ -1,8 +1,11 @@
 import { Package, ShieldCheck, Sparkles, Trophy } from "lucide-react";
 
+import { Suspense } from "react";
+
 import { getCatalog } from "@/lib/catalog";
 import ActivatePackageButton from "./ActivatePackageButton";
 import MyPaymentsPanel from "./MyPaymentsPanel";
+import PaymentResultModal from "./PaymentResultModal";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +28,9 @@ export default async function PackagesPage() {
 
   return (
     <section className="executive-page">
+      <Suspense fallback={null}>
+        <PaymentResultModal />
+      </Suspense>
       <div className="executive-container">
         <div className="executive-page-header">
           <div>

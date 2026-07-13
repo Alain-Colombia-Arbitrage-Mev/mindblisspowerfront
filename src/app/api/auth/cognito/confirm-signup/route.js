@@ -68,5 +68,29 @@ export async function POST(request) {
     );
   }
 
+  // Notifica el registro al feed del panel admin (evento member.registered).
+  // Best-effort: un fallo aquí JAMÁS afecta la confirmación del usuario.
+  await notifyRegistration(email, String(body.name || "").trim());
+
   return NextResponse.json({ ok: true });
+}
+
+async function notifyRegistration(email, name) {
+  const base = process.env.VP_PAYMENTS_URL;
+  const token = process.env.PAYMENTS_SERVICE_TOKEN;
+  if (!base || !token || !email) return;
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 1500);
+    await fetch(`${base}/api/events/registration`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "X-VP-Service-Token": token },
+      body: JSON.stringify({ email, name }),
+      signal: ctrl.signal,
+      cache: "no-store",
+    });
+    clearTimeout(timer);
+  } catch {
+    /* best-effort */
+  }
 }

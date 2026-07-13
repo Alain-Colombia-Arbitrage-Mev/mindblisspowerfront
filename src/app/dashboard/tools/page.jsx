@@ -26,7 +26,7 @@ export default function ToolsPage() {
   const tab = TOOLS_TABS.find((entry) => entry.id === tabId) ?? TOOLS_TABS[0];
 
   const filteredRows = useMemo(() => {
-    if (tab.empty) return [];
+    if (tab.empty || tab.linkTo || !tab.rows) return [];
     const query = search.trim().toLowerCase();
     if (!query) return tab.rows;
     return tab.rows.filter((row) => {
@@ -48,7 +48,25 @@ export default function ToolsPage() {
         <CreateMenu options={CREATE_OPTIONS} onSelect={setModalOption} />
       </div>
 
-      {!tab.empty ? (
+      {tab.linkTo ? (
+        <a
+          href={tab.linkTo}
+          className="flex flex-col gap-2 rounded-3xl p-8 no-underline"
+          style={{ background: "var(--vp-surface)", border: "1px solid var(--vp-border)" }}
+        >
+          <span className="text-lg font-bold" style={{ color: "var(--vp-text)" }}>
+            {tab.linkTitle}
+          </span>
+          <span className="text-sm" style={{ color: "var(--vp-muted)" }}>
+            {tab.linkDescription}
+          </span>
+          <span className="mt-3 text-sm font-semibold" style={{ color: "var(--vp-accent)" }}>
+            Ver paquetes →
+          </span>
+        </a>
+      ) : null}
+
+      {!tab.empty && !tab.linkTo ? (
         <ToolsSearchBar
           search={search}
           onSearchChange={setSearch}
@@ -64,14 +82,14 @@ export default function ToolsPage() {
           title="No media available"
           description="There isn't any record of media resources"
         />
-      ) : (
+      ) : !tab.linkTo ? (
         <DataTable
           title={tab.title}
           columns={tab.columns}
           rows={filteredRows}
           minWidth={tab.minWidth}
         />
-      )}
+      ) : null}
 
       <ModalForm option={modalOption} onClose={() => setModalOption(null)} />
     </div>
