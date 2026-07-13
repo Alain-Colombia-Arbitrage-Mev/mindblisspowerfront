@@ -63,9 +63,9 @@ const member = {
 };
 
 const overviewMetrics = [
-  { label: "Red activa", value: "9", detail: "miembros visibles", icon: Users, tone: "accent" },
-  { label: "Activos", value: "8", detail: "con estado activo", icon: CheckCircle2, tone: "success" },
-  { label: "Rango", value: "Corona", detail: "nivel actual", icon: TrendingUp, tone: "accent" },
+  { label: "Red activa", value: "—", detail: "miembros visibles", icon: Users, tone: "accent" },
+  { label: "Activos", value: "—", detail: "con estado activo", icon: CheckCircle2, tone: "success" },
+  { label: "Rango", value: "—", detail: "nivel actual", icon: TrendingUp, tone: "accent" },
   { label: "Disponible", value: "$0.00", detail: "sin liquidaciones publicadas", icon: Wallet, tone: "muted" },
 ];
 
@@ -105,10 +105,8 @@ const financeRows = [
   { date: "13 Jun 2026", type: "Liquidaciones", amount: "$0.00", status: "Sin ejecutar" },
 ];
 
-const kycRequests = [
-  { name: "Javier Demo MVP", type: "Documento de identidad", country: "Colombia", date: "13 Jun 2026", status: "Pendiente" },
-  { name: "Guard Colombia", type: "Prueba de residencia", country: "Colombia", date: "13 Jun 2026", status: "No iniciado" },
-];
+// Sin solicitudes simuladas: la lista real vendrá del backend KYC.
+const kycRequests = [];
 
 function PageHeader({ eyebrow, title, subtitle, action }) {
   return (
@@ -747,11 +745,7 @@ const moduleConfigs = {
     tableTitle: "Miembros recientes",
     tableIcon: Users,
     columns: ["Nombre", "Lado", "Estado", "Actividad"],
-    rows: [
-      ["Guard Colombia", "Derecho", "Activo", "Hoy"],
-      ["Javier Demo MVP", "Raiz personal", "Activo", "Hoy"],
-      ["Invitado pendiente", "Izquierdo", "Pendiente", "Sin actividad"],
-    ],
+    rows: [],
   },
   referrals: {
     eyebrow: "Crecimiento",
@@ -760,34 +754,31 @@ const moduleConfigs = {
     action: { label: "Copiar codigo", href: "#", icon: Copy },
     metrics: [
       { label: "Codigo", value: member.referralCode, detail: "codigo unico", icon: Copy, tone: "accent" },
-      { label: "Invitados", value: "9", detail: "registros asociados", icon: UserPlus, tone: "success" },
-      { label: "Pendientes", value: "3", detail: "requieren seguimiento", icon: Activity, tone: "warning" },
-      { label: "Conversion", value: "0%", detail: "sin compras nuevas", icon: TrendingUp, tone: "info" },
+      { label: "Invitados", value: "—", detail: "registros asociados", icon: UserPlus, tone: "success" },
+      { label: "Pendientes", value: "—", detail: "requieren seguimiento", icon: Activity, tone: "warning" },
+      { label: "Conversion", value: "—", detail: "sin compras nuevas", icon: TrendingUp, tone: "info" },
     ],
     cards: [
-      { title: "Enlace personal", text: "https://mindblisspower.com/register?ref=823649", icon: Copy, status: "Listo" },
+      { title: "Enlace personal", text: "Tu enlace aparece al cargar tu código de referido.", icon: Copy, status: "Listo" },
       { title: "Seguimiento", text: "Mantén una lista corta de conversaciones abiertas y fecha de proximo contacto.", icon: MessageSquare, status: "Manual" },
       { title: "Calidad", text: "Prioriza personas con datos completos y disponibilidad para completar onboarding.", icon: ShieldCheck, status: "Revisar" },
     ],
     tableTitle: "Invitaciones",
     tableIcon: UserPlus,
     columns: ["Contacto", "Origen", "Estado", "Ultimo paso"],
-    rows: [
-      ["guardcolombia@gmail.com", "Codigo directo", "Activo", "Perfil creado"],
-      ["prospecto@correo.com", "Enlace", "Pendiente", "Email enviado"],
-      ["lead@correo.com", "Manual", "Pendiente", "Sin KYC"],
-    ],
+    rows: [],
   },
   team: {
     eyebrow: "Equipo",
     title: "Equipo Pro",
     subtitle: "Gestiona miembros, estados, rangos y prioridades de acompanamiento desde una vista de trabajo repetible.",
     action: { label: "Contactar equipo", href: "/dashboard/communications", icon: Mail },
+    // Placeholder: TeamDashboardPage lo reemplaza con datos reales del árbol.
     metrics: [
-      { label: "Miembros", value: "9", detail: "total visible", icon: Users, tone: "accent" },
-      { label: "Activos", value: "8", detail: "estado activo", icon: CheckCircle2, tone: "success" },
-      { label: "Pendientes", value: "1", detail: "perfil incompleto", icon: Activity, tone: "warning" },
-      { label: "Rango lider", value: "Corona", detail: "referencia actual", icon: Trophy, tone: "accent" },
+      { label: "Miembros", value: "—", detail: "cargando", icon: Users, tone: "accent" },
+      { label: "Activos", value: "—", detail: "cargando", icon: CheckCircle2, tone: "success" },
+      { label: "Inactivos", value: "—", detail: "cargando", icon: Activity, tone: "warning" },
+      { label: "Con rango", value: "—", detail: "cargando", icon: Trophy, tone: "accent" },
     ],
     cards: [
       { title: "Pipeline del equipo", text: "Agrupa miembros por estado para evitar acciones dispersas.", icon: Users, status: "Operativo" },
@@ -796,12 +787,9 @@ const moduleConfigs = {
     ],
     tableTitle: "Equipo",
     tableIcon: Users,
-    columns: ["Miembro", "Rango", "Estado", "Prioridad"],
-    rows: [
-      ["Javier Demo MVP", "Embajador Corona", "Activo", "Mantener"],
-      ["Guard Colombia", "Miembro", "Activo", "Completar perfil"],
-      ["Nuevo prospecto", "Sin rango", "Pendiente", "Onboarding"],
-    ],
+    columns: ["Miembro", "Rango", "Estado", "Posición"],
+    // Se llena en runtime con /api/member/tree (TeamDashboardPage).
+    rows: [],
   },
   ai: {
     eyebrow: "Inteligencia",
@@ -1118,14 +1106,45 @@ export function ReferralsDashboardPage() {
     ...moduleConfigs.referrals,
     metrics: moduleConfigs.referrals.metrics.map((m) => (m.label === "Codigo" ? { ...m, value: code } : m)),
     cards: moduleConfigs.referrals.cards.map((c) =>
-      c.title === "Enlace personal" ? { ...c, text: `https://app.mindblisspower.com/register?ref=${code}` } : c,
+      c.title === "Enlace personal" && code
+        ? { ...c, text: `https://app.mindblisspower.com/register?ref=${code}` }
+        : c,
     ),
   };
   return <ExecutiveModulePage config={config} />;
 }
 
 export function TeamDashboardPage() {
-  return <ExecutiveModulePage config={moduleConfigs.team} />;
+  // Datos reales de la red del miembro (3 niveles) — nunca equipo simulado.
+  const [network, setNetwork] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/member/tree", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!cancelled && d && !d.error) setNetwork(d); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  const nodes = network?.positioned ? network.tree : [];
+  const actives = nodes.filter((n) => n.status === "active").length;
+  const ranked = nodes.filter((n) => n.rank).length;
+  const config = {
+    ...moduleConfigs.team,
+    metrics: [
+      { label: "Miembros", value: String(nodes.length), detail: "primeros 3 niveles", icon: Users, tone: "accent" },
+      { label: "Activos", value: String(actives), detail: "estado activo", icon: CheckCircle2, tone: "success" },
+      { label: "Inactivos", value: String(nodes.length - actives), detail: "sin actividad", icon: Activity, tone: "warning" },
+      { label: "Con rango", value: String(ranked), detail: "rango vigente", icon: Trophy, tone: "accent" },
+    ],
+    rows: nodes.slice(0, 100).map((n) => [
+      n.name,
+      n.rank?.name || "Sin rango",
+      n.status === "active" ? "Activo" : "Inactivo",
+      `Nivel ${n.level} · ${n.side === "L" ? "Izq" : "Der"}`,
+    ]),
+  };
+  return <ExecutiveModulePage config={config} />;
 }
 
 function ProjectedScenarioCard({ scenario }) {
