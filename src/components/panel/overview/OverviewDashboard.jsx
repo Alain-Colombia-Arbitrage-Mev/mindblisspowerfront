@@ -5,7 +5,6 @@ import { CreditCard, HandCoins, Network } from "lucide-react";
 
 import PanelFooter from "@/components/panel/PanelFooter";
 import EarningsCard from "./EarningsCard";
-import PerformanceChartCard from "./PerformanceChartCard";
 import RecentSignupsCard from "./RecentSignupsCard";
 import ShortcutPill from "./ShortcutPill";
 import TicketsTodayCard from "./TicketsTodayCard";
@@ -95,8 +94,9 @@ export default function OverviewDashboard() {
         <TicketsTodayCard pendingCount={0} />
       </div>
 
+      {/* Sin gráfica de "volumen": la directiva árbol 2.0 prohíbe mostrar
+          volumen al miembro, y la curva anterior era simulada ($100M falsos). */}
       <div className="flex flex-col gap-6 xl:flex-row">
-        <PerformanceChartCard />
         <TopRanksCard ranks={topRanks} />
       </div>
 
