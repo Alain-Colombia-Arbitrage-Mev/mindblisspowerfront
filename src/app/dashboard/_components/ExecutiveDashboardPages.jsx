@@ -45,17 +45,20 @@ import {
   Zap,
 } from "lucide-react";
 
+// Placeholders NEUTROS para cuando la sesión/summary aún no cargan o fallan.
+// NUNCA poner datos ficticios aquí: los miembros migrados verían un rango,
+// código de referido o balance que no es suyo.
 const member = {
-  name: "Javier Demo MVP",
-  username: "javierdemo",
-  email: "guardcolombia@gmail.com",
-  phone: "+57 300 000 0000",
-  country: "Colombia",
-  rank: "Embajador Corona",
-  plan: "Elite",
-  joined: "29 May 2026",
-  sponsor: "Mindbliss Power",
-  referralCode: "823649",
+  name: "",
+  username: "",
+  email: "",
+  phone: "",
+  country: "",
+  rank: "Sin rango",
+  plan: "—",
+  joined: "—",
+  sponsor: "—",
+  referralCode: "",
   wallet: "Sin billetera configurada",
 };
 
@@ -553,16 +556,16 @@ export function ProfileDashboardPage() {
     return () => { cancelled = true; };
   }, []);
 
-  const displayName = me.name || member.name;
+  const displayName = me.name || "Mi cuenta";
   const displayEmail = me.email || member.email;
   const displayReferral = me.referralCode || member.referralCode;
   const displayInitial = (displayName || "M").trim().charAt(0).toUpperCase();
   const displayRank = summary?.rank && summary.rank !== "—" ? summary.rank : member.rank;
   const displayJoined = summary?.joined_at || member.joined;
   const displayPlan = summary?.plan ? (PLAN_LABEL[summary.plan] || summary.plan) : member.plan;
-  const displayBalance = summary
-    ? `$${Number(summary.wallet_balance_usd ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-    : null;
+  // Siempre visible: el saldo real del ledger (migración 2.0 ⇒ $0.00 para
+  // todos). Si el summary aún no carga se muestra $0.00, nunca se oculta.
+  const displayBalance = `$${Number(summary?.wallet_balance_usd ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   return (
     <section className="executive-page">

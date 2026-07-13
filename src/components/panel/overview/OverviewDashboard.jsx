@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useEffect, useState } from "react";
 import { CreditCard, HandCoins, Network } from "lucide-react";
 
 import PanelFooter from "@/components/panel/PanelFooter";
@@ -16,20 +17,55 @@ const SHORTCUTS = [
   { icon: CreditCard, label: "Gestionar Pagos", href: "/dashboard/payments" },
 ];
 
-const RECENT_SIGNUPS = [
-  { name: "Antonio Lara López", date: "19/01/2026", pack: "Pack 7", active: true },
-  { name: "Alicia Orocio Baltazar", date: "09/11/2025", pack: "Pack 7", active: true },
-  { name: "Susana Martínez M.", date: "09/07/2025", pack: "Pack 6", active: false },
-];
+function usd(value) {
+  return `$${Number(value ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
 
-const TOP_RANKS = [
-  { tier: "diamond", name: "Diamond", username: "joseramos77", position: 1 },
-  { tier: "emerald", name: "Emerald", username: "ana23", position: 2 },
-  { tier: "sapphire", name: "Sapphire", username: "mfmartinez", position: 3 },
-  { tier: "gold", name: "Gold", username: "ayala60", position: 5 },
-];
-
+/**
+ * Overview del miembro con datos REALES:
+ *  - saldo/billetera desde /api/payments/me (vp-payments; migración 2.0 ⇒ $0.00)
+ *  - red directa, últimos de la red y rangos desde /api/member/tree
+ * Sin datos simulados: si un endpoint falla se muestran ceros/listas vacías.
+ */
 export default function OverviewDashboard() {
+  const [summary, setSummary] = useState(null);
+  const [network, setNetwork] = useState(null);
+
+  const load = useCallback(() => {
+    fetch("/api/payments/me", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d && !d.error) setSummary(d); })
+      .catch(() => {});
+    fetch("/api/member/tree", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d && !d.error) setNetwork(d); })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const nodes = network?.positioned ? network.tree : [];
+  const directs = nodes.filter((n) => n.level === 1);
+
+  const recentSignups = nodes.slice(0, 3).map((n) => ({
+    name: n.name,
+    date: `Nivel ${n.level} · ${n.side === "L" ? "Izquierda" : "Derecha"}`,
+    pack: n.rank?.name || (n.status === "active" ? "Activo" : "Inactivo"),
+    active: n.status === "active",
+  }));
+
+  const topRanks = nodes
+    .filter((n) => n.rank)
+    .slice(0, 4)
+    .map((n, i) => ({
+      tier: String(n.rank.code || "gold").toLowerCase(),
+      name: n.rank.name,
+      username: n.name,
+      position: i + 1,
+    }));
+
   return (
     <div className="relative flex min-h-full flex-col gap-8 p-6 lg:p-10">
       <span
@@ -45,14 +81,23 @@ export default function OverviewDashboard() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <EarningsCard total="$0.00" wallet="$0.00" directNetwork={1} />
-        <RecentSignupsCard signups={RECENT_SIGNUPS} pendingCount={425} />
+        <EarningsCard
+          total={usd(summary?.wallet_balance_usd)}
+          wallet={usd(summary?.available_for_withdrawal_usd)}
+          directNetwork={directs.length}
+        />
+        <RecentSignupsCard
+          signups={recentSignups}
+          pendingCount={Math.max(0, nodes.length - recentSignups.length)}
+          onRefresh={load}
+          onSeeAll={() => window.location.assign("/dashboard/network")}
+        />
         <TicketsTodayCard pendingCount={0} />
       </div>
 
       <div className="flex flex-col gap-6 xl:flex-row">
         <PerformanceChartCard />
-        <TopRanksCard ranks={TOP_RANKS} />
+        <TopRanksCard ranks={topRanks} />
       </div>
 
       <PanelFooter />
