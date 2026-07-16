@@ -61,16 +61,16 @@ export default function PaymentResultModal() {
         </span>
 
         <h2 className="m-0 text-2xl font-bold" style={{ color: "var(--vp-text)" }}>
-          {paid ? "¡Pago completado con éxito!" : "Pago cancelado"}
+          {paid ? "¡Pago completado con éxito!" : "Tu compra quedó pendiente"}
         </h2>
         <p className="mt-3 text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
           {paid
-            ? "Tu paquete se está activando: en unos segundos aparecerá en \"Mis pagos\" y tu posición en la red quedará habilitada."
-            : "No se realizó ningún cargo. Puedes intentar de nuevo cuando quieras."}
+            ? "Tu membresía se está activando: en unos segundos aparecerá en \"Mis pagos\" y tu posición en la red quedará habilitada."
+            : "No se realizó ningún cargo y tu cupo no se pierde. Puedes completar tu compra cuando quieras; si no lo haces ahora, te enviaremos un correo con un enlace para retomarla."}
         </p>
 
         <button type="button" className="executive-button primary mt-6 w-full" onClick={close}>
-          {paid ? "Ver mis pagos" : "Volver al catálogo"}
+          {paid ? "Ver mis pagos" : "Elegir mi membresía"}
         </button>
       </div>
     </div>
