@@ -92,7 +92,7 @@ export default function NetworkPage() {
               Aún no tienes posición en el árbol
             </p>
             <p className="m-0 mt-1 text-xs" style={{ color: "var(--vp-muted)" }}>
-              Tu posición se asigna al activar tu primer paquete.
+              Tu posición se asigna al activar tu primera membresía.
             </p>
           </div>
         </StatusCard>

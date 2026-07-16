@@ -6,8 +6,8 @@ import { Sliders, Loader2, CheckCircle2, XCircle, ShieldAlert, Send, Gauge } fro
 // Etiquetas legibles de los parámetros de comisión.
 const LABELS = {
   treasury_alpha: "α tesorería (techo pago)", block_size: "Tamaño bloque (pts)", bonus_per_block: "Bono por bloque ($)",
-  depth_cap: "Profundidad pago (niveles)", daily_cap_factor: "Cap diario (×rango)", lifetime_cap_factor: "Cap por paquete (×)",
-  period_cap_factor: "Cap período (×paquete)", carry_decay_days: "Decaimiento carry (días)",
+  depth_cap: "Profundidad pago (niveles)", daily_cap_factor: "Cap diario (×rango)", lifetime_cap_factor: "Cap por membresía (×)",
+  period_cap_factor: "Cap período (×membresía)", carry_decay_days: "Decaimiento carry (días)",
   qualified_directs_left: "Directos calif. izq", qualified_directs_right: "Directos calif. der",
   yield_enabled: "R2 yield activo", yield_annual_rate: "Yield anual", yield_cadence_periods: "Cadencia yield",
   capital_lock_periods: "Lock capital (períodos)", points_enabled: "R3 puntos activo", points_per_block: "Puntos/bloque",

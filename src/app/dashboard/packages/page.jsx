@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * Catálogo de paquetes de inversión (mlm.package) + carrera de rangos (mlm.rank).
- * Activar un paquete habilita beneficios y seguimiento operativo del miembro.
+ * Activar una membresía habilita beneficios y seguimiento operativo del miembro.
  */
 export default async function PackagesPage() {
   let packages = [];
@@ -35,9 +35,9 @@ export default async function PackagesPage() {
         <div className="executive-page-header">
           <div>
             <p className="executive-eyebrow">Inversion</p>
-            <h1 className="executive-title">Paquetes</h1>
+            <h1 className="executive-title">Membresías</h1>
             <p className="executive-subtitle">
-              Catalogo conectado a RDS para revisar paquetes activos, puntos y carrera de rangos de Mindbliss Power.
+              Catalogo conectado a RDS para revisar membresías activas, puntos y carrera de rangos de Mindbliss Power.
             </p>
           </div>
           <span className="executive-icon-badge">

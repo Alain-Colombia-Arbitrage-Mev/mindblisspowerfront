@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ArrowRight, Loader2 } from "lucide-react";
 
 /**
- * Botón "Activar paquete": pide al BFF crear la sesión de Stripe Checkout y
+ * Botón "Activar membresía": pide al BFF crear la sesión de Stripe Checkout y
  * redirige a la página de pago hosted (tarjeta + crypto).
  */
 export default function ActivatePackageButton({ packageId, featured }) {
@@ -54,7 +54,7 @@ export default function ActivatePackageButton({ packageId, featured }) {
             : { background: "var(--vp-surface-raised)", color: "var(--vp-text)", border: "1px solid var(--vp-border)" }
         }
       >
-        {loading ? <Loader2 size={15} className="animate-spin" /> : <>Activar paquete <ArrowRight size={15} /></>}
+        {loading ? <Loader2 size={15} className="animate-spin" /> : <>Activar membresía <ArrowRight size={15} /></>}
       </button>
       {error && (
         <p className="mt-2 text-xs font-semibold" style={{ color: "var(--vp-danger)" }}>

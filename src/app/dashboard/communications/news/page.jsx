@@ -29,7 +29,7 @@ const NEWS = [
   },
   {
     no: 2,
-    title: "Comunicado Oficial: Aplazamiento evento y compra de paquetes",
+    title: "Comunicado Oficial: Aplazamiento evento y compra de membresías",
     expiration: "31/12/2026",
     pinned: true,
     readConfirmation: true,
@@ -37,18 +37,18 @@ const NEWS = [
     dateline: "Comunicado oficial",
     headline: "Comunicado importante",
     intro:
-      "Comunicado oficial sobre el aplazamiento del evento y el proceso de compra de paquetes.",
+      "Comunicado oficial sobre el aplazamiento del evento y el proceso de compra de membresías.",
   },
   {
     no: 3,
-    title: "Actualización de cuenta bancaria para depósitos de paquetes",
+    title: "Actualización de cuenta bancaria para depósitos de membresías",
     expiration: "01/02/2026",
     pinned: false,
     readConfirmation: false,
     showDaily: false,
     dateline: "Actualización de cuenta bancaria",
     headline: "Comunicado importante",
-    intro: "Actualización de la cuenta bancaria utilizada para depósitos de paquetes.",
+    intro: "Actualización de la cuenta bancaria utilizada para depósitos de membresías.",
   },
 ];
 

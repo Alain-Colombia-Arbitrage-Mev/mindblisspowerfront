@@ -50,7 +50,7 @@ export default function MyPaymentsPanel() {
       <div className="grid gap-3 sm:grid-cols-3">
         <Metric Icon={Wallet} label="Disponible para retirar" value={money(d.available_for_withdrawal_usd)} accent />
         <Metric Icon={Clock} label="Comisiones en maduración" value={money(d.commission_maturing_usd)} />
-        <Metric Icon={CheckCircle2} label="Paquetes activos" value={String(d.active_packages ?? 0)} />
+        <Metric Icon={CheckCircle2} label="Membresías activas" value={String(d.active_packages ?? 0)} />
       </div>
 
       <WithdrawSection data={d} onDone={load} />

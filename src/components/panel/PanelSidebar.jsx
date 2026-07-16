@@ -32,7 +32,7 @@ const NAV_ITEMS = [
       { label: "Testimonials", href: "/dashboard/communications/testimonials" },
     ],
   },
-  { icon: Package, label: "Paquetes", href: "/dashboard/packages" },
+  { icon: Package, label: "Membresías", href: "/dashboard/packages" },
   { icon: Ticket, label: "Coupons", href: "/dashboard/coupons" },
   { icon: Wallet, label: "Finance", href: "/dashboard/withdrawals" },
   { icon: CreditCard, label: "KYC", href: "/dashboard/kyc" },

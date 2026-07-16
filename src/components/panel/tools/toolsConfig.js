@@ -5,7 +5,7 @@ export const TOOLS_TABS = [
     // Tab de acceso directo al catálogo real (paywall): ToolsPage lo
     // renderiza como CTA hacia /dashboard/packages.
     linkTo: "/dashboard/packages",
-    linkTitle: "Paquetes de inversión",
+    linkTitle: "Membresías de inversión",
     linkDescription: "Catálogo PACK MINDBLISS con activación por Stripe (tarjeta y crypto).",
   },
   {

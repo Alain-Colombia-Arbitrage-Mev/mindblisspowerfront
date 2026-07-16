@@ -42,7 +42,7 @@ export default function SalesSection() {
       <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
         <h2 className="executive-section-title mb-0">
           <BarChart3 size={18} style={{ color: "var(--vp-accent)" }} />
-          Ventas de paquetes {report?.from ? `(desde ${report.from})` : ""}
+          Ventas de membresías {report?.from ? `(desde ${report.from})` : ""}
         </h2>
         <div className="flex gap-2">
           {RANGES.map((r) => (
@@ -77,7 +77,7 @@ export default function SalesSection() {
           <table className="executive-table">
             <thead>
               <tr>
-                <th>Paquete</th>
+                <th>Membresía</th>
                 <th>Precio</th>
                 <th>Iniciados</th>
                 <th>Pagados</th>

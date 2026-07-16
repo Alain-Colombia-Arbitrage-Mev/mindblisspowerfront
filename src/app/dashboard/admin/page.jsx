@@ -84,7 +84,7 @@ export default function AdminPage() {
       {/* Resumen */}
       <div className="grid gap-3 sm:grid-cols-4">
         <Metric Icon={Users} label="Usuarios" value={summary ? Number(summary.total_users).toLocaleString("en-US") : "…"} />
-        <Metric Icon={CheckCircle2} label="Paquetes vendidos" value={summary ? Number(summary.total_sold).toLocaleString("en-US") : "…"} accent />
+        <Metric Icon={CheckCircle2} label="Membresías vendidas" value={summary ? Number(summary.total_sold).toLocaleString("en-US") : "…"} accent />
         <Metric Icon={DollarSign} label="Ingresos (Stripe)" value={summary ? money(summary.total_revenue_usd) : "…"} accent />
         <Metric Icon={Ban} label="Bloqueados" value={summary ? Number(summary.blocked_users).toLocaleString("en-US") : "…"} />
       </div>
@@ -113,7 +113,7 @@ export default function AdminPage() {
       {/* Finanzas + monitor de solvencia (live) */}
       <FinanceSection />
 
-      {/* Ventas de paquetes (PACK MINDBLISS por tier) */}
+      {/* Ventas de membresías (PACK MINDBLISS por tier) */}
       <SalesSection />
 
       {/* Actividad reciente (eventos de dominio, incluye member.registered) */}

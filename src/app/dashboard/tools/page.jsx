@@ -61,7 +61,7 @@ export default function ToolsPage() {
             {tab.linkDescription}
           </span>
           <span className="mt-3 text-sm font-semibold" style={{ color: "var(--vp-accent)" }}>
-            Ver paquetes →
+            Ver membresías →
           </span>
         </a>
       ) : null}

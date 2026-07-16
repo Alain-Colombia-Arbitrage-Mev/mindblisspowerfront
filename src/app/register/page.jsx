@@ -60,6 +60,7 @@ export default function RegisterPage() {
   const [confirmStep, setConfirmStep] = useState(false);
   const [confirmCode, setConfirmCode] = useState("");
   const [cognitoUsername, setCognitoUsername] = useState("");
+  const [banned, setBanned] = useState(false);
   // Guard síncrono anti doble-submit: evita un 2º SignUp que reenvía el código
   // e invalida el primero (causa del "primer código inválido").
   const submittingRef = useRef(false);
@@ -136,6 +137,13 @@ export default function RegisterPage() {
         }),
       });
       const payload = await response.json().catch(() => ({}));
+
+      if (payload.blacklisted) {
+        setBanned(true);
+        setLoading(false);
+        submittingRef.current = false;
+        return;
+      }
 
       if (!response.ok || !payload.ok) {
         setErrors({ form: payload.error || "No se pudo crear la cuenta." });
@@ -232,6 +240,10 @@ export default function RegisterPage() {
       setErrors({ form: "No se pudo conectar con el servicio de registro." });
     }
     setLoading(false);
+  }
+
+  if (banned) {
+    return <BannedModal />;
   }
 
   return (
@@ -497,6 +509,50 @@ export default function RegisterPage() {
         </div>
       </section>
     </AuthShell>
+  );
+}
+
+// BannedModal: pantalla de bloqueo cuando el candidato está en la lista negra.
+// Sin CTA de reintento — el registro no puede continuar.
+function BannedModal() {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-6"
+      style={{ background: "rgba(2,6,23,0.82)", backdropFilter: "blur(6px)" }}
+      role="alertdialog"
+      aria-modal="true"
+    >
+      <div
+        className="w-full max-w-md rounded-2xl p-8 text-center"
+        style={{ background: "var(--vp-surface)", border: "1px solid var(--vp-danger, #dc2626)", boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}
+      >
+        <div
+          className="mx-auto mb-5 inline-flex h-16 w-16 items-center justify-center rounded-full"
+          style={{ background: "rgba(220,38,38,0.12)" }}
+        >
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2.2" strokeLinecap="round">
+            <circle cx="12" cy="12" r="9" />
+            <line x1="5.6" y1="5.6" x2="18.4" y2="18.4" />
+          </svg>
+        </div>
+        <h2 className="m-0 text-xl font-bold" style={{ color: "var(--vp-text, #fff)" }}>
+          Registro no permitido
+        </h2>
+        <p className="mt-3 text-sm leading-relaxed" style={{ color: "var(--vp-muted, #94a3b8)" }}>
+          Has sido baneado de <strong>MindblissPower</strong>. El registro no puede continuar.
+        </p>
+        <p className="mt-4 text-xs" style={{ color: "var(--vp-subtle, #64748b)" }}>
+          Si crees que se trata de un error, escribe a soporte@mindblisspower.com.
+        </p>
+        <a
+          href="https://mindblisspower.com"
+          className="mt-6 inline-block rounded-lg px-5 py-2.5 text-sm font-semibold no-underline"
+          style={{ background: "var(--vp-border, #1e293b)", color: "var(--vp-text, #fff)" }}
+        >
+          Volver al inicio
+        </a>
+      </div>
+    </div>
   );
 }
 

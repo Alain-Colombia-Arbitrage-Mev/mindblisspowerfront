@@ -914,7 +914,7 @@ const moduleConfigs = {
     eyebrow: "Productos",
     title: "Productos",
     subtitle: "Catalogo operativo de productos y servicios disponibles para miembros de Mindbliss Power.",
-    action: { label: "Ver paquetes", href: "/dashboard/packages", icon: Package },
+    action: { label: "Ver membresías", href: "/dashboard/packages", icon: Package },
     metrics: [
       { label: "Productos", value: "3", detail: "categorias", icon: ShoppingBag, tone: "accent" },
       { label: "Activos", value: "1", detail: "disponible", icon: CheckCircle2, tone: "success" },
@@ -923,7 +923,7 @@ const moduleConfigs = {
     ],
     cards: [
       { title: "Membresia", text: "Acceso al portal, perfil, red, referidos y reportes de actividad.", icon: IdCard, status: "Activo" },
-      { title: "Paquetes", text: "Catalogo conectado a backend para planes disponibles.", icon: Package, status: "Disponible" },
+      { title: "Membresías", text: "Catalogo conectado a backend para planes disponibles.", icon: Package, status: "Disponible" },
       { title: "Servicios", text: "Productos adicionales se publicaran cuando esten listos para operacion.", icon: ShoppingBag, status: "Proximo" },
     ],
     tableTitle: "Catalogo",
@@ -931,7 +931,7 @@ const moduleConfigs = {
     columns: ["Producto", "Categoria", "Estado", "Accion"],
     rows: [
       ["Portal miembro", "Plataforma", "Activo", "Usar"],
-      ["Paquetes", "Plan", "Disponible", "Revisar"],
+      ["Membresías", "Plan", "Disponible", "Revisar"],
       ["Servicios premium", "Soporte", "Proximo", "Pendiente"],
     ],
   },
