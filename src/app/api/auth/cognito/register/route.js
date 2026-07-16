@@ -1,11 +1,18 @@
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 
+import { authRateLimit } from "@/lib/auth-rate-limit";
 import { buildCognitoSignUpPayload, getCognitoIdentityProviderConfig } from "@/lib/cognito";
 
 export const runtime = "nodejs";
 
 export async function POST(request) {
+  // Rate limit por IP: acota abuso del endpoint (oráculo de lista negra) y
+  // registros masivos. Rate limit per IP: caps blacklist-oracle abuse and mass
+  // sign-ups.
+  const limited = authRateLimit(request, { name: "register", preset: "register" });
+  if (limited) return limited;
+
   const body = await readJson(request);
   const email = normalizeEmail(body.email);
   const password = String(body.password || "");
@@ -19,6 +26,23 @@ export async function POST(request) {
   const validationError = validateInput({ email, password, fullName });
   if (validationError) {
     return NextResponse.json({ error: validationError }, { status: 400 });
+  }
+
+  // Lista negra: estos usuarios no pueden registrarse (ban por email/teléfono/
+  // nombre). Se consulta a vp-payments ANTES de crear el usuario en Cognito.
+  // Fail-open: si el servicio no responde, NO bloqueamos el registro legítimo
+  // (el barrido posterior captura cualquier colado); solo bloqueamos ante un
+  // "blacklisted:true" explícito.
+  if (await isBlacklisted({ email, phone, fullName, birthDate })) {
+    return NextResponse.json(
+      {
+        error:
+          "Has sido baneado de MindblissPower. El registro no puede continuar. / " +
+          "You have been banned from MindblissPower. Registration cannot continue.",
+        blacklisted: true,
+      },
+      { status: 403 }
+    );
   }
 
   let config;
@@ -101,6 +125,28 @@ export async function POST(request) {
   );
 }
 
+// isBlacklisted consulta a vp-payments si el candidato está en la lista negra.
+// Fail-open ante cualquier fallo (infra/config): devuelve false para no bloquear
+// registros legítimos por un problema transitorio.
+async function isBlacklisted({ email, phone, fullName, birthDate }) {
+  const base = process.env.VP_PAYMENTS_URL;
+  const token = process.env.PAYMENTS_SERVICE_TOKEN;
+  if (!base || !token) return false;
+  try {
+    const resp = await fetch(`${base}/api/registration/precheck`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-VP-Service-Token": token },
+      body: JSON.stringify({ email, phone, name: fullName, birth_date: birthDate }),
+      cache: "no-store",
+    });
+    if (!resp.ok) return false;
+    const data = await resp.json().catch(() => ({}));
+    return Boolean(data.blacklisted);
+  } catch {
+    return false;
+  }
+}
+
 async function callCognito({ endpoint, target, payload }) {
   const response = await fetch(endpoint, {
     method: "POST",
@@ -135,10 +181,12 @@ function normalizeBirthDate(value) {
 }
 
 function validateInput({ email, password, fullName }) {
-  if (!fullName) return "El nombre es requerido.";
-  if (!email) return "Ingresa un email válido.";
-  if (password.length < 8) return "La contraseña debe tener mínimo 8 caracteres.";
-  if (password.length > 256) return "La contraseña es demasiado larga.";
+  if (!fullName) return "El nombre es requerido. / Name is required.";
+  if (!email) return "Ingresa un email válido. / Enter a valid email.";
+  if (password.length < 8) {
+    return "La contraseña debe tener mínimo 8 caracteres. / Password must be at least 8 characters.";
+  }
+  if (password.length > 256) return "La contraseña es demasiado larga. / Password is too long.";
   return "";
 }
 
@@ -159,20 +207,29 @@ function mapCognitoSignUpError(body) {
   const code = getCognitoErrorCode(body);
 
   if (code === "UsernameExistsException") {
-    return "Ya existe una cuenta con ese email.";
+    return "Ya existe una cuenta con ese email. / An account with that email already exists.";
   }
 
   if (code === "InvalidPasswordException") {
-    return "La contraseña no cumple la política configurada en Cognito.";
+    return (
+      "La contraseña no cumple la política configurada en Cognito. / " +
+      "The password does not meet the policy configured in Cognito."
+    );
   }
 
   if (code === "InvalidParameterException") {
-    return "Cognito rechazó uno de los datos enviados. Revisa la configuración de atributos del app client.";
+    return (
+      "Cognito rechazó uno de los datos enviados. Revisa la configuración de atributos del app client. / " +
+      "Cognito rejected one of the submitted values. Check the app client attribute configuration."
+    );
   }
 
   if (code === "TooManyRequestsException" || code === "LimitExceededException") {
-    return "Demasiados intentos. Espera unos minutos antes de volver a intentar.";
+    return (
+      "Demasiados intentos. Espera unos minutos antes de volver a intentar. / " +
+      "Too many attempts. Wait a few minutes before trying again."
+    );
   }
 
-  return "No se pudo crear la cuenta en Cognito.";
+  return "No se pudo crear la cuenta en Cognito. / The account could not be created in Cognito.";
 }

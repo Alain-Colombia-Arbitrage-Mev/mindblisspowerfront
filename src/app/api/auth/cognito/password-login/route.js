@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { authRateLimit } from "@/lib/auth-rate-limit";
 import {
   buildCognitoChallengeResponsePayload,
   buildCognitoPasswordAuthPayload,
@@ -21,8 +22,16 @@ export async function POST(request) {
   const password = String(body.password || "");
 
   if (!email || !password || password.length > 256) {
-    return NextResponse.json({ error: "Ingresa email y contraseña válidos." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Ingresa email y contraseña válidos. / Enter a valid email and password." },
+      { status: 400 }
+    );
   }
+
+  // Intento de inicio de sesión: rate limit por IP + email (anti credential
+  // stuffing). Sign-in attempt: per-IP + per-email rate limit.
+  const limited = authRateLimit(request, { name: "password-login", preset: "login", email });
+  if (limited) return limited;
 
   let config;
   try {
@@ -70,7 +79,10 @@ export async function POST(request) {
 
   const tokens = cognitoResponse.body.AuthenticationResult;
   if (!tokens?.AccessToken || !tokens?.IdToken) {
-    return NextResponse.json({ error: "Cognito no devolvió una sesión válida." }, { status: 502 });
+    return NextResponse.json(
+      { error: "Cognito no devolvió una sesión válida. / Cognito did not return a valid session." },
+      { status: 502 }
+    );
   }
 
   const response = NextResponse.json({
@@ -359,32 +371,53 @@ function mapCognitoAuthError(body) {
   const code = getCognitoErrorCode(body);
 
   if (code === "UserNotConfirmedException") {
-    return "La cuenta está creada, pero falta confirmar el email antes de iniciar sesión.";
+    return (
+      "La cuenta está creada, pero falta confirmar el email antes de iniciar sesión. / " +
+      "The account exists, but the email must be confirmed before signing in."
+    );
   }
 
   if (code === "PasswordResetRequiredException") {
-    return "Cognito requiere restablecer la contraseña antes de entrar.";
+    return (
+      "Cognito requiere restablecer la contraseña antes de entrar. / " +
+      "Cognito requires resetting the password before signing in."
+    );
   }
 
   if (code === "TooManyRequestsException" || code === "LimitExceededException") {
-    return "Demasiados intentos. Espera unos minutos antes de volver a intentar.";
+    return (
+      "Demasiados intentos. Espera unos minutos antes de volver a intentar. / " +
+      "Too many attempts. Wait a few minutes before trying again."
+    );
   }
 
   if (code === "InvalidParameterException") {
-    return "La configuración de Cognito no acepta este flujo de contraseña.";
+    return (
+      "La configuración de Cognito no acepta este flujo de contraseña. / " +
+      "The Cognito configuration does not accept this password flow."
+    );
   }
 
-  return "Email o contraseña incorrectos.";
+  return "Email o contraseña incorrectos. / Incorrect email or password.";
 }
 
 function mapChallengeMessage(challengeName) {
   if (challengeName === "NEW_PASSWORD_REQUIRED") {
-    return "Cognito requiere crear una nueva contraseña antes de entrar.";
+    return (
+      "Cognito requiere crear una nueva contraseña antes de entrar. / " +
+      "Cognito requires creating a new password before signing in."
+    );
   }
 
   if (String(challengeName).includes("MFA") || String(challengeName).includes("OTP")) {
-    return "La cuenta requiere verificación adicional. Completa el segundo factor en Cognito.";
+    return (
+      "La cuenta requiere verificación adicional. Completa el segundo factor en Cognito. / " +
+      "The account requires additional verification. Complete the second factor in Cognito."
+    );
   }
 
-  return "Cognito requiere un paso adicional para completar el acceso.";
+  return (
+    "Cognito requiere un paso adicional para completar el acceso. / " +
+    "Cognito requires an additional step to complete sign-in."
+  );
 }

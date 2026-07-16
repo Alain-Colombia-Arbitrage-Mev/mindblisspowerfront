@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { authRateLimit } from "@/lib/auth-rate-limit";
 import { buildCognitoSecretHash, getCognitoIdentityProviderConfig } from "@/lib/cognito";
 import { callCognito, mapCognitoError, mapCognitoStatus, normalizeEmail, getCognitoErrorCode } from "@/lib/cognito-api";
 
@@ -10,8 +11,12 @@ export async function POST(request) {
   const email = normalizeEmail(body.email);
 
   if (!email) {
-    return NextResponse.json({ error: "Ingresa un email válido." }, { status: 400 });
+    return NextResponse.json({ error: "Ingresa un email válido. / Enter a valid email." }, { status: 400 });
   }
+
+  // Envío de correo de recuperación: rate limit por email + IP (preset "send").
+  const limited = authRateLimit(request, { name: "forgot-password", preset: "send", email });
+  if (limited) return limited;
 
   let config;
   try {

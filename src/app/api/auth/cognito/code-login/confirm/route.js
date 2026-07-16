@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { authRateLimit } from "@/lib/auth-rate-limit";
 import { buildCognitoChallengeResponsePayload, getCognitoIdentityProviderConfig } from "@/lib/cognito";
 import { callCognito, getCognitoErrorCode, mapCognitoError, mapCognitoStatus, normalizeEmail } from "@/lib/cognito-api";
 import {
@@ -20,20 +21,31 @@ export async function POST(request) {
   const code = String(body.code || "").trim();
 
   if (!email) {
-    return NextResponse.json({ error: "Ingresa un email válido." }, { status: 400 });
+    return NextResponse.json({ error: "Ingresa un email válido. / Enter a valid email." }, { status: 400 });
   }
+
+  // Verificación de código de acceso: rate limit anti fuerza-bruta (IP + email).
+  const limited = authRateLimit(request, { name: "code-login-confirm", preset: "verify", email });
+  if (limited) return limited;
+
   if (!/^[a-zA-Z0-9]{4,12}$/.test(code)) {
-    return NextResponse.json({ error: "Ingresa el código que recibiste por correo." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Ingresa el código que recibiste por correo. / Enter the code you received by email." },
+      { status: 400 }
+    );
   }
 
   const challenge = readCodeChallenge(request);
   if (!challenge || challenge.email !== email) {
-    return NextResponse.json({ error: "Solicita un código nuevo para continuar." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Solicita un código nuevo para continuar. / Request a new code to continue." },
+      { status: 400 }
+    );
   }
 
   if (challenge.mode === "demo") {
     if (code !== challenge.code) {
-      return NextResponse.json({ error: "El código no es válido." }, { status: 400 });
+      return NextResponse.json({ error: "El código no es válido. / The code is not valid." }, { status: 400 });
     }
 
     const response = NextResponse.json({
@@ -75,14 +87,21 @@ export async function POST(request) {
 
   if (cognitoResponse.body.ChallengeName) {
     return NextResponse.json(
-      { error: `Cognito requiere un paso adicional: ${cognitoResponse.body.ChallengeName}.` },
+      {
+        error:
+          `Cognito requiere un paso adicional: ${cognitoResponse.body.ChallengeName}. / ` +
+          `Cognito requires an additional step: ${cognitoResponse.body.ChallengeName}.`,
+      },
       { status: 409 }
     );
   }
 
   const tokens = cognitoResponse.body.AuthenticationResult;
   if (!tokens?.AccessToken || !tokens?.IdToken) {
-    return NextResponse.json({ error: "Cognito no devolvió una sesión válida." }, { status: 502 });
+    return NextResponse.json(
+      { error: "Cognito no devolvió una sesión válida. / Cognito did not return a valid session." },
+      { status: 502 }
+    );
   }
 
   const response = NextResponse.json({
@@ -111,12 +130,12 @@ function mapEmailOtpConfirmError(body) {
   const code = getCognitoErrorCode(body);
 
   if (code === "CodeMismatchException" || code === "NotAuthorizedException") {
-    return "El código no es válido.";
+    return "El código no es válido. / The code is not valid.";
   }
 
   if (code === "ExpiredCodeException") {
-    return "El código expiró. Solicita uno nuevo.";
+    return "El código expiró. Solicita uno nuevo. / The code expired. Request a new one.";
   }
 
-  return mapCognitoError(body, "No se pudo validar el código.");
+  return mapCognitoError(body, "No se pudo validar el código. / The code could not be validated.");
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { authRateLimit } from "@/lib/auth-rate-limit";
 import { buildCognitoSecretHash, getCognitoIdentityProviderConfig } from "@/lib/cognito";
 import { callCognito, mapCognitoError, mapCognitoStatus, normalizeEmail } from "@/lib/cognito-api";
 
@@ -12,13 +13,24 @@ export async function POST(request) {
   const password = String(body.password || "");
 
   if (!email) {
-    return NextResponse.json({ error: "Ingresa un email válido." }, { status: 400 });
+    return NextResponse.json({ error: "Ingresa un email válido. / Enter a valid email." }, { status: 400 });
   }
+
+  // Verificación de código de recuperación: rate limit anti fuerza-bruta.
+  const limited = authRateLimit(request, { name: "reset-password", preset: "verify", email });
+  if (limited) return limited;
+
   if (!/^\d{4,8}$/.test(code)) {
-    return NextResponse.json({ error: "Ingresa el código que recibiste por correo." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Ingresa el código que recibiste por correo. / Enter the code you received by email." },
+      { status: 400 }
+    );
   }
   if (password.length < 8) {
-    return NextResponse.json({ error: "La contraseña debe tener mínimo 8 caracteres." }, { status: 400 });
+    return NextResponse.json(
+      { error: "La contraseña debe tener mínimo 8 caracteres. / Password must be at least 8 characters." },
+      { status: 400 }
+    );
   }
 
   let config;

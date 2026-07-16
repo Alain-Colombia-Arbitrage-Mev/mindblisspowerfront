@@ -39,20 +39,27 @@ export function mapCognitoStatus(body) {
   return 502;
 }
 
+// Mensajes bilingües (ES / EN). Bilingual messages (ES / EN).
 const ERROR_MESSAGES = {
-  UsernameExistsException: "Ya existe una cuenta con ese email.",
-  UserNotFoundException: "No existe una cuenta con ese email.",
-  UserNotConfirmedException: "La cuenta aún no está confirmada. Revisa tu correo.",
-  InvalidPasswordException: "La contraseña no cumple la política de seguridad.",
-  InvalidParameterException: "Cognito rechazó uno de los datos enviados.",
-  CodeMismatchException: "El código no es válido.",
-  ExpiredCodeException: "El código expiró. Solicita uno nuevo.",
-  NotAuthorizedException: "Credenciales inválidas.",
-  TooManyRequestsException: "Demasiados intentos. Espera unos minutos.",
-  LimitExceededException: "Demasiados intentos. Espera unos minutos.",
+  UsernameExistsException: "Ya existe una cuenta con ese email. / An account with that email already exists.",
+  UserNotFoundException: "No existe una cuenta con ese email. / No account exists with that email.",
+  UserNotConfirmedException:
+    "La cuenta aún no está confirmada. Revisa tu correo. / The account is not confirmed yet. Check your email.",
+  InvalidPasswordException:
+    "La contraseña no cumple la política de seguridad. / The password does not meet the security policy.",
+  InvalidParameterException:
+    "Cognito rechazó uno de los datos enviados. / Cognito rejected one of the submitted values.",
+  CodeMismatchException: "El código no es válido. / The code is not valid.",
+  ExpiredCodeException: "El código expiró. Solicita uno nuevo. / The code expired. Request a new one.",
+  NotAuthorizedException: "Credenciales inválidas. / Invalid credentials.",
+  TooManyRequestsException: "Demasiados intentos. Espera unos minutos. / Too many attempts. Wait a few minutes.",
+  LimitExceededException: "Demasiados intentos. Espera unos minutos. / Too many attempts. Wait a few minutes.",
 };
 
-export function mapCognitoError(body, fallback = "No se pudo completar la operación.") {
+export function mapCognitoError(
+  body,
+  fallback = "No se pudo completar la operación. / The operation could not be completed."
+) {
   return ERROR_MESSAGES[getCognitoErrorCode(body)] || fallback;
 }
 

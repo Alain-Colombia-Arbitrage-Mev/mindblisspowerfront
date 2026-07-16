@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { authRateLimit } from "@/lib/auth-rate-limit";
 import {
   buildCognitoChallengeResponsePayload,
   buildCognitoEmailOtpStartPayload,
@@ -23,8 +24,12 @@ export async function POST(request) {
   const email = normalizeEmail(body.email);
 
   if (!email) {
-    return NextResponse.json({ error: "Ingresa un email válido." }, { status: 400 });
+    return NextResponse.json({ error: "Ingresa un email válido. / Enter a valid email." }, { status: 400 });
   }
+
+  // Envío de código por correo: rate limit por email + IP (preset "send").
+  const limited = authRateLimit(request, { name: "code-login-request", preset: "send", email });
+  if (limited) return limited;
 
   let config;
   try {
@@ -203,14 +208,20 @@ function mapEmailOtpError(body) {
   const code = getCognitoErrorCode(body);
 
   if (code === "InvalidParameterException" || code === "InvalidLambdaResponseException") {
-    return "El login con código por email requiere activar ALLOW_USER_AUTH y Email OTP en Cognito.";
+    return (
+      "El login con código por email requiere activar ALLOW_USER_AUTH y Email OTP en Cognito. / " +
+      "Email code login requires enabling ALLOW_USER_AUTH and Email OTP in Cognito."
+    );
   }
 
   if (code === "UserNotConfirmedException") {
-    return "La cuenta aún no está confirmada. Revisa tu correo antes de iniciar sesión.";
+    return (
+      "La cuenta aún no está confirmada. Revisa tu correo antes de iniciar sesión. / " +
+      "The account is not confirmed yet. Check your email before signing in."
+    );
   }
 
-  return mapCognitoError(body, "No se pudo enviar el código de acceso.");
+  return mapCognitoError(body, "No se pudo enviar el código de acceso. / The access code could not be sent.");
 }
 
 function maskEmail(email) {
