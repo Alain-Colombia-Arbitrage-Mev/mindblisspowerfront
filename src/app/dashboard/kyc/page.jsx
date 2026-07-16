@@ -32,6 +32,23 @@ export default function KycPage() {
     load();
   }, [load]);
 
+  // Mientras haya un documento "en revisión" (p. ej. un pasaporte con el OCR
+  // corriendo), poll cada 3s hasta 60s para reflejar la auto-aprobación/rechazo
+  // sin recargar la página. El tope evita poll infinito si queda revisión manual.
+  const inReview = state.documents.some((d) => d.status === "in_review");
+  useEffect(() => {
+    if (!inReview) return undefined;
+    const started = Date.now();
+    const id = setInterval(() => {
+      if (Date.now() - started > 60000) {
+        clearInterval(id);
+        return;
+      }
+      load();
+    }, 3000);
+    return () => clearInterval(id);
+  }, [inReview, load]);
+
   const latestByType = new Map();
   for (const doc of state.documents) {
     if (!latestByType.has(doc.doc_type)) latestByType.set(doc.doc_type, doc);
@@ -65,6 +82,16 @@ export default function KycPage() {
           <KycStatusBadge status={state.kycStatus} />
         )}
       </section>
+
+      {inReview ? (
+        <section
+          className="flex items-center gap-3 rounded-2xl border p-4 text-xs"
+          style={{ background: "var(--vp-surface)", borderColor: "rgba(250,204,21,0.3)", color: "var(--vp-muted)" }}
+        >
+          <Loader2 className="animate-spin" size={15} style={{ color: "var(--vp-accent)" }} />
+          Estamos verificando tus documentos. Los pasaportes se validan automáticamente en unos segundos; no cierres esta página.
+        </section>
+      ) : null}
 
       {state.error ? (
         <section
