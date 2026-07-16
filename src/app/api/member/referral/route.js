@@ -61,9 +61,11 @@ export async function GET() {
   }
 }
 
-// Código estable, único y legible derivado del id (base36, prefijo MP).
+// Código canónico MP{affiliateID} en DECIMAL — DEBE coincidir con el que genera
+// y persiste el backend (GetMemberContext) y con lo que resuelve
+// ResolveSponsorByCode; de lo contrario el link compartido no resolvería.
 function deriveCode(id) {
-  return "MP" + BigInt(id).toString(36).toUpperCase().padStart(5, "0");
+  return "MP" + String(id);
 }
 
 function emailFromIdToken(token) {

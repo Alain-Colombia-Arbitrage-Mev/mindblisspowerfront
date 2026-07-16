@@ -1100,12 +1100,17 @@ export function ReferralsDashboardPage() {
     return () => { cancelled = true; };
   }, []);
   const code = referral || member.referralCode;
+  const link = code ? `https://app.mindblisspower.com/register?ref=${encodeURIComponent(code)}` : "";
   const config = {
     ...moduleConfigs.referrals,
-    metrics: moduleConfigs.referrals.metrics.map((m) => (m.label === "Codigo" ? { ...m, value: code } : m)),
+    metrics: moduleConfigs.referrals.metrics.map((m) => (m.label === "Codigo" ? { ...m, value: code || "—" } : m)),
     cards: moduleConfigs.referrals.cards.map((c) =>
-      c.title === "Enlace personal" && code
-        ? { ...c, text: `https://app.mindblisspower.com/register?ref=${code}` }
+      c.title === "Enlace personal"
+        ? {
+            ...c,
+            text: link || "Tu enlace estará disponible cuando actives tu membresía y quedes colocado en la red.",
+            status: code ? "Listo" : "Pendiente",
+          }
         : c,
     ),
   };

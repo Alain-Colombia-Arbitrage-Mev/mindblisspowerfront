@@ -43,9 +43,11 @@ export async function GET() {
     name: name || null,
     email: email || null,
     givenName: claims.given_name || null,
-    // Código REAL del afiliado (invitation_link); si aún no tiene (no colocado),
-    // se usa uno derivado estable por usuario.
-    referralCode: realCode || referralCode(claims.sub || email || ""),
+    // Código REAL del afiliado (invitation_link o MP{id} canónico del backend).
+    // NUNCA inventamos un código: si el miembro aún no está colocado en el árbol
+    // no tiene código resoluble, así que devolvemos null y la UI muestra un aviso.
+    // (Un código inventado se ve válido pero no resuelve a ningún sponsor.)
+    referralCode: realCode || null,
     isAdmin,
   });
 }
@@ -59,16 +61,4 @@ function decodeJwt(token) {
   } catch {
     return {};
   }
-}
-
-// Código de referido único y estable por usuario (fallback si aún no hay uno real).
-function referralCode(seed) {
-  if (!seed) return null;
-  let h = 2166136261;
-  for (let i = 0; i < seed.length; i++) {
-    h ^= seed.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  const code = (h >>> 0).toString(36).toUpperCase().padStart(7, "0").slice(-7);
-  return `MP${code}`;
 }
