@@ -670,10 +670,10 @@ export function ProfileDashboardPage() {
                   Billetera retiros
                 </h2>
                 <p className="mb-5 text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
-                  Configura una direccion USDT TRC20 antes de solicitar retiros.
+                  Configura una direccion USDC (red Ethereum · ERC-20) antes de solicitar retiros.
                 </p>
-                <Field label="Direccion USDT">
-                  <input className="executive-input" placeholder="T..." />
+                <Field label="Direccion USDC (ERC-20)">
+                  <input className="executive-input" placeholder="0x..." />
                 </Field>
                 <button className="executive-button mt-4 w-full" type="button">
                   Actualizar billetera
