@@ -32,13 +32,10 @@ export default function KycPage() {
     load();
   }, [load]);
 
-  // Solo el PASAPORTE se valida automáticamente (OCR). Mientras haya un pasaporte
-  // "en revisión" hacemos poll cada 2s hasta 60s para reflejar la aprobación/
-  // rechazo sin recargar. Los demás documentos (cédula, domicilio, selfie) van a
-  // revisión manual del equipo: no se auto-resuelven, así que NO hacemos poll ni
-  // mostramos el aviso de "unos segundos" (eso daba un "verificando" eterno).
-  const ocrPending = state.documents.some((d) => d.doc_type === "passport" && d.status === "in_review");
-  const manualReview = state.documents.some((d) => d.doc_type !== "passport" && d.status === "in_review");
+  // TODOS los documentos se validan automáticamente por OCR en segundos. Mientras
+  // haya alguno "en revisión" hacemos poll cada 2s (hasta 60s) para reflejar la
+  // aprobación/rechazo sin recargar.
+  const ocrPending = state.documents.some((d) => d.status === "in_review");
   useEffect(() => {
     if (!ocrPending) return undefined;
     const started = Date.now();
@@ -92,14 +89,7 @@ export default function KycPage() {
           style={{ background: "var(--vp-surface)", borderColor: "rgba(250,204,21,0.3)", color: "var(--vp-muted)" }}
         >
           <Loader2 className="animate-spin" size={15} style={{ color: "var(--vp-accent)" }} />
-          Validando tu pasaporte automáticamente… suele tardar solo unos segundos. No cierres esta página.
-        </section>
-      ) : manualReview ? (
-        <section
-          className="rounded-2xl border p-4 text-xs"
-          style={{ background: "var(--vp-surface)", borderColor: "var(--vp-border)", color: "var(--vp-muted)" }}
-        >
-          Tienes documentos en revisión por nuestro equipo. Te notificaremos cuando se aprueben (no necesitas esperar en esta página).
+          Validando tus documentos automáticamente… suele tardar solo unos segundos. No cierres esta página.
         </section>
       ) : null}
 
