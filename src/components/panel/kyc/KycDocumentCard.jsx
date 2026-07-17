@@ -26,8 +26,9 @@ export default function KycDocumentCard({ docType, currentDocument, onUploaded }
   const [error, setError] = useState("");
   const Icon = docType.icon;
 
-  const locked =
-    currentDocument && (currentDocument.status === "in_review" || currentDocument.status === "approved");
+  // Solo se bloquea si ya está APROBADO. En revisión o rechazado se puede volver
+  // a subir (para no quedar atascado esperando).
+  const locked = currentDocument && currentDocument.status === "approved";
 
   const upload = async (file) => {
     setError("");
