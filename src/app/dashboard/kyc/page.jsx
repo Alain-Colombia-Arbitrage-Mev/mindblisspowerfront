@@ -39,7 +39,7 @@ export default function KycPage() {
         setNameMsg({ type: "err", text: d.error === "person_not_found" ? "No se pudo guardar." : "No se pudieron guardar los cambios." });
       } else {
         setNameMsg({ type: "ok", text: "Nombre guardado." });
-        try { window.dispatchEvent(new Event("vp:profile-updated")); } catch { /* ignore */ }
+        try { window.dispatchEvent(new CustomEvent("vp:profile-updated", { detail: { name: legalName.trim() } })); } catch { /* ignore */ }
       }
     } catch {
       setNameMsg({ type: "err", text: "Sin conexión. Intenta de nuevo." });

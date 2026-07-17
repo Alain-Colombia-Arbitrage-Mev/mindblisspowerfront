@@ -58,9 +58,14 @@ export default function DashboardShell({ authMode, children }) {
         .catch(() => {});
     };
     loadSession();
-    // Al editar el perfil (nombre/datos) el perfil dispara este evento para que
-    // el sidebar se actualice sin recargar la página.
-    const onProfileUpdated = () => loadSession();
+    // Al editar el perfil (nombre/datos) se dispara este evento con el nombre
+    // nuevo → actualizamos el sidebar de INMEDIATO (optimista) y re-consultamos
+    // la sesión para confirmar, sin recargar la página.
+    const onProfileUpdated = (e) => {
+      const newName = e?.detail?.name;
+      if (newName) setMember((m) => ({ ...(m || {}), name: newName }));
+      loadSession();
+    };
     window.addEventListener("vp:profile-updated", onProfileUpdated);
     return () => {
       cancelled = true;
