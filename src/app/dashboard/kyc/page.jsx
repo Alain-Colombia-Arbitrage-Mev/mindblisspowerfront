@@ -9,6 +9,44 @@ import { KYC_DOC_TYPES } from "@/components/panel/kyc/kycConfig";
 
 export default function KycPage() {
   const [state, setState] = useState({ loading: true, error: "", documents: [], kycStatus: "not_started" });
+  const [legalName, setLegalName] = useState("");
+  const [nameSaving, setNameSaving] = useState(false);
+  const [nameMsg, setNameMsg] = useState({ type: "", text: "" });
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/member/profile", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (cancelled || !d) return;
+        setLegalName([d.first_name, d.last_name].filter(Boolean).join(" ").trim());
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  async function saveName() {
+    setNameSaving(true);
+    setNameMsg({ type: "", text: "" });
+    try {
+      const r = await fetch("/api/member/profile", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: legalName.trim() }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setNameMsg({ type: "err", text: d.error === "person_not_found" ? "No se pudo guardar." : "No se pudieron guardar los cambios." });
+      } else {
+        setNameMsg({ type: "ok", text: "Nombre guardado." });
+        try { window.dispatchEvent(new Event("vp:profile-updated")); } catch { /* ignore */ }
+      }
+    } catch {
+      setNameMsg({ type: "err", text: "Sin conexión. Intenta de nuevo." });
+    } finally {
+      setNameSaving(false);
+    }
+  }
 
   const load = useCallback(() => {
     fetch("/api/member/kyc/documents", { cache: "no-store" })
@@ -81,6 +119,39 @@ export default function KycPage() {
         ) : (
           <KycStatusBadge status={state.kycStatus} />
         )}
+      </section>
+
+      <section
+        className="rounded-2xl border p-6"
+        style={{ background: "var(--vp-surface)", borderColor: "var(--vp-border)" }}
+      >
+        <h3 className="m-0 text-sm font-bold" style={{ color: "var(--vp-text)" }}>
+          Tu nombre legal
+        </h3>
+        <p className="m-0 mt-1 text-xs font-light" style={{ color: "var(--vp-muted)" }}>
+          Debe coincidir EXACTAMENTE con el nombre de tu documento; se usa para validar tu identidad.
+        </p>
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+          <input
+            className="executive-input flex-1"
+            value={legalName}
+            onChange={(e) => setLegalName(e.target.value)}
+            placeholder="Nombre(s) y apellido(s) como en tu documento"
+          />
+          <button
+            type="button"
+            className="executive-button primary"
+            onClick={saveName}
+            disabled={nameSaving || !legalName.trim()}
+          >
+            {nameSaving ? "Guardando…" : "Guardar nombre"}
+          </button>
+        </div>
+        {nameMsg.text ? (
+          <p className="mt-2 text-xs font-semibold" style={{ color: nameMsg.type === "ok" ? "var(--vp-accent)" : "#f87171" }}>
+            {nameMsg.text}
+          </p>
+        ) : null}
       </section>
 
       {ocrPending ? (
