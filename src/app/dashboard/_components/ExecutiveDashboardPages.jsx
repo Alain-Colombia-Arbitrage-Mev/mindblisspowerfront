@@ -628,9 +628,15 @@ export function ProfileDashboardPage() {
               </h2>
               <div className="rounded-2xl p-4" style={{ background: "var(--vp-bg)", border: "1px solid var(--vp-border)" }}>
                 <p className="executive-card-label">Codigo unico</p>
-                <p className="m-0 text-4xl font-light" style={{ color: "var(--vp-text)" }}>
-                  {displayReferral}
-                </p>
+                {displayReferral ? (
+                  <p className="m-0 text-4xl font-light" style={{ color: "var(--vp-text)" }}>
+                    {displayReferral}
+                  </p>
+                ) : (
+                  <p className="m-0 mt-1 text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
+                    Tu código estará disponible cuando actives tu membresía y quedes colocado en la red.
+                  </p>
+                )}
               </div>
             </div>
           </div>

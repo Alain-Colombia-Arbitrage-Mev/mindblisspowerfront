@@ -13,7 +13,8 @@ export async function POST(request) {
   const idToken = cookieStore.get("vp_id_token")?.value;
   if (!idToken) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
 
-  const email = emailFromIdToken(idToken);
+  const identity = identityFromIdToken(idToken);
+  const email = identity.email;
   if (!email) return NextResponse.json({ error: "session-invalid" }, { status: 401 });
 
   let body;
@@ -39,7 +40,9 @@ export async function POST(request) {
         "X-VP-Service-Token": token,
         "X-VP-Id-Token": idToken,
       },
-      body: JSON.stringify({ email, doc_type: docType, file_name: fileName, mime, size }),
+      // name/phone del id token → el backend auto-provisiona mlm.person si el
+      // usuario aún no compró, para no bloquear el KYC con "person-not-found".
+      body: JSON.stringify({ email, name: identity.name, phone: identity.phone, doc_type: docType, file_name: fileName, mime, size }),
       cache: "no-store",
     });
     const payload = await resp.json().catch(() => ({}));
@@ -51,12 +54,16 @@ export async function POST(request) {
   }
 }
 
-function emailFromIdToken(token) {
+function identityFromIdToken(token) {
   try {
     const payload = JSON.parse(Buffer.from(String(token).split(".")[1], "base64url").toString("utf8"));
-    if (payload.exp && payload.exp * 1000 < Date.now()) return "";
-    return String(payload.email || "").trim().toLowerCase();
+    if (payload.exp && payload.exp * 1000 < Date.now()) return { email: "" };
+    return {
+      email: String(payload.email || "").trim().toLowerCase(),
+      name: String(payload.name || [payload.given_name, payload.family_name].filter(Boolean).join(" ") || "").trim(),
+      phone: String(payload.phone_number || "").trim(),
+    };
   } catch {
-    return "";
+    return { email: "" };
   }
 }
