@@ -45,7 +45,7 @@ export default function KycPage() {
         return;
       }
       load();
-    }, 3000);
+    }, 2000);
     return () => clearInterval(id);
   }, [inReview, load]);
 

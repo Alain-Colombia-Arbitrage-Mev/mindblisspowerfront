@@ -538,6 +538,9 @@ export function ProfileDashboardPage() {
   const [digest, setDigest] = useState(true);
   const [me, setMe] = useState({ name: "", email: "", referralCode: "" });
   const [summary, setSummary] = useState(null);
+  const [form, setForm] = useState({ name: "", phone: "", country: "", payout_wallet_usdc: "" });
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState({ type: "", text: "" });
 
   useEffect(() => {
     let cancelled = false;
@@ -551,8 +554,57 @@ export function ProfileDashboardPage() {
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => { if (!cancelled && d && !d.error) setSummary(d); })
       .catch(() => {});
+    fetch("/api/member/profile", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (cancelled || !d) return;
+        const full = [d.first_name, d.last_name].filter(Boolean).join(" ").trim();
+        setForm({
+          name: full,
+          phone: d.phone || "",
+          country: d.country || "",
+          payout_wallet_usdc: d.payout_wallet_usdc || "",
+        });
+      })
+      .catch(() => {});
     return () => { cancelled = true; };
   }, []);
+
+  const setField = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  async function saveProfile() {
+    setSaving(true);
+    setSaveMsg({ type: "", text: "" });
+    const wallet = (form.payout_wallet_usdc || "").trim();
+    if (wallet && !/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
+      setSaving(false);
+      setSaveMsg({ type: "err", text: "La dirección USDC debe ser una address ERC-20 válida (0x + 40 hex)." });
+      return;
+    }
+    try {
+      const r = await fetch("/api/member/profile", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: (form.name || "").trim(),
+          phone: (form.phone || "").trim(),
+          country: (form.country || "").trim(),
+          payout_wallet_usdc: wallet,
+        }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        const m = { invalid_wallet: "Dirección USDC inválida.", person_not_found: "No se pudo guardar (perfil no encontrado)." }[d.error] || "No se pudieron guardar los cambios.";
+        setSaveMsg({ type: "err", text: m });
+      } else {
+        setSaveMsg({ type: "ok", text: "Cambios guardados." });
+      }
+    } catch {
+      setSaveMsg({ type: "err", text: "Sin conexión. Intenta de nuevo." });
+    } finally {
+      setSaving(false);
+    }
+  }
 
   const displayName = me.name || "Mi cuenta";
   const displayEmail = me.email || member.email;
@@ -573,9 +625,16 @@ export function ProfileDashboardPage() {
           title="Mi perfil"
           subtitle="Gestiona datos personales, seguridad, billetera de retiro y preferencias de notificacion."
           action={
-            <button className="executive-button primary" type="button">
-              Guardar cambios
-            </button>
+            <div className="flex flex-col items-end gap-1">
+              <button className="executive-button primary" type="button" onClick={saveProfile} disabled={saving}>
+                {saving ? "Guardando…" : "Guardar cambios"}
+              </button>
+              {saveMsg.text && (
+                <span className="text-xs font-semibold" style={{ color: saveMsg.type === "ok" ? "var(--vp-accent)" : "#f87171" }}>
+                  {saveMsg.text}
+                </span>
+              )}
+            </div>
           }
         />
 
@@ -649,7 +708,7 @@ export function ProfileDashboardPage() {
               </h2>
               <div className="grid gap-5 md:grid-cols-2">
                 <Field label="Nombre completo">
-                  <input className="executive-input" key={displayName} defaultValue={displayName} />
+                  <input className="executive-input" value={form.name} onChange={setField("name")} placeholder="Tu nombre y apellido" />
                 </Field>
                 <Field label="Usuario">
                   <input className="executive-input" key={displayEmail} defaultValue={displayEmail ? displayEmail.split("@")[0] : member.username} readOnly />
@@ -658,10 +717,10 @@ export function ProfileDashboardPage() {
                   <input className="executive-input" key={displayEmail} defaultValue={displayEmail} readOnly type="email" />
                 </Field>
                 <Field label="Telefono">
-                  <input className="executive-input" defaultValue={member.phone} type="tel" />
+                  <input className="executive-input" value={form.phone} onChange={setField("phone")} type="tel" placeholder="+57 300 000 0000" />
                 </Field>
                 <Field label="Pais">
-                  <input className="executive-input" defaultValue={member.country} />
+                  <input className="executive-input" value={form.country} onChange={setField("country")} placeholder="País" />
                 </Field>
                 <Field label="Patrocinador">
                   <input className="executive-input" defaultValue={member.sponsor} readOnly />
@@ -679,10 +738,10 @@ export function ProfileDashboardPage() {
                   Configura una direccion USDC (red Ethereum · ERC-20) antes de solicitar retiros.
                 </p>
                 <Field label="Direccion USDC (ERC-20)">
-                  <input className="executive-input" placeholder="0x..." />
+                  <input className="executive-input" value={form.payout_wallet_usdc} onChange={setField("payout_wallet_usdc")} placeholder="0x..." />
                 </Field>
-                <button className="executive-button mt-4 w-full" type="button">
-                  Actualizar billetera
+                <button className="executive-button mt-4 w-full" type="button" onClick={saveProfile} disabled={saving}>
+                  {saving ? "Guardando…" : "Actualizar billetera"}
                 </button>
               </div>
 
