@@ -6,6 +6,7 @@ import { getCatalog } from "@/lib/catalog";
 import ActivatePackageButton from "./ActivatePackageButton";
 import MyPaymentsPanel from "./MyPaymentsPanel";
 import PaymentResultModal from "./PaymentResultModal";
+import PaywallGate from "./PaywallGate";
 
 export const dynamic = "force-dynamic";
 
@@ -54,6 +55,7 @@ export default async function PackagesPage() {
             El catalogo estara disponible al finalizar la sincronizacion de datos.
           </div>
         ) : (
+          <PaywallGate>
           <div className="executive-grid three">
             {packages.map((pkg, index) => {
               const featured = index === Math.min(2, packages.length - 1);
@@ -99,6 +101,7 @@ export default async function PackagesPage() {
               );
             })}
           </div>
+          </PaywallGate>
         )}
 
         {ranks.length > 0 && (
