@@ -47,16 +47,24 @@ export default function DashboardShell({ authMode, children }) {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/auth/session", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d) => {
-        if (cancelled) return;
-        if (d?.name || d?.email) setMember({ name: d.name, email: d.email });
-        if (d?.isAdmin) setIsAdmin(true);
-      })
-      .catch(() => {});
+    const loadSession = () => {
+      fetch("/api/auth/session", { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d) => {
+          if (cancelled) return;
+          if (d?.name || d?.email) setMember({ name: d.name, email: d.email });
+          if (d?.isAdmin) setIsAdmin(true);
+        })
+        .catch(() => {});
+    };
+    loadSession();
+    // Al editar el perfil (nombre/datos) el perfil dispara este evento para que
+    // el sidebar se actualice sin recargar la página.
+    const onProfileUpdated = () => loadSession();
+    window.addEventListener("vp:profile-updated", onProfileUpdated);
     return () => {
       cancelled = true;
+      window.removeEventListener("vp:profile-updated", onProfileUpdated);
     };
   }, []);
 

@@ -598,6 +598,8 @@ export function ProfileDashboardPage() {
         setSaveMsg({ type: "err", text: m });
       } else {
         setSaveMsg({ type: "ok", text: "Cambios guardados." });
+        // Refresca el sidebar (nombre) sin recargar la página.
+        try { window.dispatchEvent(new Event("vp:profile-updated")); } catch { /* ignore */ }
       }
     } catch {
       setSaveMsg({ type: "err", text: "Sin conexión. Intenta de nuevo." });
