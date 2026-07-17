@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, ShieldCheck } from "lucide-react";
 
 import KycDocumentCard from "@/components/panel/kyc/KycDocumentCard";
@@ -12,13 +12,15 @@ export default function KycPage() {
   const [legalName, setLegalName] = useState("");
   const [nameSaving, setNameSaving] = useState(false);
   const [nameMsg, setNameMsg] = useState({ type: "", text: "" });
+  const nameEditedRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
     fetch("/api/member/profile", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (cancelled || !d) return;
+        // No pisar lo que el usuario ya empezó a escribir si el fetch llega tarde.
+        if (cancelled || !d || nameEditedRef.current) return;
         setLegalName([d.first_name, d.last_name].filter(Boolean).join(" ").trim());
       })
       .catch(() => {});
@@ -74,12 +76,18 @@ export default function KycPage() {
   // haya alguno "en revisión" hacemos poll cada 2s (hasta 60s) para reflejar la
   // aprobación/rechazo sin recargar.
   const ocrPending = state.documents.some((d) => d.status === "in_review");
+  const [pollTimedOut, setPollTimedOut] = useState(false);
   useEffect(() => {
-    if (!ocrPending) return undefined;
+    if (!ocrPending) {
+      setPollTimedOut(false);
+      return undefined;
+    }
+    setPollTimedOut(false);
     const started = Date.now();
     const id = setInterval(() => {
       if (Date.now() - started > 60000) {
         clearInterval(id);
+        setPollTimedOut(true); // deja de girar y muestra un aviso distinto
         return;
       }
       load();
@@ -135,7 +143,7 @@ export default function KycPage() {
           <input
             className="executive-input flex-1"
             value={legalName}
-            onChange={(e) => setLegalName(e.target.value)}
+            onChange={(e) => { nameEditedRef.current = true; setLegalName(e.target.value); }}
             placeholder="Nombre(s) y apellido(s) como en tu documento"
           />
           <button
@@ -154,13 +162,23 @@ export default function KycPage() {
         ) : null}
       </section>
 
-      {ocrPending ? (
+      {ocrPending && !pollTimedOut ? (
         <section
           className="flex items-center gap-3 rounded-2xl border p-4 text-xs"
           style={{ background: "var(--vp-surface)", borderColor: "rgba(250,204,21,0.3)", color: "var(--vp-muted)" }}
         >
           <Loader2 className="animate-spin" size={15} style={{ color: "var(--vp-accent)" }} />
           Validando tus documentos automáticamente… suele tardar solo unos segundos. No cierres esta página.
+        </section>
+      ) : ocrPending && pollTimedOut ? (
+        <section
+          className="flex items-center justify-between gap-3 rounded-2xl border p-4 text-xs"
+          style={{ background: "var(--vp-surface)", borderColor: "var(--vp-border)", color: "var(--vp-muted)" }}
+        >
+          <span>La validación está tardando más de lo normal. Puedes recargar para ver el estado.</span>
+          <button type="button" className="executive-button" onClick={() => { setPollTimedOut(false); load(); }}>
+            Actualizar
+          </button>
         </section>
       ) : null}
 

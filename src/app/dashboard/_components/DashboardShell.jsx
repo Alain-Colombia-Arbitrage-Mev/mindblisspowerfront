@@ -63,8 +63,11 @@ export default function DashboardShell({ authMode, children }) {
     // la sesión para confirmar, sin recargar la página.
     const onProfileUpdated = (e) => {
       const newName = e?.detail?.name;
+      // Solo actualización optimista con el nombre guardado. NO re-consultamos la
+      // sesión aquí: el POST ya confirmó el guardado, y una re-consulta podría
+      // devolver un nombre stale (lag de réplica/cache) y pisar el valor nuevo.
+      // La sesión se sincroniza sola en el próximo montaje/navegación.
       if (newName) setMember((m) => ({ ...(m || {}), name: newName }));
-      loadSession();
     };
     window.addEventListener("vp:profile-updated", onProfileUpdated);
     return () => {

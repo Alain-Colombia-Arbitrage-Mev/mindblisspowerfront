@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Wallet, ReceiptText, Loader2, CheckCircle2, Clock, AlertTriangle, ArrowDownToLine, Banknote } from "lucide-react";
 
 const PAY_STATUS = {
@@ -25,17 +25,23 @@ const fmtDate = (s) => { if (!s) return "—"; try { return new Date(s).toLocale
 
 export default function MyPaymentsPanel() {
   const [state, setState] = useState({ loading: true, error: "", data: null });
+  const mountedRef = useRef(true);
 
   const load = () => {
     fetch("/api/payments/me", { cache: "no-store" })
       .then(async (r) => {
         const p = await r.json().catch(() => ({}));
+        if (!mountedRef.current) return;
         if (!r.ok) return setState({ loading: false, error: p.error || "error", data: null });
         setState({ loading: false, error: "", data: p });
       })
-      .catch(() => setState({ loading: false, error: "Sin conexión.", data: null }));
+      .catch(() => { if (mountedRef.current) setState({ loading: false, error: "Sin conexión.", data: null }); });
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    mountedRef.current = true;
+    load();
+    return () => { mountedRef.current = false; };
+  }, []);
 
   if (state.loading) {
     return <Card><div className="flex items-center gap-2 text-sm" style={{ color: "var(--vp-muted)" }}><Loader2 size={15} className="animate-spin" /> Cargando…</div></Card>;

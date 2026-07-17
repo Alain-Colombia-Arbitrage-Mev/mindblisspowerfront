@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNetworkHealth } from "@/lib/useNetworkHealth";
 import { useSustainability } from "@/lib/useSustainability";
 import {
@@ -541,6 +541,7 @@ export function ProfileDashboardPage() {
   const [form, setForm] = useState({ name: "", phone: "", country: "", payout_wallet_usdc: "" });
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState({ type: "", text: "" });
+  const editedRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -557,7 +558,8 @@ export function ProfileDashboardPage() {
     fetch("/api/member/profile", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (cancelled || !d) return;
+        // No pisar lo que el usuario ya empezó a editar si el fetch llega tarde.
+        if (cancelled || !d || editedRef.current) return;
         const full = [d.first_name, d.last_name].filter(Boolean).join(" ").trim();
         setForm({
           name: full,
@@ -570,7 +572,7 @@ export function ProfileDashboardPage() {
     return () => { cancelled = true; };
   }, []);
 
-  const setField = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const setField = (k) => (e) => { editedRef.current = true; setForm((f) => ({ ...f, [k]: e.target.value })); };
 
   async function saveProfile() {
     setSaving(true);
