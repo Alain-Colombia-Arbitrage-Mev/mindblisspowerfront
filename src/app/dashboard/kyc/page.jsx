@@ -32,12 +32,15 @@ export default function KycPage() {
     load();
   }, [load]);
 
-  // Mientras haya un documento "en revisión" (p. ej. un pasaporte con el OCR
-  // corriendo), poll cada 3s hasta 60s para reflejar la auto-aprobación/rechazo
-  // sin recargar la página. El tope evita poll infinito si queda revisión manual.
-  const inReview = state.documents.some((d) => d.status === "in_review");
+  // Solo el PASAPORTE se valida automáticamente (OCR). Mientras haya un pasaporte
+  // "en revisión" hacemos poll cada 2s hasta 60s para reflejar la aprobación/
+  // rechazo sin recargar. Los demás documentos (cédula, domicilio, selfie) van a
+  // revisión manual del equipo: no se auto-resuelven, así que NO hacemos poll ni
+  // mostramos el aviso de "unos segundos" (eso daba un "verificando" eterno).
+  const ocrPending = state.documents.some((d) => d.doc_type === "passport" && d.status === "in_review");
+  const manualReview = state.documents.some((d) => d.doc_type !== "passport" && d.status === "in_review");
   useEffect(() => {
-    if (!inReview) return undefined;
+    if (!ocrPending) return undefined;
     const started = Date.now();
     const id = setInterval(() => {
       if (Date.now() - started > 60000) {
@@ -47,7 +50,7 @@ export default function KycPage() {
       load();
     }, 2000);
     return () => clearInterval(id);
-  }, [inReview, load]);
+  }, [ocrPending, load]);
 
   const latestByType = new Map();
   for (const doc of state.documents) {
@@ -83,13 +86,20 @@ export default function KycPage() {
         )}
       </section>
 
-      {inReview ? (
+      {ocrPending ? (
         <section
           className="flex items-center gap-3 rounded-2xl border p-4 text-xs"
           style={{ background: "var(--vp-surface)", borderColor: "rgba(250,204,21,0.3)", color: "var(--vp-muted)" }}
         >
           <Loader2 className="animate-spin" size={15} style={{ color: "var(--vp-accent)" }} />
-          Estamos verificando tus documentos. Los pasaportes se validan automáticamente en unos segundos; no cierres esta página.
+          Validando tu pasaporte automáticamente… suele tardar solo unos segundos. No cierres esta página.
+        </section>
+      ) : manualReview ? (
+        <section
+          className="rounded-2xl border p-4 text-xs"
+          style={{ background: "var(--vp-surface)", borderColor: "var(--vp-border)", color: "var(--vp-muted)" }}
+        >
+          Tienes documentos en revisión por nuestro equipo. Te notificaremos cuando se aprueben (no necesitas esperar en esta página).
         </section>
       ) : null}
 
