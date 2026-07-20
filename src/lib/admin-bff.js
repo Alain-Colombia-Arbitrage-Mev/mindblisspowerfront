@@ -37,6 +37,29 @@ export async function callPayments(path, { method = "GET", body } = {}) {
   }
 }
 
+/** Config del servicio de retiros (Go, vp-withdrawals). Reusa el service token. */
+export function withdrawalsConfig() {
+  return { base: process.env.VP_WITHDRAWALS_URL, token: process.env.PAYMENTS_SERVICE_TOKEN };
+}
+
+/** Llama a vp-withdrawals con el token de servicio (retiros + BMP). */
+export async function callWithdrawals(path, { method = "GET", body } = {}) {
+  const { base, token } = withdrawalsConfig();
+  if (!base || !token) return { ok: false, status: 503, data: { error: "withdrawals-unconfigured" } };
+  try {
+    const resp = await fetch(`${base}${path}`, {
+      method,
+      headers: { "X-VP-Service-Token": token, ...(body ? { "content-type": "application/json" } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+      cache: "no-store",
+    });
+    const data = await resp.json().catch(() => ({}));
+    return { ok: resp.ok, status: resp.status, data };
+  } catch {
+    return { ok: false, status: 502, data: { error: "withdrawals-unreachable" } };
+  }
+}
+
 /** Verifica si el email corresponde a un admin (fail-closed: cualquier error → false). */
 export async function isAdminEmail(email) {
   if (!email) return false;

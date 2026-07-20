@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { callPayments, sessionEmail } from "@/lib/admin-bff";
+import { callWithdrawals, sessionEmail } from "@/lib/admin-bff";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,7 +21,7 @@ export async function POST(request) {
     return NextResponse.json({ error: "invalid-action" }, { status: 400 });
   }
 
-  const { ok, status, data } = await callPayments("/api/admin/withdrawals/action", {
+  const { ok, status, data } = await callWithdrawals("/api/admin/withdrawals/action", {
     method: "POST",
     body: { email, id, action },
   });
