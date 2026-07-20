@@ -24,9 +24,12 @@ export async function POST(request) {
     return NextResponse.json({ error: "missing-fields" }, { status: 400 });
   }
 
-  const base = process.env.VP_PAYMENTS_URL;
+  // El retiro lo sirve vp-withdrawals (candado BMP + débito contable), NO
+  // vp-payments. Comparte el mismo service token (una sola credencial para ambos
+  // servicios en localhost).
+  const base = process.env.VP_WITHDRAWALS_URL;
   const token = process.env.PAYMENTS_SERVICE_TOKEN;
-  if (!base || !token) return NextResponse.json({ error: "payments-unconfigured" }, { status: 503 });
+  if (!base || !token) return NextResponse.json({ error: "withdrawals-unconfigured" }, { status: 503 });
 
   try {
     const resp = await fetch(`${base}/api/payments/withdraw`, {
