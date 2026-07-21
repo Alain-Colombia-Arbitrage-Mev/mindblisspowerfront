@@ -1,6 +1,9 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
+import { idTokenHeader } from "@/lib/admin-bff";
+import { verifyIdToken } from "@/lib/verify-id-token";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -16,7 +19,7 @@ export async function POST(request) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }
 
-  const claims = claimsFromIdToken(idToken);
+  const claims = await claimsFromIdToken(idToken);
   const email = claims.email;
   if (!email) {
     return NextResponse.json({ error: "session-invalid" }, { status: 401 });
@@ -46,6 +49,7 @@ export async function POST(request) {
       headers: {
         "content-type": "application/json",
         "X-VP-Service-Token": token,
+        ...(await idTokenHeader()),
       },
       body: JSON.stringify({ email, package_id: packageId, ref, name: claims.name, phone: claims.phone }),
       cache: "no-store",
@@ -61,16 +65,12 @@ export async function POST(request) {
   }
 }
 
-function claimsFromIdToken(token) {
-  try {
-    const payload = JSON.parse(Buffer.from(String(token).split(".")[1], "base64url").toString("utf8"));
-    if (payload.exp && payload.exp * 1000 < Date.now()) return { email: "" };
-    return {
-      email: String(payload.email || "").trim().toLowerCase(),
-      name: String(payload.name || "").trim(),
-      phone: String(payload.phone_number || "").trim(),
-    };
-  } catch {
-    return { email: "" };
-  }
+async function claimsFromIdToken(token) {
+  const payload = await verifyIdToken(token);
+  if (!payload) return { email: "" };
+  return {
+    email: payload.email,
+    name: String(payload.name || "").trim(),
+    phone: String(payload.phone_number || "").trim(),
+  };
 }

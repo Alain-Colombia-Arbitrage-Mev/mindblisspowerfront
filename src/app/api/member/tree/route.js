@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 import { memberDb } from "@/lib/member-db";
+import { verifiedEmailFromIdToken } from "@/lib/verify-id-token";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,7 +20,7 @@ export async function GET() {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }
 
-  const email = emailFromIdToken(idToken);
+  const email = await verifiedEmailFromIdToken(idToken);
   if (!email) {
     return NextResponse.json({ error: "session-invalid" }, { status: 401 });
   }
@@ -114,15 +115,5 @@ export async function GET() {
   } catch (error) {
     console.error("member/tree query failed:", error.message);
     return NextResponse.json({ error: "tree-query-failed" }, { status: 502 });
-  }
-}
-
-function emailFromIdToken(token) {
-  try {
-    const payload = JSON.parse(Buffer.from(String(token).split(".")[1], "base64url").toString("utf8"));
-    if (payload.exp && payload.exp * 1000 < Date.now()) return "";
-    return String(payload.email || "").trim().toLowerCase();
-  } catch {
-    return "";
   }
 }

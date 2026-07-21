@@ -1,6 +1,8 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
+import { verifyIdToken } from "@/lib/verify-id-token";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -13,7 +15,7 @@ export async function POST(request) {
   const idToken = cookieStore.get("vp_id_token")?.value;
   if (!idToken) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
 
-  const identity = identityFromIdToken(idToken);
+  const identity = await identityFromIdToken(idToken);
   const email = identity.email;
   if (!email) return NextResponse.json({ error: "session-invalid" }, { status: 401 });
 
@@ -54,16 +56,12 @@ export async function POST(request) {
   }
 }
 
-function identityFromIdToken(token) {
-  try {
-    const payload = JSON.parse(Buffer.from(String(token).split(".")[1], "base64url").toString("utf8"));
-    if (payload.exp && payload.exp * 1000 < Date.now()) return { email: "" };
-    return {
-      email: String(payload.email || "").trim().toLowerCase(),
-      name: String(payload.name || [payload.given_name, payload.family_name].filter(Boolean).join(" ") || "").trim(),
-      phone: String(payload.phone_number || "").trim(),
-    };
-  } catch {
-    return { email: "" };
-  }
+async function identityFromIdToken(token) {
+  const payload = await verifyIdToken(token);
+  if (!payload) return { email: "" };
+  return {
+    email: payload.email,
+    name: String(payload.name || [payload.given_name, payload.family_name].filter(Boolean).join(" ") || "").trim(),
+    phone: String(payload.phone_number || "").trim(),
+  };
 }

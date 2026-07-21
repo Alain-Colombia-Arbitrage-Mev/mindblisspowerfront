@@ -1,6 +1,9 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
+import { idTokenHeader } from "@/lib/admin-bff";
+import { verifiedEmailFromIdToken } from "@/lib/verify-id-token";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -14,7 +17,7 @@ export async function GET() {
   const idToken = cookieStore.get("vp_id_token")?.value;
   if (!idToken) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
 
-  const email = emailFromIdToken(idToken);
+  const email = await verifiedEmailFromIdToken(idToken);
   if (!email) return NextResponse.json({ error: "session-invalid" }, { status: 401 });
 
   const base = process.env.VP_WITHDRAWALS_URL;
@@ -24,7 +27,7 @@ export async function GET() {
   try {
     const resp = await fetch(`${base}/api/payments/bmp-status?email=${encodeURIComponent(email)}`, {
       method: "GET",
-      headers: { "X-VP-Service-Token": token },
+      headers: { "X-VP-Service-Token": token, ...(await idTokenHeader()) },
       cache: "no-store",
     });
     const payload = await resp.json().catch(() => ({}));
@@ -33,15 +36,5 @@ export async function GET() {
   } catch (error) {
     console.error("payments/bmp-status proxy failed:", error.message);
     return NextResponse.json({ error: "withdrawals-unreachable" }, { status: 502 });
-  }
-}
-
-function emailFromIdToken(token) {
-  try {
-    const payload = JSON.parse(Buffer.from(String(token).split(".")[1], "base64url").toString("utf8"));
-    if (payload.exp && payload.exp * 1000 < Date.now()) return "";
-    return String(payload.email || "").trim().toLowerCase();
-  } catch {
-    return "";
   }
 }

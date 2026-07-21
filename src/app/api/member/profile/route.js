@@ -1,6 +1,8 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
+import { verifyIdToken } from "@/lib/verify-id-token";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -9,7 +11,7 @@ async function ctx() {
   const cookieStore = await cookies();
   const idToken = cookieStore.get("vp_id_token")?.value;
   if (!idToken) return { error: "unauthenticated", status: 401 };
-  const id = identityFromIdToken(idToken);
+  const id = await identityFromIdToken(idToken);
   if (!id.email) return { error: "session-invalid", status: 401 };
   const base = process.env.VP_PAYMENTS_URL;
   const token = process.env.PAYMENTS_SERVICE_TOKEN;
@@ -56,12 +58,7 @@ export async function POST(request) {
   }
 }
 
-function identityFromIdToken(token) {
-  try {
-    const payload = JSON.parse(Buffer.from(String(token).split(".")[1], "base64url").toString("utf8"));
-    if (payload.exp && payload.exp * 1000 < Date.now()) return { email: "" };
-    return { email: String(payload.email || "").trim().toLowerCase() };
-  } catch {
-    return { email: "" };
-  }
+async function identityFromIdToken(token) {
+  const payload = await verifyIdToken(token);
+  return { email: payload ? payload.email : "" };
 }

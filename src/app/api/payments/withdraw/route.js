@@ -1,6 +1,9 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
+import { idTokenHeader } from "@/lib/admin-bff";
+import { verifiedEmailFromIdToken } from "@/lib/verify-id-token";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -13,7 +16,9 @@ export async function POST(request) {
   const idToken = cookieStore.get("vp_id_token")?.value;
   if (!idToken) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
 
-  const email = emailFromIdToken(idToken);
+  // Identidad VERIFICADA (firma JWKS + iss + aud + token_use + exp). Sin esto,
+  // cualquiera podía forjar un token y pedir el retiro del saldo ajeno.
+  const email = await verifiedEmailFromIdToken(idToken);
   if (!email) return NextResponse.json({ error: "session-invalid" }, { status: 401 });
 
   let body;
@@ -34,7 +39,7 @@ export async function POST(request) {
   try {
     const resp = await fetch(`${base}/api/payments/withdraw`, {
       method: "POST",
-      headers: { "content-type": "application/json", "X-VP-Service-Token": token },
+      headers: { "content-type": "application/json", "X-VP-Service-Token": token, ...(await idTokenHeader()) },
       body: JSON.stringify({ email, amount, bank_info: bankInfo }),
       cache: "no-store",
     });
@@ -44,15 +49,5 @@ export async function POST(request) {
   } catch (error) {
     console.error("payments/withdraw proxy failed:", error.message);
     return NextResponse.json({ error: "payments-unreachable" }, { status: 502 });
-  }
-}
-
-function emailFromIdToken(token) {
-  try {
-    const payload = JSON.parse(Buffer.from(String(token).split(".")[1], "base64url").toString("utf8"));
-    if (payload.exp && payload.exp * 1000 < Date.now()) return "";
-    return String(payload.email || "").trim().toLowerCase();
-  } catch {
-    return "";
   }
 }
