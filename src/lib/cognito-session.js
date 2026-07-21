@@ -68,10 +68,23 @@ export function buildDemoUser(email) {
   };
 }
 
+/**
+ * Decodifica (SIN verificar firma) el payload de un id token.
+ *
+ * Sólo es aceptable aquí porque el token viene RECIÉN emitido por Cognito en la
+ * respuesta del login (InitiateAuth / RespondToAuthChallenge), no de una cookie
+ * enviada por el cliente: no es una frontera de confianza, sólo se usa para
+ * pintar el perfil en la UI. NO usar esta función para autorizar nada — para eso
+ * está @/lib/verify-id-token.
+ *
+ * Aun así, exigimos `exp`: un token sin caducidad se considera inválido.
+ */
 function decodeJwtPayload(token) {
   try {
     const payload = String(token).split(".")[1];
-    return JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    const claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    if (typeof claims.exp !== "number") return {};
+    return claims;
   } catch {
     return {};
   }
