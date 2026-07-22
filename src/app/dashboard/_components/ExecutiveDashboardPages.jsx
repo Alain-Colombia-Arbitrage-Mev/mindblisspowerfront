@@ -5,7 +5,9 @@ import { useNetworkHealth } from "@/lib/useNetworkHealth";
 import { useSustainability } from "@/lib/useSustainability";
 import {
   Activity,
+  AlertTriangle,
   Archive,
+  ArrowDownToLine,
   BarChart3,
   Bell,
   BookOpen,
@@ -22,6 +24,7 @@ import {
   IdCard,
   KeyRound,
   LifeBuoy,
+  Loader2,
   Lock,
   Mail,
   MapPin,
@@ -100,10 +103,29 @@ const campaigns = [
   { name: "Recordatorio KYC", target: "Perfiles pendientes", sent: "0", read: "0%", status: "Programable" },
 ];
 
-const financeRows = [
-  { date: "13 Jun 2026", type: "Saldo inicial", amount: "$0.00", status: "Publicado" },
-  { date: "13 Jun 2026", type: "Liquidaciones", amount: "$0.00", status: "Sin ejecutar" },
-];
+// Formato de dinero unificado (mismos decimales que MyPaymentsPanel).
+const money = (v) => `$${Number(v ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fmtMoneyDate = (s) => {
+  if (!s) return "—";
+  try { return new Date(s).toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" }); } catch { return s; }
+};
+// Estados de retiro → etiqueta + tono del StatusPill.
+const WITHDRAWAL_STATUS = {
+  requested: { label: "Solicitado", tone: "warning" },
+  approved: { label: "Aprobado", tone: "success" },
+  paid: { label: "Pagado", tone: "success" },
+  rejected: { label: "Rechazado", tone: "danger" },
+  cancelled: { label: "Cancelado", tone: "muted" },
+};
+const PAYMENT_STATUS = {
+  activated: { label: "Activado", tone: "success" },
+  paid: { label: "Pagado", tone: "success" },
+  needs_placement: { label: "Pendiente", tone: "warning" },
+  created: { label: "Iniciado", tone: "warning" },
+  failed: { label: "Fallido", tone: "danger" },
+  expired: { label: "Expirado", tone: "muted" },
+  refunded: { label: "Reembolsado", tone: "muted" },
+};
 
 // Sin solicitudes simuladas: la lista real vendrá del backend KYC.
 const kycRequests = [];
@@ -433,74 +455,144 @@ export function CommunicationsDashboardPage() {
 }
 
 export function FinanceDashboardPage() {
+  // Distinguir "cargando" de "cargó y es 0" de "falló" es el punto central:
+  // nunca pintar $0.00 mientras carga ni cuando la API falla.
+  const [state, setState] = useState({ loading: true, error: "", data: null });
+  const mountedRef = useRef(true);
+
+  const load = () => {
+    setState((prev) => ({ ...prev, loading: true, error: "" }));
+    fetch("/api/payments/me", { cache: "no-store" })
+      .then(async (r) => {
+        const p = await r.json().catch(() => ({}));
+        if (!mountedRef.current) return;
+        // buyer_not_found = miembro sin registro de pagos aún: NO es un error,
+        // es un saldo legítimamente en 0 con historial vacío.
+        if (!r.ok && p.error !== "buyer_not_found") {
+          return setState({ loading: false, error: p.error || "summary-failed", data: null });
+        }
+        setState({ loading: false, error: "", data: p.error === "buyer_not_found" ? {} : p });
+      })
+      .catch(() => { if (mountedRef.current) setState({ loading: false, error: "network", data: null }); });
+  };
+
+  useEffect(() => {
+    mountedRef.current = true;
+    load();
+    return () => { mountedRef.current = false; };
+  }, []);
+
   return (
     <section className="executive-page">
       <div className="executive-container">
         <PageHeader
           eyebrow="Finanzas"
           title="Billetera y retiros"
-          subtitle="Gestiona saldo disponible, historial de liquidaciones y solicitudes de retiro. Los desembolsos permanecen en cero hasta que existan bonus runs publicados."
-          action={
-            <button className="executive-button" type="button">
-              <Download size={16} />
-              Exportar
-            </button>
-          }
+          subtitle="Gestiona tu saldo disponible, historial de retiros y solicitudes. Los montos reflejan tus comisiones publicadas por el motor."
         />
 
-        <div className="executive-grid metrics mb-6">
-          <MetricCard label="Balance disponible" value="$0.00" detail="saldo real en billetera" icon={Wallet} tone="success" />
-          <MetricCard label="Ganancias historicas" value="$0.00" detail="sin movimientos publicados" icon={TrendingUp} tone="accent" />
-          <MetricCard label="Retiros pendientes" value="$0.00" detail="sin solicitudes abiertas" icon={Activity} tone="muted" />
-          <MetricCard label="Fondo empresa" value="$0.00" detail="pendiente de simulador real" icon={DollarSign} tone="info" />
-        </div>
+        {state.loading ? (
+          <FinanceLoading />
+        ) : state.error ? (
+          <FinanceError onRetry={load} />
+        ) : (
+          <FinanceContent data={state.data || {}} onDone={load} />
+        )}
+      </div>
+    </section>
+  );
+}
 
-        <div className="grid gap-6 lg:grid-cols-[390px_minmax(0,1fr)]">
-          <div className="executive-panel">
-            <h2 className="executive-section-title">
-              <DollarSign size={18} style={{ color: "var(--vp-accent)" }} />
-              Solicitar retiro
-            </h2>
-            <div className="space-y-5">
-              <Field label="Monto a retirar">
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color: "var(--vp-muted)" }}>
-                    $
-                  </span>
-                  <input className="executive-input leading-icon" disabled min="50" placeholder="0.00" type="number" />
-                </div>
-              </Field>
-              <Field label="Billetera destino">
-                <input className="executive-input" readOnly value={member.wallet} />
-              </Field>
-              <div className="rounded-2xl p-4" style={{ background: "var(--vp-bg)", border: "1px solid var(--vp-border)" }}>
-                <div className="mb-2 flex justify-between text-sm">
-                  <span style={{ color: "var(--vp-muted)" }}>Comision estimada</span>
-                  <span style={{ color: "var(--vp-text)" }}>$0.00</span>
-                </div>
-                <div className="flex justify-between text-base font-bold">
-                  <span style={{ color: "var(--vp-muted)" }}>Total a recibir</span>
-                  <span style={{ color: "var(--vp-accent)" }}>$0.00</span>
-                </div>
-              </div>
-              <button className="executive-button primary w-full opacity-60" disabled type="button">
-                Balance no disponible
-              </button>
+function FinanceLoading() {
+  return (
+    <>
+      <div className="executive-grid metrics mb-6">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="executive-card">
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <span className="skeleton-line" style={{ width: "60%", height: 12, borderRadius: 6, background: "var(--vp-surface-raised)" }} />
+              <span className="flex h-10 w-10 items-center justify-center rounded-full" style={{ background: "var(--vp-surface-raised)" }} />
             </div>
+            <div className="skeleton-line" style={{ width: "45%", height: 26, borderRadius: 8, background: "var(--vp-surface-raised)" }} />
           </div>
+        ))}
+      </div>
+      <div className="executive-panel flex items-center justify-center gap-2 py-16 text-sm" style={{ color: "var(--vp-muted)" }}>
+        <Loader2 size={16} className="animate-spin" />
+        Cargando tu saldo…
+      </div>
+    </>
+  );
+}
 
-          <div className="executive-panel">
-            <div className="mb-5 flex flex-col justify-between gap-4 md:flex-row md:items-center">
-              <h2 className="executive-section-title mb-0">
-                <CreditCard size={18} style={{ color: "var(--vp-accent)" }} />
-                Historial financiero
-              </h2>
-              <button className="executive-button ghost" type="button">
-                <Filter size={16} />
-                Filtros
-              </button>
-            </div>
-            <div className="executive-table-wrap">
+function FinanceError({ onRetry }) {
+  return (
+    <div className="executive-panel flex flex-col items-center justify-center gap-4 py-16 text-center">
+      <span className="flex h-12 w-12 items-center justify-center rounded-full" style={{ background: "var(--vp-danger-muted)", border: "1px solid var(--vp-danger-border)", color: "var(--vp-danger)" }}>
+        <AlertTriangle size={22} />
+      </span>
+      <div>
+        <p className="text-base font-bold" style={{ color: "var(--vp-text)" }}>No pudimos cargar tu saldo</p>
+        <p className="mt-1 text-sm" style={{ color: "var(--vp-muted)" }}>
+          Ocurrió un problema al consultar tu billetera. Tu dinero está seguro; vuelve a intentarlo.
+        </p>
+      </div>
+      <button className="executive-button primary" type="button" onClick={onRetry}>
+        Reintentar
+      </button>
+    </div>
+  );
+}
+
+function FinanceContent({ data, onDone }) {
+  const withdrawals = Array.isArray(data.withdrawals) ? data.withdrawals : [];
+  const payments = Array.isArray(data.payments) ? data.payments : [];
+  const pendingTotal = withdrawals
+    .filter((w) => w.status === "requested" || w.status === "approved")
+    .reduce((sum, w) => sum + Number(w.amount_usd ?? 0), 0);
+
+  const history = [
+    ...withdrawals.map((w) => ({
+      key: `wd-${w.id}`,
+      date: w.created_at,
+      type: "Retiro",
+      amount: w.amount_usd,
+      status: WITHDRAWAL_STATUS[w.status] || WITHDRAWAL_STATUS.requested,
+    })),
+    ...payments.map((p) => ({
+      key: `pay-${p.purchase_id}`,
+      date: p.created_at,
+      type: "Membresía",
+      amount: p.total_usd,
+      status: PAYMENT_STATUS[p.status] || PAYMENT_STATUS.created,
+    })),
+  ].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+
+  return (
+    <>
+      <div className="executive-grid metrics mb-6">
+        <MetricCard label="Balance disponible" value={money(data.available_for_withdrawal_usd)} detail="saldo real para retirar" icon={Wallet} tone="success" />
+        <MetricCard label="Comisiones en maduración" value={money(data.commission_maturing_usd)} detail="aún no disponibles" icon={TrendingUp} tone="accent" />
+        <MetricCard label="Retiros pendientes" value={money(pendingTotal)} detail="solicitudes en curso" icon={Activity} tone="muted" />
+        <MetricCard label="Membresías activas" value={String(data.active_packages ?? 0)} detail="cuentas con estado activo" icon={CreditCard} tone="info" />
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[390px_minmax(0,1fr)]">
+        <WithdrawPanel data={data} onDone={onDone} />
+
+        <div className="executive-panel">
+          <div className="mb-5 flex flex-col justify-between gap-4 md:flex-row md:items-center">
+            <h2 className="executive-section-title mb-0">
+              <CreditCard size={18} style={{ color: "var(--vp-accent)" }} />
+              Historial financiero
+            </h2>
+          </div>
+          <div className="executive-table-wrap">
+            {history.length === 0 ? (
+              <p className="py-8 text-center text-sm" style={{ color: "var(--vp-muted)" }}>
+                Aún no tienes movimientos registrados.
+              </p>
+            ) : (
               <table className="executive-table">
                 <thead>
                   <tr>
@@ -511,23 +603,127 @@ export function FinanceDashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {financeRows.map((row) => (
-                    <tr key={`${row.date}-${row.type}`}>
-                      <td>{row.date}</td>
+                  {history.map((row) => (
+                    <tr key={row.key}>
+                      <td>{fmtMoneyDate(row.date)}</td>
                       <td>{row.type}</td>
-                      <td>{row.amount}</td>
+                      <td>{money(row.amount)}</td>
                       <td>
-                        <StatusPill tone={row.status === "Publicado" ? "success" : "warning"}>{row.status}</StatusPill>
+                        <StatusPill tone={row.status.tone}>{row.status.label}</StatusPill>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            </div>
+            )}
           </div>
         </div>
       </div>
-    </section>
+    </>
+  );
+}
+
+function WithdrawPanel({ data, onDone }) {
+  const [amount, setAmount] = useState("");
+  const [bank, setBank] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState({ type: "", text: "" });
+
+  const min = Number(data.min_withdrawal_usd ?? 100);
+  const avail = Number(data.available_for_withdrawal_usd ?? 0);
+  const canWithdraw = avail >= min;
+
+  async function submit() {
+    setMsg({ type: "", text: "" });
+    const amt = Number(amount);
+    if (!amt || amt < min) return setMsg({ type: "err", text: `El mínimo de retiro es ${money(min)}.` });
+    if (amt > avail) return setMsg({ type: "err", text: "El monto supera tu saldo disponible." });
+    if (bank.trim().length < 6) return setMsg({ type: "err", text: "Ingresa tus datos bancarios." });
+    // Guard anti-doble-clic: el backend llama a BMP y puede tardar ~10s.
+    setBusy(true);
+    try {
+      const r = await fetch("/api/payments/withdraw", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ amount: amt.toFixed(2), bank_info: bank.trim() }),
+      });
+      const p = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        const m = {
+          min_withdrawal: `El mínimo es ${money(min)}.`,
+          insufficient_balance: "Saldo insuficiente.",
+          no_balance: "No tienes saldo de comisiones.",
+        }[p.error] || "No se pudo solicitar el retiro. Intenta de nuevo.";
+        setMsg({ type: "err", text: m });
+      } else {
+        setMsg({ type: "ok", text: "Solicitud enviada. Queda pendiente de aprobación." });
+        setAmount(""); setBank(""); onDone();
+      }
+    } catch {
+      setMsg({ type: "err", text: "Sin conexión. Intenta de nuevo." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="executive-panel">
+      <h2 className="executive-section-title">
+        <DollarSign size={18} style={{ color: "var(--vp-accent)" }} />
+        Solicitar retiro
+      </h2>
+      <div className="space-y-5">
+        <Field label="Monto a retirar (USD)">
+          <div className="relative">
+            <span className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color: "var(--vp-muted)" }}>$</span>
+            <input
+              className="executive-input leading-icon"
+              type="number"
+              min={min}
+              step="0.01"
+              placeholder={`${min}.00`}
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              disabled={!canWithdraw || busy}
+            />
+          </div>
+        </Field>
+        <Field label="Datos bancarios de destino">
+          <textarea
+            className="executive-input"
+            rows={3}
+            placeholder="Banco, número de cuenta/CLABE, titular, documento"
+            value={bank}
+            onChange={(e) => setBank(e.target.value)}
+            disabled={!canWithdraw || busy}
+          />
+        </Field>
+        <div className="rounded-2xl p-4" style={{ background: "var(--vp-bg)", border: "1px solid var(--vp-border)" }}>
+          <div className="mb-2 flex justify-between text-sm">
+            <span style={{ color: "var(--vp-muted)" }}>Disponible</span>
+            <span style={{ color: "var(--vp-text)" }}>{money(avail)}</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span style={{ color: "var(--vp-muted)" }}>Mínimo de retiro</span>
+            <span style={{ color: "var(--vp-text)" }}>{money(min)}</span>
+          </div>
+        </div>
+        <button
+          className="executive-button primary w-full disabled:opacity-60"
+          type="button"
+          onClick={submit}
+          disabled={!canWithdraw || busy}
+        >
+          {busy ? <Loader2 size={16} className="animate-spin" /> : <ArrowDownToLine size={16} />}
+          {canWithdraw ? "Enviar solicitud" : "Saldo insuficiente para retirar"}
+        </button>
+        {msg.text && (
+          <p className="text-xs font-semibold" style={{ color: msg.type === "ok" ? "var(--vp-accent)" : "var(--vp-danger)" }}>
+            {msg.text}
+          </p>
+        )}
+      </div>
+    </div>
   );
 }
 
