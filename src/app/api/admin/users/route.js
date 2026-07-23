@@ -8,6 +8,8 @@ export const dynamic = "force-dynamic";
 export async function GET(request) {
   const email = await sessionEmail();
   if (!email) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+  const chk = await callPayments(`/api/admin/check?email=${encodeURIComponent(email)}`);
+  if (!chk.ok || !chk.data?.is_admin) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const sp = new URL(request.url).searchParams;
   const q = sp.get("q") || "";
