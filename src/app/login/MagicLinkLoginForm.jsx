@@ -10,6 +10,7 @@ import {
   LockKeyhole,
   Mail,
   ShieldCheck,
+  UserPlus,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -96,6 +97,14 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
         body: JSON.stringify({ email: normalizedEmail }),
       });
       const payload = await response.json().catch(() => ({}));
+
+      // Usuario nuevo (no está en el pool): el OTP nunca le llegaría. Lo llevamos
+      // a crear cuenta con el email precargado (el registro sí envía el código).
+      if (payload.needsRegister) {
+        setNotice("No tienes una cuenta con ese email. Te llevamos a crear una…");
+        window.location.assign(`/register?email=${encodeURIComponent(normalizedEmail)}`);
+        return;
+      }
 
       if (!response.ok || !payload.ok) {
         setError(payload.error || "No se pudo enviar el código de acceso.");
@@ -296,6 +305,19 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
             <PrimaryButton disabled={isLoading} loading={loadingAction === "code-request"} icon={<ShieldCheck size={16} />}>
               Enviar código
             </PrimaryButton>
+
+            <p className="text-center text-xs" style={{ color: "var(--vp-muted)" }}>
+              ¿Primera vez? Necesitas una cuenta para recibir el código.
+            </p>
+            <SecondaryButton
+              disabled={isLoading}
+              onClick={() =>
+                window.location.assign(email ? `/register?email=${encodeURIComponent(email)}` : "/register")
+              }
+              icon={<UserPlus size={15} />}
+            >
+              Crear cuenta nueva
+            </SecondaryButton>
           </form>
         ) : (
           <form className="space-y-4" onSubmit={confirmLoginCode}>

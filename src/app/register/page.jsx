@@ -68,8 +68,16 @@ export default function RegisterPage() {
   useEffect(() => {
     const stored = readStoredJson("mp_registration_draft");
     const legacyStored = readStoredJson("vp_registration_draft");
-    setForm((current) => ({ ...current, ...legacyStored, ...stored }));
-    try { const r = new URLSearchParams(window.location.search).get("ref"); if (r) localStorage.setItem("mp_ref", r.trim().slice(0, 64)); } catch (e) { /* ignore */ }
+    // ?email= viene del login cuando el usuario resultó ser nuevo: lo precargamos
+    // con precedencia sobre el borrador guardado (es el email que acaba de teclear).
+    let prefillEmail = "";
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const r = sp.get("ref");
+      if (r) localStorage.setItem("mp_ref", r.trim().slice(0, 64));
+      prefillEmail = (sp.get("email") || "").trim().toLowerCase();
+    } catch (e) { /* ignore */ }
+    setForm((current) => ({ ...current, ...legacyStored, ...stored, ...(prefillEmail ? { email: prefillEmail } : {}) }));
   }, []);
 
   function updateField(field, value) {

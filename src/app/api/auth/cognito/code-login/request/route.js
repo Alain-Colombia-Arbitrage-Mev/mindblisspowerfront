@@ -53,6 +53,25 @@ export async function POST(request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  // Detecta usuarios nuevos ANTES de pedir el OTP: el passwordless de Cognito no
+  // envía código a un usuario inexistente y, con PreventUserExistenceErrors
+  // activo, no lo revela → el usuario espera un código que nunca llega. Si no
+  // existe, lo enrutamos a registro (SignUp sí envía el código). null = no se
+  // pudo verificar ⇒ seguimos con el OTP normal (fail-safe, no bloqueamos login).
+  const exists = await userExistsInPool(email);
+  if (exists === false) {
+    return NextResponse.json(
+      {
+        error:
+          "No encontramos una cuenta con ese email. Crea tu cuenta para recibir el código. / " +
+          "We couldn't find an account with that email. Create your account to receive the code.",
+        needsRegister: true,
+        email,
+      },
+      { status: 404 }
+    );
+  }
+
   const startResponse = await callCognito({
     endpoint: config.endpoint,
     target: "InitiateAuth",
@@ -222,6 +241,29 @@ function mapEmailOtpError(body) {
   }
 
   return mapCognitoError(body, "No se pudo enviar el código de acceso. / The access code could not be sent.");
+}
+
+// userExistsInPool consulta al backend (vp-payments, que tiene el cliente admin
+// de Cognito) si el email ya está en el pool. Devuelve true/false, o null si no
+// se pudo verificar (servicio no configurado, error, o el backend no tiene el
+// admin de Cognito) — en cuyo caso el caller NO bloquea el login. Gated por el
+// service token; el rate limit de arriba ("send") acota el oráculo de enumeración.
+async function userExistsInPool(email) {
+  const base = process.env.VP_PAYMENTS_URL;
+  const token = process.env.PAYMENTS_SERVICE_TOKEN;
+  if (!base || !token) return null;
+  try {
+    const resp = await fetch(`${base}/api/auth/user-exists?email=${encodeURIComponent(email)}`, {
+      headers: { "X-VP-Service-Token": token },
+      cache: "no-store",
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json().catch(() => ({}));
+    if (!data.checked) return null;
+    return Boolean(data.exists);
+  } catch {
+    return null;
+  }
 }
 
 function maskEmail(email) {
