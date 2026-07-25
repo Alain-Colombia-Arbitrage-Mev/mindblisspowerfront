@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNetworkHealth } from "@/lib/useNetworkHealth";
 import { useSustainability } from "@/lib/useSustainability";
+import SupportTicketForm from "./SupportTicketForm";
 import {
   Activity,
   AlertTriangle,
@@ -1204,7 +1205,6 @@ const moduleConfigs = {
     eyebrow: "Soporte",
     title: "Centro de soporte",
     subtitle: "Canales de atencion, tickets y seguimiento para resolver dudas de cuenta, KYC, pagos y acceso.",
-    action: { label: "Crear ticket", href: "#", icon: LifeBuoy },
     metrics: [
       { label: "Tickets", value: "0", detail: "abiertos", icon: LifeBuoy, tone: "muted" },
       { label: "Tiempo", value: "24h", detail: "respuesta objetivo", icon: Activity, tone: "info" },
@@ -1256,7 +1256,7 @@ function CalendarLikeIcon(props) {
   return <Activity {...props} />;
 }
 
-function ExecutiveModulePage({ config }) {
+function ExecutiveModulePage({ config, extra }) {
   return (
     <section className="executive-page">
       <div className="executive-container">
@@ -1273,6 +1273,8 @@ function ExecutiveModulePage({ config }) {
             )
           }
         />
+
+        {extra}
 
         <div className="executive-grid metrics mb-6">
           {config.metrics.map((item) => (
@@ -1647,7 +1649,7 @@ export function ProductsDashboardPage() {
 }
 
 export function SupportDashboardPage() {
-  return <ExecutiveModulePage config={moduleConfigs.support} />;
+  return <ExecutiveModulePage config={moduleConfigs.support} extra={<SupportTicketForm />} />;
 }
 
 export function LegalDashboardPage() {
