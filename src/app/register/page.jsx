@@ -404,13 +404,13 @@ export default function RegisterPage() {
               <label className="mb-2 block text-xs font-bold" htmlFor="phone" style={{ color: "var(--vp-muted)" }}>
                 Teléfono
               </label>
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row">
                 <select
                   aria-label="Código de país"
                   value={form.dialCode}
                   onChange={(event) => updateField("dialCode", event.target.value)}
-                  className="min-h-12 rounded-lg px-2 text-sm font-semibold outline-none"
-                  style={{ color: "var(--vp-text)", background: "var(--vp-surface-raised)", border: "1px solid var(--vp-border)", maxWidth: 150 }}
+                  className="min-h-12 w-full shrink-0 rounded-lg px-2 text-sm font-semibold outline-none sm:w-[118px]"
+                  style={{ color: "var(--vp-text)", background: "var(--vp-surface-raised)", border: "1px solid var(--vp-border)" }}
                 >
                   {dialCodes.map(([value, label]) => (
                     <option key={value} value={value}>{label}</option>
@@ -419,12 +419,12 @@ export default function RegisterPage() {
                 <input
                   id="phone"
                   type="tel"
-                  inputMode="tel"
+                  inputMode="numeric"
                   autoComplete="tel-national"
                   value={form.phone}
-                  onChange={(event) => updateField("phone", event.target.value)}
+                  onChange={(event) => updateField("phone", event.target.value.replace(/[^\d\s]/g, ""))}
                   placeholder="300 123 4567"
-                  className="min-h-12 w-full rounded-lg px-3 text-sm font-semibold outline-none"
+                  className="min-h-12 w-full min-w-0 rounded-lg px-3 text-base font-semibold tracking-wide outline-none sm:flex-1"
                   style={{
                     color: "var(--vp-text)",
                     background: "var(--vp-surface-raised)",
