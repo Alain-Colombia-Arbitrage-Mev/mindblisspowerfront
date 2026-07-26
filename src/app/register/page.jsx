@@ -404,12 +404,12 @@ export default function RegisterPage() {
               <label className="mb-2 block text-xs font-bold" htmlFor="phone" style={{ color: "var(--vp-muted)" }}>
                 Teléfono
               </label>
-              <div className="flex flex-col gap-2 sm:flex-row">
+              <div className="flex flex-col gap-2">
                 <select
                   aria-label="Código de país"
                   value={form.dialCode}
                   onChange={(event) => updateField("dialCode", event.target.value)}
-                  className="min-h-12 w-full shrink-0 rounded-lg px-2 text-sm font-semibold outline-none sm:w-[118px]"
+                  className="min-h-12 w-full rounded-lg px-2 text-sm font-semibold outline-none"
                   style={{ color: "var(--vp-text)", background: "var(--vp-surface-raised)", border: "1px solid var(--vp-border)" }}
                 >
                   {dialCodes.map(([value, label]) => (
@@ -424,7 +424,7 @@ export default function RegisterPage() {
                   value={form.phone}
                   onChange={(event) => updateField("phone", event.target.value.replace(/[^\d\s]/g, ""))}
                   placeholder="300 123 4567"
-                  className="min-h-12 w-full min-w-0 rounded-lg px-3 text-base font-semibold tracking-wide outline-none sm:flex-1"
+                  className="min-h-12 w-full min-w-0 rounded-lg px-3 text-base font-semibold tracking-widest outline-none"
                   style={{
                     color: "var(--vp-text)",
                     background: "var(--vp-surface-raised)",
