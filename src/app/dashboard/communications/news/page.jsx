@@ -1,72 +1,96 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import NewsPreviewCard from "@/components/panel/news/NewsPreviewCard";
-import NewsSearchPanel from "@/components/panel/news/NewsSearchPanel";
-import NewsTable from "@/components/panel/news/NewsTable";
+// Comunicados/news servidos desde el backend (support.news vía /api/member/news).
+// Antes había un array NEWS hardcodeado con datos bancarios OBSOLETOS (el negocio
+// cobra SOLO por Stripe, no por depósito bancario) — eliminado. Nada hardcodeado.
 
-const NEWS = [
-  {
-    no: 1,
-    title: "Actualización cuenta Bancaria para depósitos en Estados Unidos",
-    expiration: "30/12/2026",
-    pinned: true,
-    readConfirmation: true,
-    showDaily: true,
-    dateline: "Actualización de cuenta bancaria, lunes 1 de junio de 2026",
-    headline: "Comunicado importante",
-    intro:
-      "Estimados líderes, socios y aliados: Les informamos que, con el propósito de continuar fortaleciendo nuestros procesos operativos, a partir de la fecha se realizará la actualización de la cuenta oficial.",
-    details: [
-      { label: "Banco", value: "Royal Business Bank" },
-      { label: "Routing Number", value: "122045037" },
-      { label: "Número de Cuenta", value: "2630826054" },
-      { label: "Titular", value: "TWISE-HOME INC" },
-    ],
-    outro:
-      "Agradecemos actualizar esta información en sus registros para garantizar la correcta aplicación de los fondos.",
-  },
-  {
-    no: 2,
-    title: "Comunicado Oficial: Aplazamiento evento y compra de membresías",
-    expiration: "31/12/2026",
-    pinned: true,
-    readConfirmation: true,
-    showDaily: true,
-    dateline: "Comunicado oficial",
-    headline: "Comunicado importante",
-    intro:
-      "Comunicado oficial sobre el aplazamiento del evento y el proceso de compra de membresías.",
-  },
-  {
-    no: 3,
-    title: "Actualización de cuenta bancaria para depósitos de membresías",
-    expiration: "01/02/2026",
-    pinned: false,
-    readConfirmation: false,
-    showDaily: false,
-    dateline: "Actualización de cuenta bancaria",
-    headline: "Comunicado importante",
-    intro: "Actualización de la cuenta bancaria utilizada para depósitos de membresías.",
-  },
-];
+function formatDate(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("es-ES", { day: "2-digit", month: "long", year: "numeric" });
+}
 
 export default function InternalNewsPage() {
-  const [selectedNo, setSelectedNo] = useState(NEWS[0]?.no ?? null);
-  const selected = NEWS.find((item) => item.no === selectedNo) ?? null;
+  const [news, setNews] = useState([]);
+  const [status, setStatus] = useState("loading"); // loading | ready | error
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const resp = await fetch("/api/member/news", { cache: "no-store" });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        if (!active) return;
+        setNews(Array.isArray(data.news) ? data.news : []);
+        setStatus("ready");
+      } catch {
+        if (active) setStatus("error");
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <div className="flex h-full flex-col gap-6 p-6">
-      <NewsSearchPanel />
-      <div className="flex min-h-0 flex-1 flex-col gap-6 xl:flex-row">
-        <NewsTable
-          items={NEWS}
-          selectedNo={selectedNo}
-          onSelect={(item) => setSelectedNo(item.no)}
-        />
-        {selected ? <NewsPreviewCard news={selected} onClose={() => setSelectedNo(null)} /> : null}
-      </div>
+      <header>
+        <h1 className="m-0 text-lg font-semibold" style={{ color: "var(--vp-text)" }}>
+          Comunicados
+        </h1>
+        <p className="m-0 mt-1 text-sm" style={{ color: "var(--vp-muted)" }}>
+          Anuncios oficiales del equipo Mindbliss Power.
+        </p>
+      </header>
+
+      {status === "loading" ? (
+        <p className="text-sm" style={{ color: "var(--vp-muted)" }}>
+          Cargando comunicados…
+        </p>
+      ) : null}
+
+      {status === "error" ? (
+        <p className="text-sm" style={{ color: "var(--vp-danger, #ef4444)" }}>
+          No se pudieron cargar los comunicados. Intenta de nuevo más tarde.
+        </p>
+      ) : null}
+
+      {status === "ready" && news.length === 0 ? (
+        <p className="text-sm" style={{ color: "var(--vp-muted)" }}>
+          No hay comunicados por ahora.
+        </p>
+      ) : null}
+
+      {status === "ready" && news.length > 0 ? (
+        <ul className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-0" style={{ listStyle: "none" }}>
+          {news.map((item) => (
+            <li
+              key={item.id}
+              className="rounded-2xl p-5"
+              style={{ background: "var(--vp-surface)", border: "1px solid var(--vp-border)" }}
+            >
+              <div className="flex items-start justify-between gap-4">
+                <h2 className="m-0 text-base font-semibold" style={{ color: "var(--vp-text)" }}>
+                  {item.title}
+                </h2>
+                <time className="shrink-0 text-[11px]" style={{ color: "var(--vp-muted)" }}>
+                  {formatDate(item.created_at)}
+                </time>
+              </div>
+              <p
+                className="m-0 mt-3 whitespace-pre-line text-sm leading-relaxed"
+                style={{ color: "var(--vp-text-soft)" }}
+              >
+                {item.body}
+              </p>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }

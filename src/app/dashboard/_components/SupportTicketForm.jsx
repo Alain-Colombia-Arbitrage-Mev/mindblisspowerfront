@@ -5,7 +5,7 @@ import { LifeBuoy, Loader2, Send } from "lucide-react";
 
 // Formulario real de creación de tickets de soporte.
 // POST /api/member/support/ticket -> backend {id, status:"open"}.
-export default function SupportTicketForm() {
+export default function SupportTicketForm({ onCreated }) {
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
@@ -40,6 +40,7 @@ export default function SupportTicketForm() {
         setMsg({ type: "ok", text: id ? `Ticket #${id} creado. Te responderemos pronto.` : "Ticket creado. Te responderemos pronto." });
         setSubject("");
         setBody("");
+        if (typeof onCreated === "function") onCreated();
       }
     } catch {
       setMsg({ type: "err", text: "Sin conexión. Intenta de nuevo." });
