@@ -140,7 +140,7 @@ export default function NetworkPage() {
 
       <NetworkTabs active={tab} onChange={setTab} />
 
-      {tab === "tree" ? <BinaryTreeView nodes={tree} /> : null}
+      {tab === "tree" ? <BinaryTreeView nodes={tree} me={me} /> : null}
       {tab === "generation" ? <GenerationView nodes={tree} /> : null}
       {tab === "rank" ? <RankView nodes={tree} /> : null}
       {tab === "list" ? <OperativeListView nodes={tree} /> : null}

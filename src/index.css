@@ -2130,3 +2130,90 @@ html {
   border: 1px solid rgba(250, 204, 21, 0.22) !important;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.38) !important;
 }
+
+/* ── Árbol binario (red de miembros) ─────────────────────────────── */
+.vp-tree-scroll {
+  overflow-x: auto;
+  padding: 8px 4px 16px;
+  -webkit-overflow-scrolling: touch;
+}
+.vp-tree {
+  display: inline-flex;
+  min-width: 100%;
+  justify-content: center;
+}
+.vp-tree ul,
+.vp-tree li {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* contenedor de un subárbol: apila nodo + fila de hijos, centrado */
+.vp-tree .vp-children-root {
+  display: flex;
+  justify-content: center;
+}
+.vp-tree .vp-branch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.vp-tree .vp-branch-node {
+  display: flex;
+  justify-content: center;
+}
+/* fila de los dos hijos (izq/der) con tallo del padre */
+.vp-tree .vp-children {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  padding-top: 20px;
+}
+/* tallo vertical: nodo padre -> barra horizontal */
+.vp-tree .vp-children::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  margin-left: -1px;
+  width: 2px;
+  height: 20px;
+  background: var(--vp-border-strong);
+}
+/* cada rama: mitad de la barra horizontal + caida vertical al hijo */
+.vp-tree .vp-leaf {
+  position: relative;
+  padding: 24px 12px 0;
+}
+.vp-tree .vp-leaf::before,
+.vp-tree .vp-leaf::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 50%;
+  width: 50%;
+  height: 24px;
+  border-top: 2px solid var(--vp-border-strong);
+}
+.vp-tree .vp-leaf::after {
+  right: auto;
+  left: 50%;
+  border-left: 2px solid var(--vp-border-strong);
+}
+.vp-tree .vp-leaf:first-child::before,
+.vp-tree .vp-leaf:last-child::after {
+  border: 0 none;
+}
+.vp-tree .vp-leaf:last-child::before {
+  border-right: 2px solid var(--vp-border-strong);
+  border-radius: 0 8px 0 0;
+}
+.vp-tree .vp-leaf:first-child::after {
+  border-radius: 8px 0 0 0;
+}
+@media (max-width: 640px) {
+  .vp-tree .vp-leaf {
+    padding-left: 5px;
+    padding-right: 5px;
+  }
+}
