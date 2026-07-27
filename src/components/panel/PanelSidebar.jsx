@@ -12,7 +12,6 @@ import {
   Ticket,
   User,
   Wallet,
-  Wrench,
 } from "lucide-react";
 
 import SidebarLogo from "./SidebarLogo";
@@ -39,7 +38,6 @@ const NAV_ITEMS = [
   { icon: User, label: "Profile", href: "/dashboard/profile" },
   { icon: Medal, label: "Ranks", href: "/dashboard/rank" },
   { icon: Network, label: "Team / Network", href: "/dashboard/network", also: ["/dashboard/team"] },
-  { icon: Wrench, label: "Tools", href: "/dashboard/tools" },
 ];
 
 export default function PanelSidebar({ pathname, isAdmin, member, onNavigate }) {
