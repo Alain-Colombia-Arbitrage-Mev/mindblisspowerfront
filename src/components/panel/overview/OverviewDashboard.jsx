@@ -5,6 +5,7 @@ import { CreditCard, HandCoins, Network } from "lucide-react";
 
 import PanelFooter from "@/components/panel/PanelFooter";
 import EarningsCard from "./EarningsCard";
+import ReferralLinkCard from "./ReferralLinkCard";
 import RecentSignupsCard from "./RecentSignupsCard";
 import ShortcutPill from "./ShortcutPill";
 import TicketsTodayCard from "./TicketsTodayCard";
@@ -78,6 +79,8 @@ export default function OverviewDashboard() {
           <ShortcutPill key={shortcut.href} {...shortcut} />
         ))}
       </div>
+
+      <ReferralLinkCard />
 
       <div className="grid gap-6 lg:grid-cols-3">
         <EarningsCard
