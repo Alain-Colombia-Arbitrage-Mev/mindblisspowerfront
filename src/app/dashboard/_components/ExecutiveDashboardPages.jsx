@@ -624,6 +624,66 @@ function FinanceContent({ data, onDone }) {
   );
 }
 
+// Texto legible por código de bloqueo BMP (el backend manda el código crudo).
+// not_registered NO va aquí: tiene su propia tarjeta de invitación.
+const BMP_BLOCK_TEXT = {
+  kyc_pending:
+    "Tu verificación de identidad (KYC) en BMP está pendiente. Complétala en la app de BMP para poder retirar.",
+  va_incomplete:
+    "Aún no tienes una cuenta virtual activa en BMP donde depositar. Actívala en la app de BMP para poder retirar.",
+  bmp_blocked:
+    "BMP tiene tu cuenta bloqueada por el momento. Contacta al soporte de BMP para reactivarla.",
+};
+
+// Invitación cuando el usuario NO está registrado en BMP: BMP es la plataforma
+// de pagos donde se reciben los retiros, así que sin cuenta BMP no hay a dónde
+// pagar. En vez de un error, lo invitamos a crear su cuenta y vincular su email.
+function BMPRegisterInvite() {
+  return (
+    <div
+      className="mb-4 rounded-2xl p-5"
+      style={{ background: "var(--vp-surface-raised)", border: "1px solid var(--vp-accent)" }}
+    >
+      <div className="flex items-start gap-3">
+        <div
+          className="flex shrink-0 items-center justify-center rounded-xl"
+          style={{ width: 40, height: 40, background: "var(--vp-accent)", color: "var(--vp-bg)" }}
+        >
+          <UserPlus size={20} />
+        </div>
+        <div className="flex-1">
+          <h3 className="mb-1 text-sm font-bold" style={{ color: "var(--vp-text)" }}>
+            Aún no estás registrado en BMP
+          </h3>
+          <p className="mb-3 text-xs leading-5" style={{ color: "var(--vp-muted)" }}>
+            BMP es la plataforma de pagos donde recibes tus retiros. Crea tu cuenta con
+            el <strong>mismo correo</strong> de tu cuenta aquí y actívala para poder retirar.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <a
+              href="https://play.google.com/store/apps/details?id=chat.bemindepower.bmpchat"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="executive-button primary inline-flex min-h-10 items-center gap-2 px-4 text-xs"
+            >
+              <Download size={14} /> Descargar app BMP
+            </a>
+            <a
+              href="https://bemindepower.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex min-h-10 items-center gap-2 rounded-lg px-4 text-xs font-semibold"
+              style={{ border: "1px solid var(--vp-border)", color: "var(--vp-text)" }}
+            >
+              Registrarme en BMP
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function WithdrawPanel({ data, onDone }) {
   const [amount, setAmount] = useState("");
   const [bank, setBank] = useState("");
@@ -646,8 +706,18 @@ function WithdrawPanel({ data, onDone }) {
       .catch(() => {});
     return () => { cancelled = true; };
   }, []);
-  const bmpBlocked = bmp?.can_withdraw === false;
-  const formEnabled = canWithdraw && !bmpBlocked;
+  // El backend devuelve block_reason como CÓDIGO (not_registered, kyc_pending…).
+  // available:false ⇒ BMP no respondió: el backend es fail-open al solicitar (la
+  // solicitud se registra y se re-verifica al pagar), así que NO bloqueamos el
+  // form; sólo avisamos. Un bloqueo DURO es sólo cuando BMP respondió y niega.
+  const bmpReason = bmp?.block_reason || "";
+  const bmpAnswered = bmp?.available === true;
+  const bmpUnavailable = bmp != null && bmp.available === false;
+  const bmpNotRegistered = bmpAnswered && bmpReason === "not_registered";
+  // Bloqueo duro: BMP respondió y no habilita retiro. not_registered se muestra
+  // aparte (invitación a registrarse), el resto con banner de motivo.
+  const bmpHardBlocked = bmpAnswered && bmp?.can_withdraw === false;
+  const formEnabled = canWithdraw && !bmpHardBlocked;
 
   async function submit() {
     setMsg({ type: "", text: "" });
@@ -688,13 +758,22 @@ function WithdrawPanel({ data, onDone }) {
         <DollarSign size={18} style={{ color: "var(--vp-accent)" }} />
         Solicitar retiro
       </h2>
-      {bmpBlocked && (
+      {bmpNotRegistered && <BMPRegisterInvite />}
+      {bmpHardBlocked && !bmpNotRegistered && (
         <div
           className="mb-4 rounded-lg px-4 py-3 text-sm font-semibold"
           style={{ background: "var(--vp-surface-raised)", border: "1px solid var(--vp-danger)", color: "var(--vp-danger)" }}
         >
-          {bmp?.block_reason ||
+          {BMP_BLOCK_TEXT[bmpReason] ||
             "Tu cuenta BMP no permite retiros por ahora. Verifica o activa tu cuenta BMP para poder retirar."}
+        </div>
+      )}
+      {bmpUnavailable && (
+        <div
+          className="mb-4 rounded-lg px-4 py-3 text-xs font-semibold"
+          style={{ background: "var(--vp-surface-raised)", border: "1px solid var(--vp-border)", color: "var(--vp-muted)" }}
+        >
+          No pudimos verificar tu cuenta BMP en este momento. Puedes enviar la solicitud; se verificará antes del pago.
         </div>
       )}
       <div className="space-y-5">
@@ -720,7 +799,7 @@ function WithdrawPanel({ data, onDone }) {
             placeholder="Banco, número de cuenta/CLABE, titular, documento"
             value={bank}
             onChange={(e) => setBank(e.target.value)}
-            disabled={!canWithdraw || busy}
+            disabled={!formEnabled || busy}
           />
         </Field>
         <div className="rounded-2xl p-4" style={{ background: "var(--vp-bg)", border: "1px solid var(--vp-border)" }}>
@@ -737,10 +816,16 @@ function WithdrawPanel({ data, onDone }) {
           className="executive-button primary w-full disabled:opacity-60"
           type="button"
           onClick={submit}
-          disabled={!canWithdraw || busy}
+          disabled={!formEnabled || busy}
         >
           {busy ? <Loader2 size={16} className="animate-spin" /> : <ArrowDownToLine size={16} />}
-          {canWithdraw ? "Enviar solicitud" : "Saldo insuficiente para retirar"}
+          {!canWithdraw
+            ? "Saldo insuficiente para retirar"
+            : bmpNotRegistered
+              ? "Regístrate en BMP para retirar"
+              : bmpHardBlocked
+                ? "Cuenta BMP no habilitada"
+                : "Enviar solicitud"}
         </button>
         {msg.text && (
           <p className="text-xs font-semibold" style={{ color: msg.type === "ok" ? "var(--vp-accent)" : "var(--vp-danger)" }}>
