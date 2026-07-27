@@ -634,6 +634,21 @@ function WithdrawPanel({ data, onDone }) {
   const avail = Number(data.available_for_withdrawal_usd ?? 0);
   const canWithdraw = avail >= min;
 
+  // Candado BMP: el retiro exige una cuenta BMP válida. Consultamos el estado
+  // para mostrar el motivo del bloqueo y deshabilitar el form, en vez de dejar
+  // que el usuario intente y reciba un error genérico del backend.
+  const [bmp, setBmp] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/payments/bmp-status", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!cancelled && d && !d.error) setBmp(d); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  const bmpBlocked = bmp?.can_withdraw === false;
+  const formEnabled = canWithdraw && !bmpBlocked;
+
   async function submit() {
     setMsg({ type: "", text: "" });
     const amt = Number(amount);
@@ -673,6 +688,15 @@ function WithdrawPanel({ data, onDone }) {
         <DollarSign size={18} style={{ color: "var(--vp-accent)" }} />
         Solicitar retiro
       </h2>
+      {bmpBlocked && (
+        <div
+          className="mb-4 rounded-lg px-4 py-3 text-sm font-semibold"
+          style={{ background: "var(--vp-surface-raised)", border: "1px solid var(--vp-danger)", color: "var(--vp-danger)" }}
+        >
+          {bmp?.block_reason ||
+            "Tu cuenta BMP no permite retiros por ahora. Verifica o activa tu cuenta BMP para poder retirar."}
+        </div>
+      )}
       <div className="space-y-5">
         <Field label="Monto a retirar (USD)">
           <div className="relative">
@@ -685,7 +709,7 @@ function WithdrawPanel({ data, onDone }) {
               placeholder={`${min}.00`}
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              disabled={!canWithdraw || busy}
+              disabled={!formEnabled || busy}
             />
           </div>
         </Field>

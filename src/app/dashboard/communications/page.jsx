@@ -6,27 +6,12 @@ import MessageFolders from "@/components/panel/messages/MessageFolders";
 import MessageList from "@/components/panel/messages/MessageList";
 import MessageReader from "@/components/panel/messages/MessageReader";
 
-const MESSAGES = [
-  {
-    id: 1,
-    folder: "inbox",
-    from: "Soporte Técnico",
-    fromEmail: "admin@mindbliss.com",
-    to: "joseoperator",
-    time: "10:45 AM",
-    date: "Hoy, 10:45 AM",
-    subject: "Actualización de sistema",
-    preview: "Hola José, te informamos que el sistema estará en mantenimiento esta noche...",
-    body: [
-      "Estimado José,",
-      "Te informamos que el día de hoy realizaremos un mantenimiento programado en los servidores para mejorar la velocidad.",
-      "Saludos cordiales,\nEl equipo de Mindbliss Power",
-    ],
-  },
-];
+// Sin mensajería real todavía: bandeja vacía (no mensajes mock) y sin caja de
+// "responder" (MessageReader oculta el ReplyBox cuando no hay mensaje seleccionado).
+const MESSAGES = [];
 
 const FOLDERS = [
-  { id: "inbox", label: "Recibidos", count: 3 },
+  { id: "inbox", label: "Recibidos", count: 0 },
   { id: "starred", label: "Destacados" },
   { id: "sent", label: "Enviados" },
 ];
