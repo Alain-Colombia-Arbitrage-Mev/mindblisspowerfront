@@ -5,6 +5,7 @@ import { ArrowRight, ClipboardCheck, Eye, EyeOff, Loader2, LogIn, UserPlus } fro
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import AuthShell from "../_components/AuthShell";
+import { isMicrosoftEmail, useResendCooldown } from "@/lib/useResendCooldown";
 
 // Registro MÍNIMO: solo lo esencial para crear la cuenta. El resto del perfil
 // (país, ciudad, documento, fecha, preferencias) se completa en el onboarding.
@@ -61,6 +62,7 @@ export default function RegisterPage() {
   const [confirmCode, setConfirmCode] = useState("");
   const [cognitoUsername, setCognitoUsername] = useState("");
   const [banned, setBanned] = useState(false);
+  const resendCooldown = useResendCooldown(45);
   // Guard síncrono anti doble-submit: evita un 2º SignUp que reenvía el código
   // e invalida el primero (causa del "primer código inválido").
   const submittingRef = useRef(false);
@@ -165,6 +167,7 @@ export default function RegisterPage() {
       if (payload.userConfirmed === false) {
         setCognitoUsername(payload.username || "");
         setConfirmStep(true);
+        resendCooldown.start();
         setSuccess("Cuenta creada. Te enviamos un código por correo — ingrésalo abajo para activar tu cuenta.");
         setLoading(false);
         return;
@@ -227,6 +230,7 @@ export default function RegisterPage() {
   }
 
   async function handleResendCode() {
+    if (resendCooldown.active || loading) return;
     setErrors({});
     setSuccess("");
     setLoading(true);
@@ -242,7 +246,8 @@ export default function RegisterPage() {
       if (!response.ok || !payload.ok) {
         setErrors({ form: payload.error || "No se pudo reenviar el código." });
       } else {
-        setSuccess("Código reenviado. Revisa tu correo.");
+        resendCooldown.start();
+        setSuccess("Código reenviado. Revisa tu correo (y la carpeta de spam).");
       }
     } catch {
       setErrors({ form: "No se pudo conectar con el servicio de registro." });
@@ -325,12 +330,20 @@ export default function RegisterPage() {
               id="confirmCode"
               label={`Código enviado a ${form.email}`}
               value={confirmCode}
-              onChange={(event) => setConfirmCode(event.target.value)}
-              placeholder="123456"
+              onChange={(event) => setConfirmCode(event.target.value.replace(/\s+/g, ""))}
+              placeholder="········"
               inputMode="numeric"
               autoComplete="one-time-code"
+              maxLength={8}
+              autoFocus
               required
             />
+
+            <p className="-mt-2 text-xs leading-5" style={{ color: isMicrosoftEmail(form.email) ? "var(--vp-amber, #d97706)" : "var(--vp-subtle)" }}>
+              {isMicrosoftEmail(form.email)
+                ? "Tu correo es de Microsoft (Hotmail/Outlook/Live): a veces demora o cae en «Correo no deseado». Revisa esa carpeta."
+                : "¿No llega en 1–2 min? Revisa la carpeta de spam / correo no deseado."}
+            </p>
 
             <button
               type="submit"
@@ -349,11 +362,11 @@ export default function RegisterPage() {
             <button
               type="button"
               onClick={handleResendCode}
-              disabled={loading}
+              disabled={loading || resendCooldown.active}
               className="block w-full text-center text-sm font-bold transition hover:opacity-80 disabled:opacity-50"
               style={{ color: "var(--vp-muted)" }}
             >
-              Reenviar código
+              {resendCooldown.active ? resendCooldown.label : "Reenviar código"}
             </button>
           </form>
         ) : (

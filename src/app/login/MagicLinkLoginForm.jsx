@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
+import { isMicrosoftEmail, useResendCooldown } from "@/lib/useResendCooldown";
+
 const AUTH_STATE_MESSAGES = {
   "invalid-email": {
     tone: "danger",
@@ -49,6 +51,8 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
   const [loadingAction, setLoadingAction] = useState("");
   const [resetStep, setResetStep] = useState("request");
   const [resetCode, setResetCode] = useState("");
+  const codeCooldown = useResendCooldown(45);
+  const resetCooldown = useResendCooldown(45);
 
   const authMessage = getAuthStateMessage(authState);
   const isLoading = Boolean(loadingAction);
@@ -82,8 +86,9 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     }
   }
 
-  async function requestLoginCode(event) {
+  async function requestLoginCode(event, { resend = false } = {}) {
     event?.preventDefault();
+    if (resend && codeCooldown.active) return;
     setError("");
     setNotice("");
     const normalizedEmail = validateEmail();
@@ -119,7 +124,12 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
 
       setCodeStep("confirm");
       setLoginCode("");
-      setNotice(payload.message || "Te enviamos un código por correo. Escríbelo para entrar.");
+      codeCooldown.start();
+      setNotice(
+        resend
+          ? `Te reenviamos el código a ${normalizedEmail}. Revisa tu correo (y spam).`
+          : payload.message || "Te enviamos un código por correo. Escríbelo para entrar.",
+      );
     } catch {
       setError("No se pudo conectar con el servicio de acceso.");
     } finally {
@@ -198,8 +208,9 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     }
   }
 
-  async function requestPasswordResetCode(event) {
+  async function requestPasswordResetCode(event, { resend = false } = {}) {
     event?.preventDefault();
+    if (resend && resetCooldown.active) return;
     setError("");
     setNotice("");
     const normalizedEmail = validateEmail();
@@ -220,7 +231,12 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
       }
 
       setResetStep("confirm");
-      setNotice("Te enviamos un código por correo. Ingresa el código y tu nueva contraseña.");
+      resetCooldown.start();
+      setNotice(
+        resend
+          ? `Te reenviamos el código a ${normalizedEmail}. Revisa tu correo (y spam).`
+          : "Te enviamos un código por correo. Ingresa el código y tu nueva contraseña.",
+      );
     } catch {
       setError("No se pudo conectar con el servicio de acceso.");
     } finally {
@@ -326,11 +342,13 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
               id="login-code"
               label="Código de acceso"
               value={loginCode}
+              autoFocus
               onChange={(value) => {
                 setLoginCode(value);
                 setError("");
               }}
             />
+            <DeliveryHint email={email} />
 
             <PrimaryButton disabled={isLoading} loading={loadingAction === "code-confirm"} icon={<ArrowRight size={16} />}>
               Entrar con código
@@ -340,8 +358,12 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
               <SecondaryButton disabled={isLoading} onClick={() => switchMode("code")} icon={<ArrowLeft size={15} />}>
                 Cambiar email
               </SecondaryButton>
-              <SecondaryButton disabled={isLoading} onClick={requestLoginCode} icon={<KeyRound size={15} />}>
-                Reenviar
+              <SecondaryButton
+                disabled={isLoading || codeCooldown.active}
+                onClick={(e) => requestLoginCode(e, { resend: true })}
+                icon={<KeyRound size={15} />}
+              >
+                {codeCooldown.active ? codeCooldown.label : "Reenviar"}
               </SecondaryButton>
             </div>
           </form>
@@ -396,11 +418,13 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
             id="reset-code"
             label="Código de verificación"
             value={resetCode}
+            autoFocus
             onChange={(value) => {
               setResetCode(value);
               setError("");
             }}
           />
+          <DeliveryHint email={email} />
           <PasswordField
             id="new-password"
             label="Nueva contraseña"
@@ -422,8 +446,12 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
             <SecondaryButton disabled={isLoading} onClick={() => switchMode("password")} icon={<ArrowLeft size={15} />}>
               Volver
             </SecondaryButton>
-            <SecondaryButton disabled={isLoading} onClick={requestPasswordResetCode} icon={<KeyRound size={15} />}>
-              Reenviar código
+            <SecondaryButton
+              disabled={isLoading || resetCooldown.active}
+              onClick={(e) => requestPasswordResetCode(e, { resend: true })}
+              icon={<KeyRound size={15} />}
+            >
+              {resetCooldown.active ? resetCooldown.label : "Reenviar código"}
             </SecondaryButton>
           </div>
         </form>
@@ -522,7 +550,7 @@ function PasswordField({ id, label, value, showPassword, autoComplete, onChange,
   );
 }
 
-function CodeField({ id, label, value, onChange }) {
+function CodeField({ id, label, value, onChange, autoFocus = false }) {
   return (
     <div>
       <label className="mb-2 block text-sm font-bold" htmlFor={id} style={{ color: "var(--vp-text)" }}>
@@ -532,10 +560,12 @@ function CodeField({ id, label, value, onChange }) {
         id={id}
         inputMode="numeric"
         autoComplete="one-time-code"
+        autoFocus={autoFocus}
+        maxLength={8}
         value={value}
         onChange={(event) => onChange(event.target.value.replace(/\s+/g, ""))}
-        placeholder="123456"
-        className="min-h-12 w-full rounded-lg px-4 text-sm font-semibold tracking-[0.3em] outline-none"
+        placeholder="········"
+        className="min-h-12 w-full rounded-lg px-4 text-base font-semibold tracking-[0.4em] outline-none"
         style={{
           color: "var(--vp-text)",
           background: "var(--vp-surface-raised)",
@@ -543,6 +573,20 @@ function CodeField({ id, label, value, onChange }) {
         }}
       />
     </div>
+  );
+}
+
+// Pista de entregabilidad bajo el campo de código: recuerda revisar spam y, si
+// el correo es de Microsoft (que suele filtrar los envíos de Cognito/SES),
+// avisa explícitamente — es la causa #1 de "el código no llega".
+function DeliveryHint({ email }) {
+  const microsoft = isMicrosoftEmail(email);
+  return (
+    <p className="text-xs leading-5" style={{ color: microsoft ? "var(--vp-amber, #d97706)" : "var(--vp-subtle)" }}>
+      {microsoft
+        ? "Tu correo es de Microsoft (Hotmail/Outlook/Live): a veces demora o cae en «Correo no deseado». Revisa esa carpeta o usa otro correo."
+        : "¿No llega en 1–2 min? Revisa la carpeta de spam / correo no deseado."}
+    </p>
   );
 }
 
