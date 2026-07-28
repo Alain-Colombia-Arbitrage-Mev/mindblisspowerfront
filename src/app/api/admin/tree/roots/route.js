@@ -31,6 +31,8 @@ export async function GET() {
         JOIN mlm.person p      ON p.id = a.person_id
         LEFT JOIN mlm.rank r   ON r.id = a.current_rank_id
        WHERE a.parent_id IS NULL
+         AND a.status <> 'deleted'
+         AND p.status <> 'deleted'
        ORDER BY (a.id = 1) DESC, p.blacklisted, a.id`;
 
     return NextResponse.json({ roots: rows.map(shapeNode) });
