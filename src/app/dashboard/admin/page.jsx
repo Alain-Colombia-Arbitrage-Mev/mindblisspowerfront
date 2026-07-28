@@ -6,6 +6,7 @@ import FinanceSection from "./FinanceSection";
 import PlanConfigSection from "./PlanConfigSection";
 import ActivityFeed from "./ActivityFeed";
 import SalesSection from "./SalesSection";
+import AdminNetworkTree from "./AdminNetworkTree";
 import { ShieldCheck, Users, DollarSign, Ban, CheckCircle2, Search, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 
 const money = (v) => `$${Number(v ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -109,6 +110,9 @@ export default function AdminPage() {
           </div>
         </div>
       )}
+
+      {/* Red completa: árbol binario navegable (lazy) + buscador */}
+      <AdminNetworkTree />
 
       {/* Finanzas + monitor de solvencia (live) */}
       <FinanceSection />
