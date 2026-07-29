@@ -28,6 +28,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Gate de build: compila EN EL RUNNER antes de tocar el box. Una rotura
+      # se detecta aquí (rápido, sin consumir CPU del servidor que sirve a los
+      # miembros); el box igual re-construye con sus .env reales.
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: Build gate
+        run: npm ci --no-audit --no-fund && npm run build
+
       - name: Resolve target instance
         id: t
         run: |
