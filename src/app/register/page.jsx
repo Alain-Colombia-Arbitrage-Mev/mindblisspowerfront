@@ -79,7 +79,23 @@ export default function RegisterPage() {
       if (r) localStorage.setItem("mp_ref", r.trim().slice(0, 64));
       prefillEmail = (sp.get("email") || "").trim().toLowerCase();
     } catch (e) { /* ignore */ }
-    setForm((current) => ({ ...current, ...legacyStored, ...stored, ...(prefillEmail ? { email: prefillEmail } : {}) }));
+    const merged = { ...legacyStored, ...stored };
+    // El draft guarda phone en E.164 (+57300…) para la API; re-inyectarlo como
+    // número local hacía que composePhone duplicara el código de país
+    // (+57 + 573001234567). Restaurar el número local por separado.
+    if (merged.phoneLocal) {
+      merged.phone = merged.phoneLocal;
+    } else if (typeof merged.phone === "string" && merged.phone.startsWith("+")) {
+      const dc = dialCodes.find(([code]) => merged.phone.startsWith(code));
+      if (dc) {
+        merged.dialCode = dc[0];
+        merged.phone = merged.phone.slice(dc[0].length);
+      } else {
+        merged.phone = "";
+      }
+    }
+    delete merged.phoneLocal;
+    setForm((current) => ({ ...current, ...merged, ...(prefillEmail ? { email: prefillEmail } : {}) }));
   }, []);
 
   function updateField(field, value) {
@@ -161,8 +177,11 @@ export default function RegisterPage() {
         return;
       }
 
-      localStorage.setItem("mp_registration_draft", JSON.stringify(draft));
-      localStorage.setItem("vp_registration_draft", JSON.stringify(draft));
+      // phoneLocal/dialCode por separado: el restore los usa para no duplicar
+      // el código de país (draft.phone es E.164, solo para la API).
+      const storedDraft = { ...draft, dialCode: form.dialCode, phoneLocal: form.phone.trim() };
+      localStorage.setItem("mp_registration_draft", JSON.stringify(storedDraft));
+      localStorage.setItem("vp_registration_draft", JSON.stringify(storedDraft));
 
       if (payload.userConfirmed === false) {
         setCognitoUsername(payload.username || "");

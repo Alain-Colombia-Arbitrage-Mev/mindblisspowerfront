@@ -69,10 +69,15 @@ export function rateLimit(rules, now = Date.now()) {
   return { allowed: true, retryAfterSec: 0 };
 }
 
-/** IP del cliente detrás de proxy/CDN. Client IP behind proxy/CDN. */
+/** IP del cliente detrás de proxy/CDN. Client IP behind proxy/CDN.
+ * Se toma el ÚLTIMO hop de X-Forwarded-For: es el que estampó NUESTRO proxy
+ * (Caddy) y el único no falsificable. El primer hop lo controla el cliente si
+ * el proxy adjunta en vez de reemplazar — usarlo permitía rotar IPs falsas y
+ * evadir los límites por IP (p.ej. el preset "register", que es solo-IP). */
 export function clientIp(request) {
   const xff = request.headers.get("x-forwarded-for") || "";
-  const ip = xff.split(",")[0].trim();
+  const hops = xff.split(",").map((h) => h.trim()).filter(Boolean);
+  const ip = hops.length > 0 ? hops[hops.length - 1] : "";
   return ip || request.headers.get("x-real-ip") || "unknown";
 }
 

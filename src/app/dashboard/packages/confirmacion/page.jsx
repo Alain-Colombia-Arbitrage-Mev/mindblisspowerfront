@@ -70,6 +70,9 @@ export default function PaymentConfirmationPage() {
 
   const activa = phase === "activa";
   const verificando = phase === "verificando";
+  // Sin ?paid ni ?canceled (navegación directa): no afirmamos éxito de un pago
+  // que no consta — estado neutro que remite a "Mis pagos".
+  const desconocido = phase === "desconocido";
   const lastPayment = summary?.payments?.[0];
 
   return (
@@ -98,15 +101,17 @@ export default function PaymentConfirmationPage() {
           </span>
 
           <h1 className="executive-title m-0 text-3xl font-bold" style={{ color: "var(--vp-text)" }}>
-            ¡Pago completado con éxito!
+            {desconocido ? "Estado del pago" : "¡Pago completado con éxito!"}
           </h1>
 
           <p className="mt-4 text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
-            {activa
-              ? "Tu membresía está activa. Tu posición en la red quedó habilitada y ya puedes operar."
-              : verificando
-                ? "Estamos activando tu membresía. Esto toma solo unos segundos…"
-                : "Tu pago fue recibido. La activación de tu membresía se completará en breve; la verás reflejada en \"Mis pagos\"."}
+            {desconocido
+              ? "No encontramos información de un pago reciente en esta sesión. Si acabas de pagar, tu membresía aparecerá en \"Mis pagos\" en unos minutos."
+              : activa
+                ? "Tu membresía está activa. Tu posición en la red quedó habilitada y ya puedes operar."
+                : verificando
+                  ? "Estamos activando tu membresía. Esto toma solo unos segundos…"
+                  : "Tu pago fue recibido. La activación de tu membresía se completará en breve; la verás reflejada en \"Mis pagos\"."}
           </p>
 
           {(lastPayment || summary) && (

@@ -1,10 +1,25 @@
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 import { getNetworkDashboardModel } from "@/lib/dashboardNetworkModel";
+import { verifiedEmailFromIdToken } from "@/lib/verify-id-token";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+// Era la única ruta API sin verificación de sesión: el POST reenviaba JSON
+// arbitrario de un cliente anónimo al motor interno si VP_ENGINE_HTTP_URL
+// estaba configurado. Fail-closed: sesión Cognito verificada o 401.
+async function requireSession() {
+  const idToken = (await cookies()).get("vp_id_token")?.value;
+  if (!idToken) return null;
+  return verifiedEmailFromIdToken(idToken);
+}
 
 export async function GET() {
+  if (!(await requireSession())) {
+    return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+  }
   const model = getNetworkDashboardModel();
 
   return NextResponse.json({
@@ -15,6 +30,9 @@ export async function GET() {
 }
 
 export async function POST(request) {
+  if (!(await requireSession())) {
+    return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+  }
   const payload = await request.json();
   const engineURL = process.env.VP_ENGINE_HTTP_URL || process.env.BACKEND_ANALYSIS_URL;
 

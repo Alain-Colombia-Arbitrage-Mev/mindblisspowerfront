@@ -79,7 +79,9 @@ function setSessionCookie(response, name, value, requestUrl, maxAge) {
   response.cookies.set(name, value, {
     httpOnly: true,
     sameSite: "lax",
-    secure: requestUrl.protocol === "https:",
+    // Detrás de Caddy la URL interna es http:, así que el protocolo NO indica
+    // producción — igual que la versión canónica de lib/cognito-session.js.
+    secure: process.env.NODE_ENV === "production" || requestUrl.protocol === "https:",
     path: "/",
     maxAge,
   });
