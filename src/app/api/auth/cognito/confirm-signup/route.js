@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 
 import { authRateLimit } from "@/lib/auth-rate-limit";
@@ -12,8 +13,13 @@ export async function POST(request) {
   const code = String(body.code || "").trim();
   const resend = Boolean(body.resend);
   // Antes de confirmar, el alias por email aún no existe: usar el username real.
+  // Si el front no lo trae (p.ej. link de reactivación "reanudar registro"), se
+  // deriva igual que en el registro: determinístico por email.
   const rawUsername = String(body.username || "").trim();
-  const username = /^[\w.-]{1,128}$/.test(rawUsername) ? rawUsername : email;
+  const derivedUsername = email
+    ? `mp_${createHash("sha256").update(email).digest("hex").slice(0, 40)}`
+    : "";
+  const username = /^[\w.-]{1,128}$/.test(rawUsername) ? rawUsername : derivedUsername;
 
   if (!username) {
     return NextResponse.json({ error: "Ingresa un email válido. / Enter a valid email." }, { status: 400 });
@@ -52,6 +58,11 @@ export async function POST(request) {
     });
 
     if (!response.ok) {
+      // Cuenta ya confirmada (p.ej. link de reactivación clicado tarde): no es
+      // un error real — el front manda al login.
+      if (/already\s+confirmed/i.test(String(response.body?.message || ""))) {
+        return NextResponse.json({ ok: true, alreadyConfirmed: true });
+      }
       return NextResponse.json(
         { error: mapCognitoError(response.body, "No se pudo reenviar el código.") },
         { status: mapCognitoStatus(response.body) }

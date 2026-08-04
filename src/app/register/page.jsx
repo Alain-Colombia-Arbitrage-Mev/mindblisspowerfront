@@ -66,6 +66,35 @@ export default function RegisterPage() {
   // Guard síncrono anti doble-submit: evita un 2º SignUp que reenvía el código
   // e invalida el primero (causa del "primer código inválido").
   const submittingRef = useRef(false);
+  // Guard del auto-reenvío del link de reactivación (StrictMode monta 2 veces).
+  const resumedRef = useRef(false);
+
+  async function resumeRegistration(email) {
+    setForm((current) => ({ ...current, email }));
+    setConfirmStep(true);
+    setLoading(true);
+    try {
+      const response = await fetch("/api/auth/cognito/confirm-signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, resend: true }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (payload.alreadyConfirmed) {
+        router.push(`/login?email=${encodeURIComponent(email)}`);
+        return;
+      }
+      if (!response.ok || !payload.ok) {
+        setErrors({ form: payload.error || "No se pudo reenviar el código. Intenta con «Reenviar código»." });
+      } else {
+        resendCooldown.start();
+        setSuccess(`Te enviamos un código nuevo a ${email} para activar tu cuenta. Si no aparece en 1–2 min, revisa la carpeta de spam / correo no deseado.`);
+      }
+    } catch {
+      setErrors({ form: "No se pudo conectar con el servicio de registro. Usa «Reenviar código»." });
+    }
+    setLoading(false);
+  }
 
   useEffect(() => {
     const stored = readStoredJson("mp_registration_draft");
@@ -73,12 +102,21 @@ export default function RegisterPage() {
     // ?email= viene del login cuando el usuario resultó ser nuevo: lo precargamos
     // con precedencia sobre el borrador guardado (es el email que acaba de teclear).
     let prefillEmail = "";
+    let resume = false;
     try {
       const sp = new URLSearchParams(window.location.search);
       const r = sp.get("ref");
       if (r) localStorage.setItem("mp_ref", r.trim().slice(0, 64));
       prefillEmail = (sp.get("email") || "").trim().toLowerCase();
+      resume = sp.get("resume") === "1";
     } catch (e) { /* ignore */ }
+    // ?resume=1&email=…: link de reactivación para cuentas creadas pero nunca
+    // confirmadas — salta directo al paso del código y lo reenvía en el acto
+    // (el BFF deriva el username determinístico desde el email).
+    if (resume && /^\S+@\S+\.\S+$/.test(prefillEmail) && !resumedRef.current) {
+      resumedRef.current = true;
+      resumeRegistration(prefillEmail);
+    }
     const merged = { ...legacyStored, ...stored };
     // El draft guarda phone en E.164 (+57300…) para la API; re-inyectarlo como
     // número local hacía que composePhone duplicara el código de país
@@ -261,6 +299,11 @@ export default function RegisterPage() {
         body: JSON.stringify({ email: form.email.trim().toLowerCase(), username: cognitoUsername, resend: true }),
       });
       const payload = await response.json().catch(() => ({}));
+
+      if (payload.alreadyConfirmed) {
+        router.push(`/login?email=${encodeURIComponent(form.email.trim().toLowerCase())}`);
+        return;
+      }
 
       if (!response.ok || !payload.ok) {
         setErrors({ form: payload.error || "No se pudo reenviar el código." });
