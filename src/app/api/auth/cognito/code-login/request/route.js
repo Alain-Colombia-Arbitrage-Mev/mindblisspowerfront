@@ -118,7 +118,7 @@ export async function POST(request) {
     ok: true,
     mode: "cognito",
     challenge: "EMAIL_OTP",
-    message: "Te enviamos un código por correo. Escríbelo para entrar.",
+    message: "Te enviamos un código por correo. Si no aparece en 1–2 min, revisa la carpeta de spam / correo no deseado.",
     delivery: challengeResponse.delivery,
   });
   setCodeChallengeCookie(response, requestUrl, {

@@ -5,7 +5,7 @@ import { ArrowRight, ClipboardCheck, Eye, EyeOff, Loader2, LogIn, UserPlus } fro
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import AuthShell from "../_components/AuthShell";
-import { isMicrosoftEmail, useResendCooldown } from "@/lib/useResendCooldown";
+import { isMicrosoftEmail, suggestEmailFix, useResendCooldown } from "@/lib/useResendCooldown";
 
 // Registro MÍNIMO: solo lo esencial para crear la cuenta. El resto del perfil
 // (país, ciudad, documento, fecha, preferencias) se completa en el onboarding.
@@ -187,7 +187,7 @@ export default function RegisterPage() {
         setCognitoUsername(payload.username || "");
         setConfirmStep(true);
         resendCooldown.start();
-        setSuccess("Cuenta creada. Te enviamos un código por correo — ingrésalo abajo para activar tu cuenta.");
+        setSuccess("Cuenta creada. Te enviamos un código por correo — ingrésalo abajo para activar tu cuenta. Si no aparece en 1–2 min, revisa la carpeta de spam / correo no deseado.");
         setLoading(false);
         return;
       }
@@ -400,16 +400,28 @@ export default function RegisterPage() {
               autoComplete="name"
               required
             />
-            <Field
-              id="email"
-              label="Email"
-              type="email"
-              value={form.email}
-              onChange={(event) => updateField("email", event.target.value)}
-              error={errors.email}
-              autoComplete="email"
-              required
-            />
+            <div>
+              <Field
+                id="email"
+                label="Email"
+                type="email"
+                value={form.email}
+                onChange={(event) => updateField("email", event.target.value)}
+                error={errors.email}
+                autoComplete="email"
+                required
+              />
+              {suggestEmailFix(form.email) && (
+                <button
+                  type="button"
+                  onClick={() => updateField("email", suggestEmailFix(form.email))}
+                  className="mt-2 text-left text-xs font-bold transition hover:opacity-80"
+                  style={{ color: "var(--vp-amber, #d97706)" }}
+                >
+                  ¿Quisiste decir {suggestEmailFix(form.email)}? Toca aquí para corregirlo.
+                </button>
+              )}
+            </div>
             <PasswordField
               id="password"
               label="Contraseña"

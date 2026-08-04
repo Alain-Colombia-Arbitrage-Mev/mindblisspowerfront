@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
-import { isMicrosoftEmail, useResendCooldown } from "@/lib/useResendCooldown";
+import { isMicrosoftEmail, suggestEmailFix, useResendCooldown } from "@/lib/useResendCooldown";
 
 const AUTH_STATE_MESSAGES = {
   "invalid-email": {
@@ -128,7 +128,8 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
       setNotice(
         resend
           ? `Te reenviamos el código a ${normalizedEmail}. Revisa tu correo (y spam).`
-          : payload.message || "Te enviamos un código por correo. Escríbelo para entrar.",
+          : payload.message ||
+            "Te enviamos un código por correo. Si no aparece en 1–2 min, revisa la carpeta de spam.",
       );
     } catch {
       setError("No se pudo conectar con el servicio de acceso.");
@@ -235,7 +236,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
       setNotice(
         resend
           ? `Te reenviamos el código a ${normalizedEmail}. Revisa tu correo (y spam).`
-          : "Te enviamos un código por correo. Ingresa el código y tu nueva contraseña.",
+          : "Te enviamos un código por correo (revisa también spam). Ingresa el código y tu nueva contraseña.",
       );
     } catch {
       setError("No se pudo conectar con el servicio de acceso.");
@@ -507,6 +508,19 @@ function EmailField({ email, setEmail, onClearError }) {
           }}
         />
       </div>
+      {suggestEmailFix(email) && (
+        <button
+          type="button"
+          onClick={() => {
+            setEmail(suggestEmailFix(email));
+            onClearError();
+          }}
+          className="mt-2 text-left text-xs font-bold transition hover:opacity-80"
+          style={{ color: "var(--vp-amber, #d97706)" }}
+        >
+          ¿Quisiste decir {suggestEmailFix(email)}? Toca aquí para corregirlo.
+        </button>
+      )}
     </div>
   );
 }
