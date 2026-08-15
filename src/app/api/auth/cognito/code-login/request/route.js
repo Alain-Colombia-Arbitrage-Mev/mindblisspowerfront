@@ -12,6 +12,7 @@ import {
   setCognitoSessionCookies,
   setSessionCookie,
 } from "@/lib/cognito-session";
+import { memberDb } from "@/lib/member-db";
 
 export const runtime = "nodejs";
 
@@ -60,12 +61,23 @@ export async function POST(request) {
   // pudo verificar ⇒ seguimos con el OTP normal (fail-safe, no bloqueamos login).
   const exists = await userExistsInPool(email);
   if (exists === false) {
+    // Miembro legacy: existe como afiliado ACTIVO en la DB (migrado desde el
+    // sistema anterior) pero todavía NO tiene cuenta Cognito → nunca creó su
+    // acceso digital. Le damos un mensaje específico que lo invita a activar su
+    // acceso con ESE mismo correo (el registro/SignUp sí envía el código),
+    // en vez del genérico "no encontramos cuenta" que lo deja confundido.
+    const legacy = await isLegacyActiveAffiliate(email);
     return NextResponse.json(
       {
-        error:
-          "No encontramos una cuenta con ese email. Crea tu cuenta para recibir el código. / " +
-          "We couldn't find an account with that email. Create your account to receive the code.",
+        error: legacy
+          ? "Tu cuenta de miembro ya existe, pero aún no has creado tu acceso digital. " +
+            "Crea tu acceso con este mismo correo y te enviaremos el código de activación. / " +
+            "Your member account already exists, but you haven't created your digital access yet. " +
+            "Create your access with this same email and we'll send you the activation code."
+          : "No encontramos una cuenta con ese email. Crea tu cuenta para recibir el código. / " +
+            "We couldn't find an account with that email. Create your account to receive the code.",
         needsRegister: true,
+        legacy,
         email,
       },
       { status: 404 }
@@ -263,6 +275,24 @@ async function userExistsInPool(email) {
     return Boolean(data.exists);
   } catch {
     return null;
+  }
+}
+
+// isLegacyActiveAffiliate: true si el email corresponde a un afiliado ACTIVO en
+// la DB (miembro migrado) que aún NO tiene cuenta Cognito. Solo lectura (rol
+// vp_web). Best-effort: cualquier fallo ⇒ false (cae al mensaje genérico).
+async function isLegacyActiveAffiliate(email) {
+  try {
+    const sql = memberDb();
+    const rows = await sql`
+      SELECT 1
+        FROM mlm.person p
+        JOIN mlm.affiliate a ON a.person_id = p.id
+       WHERE lower(p.email) = ${email} AND a.status = 'active'
+       LIMIT 1`;
+    return rows.length > 0;
+  } catch {
+    return false;
   }
 }
 
