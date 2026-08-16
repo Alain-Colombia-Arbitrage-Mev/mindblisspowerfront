@@ -33,8 +33,10 @@ jobs:
       # aquí (rápido, sin consumir CPU del servidor que sirve a los miembros); el
       # box igual re-construye con sus .env reales. Ningún push llega a prod sin
       # pasar los tests.
+      # node 22 = misma versión que el box en prod; además `node --test` sólo
+      # expande el glob "src/**/*.test.mjs" en node 21+ (en 20 falla el gate).
       - uses: actions/setup-node@v4
-        with: { node-version: 20 }
+        with: { node-version: 22 }
       - name: Install deps
         run: npm ci --no-audit --no-fund
       - name: Test gate
