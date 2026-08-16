@@ -65,6 +65,11 @@ export async function POST(request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  // El canal (EMAIL_OTP | SMS_OTP) viene en la cookie del challenge que fijó el
+  // request. Cada uno usa su propia clave de respuesta.
+  const challengeName = challenge.challengeName === "SMS_OTP" ? "SMS_OTP" : "EMAIL_OTP";
+  const responseKey = challengeName === "SMS_OTP" ? "SMS_OTP_CODE" : "EMAIL_OTP_CODE";
+
   const cognitoResponse = await callCognito({
     endpoint: config.endpoint,
     target: "RespondToAuthChallenge",
@@ -73,8 +78,8 @@ export async function POST(request) {
       clientSecret: config.clientSecret,
       username: email,
       session: challenge.session,
-      challengeName: "EMAIL_OTP",
-      responses: { EMAIL_OTP_CODE: code },
+      challengeName,
+      responses: { [responseKey]: code },
     }),
   });
 

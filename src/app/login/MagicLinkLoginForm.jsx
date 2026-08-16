@@ -10,6 +10,7 @@ import {
   LockKeyhole,
   Mail,
   ShieldCheck,
+  Smartphone,
   UserPlus,
 } from "lucide-react";
 import { useState } from "react";
@@ -86,7 +87,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     }
   }
 
-  async function requestLoginCode(event, { resend = false } = {}) {
+  async function requestLoginCode(event, { resend = false, channel = "email" } = {}) {
     event?.preventDefault();
     if (resend && codeCooldown.active) return;
     setError("");
@@ -94,12 +95,12 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     const normalizedEmail = validateEmail();
     if (!normalizedEmail) return;
 
-    setLoadingAction("code-request");
+    setLoadingAction(channel === "sms" ? "code-request-sms" : "code-request");
     try {
       const response = await fetch("/api/auth/cognito/code-login/request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: normalizedEmail }),
+        body: JSON.stringify({ email: normalizedEmail, channel }),
       });
       const payload = await response.json().catch(() => ({}));
 
@@ -108,6 +109,14 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
       if (payload.needsRegister) {
         setNotice("No tienes una cuenta con ese email. Te llevamos a crear una…");
         window.location.assign(`/register?email=${encodeURIComponent(normalizedEmail)}`);
+        return;
+      }
+
+      // Cuenta sin confirmar: la reenviamos al paso de confirmar (resume=1), que
+      // ya reenvió el código de confirmación.
+      if (payload.needsConfirm) {
+        setNotice("Tu cuenta aún no está confirmada. Te llevamos a confirmarla…");
+        window.location.assign(`/register?email=${encodeURIComponent(normalizedEmail)}&resume=1`);
         return;
       }
 
@@ -126,10 +135,42 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
       setLoginCode("");
       codeCooldown.start();
       setNotice(
-        resend
-          ? `Te reenviamos el código a ${normalizedEmail}. Revisa tu correo (y spam).`
-          : payload.message ||
-            "Te enviamos un código por correo. Si no aparece en 1–2 min, revisa la carpeta de spam.",
+        payload.message ||
+          (channel === "sms"
+            ? `Te enviamos un código por SMS. Puede tardar 1–2 min.`
+            : resend
+              ? `Te reenviamos el código a ${normalizedEmail}. Revisa tu correo (y spam).`
+              : "Te enviamos un código por correo. Si no aparece en 1–2 min, revisa la carpeta de spam."),
+      );
+    } catch {
+      setError("No se pudo conectar con el servicio de acceso.");
+    } finally {
+      setLoadingAction("");
+    }
+  }
+
+  // Último recurso: si el código no llega por ningún canal, el usuario NO queda
+  // atascado — abre un ticket de ayuda de acceso para que un asesor lo valide.
+  async function requestAccessHelp() {
+    setError("");
+    setNotice("");
+    const normalizedEmail = validateEmail();
+    if (!normalizedEmail) return;
+
+    setLoadingAction("access-help");
+    try {
+      const response = await fetch("/api/auth/access-help", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: normalizedEmail, note: "Solicitud desde el login: no recibe el código." }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.ok) {
+        setError(payload.error || "No se pudo registrar tu solicitud. Intenta de nuevo.");
+        return;
+      }
+      setNotice(
+        "Listo. Registramos tu solicitud y un asesor te va a contactar para validar tu acceso. No necesitas hacer nada más por ahora.",
       );
     } catch {
       setError("No se pudo conectar con el servicio de acceso.");
@@ -366,6 +407,26 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
               >
                 {codeCooldown.active ? codeCooldown.label : "Reenviar"}
               </SecondaryButton>
+            </div>
+
+            {/* Escalada sin dead-ends: SMS como canal alterno y, si nada llega, ayuda humana. */}
+            <div className="space-y-2 border-t pt-3" style={{ borderColor: "var(--vp-border)" }}>
+              <SecondaryButton
+                disabled={isLoading}
+                onClick={(e) => requestLoginCode(e, { channel: "sms" })}
+                icon={<Smartphone size={15} />}
+              >
+                {loadingAction === "code-request-sms" ? "Enviando SMS…" : "¿No llega? Recíbelo por SMS"}
+              </SecondaryButton>
+              <button
+                type="button"
+                disabled={isLoading}
+                onClick={requestAccessHelp}
+                className="block w-full text-center text-xs font-bold transition hover:opacity-80 disabled:opacity-60"
+                style={{ color: "var(--vp-accent)" }}
+              >
+                {loadingAction === "access-help" ? "Registrando tu solicitud…" : "Sigo sin recibir el código — solicitar ayuda"}
+              </button>
             </div>
           </form>
         )

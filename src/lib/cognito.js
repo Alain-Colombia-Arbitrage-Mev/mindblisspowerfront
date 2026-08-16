@@ -142,11 +142,16 @@ export function buildCognitoPasswordChoiceStartPayload({ clientId, clientSecret 
   };
 }
 
-export function buildCognitoEmailOtpStartPayload({ clientId, clientSecret = "", username }) {
+export function buildCognitoEmailOtpStartPayload({
+  clientId,
+  clientSecret = "",
+  username,
+  preferredChallenge = "EMAIL_OTP",
+}) {
   const normalizedUsername = normalizeUsername(username);
   const authParameters = {
     USERNAME: normalizedUsername,
-    PREFERRED_CHALLENGE: "EMAIL_OTP",
+    PREFERRED_CHALLENGE: preferredChallenge,
   };
 
   if (clientSecret) {

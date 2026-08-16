@@ -26,6 +26,9 @@ export async function POST(request) {
   const requestUrl = new URL(request.url);
   const body = await request.json().catch(() => ({}));
   const email = normalizeEmail(body.email);
+  // Canal del código: email (default) o sms (alterno, cuando el correo no llega).
+  const channel = body.channel === "sms" ? "sms" : "email";
+  const otpChallenge = channel === "sms" ? "SMS_OTP" : "EMAIL_OTP";
 
   if (!email) {
     return NextResponse.json({ error: "Ingresa un email válido. / Enter a valid email." }, { status: 400 });
@@ -114,6 +117,7 @@ export async function POST(request) {
       clientId: config.clientId,
       clientSecret: config.clientSecret,
       username: email,
+      preferredChallenge: otpChallenge,
     }),
   });
 
@@ -129,6 +133,7 @@ export async function POST(request) {
     config,
     email,
     body: startResponse.body,
+    otpChallenge,
   });
 
   if (!challengeResponse.ok) {
@@ -152,25 +157,29 @@ export async function POST(request) {
   const response = NextResponse.json({
     ok: true,
     mode: "cognito",
-    challenge: "EMAIL_OTP",
-    message: "Te enviamos un código por correo. Si no aparece en 1–2 min, revisa la carpeta de spam / correo no deseado.",
+    challenge: otpChallenge,
+    channel,
+    message:
+      channel === "sms"
+        ? "Te enviamos un código por SMS a tu teléfono. Puede tardar 1–2 min."
+        : "Te enviamos un código por correo. Si no aparece en 1–2 min, revisa la carpeta de spam / correo no deseado.",
     delivery: challengeResponse.delivery,
   });
   setCodeChallengeCookie(response, requestUrl, {
     email,
     mode: "cognito",
-    challengeName: "EMAIL_OTP",
+    challengeName: otpChallenge,
     session: challengeResponse.session,
   });
   return response;
 }
 
-async function resolveEmailOtpChallenge({ endpoint, config, email, body }) {
+async function resolveEmailOtpChallenge({ endpoint, config, email, body, otpChallenge = "EMAIL_OTP" }) {
   if (body.AuthenticationResult) {
     return { ok: true, tokens: body.AuthenticationResult };
   }
 
-  if (body.ChallengeName === "EMAIL_OTP") {
+  if (body.ChallengeName === otpChallenge) {
     return {
       ok: true,
       session: body.Session,
@@ -179,11 +188,14 @@ async function resolveEmailOtpChallenge({ endpoint, config, email, body }) {
   }
 
   if (body.ChallengeName === "SELECT_CHALLENGE") {
-    if (!hasEmailOtpChallenge(body)) {
+    if (!hasChallenge(body, otpChallenge)) {
       return {
         ok: false,
         status: 409,
-        error: "El usuario o el pool no tiene EMAIL_OTP habilitado. Activa ALLOW_USER_AUTH y Email OTP en Cognito.",
+        error:
+          otpChallenge === "SMS_OTP"
+            ? "No hay un teléfono válido para enviarte el código por SMS."
+            : "El usuario o el pool no tiene EMAIL_OTP habilitado. Activa ALLOW_USER_AUTH y Email OTP en Cognito.",
       };
     }
 
@@ -196,7 +208,7 @@ async function resolveEmailOtpChallenge({ endpoint, config, email, body }) {
         username: email,
         session: body.Session,
         challengeName: "SELECT_CHALLENGE",
-        responses: { ANSWER: "EMAIL_OTP" },
+        responses: { ANSWER: otpChallenge },
       }),
     });
 
@@ -212,7 +224,7 @@ async function resolveEmailOtpChallenge({ endpoint, config, email, body }) {
       return { ok: true, tokens: selectResponse.body.AuthenticationResult };
     }
 
-    if (selectResponse.body.ChallengeName === "EMAIL_OTP") {
+    if (selectResponse.body.ChallengeName === otpChallenge) {
       return {
         ok: true,
         session: selectResponse.body.Session,
@@ -239,7 +251,7 @@ function setCodeChallengeCookie(response, requestUrl, challenge) {
   setSessionCookie(response, CODE_CHALLENGE_COOKIE, value, requestUrl, CODE_CHALLENGE_MAX_AGE);
 }
 
-function hasEmailOtpChallenge(body) {
+function hasChallenge(body, name) {
   const challenges = [
     ...(Array.isArray(body.AvailableChallenges) ? body.AvailableChallenges : []),
     String(body.ChallengeParameters?.AvailableChallenges || ""),
@@ -248,7 +260,7 @@ function hasEmailOtpChallenge(body) {
     .split(",")
     .map((challenge) => challenge.trim());
 
-  return challenges.includes("EMAIL_OTP");
+  return challenges.includes(name);
 }
 
 function normalizeDelivery(challengeParameters = {}) {
