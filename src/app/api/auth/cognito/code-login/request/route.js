@@ -1,9 +1,12 @@
+import { createHash } from "node:crypto";
+
 import { NextResponse } from "next/server";
 
 import { authRateLimit } from "@/lib/auth-rate-limit";
 import {
   buildCognitoChallengeResponsePayload,
   buildCognitoEmailOtpStartPayload,
+  buildCognitoSecretHash,
   getCognitoIdentityProviderConfig,
 } from "@/lib/cognito";
 import { callCognito, getCognitoErrorCode, mapCognitoError, mapCognitoStatus, normalizeEmail } from "@/lib/cognito-api";
@@ -59,7 +62,7 @@ export async function POST(request) {
   // activo, no lo revela → el usuario espera un código que nunca llega. Si no
   // existe, lo enrutamos a registro (SignUp sí envía el código). null = no se
   // pudo verificar ⇒ seguimos con el OTP normal (fail-safe, no bloqueamos login).
-  const exists = await userExistsInPool(email);
+  const { exists, confirmed } = await userStatusInPool(email);
   if (exists === false) {
     // Miembro legacy: existe como afiliado ACTIVO en la DB (migrado desde el
     // sistema anterior) pero todavía NO tiene cuenta Cognito → nunca creó su
@@ -81,6 +84,26 @@ export async function POST(request) {
         email,
       },
       { status: 404 }
+    );
+  }
+
+  // Usuario existe pero UNCONFIRMED: el passwordless de Cognito NO envía código
+  // de login hasta confirmar la cuenta → el usuario quedaba atascado con "el
+  // código que nunca llega". Reenviamos el código de CONFIRMACIÓN y enrutamos al
+  // paso de confirmar (mismo flujo que el registro). confirmed===false sólo
+  // cuando el backend lo verificó; si no se pudo (null/legacy), no bloqueamos.
+  if (exists === true && confirmed === false) {
+    const resent = await resendConfirmationCode(email, config);
+    return NextResponse.json(
+      {
+        needsConfirm: true,
+        email,
+        error:
+          "Tu cuenta aún no está confirmada. Te reenviamos el código de confirmación por correo (revisa también spam). / " +
+          "Your account isn't confirmed yet. We've resent your confirmation code by email (check spam too).",
+        delivery: resent?.delivery || null,
+      },
+      { status: 409 }
     );
   }
 
@@ -260,19 +283,50 @@ function mapEmailOtpError(body) {
 // se pudo verificar (servicio no configurado, error, o el backend no tiene el
 // admin de Cognito) — en cuyo caso el caller NO bloquea el login. Gated por el
 // service token; el rate limit de arriba ("send") acota el oráculo de enumeración.
-async function userExistsInPool(email) {
+async function userStatusInPool(email) {
   const base = process.env.VP_PAYMENTS_URL;
   const token = process.env.PAYMENTS_SERVICE_TOKEN;
-  if (!base || !token) return null;
+  if (!base || !token) return { exists: null, confirmed: true };
   try {
     const resp = await fetch(`${base}/api/auth/user-exists?email=${encodeURIComponent(email)}`, {
       headers: { "X-VP-Service-Token": token },
       cache: "no-store",
     });
-    if (!resp.ok) return null;
+    if (!resp.ok) return { exists: null, confirmed: true };
     const data = await resp.json().catch(() => ({}));
-    if (!data.checked) return null;
-    return Boolean(data.exists);
+    if (!data.checked) return { exists: null, confirmed: true };
+    // confirmed ausente (backend anterior) ⇒ true: no tratar por error a un
+    // usuario válido como no-confirmado.
+    return {
+      exists: Boolean(data.exists),
+      confirmed: data.confirmed === undefined ? true : Boolean(data.confirmed),
+    };
+  } catch {
+    return { exists: null, confirmed: true };
+  }
+}
+
+// resendConfirmationCode reenvía el código de confirmación de SignUp usando el
+// username determinístico mp_<hash> (igual que el registro/confirm-signup).
+// Best-effort: cualquier fallo ⇒ null (el caller igual enruta a confirmar).
+async function resendConfirmationCode(email, config) {
+  try {
+    const username = `mp_${createHash("sha256").update(email).digest("hex").slice(0, 40)}`;
+    const payload = { ClientId: config.clientId, Username: username };
+    if (config.clientSecret) {
+      payload.SecretHash = buildCognitoSecretHash({
+        username,
+        clientId: config.clientId,
+        clientSecret: config.clientSecret,
+      });
+    }
+    const resp = await callCognito({
+      endpoint: config.endpoint,
+      target: "ResendConfirmationCode",
+      payload,
+    });
+    if (!resp.ok) return null;
+    return { delivery: resp.body?.CodeDeliveryDetails || null };
   } catch {
     return null;
   }
