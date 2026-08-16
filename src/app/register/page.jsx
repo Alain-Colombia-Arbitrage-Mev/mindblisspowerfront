@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, ClipboardCheck, Eye, EyeOff, Loader2, LogIn, UserPlus } from "lucide-react";
+import { ArrowRight, Check, ClipboardCheck, Eye, EyeOff, Loader2, LogIn, UserPlus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import AuthShell from "../_components/AuthShell";
 import { isMicrosoftEmail, suggestEmailFix, useResendCooldown } from "@/lib/useResendCooldown";
 import { composePhone, formatLocalPhone, isValidE164 } from "@/lib/phone";
+import { checkPassword, isValidPassword } from "@/lib/password";
 
 // Registro MÍNIMO: solo lo esencial para crear la cuenta. El resto del perfil
 // (país, ciudad, documento, fecha, preferencias) se completa en el onboarding.
@@ -162,8 +163,8 @@ export default function RegisterPage() {
     } else if (!/^\S+@\S+\.\S+$/.test(form.email)) {
       nextErrors.email = "Ingresa un email válido.";
     }
-    if (form.password.length < 8) {
-      nextErrors.password = "La contraseña debe tener mínimo 8 caracteres.";
+    if (!isValidPassword(form.password)) {
+      nextErrors.password = "La contraseña no cumple todos los requisitos (revisa la lista de abajo).";
     }
     if (form.confirmPassword !== form.password) {
       nextErrors.confirmPassword = "Las contraseñas no coinciden.";
@@ -483,6 +484,7 @@ export default function RegisterPage() {
               autoComplete="new-password"
               required
             />
+            <PasswordChecklist password={form.password} />
             <PasswordField
               id="confirmPassword"
               label="Confirmar contraseña"
@@ -661,6 +663,34 @@ function BannedModal() {
         </a>
       </div>
     </div>
+  );
+}
+
+// Checklist en vivo de la política de contraseña: cada requisito se pone verde
+// al cumplirse mientras el usuario escribe. Evita el rechazo tardío de Cognito.
+function PasswordChecklist({ password }) {
+  const { results } = checkPassword(password);
+  return (
+    <ul className="-mt-1 grid grid-cols-1 gap-1 sm:grid-cols-2" aria-label="Requisitos de la contraseña">
+      {results.map((rule) => (
+        <li
+          key={rule.key}
+          className="flex items-center gap-1.5 text-xs font-semibold transition-colors"
+          style={{ color: rule.met ? "var(--vp-accent)" : "var(--vp-subtle)" }}
+        >
+          <span
+            className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full"
+            style={{
+              background: rule.met ? "var(--vp-accent-muted)" : "transparent",
+              border: `1px solid ${rule.met ? "var(--vp-accent-border)" : "var(--vp-border)"}`,
+            }}
+          >
+            {rule.met ? <Check size={11} /> : null}
+          </span>
+          {rule.label}
+        </li>
+      ))}
+    </ul>
   );
 }
 

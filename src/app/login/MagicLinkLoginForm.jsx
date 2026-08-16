@@ -3,6 +3,7 @@
 import {
   ArrowLeft,
   ArrowRight,
+  Check,
   Eye,
   EyeOff,
   KeyRound,
@@ -16,6 +17,7 @@ import {
 import { useState } from "react";
 
 import { isMicrosoftEmail, suggestEmailFix, useResendCooldown } from "@/lib/useResendCooldown";
+import { checkPassword, isValidPassword } from "@/lib/password";
 
 const AUTH_STATE_MESSAGES = {
   "invalid-email": {
@@ -297,8 +299,8 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
       setError("Ingresa el código que recibiste por correo.");
       return;
     }
-    if (password.length < 8) {
-      setError("La nueva contraseña debe tener mínimo 8 caracteres.");
+    if (!isValidPassword(password)) {
+      setError("La nueva contraseña no cumple todos los requisitos (revisa la lista bajo el campo).");
       return;
     }
 
@@ -499,6 +501,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
             }}
             onToggle={() => setShowPassword((current) => !current)}
           />
+          <PasswordChecklist password={password} />
 
           <PrimaryButton disabled={isLoading} loading={loadingAction === "reset-confirm"} icon={<ArrowRight size={16} />}>
             Restablecer contraseña
@@ -519,6 +522,34 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
         </form>
       )}
     </div>
+  );
+}
+
+// Checklist en vivo de la política de contraseña (misma que el registro).
+function PasswordChecklist({ password }) {
+  if (!password) return null;
+  const { results } = checkPassword(password);
+  return (
+    <ul className="grid grid-cols-1 gap-1 sm:grid-cols-2" aria-label="Requisitos de la contraseña">
+      {results.map((rule) => (
+        <li
+          key={rule.key}
+          className="flex items-center gap-1.5 text-xs font-semibold"
+          style={{ color: rule.met ? "var(--vp-accent)" : "var(--vp-subtle)" }}
+        >
+          <span
+            className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full"
+            style={{
+              background: rule.met ? "var(--vp-accent-muted)" : "transparent",
+              border: `1px solid ${rule.met ? "var(--vp-accent-border)" : "var(--vp-border)"}`,
+            }}
+          >
+            {rule.met ? <Check size={11} /> : null}
+          </span>
+          {rule.label}
+        </li>
+      ))}
+    </ul>
   );
 }
 
