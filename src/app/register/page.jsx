@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import AuthShell from "../_components/AuthShell";
 import { isMicrosoftEmail, suggestEmailFix, useResendCooldown } from "@/lib/useResendCooldown";
+import { composePhone, formatLocalPhone, isValidE164 } from "@/lib/phone";
 
 // Registro MÍNIMO: solo lo esencial para crear la cuenta. El resto del perfil
 // (país, ciudad, documento, fecha, preferencias) se completa en el onboarding.
@@ -19,7 +20,8 @@ const initialForm = {
   acceptsPrivacy: false,
 };
 
-// Códigos de país comunes (LatAm + US/ES). value = prefijo E.164.
+// Códigos de país (LatAm completo + US/ES y comunes). value = prefijo E.164.
+// Ordenados por relevancia de la base (LatAm primero).
 const dialCodes = [
   ["+57", "🇨🇴 Colombia (+57)"],
   ["+52", "🇲🇽 México (+52)"],
@@ -30,26 +32,31 @@ const dialCodes = [
   ["+54", "🇦🇷 Argentina (+54)"],
   ["+56", "🇨🇱 Chile (+56)"],
   ["+591", "🇧🇴 Bolivia (+591)"],
+  ["+595", "🇵🇾 Paraguay (+595)"],
+  ["+598", "🇺🇾 Uruguay (+598)"],
   ["+507", "🇵🇦 Panamá (+507)"],
+  ["+506", "🇨🇷 Costa Rica (+506)"],
+  ["+505", "🇳🇮 Nicaragua (+505)"],
+  ["+504", "🇭🇳 Honduras (+504)"],
+  ["+503", "🇸🇻 El Salvador (+503)"],
   ["+502", "🇬🇹 Guatemala (+502)"],
+  ["+509", "🇭🇹 Haití (+509)"],
+  ["+1809", "🇩🇴 Rep. Dominicana (+1809)"],
+  ["+53", "🇨🇺 Cuba (+53)"],
   ["+34", "🇪🇸 España (+34)"],
+  ["+55", "🇧🇷 Brasil (+55)"],
+  ["+1787", "🇵🇷 Puerto Rico (+1787)"],
+  ["+39", "🇮🇹 Italia (+39)"],
+  ["+33", "🇫🇷 Francia (+33)"],
+  ["+44", "🇬🇧 Reino Unido (+44)"],
+  ["+49", "🇩🇪 Alemania (+49)"],
 ];
-
-// Combina código de país + número local en E.164 (lo que acepta Cognito).
-function composePhone(dialCode, local) {
-  const digits = String(local || "").replace(/\D/g, "").replace(/^0+/, "");
-  return `${dialCode}${digits}`;
-}
 
 const sideKpis = [
   { value: "1 min", label: "registro" },
   { value: "1", label: "perfil" },
   { value: "100%", label: "personal" },
 ];
-
-function isValidE164(phone) {
-  return /^\+[1-9]\d{7,14}$/.test(phone);
-}
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -489,18 +496,18 @@ export default function RegisterPage() {
             />
             <div>
               <label className="mb-2 block text-xs font-bold" htmlFor="phone" style={{ color: "var(--vp-muted)" }}>
-                Teléfono
+                Teléfono <span style={{ color: "var(--vp-subtle)" }}>· recibirás aquí tu código si el correo falla</span>
               </label>
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row">
                 <select
-                  aria-label="Código de país"
+                  aria-label="País"
                   value={form.dialCode}
                   onChange={(event) => updateField("dialCode", event.target.value)}
-                  className="min-h-12 w-full rounded-lg px-2 text-sm font-semibold outline-none"
+                  className="min-h-12 rounded-lg px-2 text-sm font-semibold outline-none sm:w-[46%] sm:shrink-0"
                   style={{ color: "var(--vp-text)", background: "var(--vp-surface-raised)", border: "1px solid var(--vp-border)" }}
                 >
                   {dialCodes.map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
+                    <option key={`${value}-${label}`} value={value}>{label}</option>
                   ))}
                 </select>
                 <input
@@ -508,10 +515,10 @@ export default function RegisterPage() {
                   type="tel"
                   inputMode="numeric"
                   autoComplete="tel-national"
-                  value={form.phone}
-                  onChange={(event) => updateField("phone", event.target.value.replace(/[^\d\s]/g, ""))}
+                  value={formatLocalPhone(form.phone)}
+                  onChange={(event) => updateField("phone", event.target.value.replace(/\D/g, ""))}
                   placeholder="300 123 4567"
-                  className="min-h-12 w-full min-w-0 rounded-lg px-3 text-base font-semibold tracking-widest outline-none"
+                  className="min-h-12 w-full min-w-0 flex-1 rounded-lg px-3 text-base font-semibold tracking-wider outline-none"
                   style={{
                     color: "var(--vp-text)",
                     background: "var(--vp-surface-raised)",
@@ -521,8 +528,14 @@ export default function RegisterPage() {
               </div>
               {errors.phone ? (
                 <p className="mt-2 text-xs font-semibold" style={{ color: "var(--vp-danger)" }}>{errors.phone}</p>
+              ) : form.phone.trim() ? (
+                <p className="mt-2 text-xs font-semibold leading-5" style={{ color: "var(--vp-accent)" }}>
+                  Se guardará como {form.dialCode} {formatLocalPhone(form.phone)}
+                </p>
               ) : (
-                <p className="mt-2 text-xs leading-5" style={{ color: "var(--vp-subtle)" }}>Solo el número, sin el código de país.</p>
+                <p className="mt-2 text-xs leading-5" style={{ color: "var(--vp-subtle)" }}>
+                  Escribe solo el número, sin el código de país.
+                </p>
               )}
             </div>
           </div>

@@ -28,13 +28,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Gate de build: compila EN EL RUNNER antes de tocar el box. Una rotura
-      # se detecta aquí (rápido, sin consumir CPU del servidor que sirve a los
-      # miembros); el box igual re-construye con sus .env reales.
+      # Gate de tests + build: corre las pruebas unitarias y compila EN EL RUNNER
+      # antes de tocar el box. Cualquier rotura (test o build) aborta el deploy
+      # aquí (rápido, sin consumir CPU del servidor que sirve a los miembros); el
+      # box igual re-construye con sus .env reales. Ningún push llega a prod sin
+      # pasar los tests.
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
+      - name: Install deps
+        run: npm ci --no-audit --no-fund
+      - name: Test gate
+        run: npm test
       - name: Build gate
-        run: npm ci --no-audit --no-fund && npm run build
+        run: npm run build
 
       - name: Resolve target instance
         id: t
