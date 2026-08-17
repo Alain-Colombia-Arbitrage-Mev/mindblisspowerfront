@@ -496,22 +496,40 @@ export default function RegisterPage() {
               autoComplete="new-password"
               required
             />
-            <div>
-              <label className="mb-2 block text-xs font-bold" htmlFor="phone" style={{ color: "var(--vp-muted)" }}>
-                Teléfono <span style={{ color: "var(--vp-subtle)" }}>· recibirás aquí tu código si el correo falla</span>
-              </label>
-              <div className="grid gap-2 sm:grid-cols-[11rem_minmax(0,1fr)]">
+          </div>
+
+          <div
+            className="rounded-xl p-4"
+            style={{
+              background: "var(--vp-surface-raised)",
+              border: errors.phone ? "1px solid var(--vp-danger)" : "1px solid var(--vp-border)",
+            }}
+          >
+            <label className="block text-xs font-bold" htmlFor="phone" style={{ color: "var(--vp-muted)" }}>
+              Teléfono <span style={{ color: "var(--vp-subtle)" }}>· recibirás aquí tu código si el correo falla</span>
+            </label>
+            <div className="mt-3 grid gap-3 md:grid-cols-[12rem_minmax(20rem,1fr)]">
+              <div>
+                <label className="mb-1.5 block text-[11px] font-bold uppercase" htmlFor="dialCode" style={{ color: "var(--vp-subtle)" }}>
+                  País / código
+                </label>
                 <select
-                  aria-label="País"
+                  id="dialCode"
+                  aria-label="País / código"
                   value={form.dialCode}
                   onChange={(event) => updateField("dialCode", event.target.value)}
                   className="min-h-12 w-full rounded-lg px-3 text-sm font-semibold outline-none"
-                  style={{ color: "var(--vp-text)", background: "var(--vp-surface-raised)", border: "1px solid var(--vp-border)" }}
+                  style={{ color: "var(--vp-text)", background: "var(--vp-surface)", border: "1px solid var(--vp-border)" }}
                 >
                   {dialCodes.map(([value, label]) => (
                     <option key={`${value}-${label}`} value={value}>{label}</option>
                   ))}
                 </select>
+              </div>
+              <div className="min-w-0">
+                <label className="mb-1.5 block text-[11px] font-bold uppercase" htmlFor="phone" style={{ color: "var(--vp-subtle)" }}>
+                  Número local
+                </label>
                 <input
                   id="phone"
                   type="tel"
@@ -519,27 +537,27 @@ export default function RegisterPage() {
                   autoComplete="tel-national"
                   value={formatLocalPhone(form.phone)}
                   onChange={(event) => updateField("phone", event.target.value.replace(/\D/g, ""))}
-                  placeholder="300 123 4567"
-                  className="min-h-12 w-full min-w-0 flex-1 rounded-lg px-3 text-base font-semibold tracking-wider outline-none"
+                  placeholder="304 657 200 91"
+                  className="min-h-12 w-full min-w-0 rounded-lg px-4 text-lg font-semibold outline-none"
                   style={{
                     color: "var(--vp-text)",
-                    background: "var(--vp-surface-raised)",
+                    background: "var(--vp-surface)",
                     border: errors.phone ? "1px solid var(--vp-danger)" : "1px solid var(--vp-border)",
                   }}
                 />
               </div>
-              {errors.phone ? (
-                <p className="mt-2 text-xs font-semibold" style={{ color: "var(--vp-danger)" }}>{errors.phone}</p>
-              ) : form.phone.trim() ? (
-                <p className="mt-2 text-xs font-semibold leading-5" style={{ color: "var(--vp-accent)" }}>
-                  Se guardará como {form.dialCode} {formatLocalPhone(form.phone)}
-                </p>
-              ) : (
-                <p className="mt-2 text-xs leading-5" style={{ color: "var(--vp-subtle)" }}>
-                  Escribe solo el número, sin el código de país.
-                </p>
-              )}
             </div>
+            {errors.phone ? (
+              <p className="mt-2 text-xs font-semibold" style={{ color: "var(--vp-danger)" }}>{errors.phone}</p>
+            ) : form.phone.trim() ? (
+              <p className="mt-2 text-xs font-semibold leading-5" style={{ color: "var(--vp-accent)" }}>
+                Se guardará como {form.dialCode} {formatLocalPhone(form.phone)}.
+              </p>
+            ) : (
+              <p className="mt-2 text-xs leading-5" style={{ color: "var(--vp-subtle)" }}>
+                Escribe solo el número local; el código de país se agrega desde el selector.
+              </p>
+            )}
           </div>
 
           <CheckRow
