@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Check, ClipboardCheck, Eye, EyeOff, Loader2, LogIn, UserPlus } from "lucide-react";
+import { ArrowRight, Check, ClipboardCheck, Eye, EyeOff, Loader2, LockKeyhole, LogIn, Mail, UserPlus, UserRound } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import AuthShell from "../_components/AuthShell";
@@ -441,13 +441,15 @@ export default function RegisterPage() {
           </form>
         ) : (
         <form className="space-y-5" onSubmit={handleSubmit}>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4">
             <Field
               id="fullName"
               label="Nombre completo"
               value={form.fullName}
               onChange={(event) => updateField("fullName", event.target.value)}
               error={errors.fullName}
+              icon={<UserRound size={17} />}
+              placeholder="Nombre y apellido"
               autoComplete="name"
               required
             />
@@ -459,6 +461,8 @@ export default function RegisterPage() {
                 value={form.email}
                 onChange={(event) => updateField("email", event.target.value)}
                 error={errors.email}
+                icon={<Mail size={17} />}
+                placeholder="correo@dominio.com"
                 autoComplete="email"
                 required
               />
@@ -479,23 +483,35 @@ export default function RegisterPage() {
               value={form.password}
               onChange={(event) => updateField("password", event.target.value)}
               error={errors.password}
+              icon={<LockKeyhole size={17} />}
+              placeholder="Mínimo 8 caracteres"
               showPassword={showPassword}
               onTogglePassword={() => setShowPassword((current) => !current)}
               autoComplete="new-password"
               required
             />
-            <PasswordChecklist password={form.password} />
             <PasswordField
               id="confirmPassword"
               label="Confirmar contraseña"
               value={form.confirmPassword}
               onChange={(event) => updateField("confirmPassword", event.target.value)}
               error={errors.confirmPassword}
+              icon={<LockKeyhole size={17} />}
+              placeholder="Repite la contraseña"
               showPassword={showPassword}
               onTogglePassword={() => setShowPassword((current) => !current)}
               autoComplete="new-password"
               required
             />
+            <div
+              className="rounded-lg px-3 py-3"
+              style={{
+                background: "var(--vp-surface-raised)",
+                border: "1px solid var(--vp-border)",
+              }}
+            >
+              <PasswordChecklist password={form.password} />
+            </div>
           </div>
 
           <div
@@ -689,11 +705,11 @@ function BannedModal() {
 function PasswordChecklist({ password }) {
   const { results } = checkPassword(password);
   return (
-    <ul className="-mt-1 grid grid-cols-1 gap-1 sm:grid-cols-2" aria-label="Requisitos de la contraseña">
+    <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2" aria-label="Requisitos de la contraseña">
       {results.map((rule) => (
         <li
           key={rule.key}
-          className="flex items-center gap-1.5 text-xs font-semibold transition-colors"
+          className="flex min-h-5 items-center gap-2 text-xs font-semibold leading-5 transition-colors"
           style={{ color: rule.met ? "var(--vp-accent)" : "var(--vp-subtle)" }}
         >
           <span
@@ -712,28 +728,41 @@ function PasswordChecklist({ password }) {
   );
 }
 
-function Field({ id, label, error, helper, ...props }) {
+function Field({ id, label, error, helper, icon, ...props }) {
+  const describedBy = error ? `${id}-error` : helper ? `${id}-helper` : undefined;
   return (
-    <div>
+    <div className="min-w-0">
       <label className="mb-2 block text-xs font-bold" htmlFor={id} style={{ color: "var(--vp-muted)" }}>
         {label}
       </label>
-      <input
-        id={id}
-        className="min-h-12 w-full rounded-lg px-3 text-sm font-semibold outline-none"
-        style={{
-          color: "var(--vp-text)",
-          background: "var(--vp-surface-raised)",
-          border: error ? "1px solid var(--vp-danger)" : "1px solid var(--vp-border)",
-        }}
-        {...props}
-      />
+      <div className="relative">
+        {icon ? (
+          <span
+            className="pointer-events-none absolute left-3 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center"
+            style={{ color: "var(--vp-subtle)" }}
+          >
+            {icon}
+          </span>
+        ) : null}
+        <input
+          id={id}
+          aria-invalid={Boolean(error)}
+          aria-describedby={describedBy}
+          className={`min-h-12 w-full rounded-lg ${icon ? "pl-11 pr-3" : "px-3"} text-base font-semibold outline-none transition`}
+          style={{
+            color: "var(--vp-text)",
+            background: "var(--vp-surface-raised)",
+            border: error ? "1px solid var(--vp-danger)" : "1px solid var(--vp-border)",
+          }}
+          {...props}
+        />
+      </div>
       {error ? (
-        <p className="mt-2 text-xs font-semibold" style={{ color: "var(--vp-danger)" }}>
+        <p id={`${id}-error`} className="mt-2 text-xs font-semibold" style={{ color: "var(--vp-danger)" }}>
           {error}
         </p>
       ) : helper ? (
-        <p className="mt-2 text-xs leading-5" style={{ color: "var(--vp-subtle)" }}>
+        <p id={`${id}-helper`} className="mt-2 text-xs leading-5" style={{ color: "var(--vp-subtle)" }}>
           {helper}
         </p>
       ) : null}
@@ -745,20 +774,31 @@ function PasswordField({
   id,
   label,
   error,
+  icon,
   showPassword,
   onTogglePassword,
   ...props
 }) {
   return (
-    <div>
+    <div className="min-w-0">
       <label className="mb-2 block text-xs font-bold" htmlFor={id} style={{ color: "var(--vp-muted)" }}>
         {label}
       </label>
       <div className="relative">
+        {icon ? (
+          <span
+            className="pointer-events-none absolute left-3 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center"
+            style={{ color: "var(--vp-subtle)" }}
+          >
+            {icon}
+          </span>
+        ) : null}
         <input
           id={id}
           type={showPassword ? "text" : "password"}
-          className="min-h-12 w-full rounded-lg px-3 pr-12 text-sm font-semibold outline-none"
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? `${id}-error` : undefined}
+          className={`min-h-12 w-full rounded-lg ${icon ? "pl-11" : "pl-3"} pr-12 text-base font-semibold outline-none transition`}
           style={{
             color: "var(--vp-text)",
             background: "var(--vp-surface-raised)",
@@ -777,7 +817,7 @@ function PasswordField({
         </button>
       </div>
       {error && (
-        <p className="mt-2 text-xs font-semibold" style={{ color: "var(--vp-danger)" }}>
+        <p id={`${id}-error`} className="mt-2 text-xs font-semibold" style={{ color: "var(--vp-danger)" }}>
           {error}
         </p>
       )}
