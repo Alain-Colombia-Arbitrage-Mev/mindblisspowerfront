@@ -508,7 +508,7 @@ export default function RegisterPage() {
             <label className="block text-xs font-bold" htmlFor="phone" style={{ color: "var(--vp-muted)" }}>
               Teléfono <span style={{ color: "var(--vp-subtle)" }}>· recibirás aquí tu código si el correo falla</span>
             </label>
-            <div className="mt-3 grid gap-3 md:grid-cols-[12rem_minmax(20rem,1fr)]">
+            <div className="mt-3 grid gap-3">
               <div>
                 <label className="mb-1.5 block text-[11px] font-bold uppercase" htmlFor="dialCode" style={{ color: "var(--vp-subtle)" }}>
                   País / código
