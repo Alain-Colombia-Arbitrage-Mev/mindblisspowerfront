@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
  * Resumen de pagos + posición + comisiones del miembro autenticado.
  * Valida la sesión Cognito y delega al servicio Go vp-payments.
  */
-export async function GET() {
+export async function GET(request) {
   const cookieStore = await cookies();
   const idToken = cookieStore.get("vp_id_token")?.value;
   if (!idToken) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
@@ -24,7 +24,11 @@ export async function GET() {
   if (!base || !token) return NextResponse.json({ error: "payments-unconfigured" }, { status: 503 });
 
   try {
-    const resp = await fetch(`${base}/api/payments/me?email=${encodeURIComponent(email)}`, {
+    const requestUrl = new URL(request.url);
+    const fresh = requestUrl.searchParams.get("fresh") === "1";
+    const upstreamUrl =
+      `${base}/api/payments/me?email=${encodeURIComponent(email)}${fresh ? "&fresh=1" : ""}`;
+    const resp = await fetch(upstreamUrl, {
       headers: { "X-VP-Service-Token": token, ...(await idTokenHeader()) },
       cache: "no-store",
     });

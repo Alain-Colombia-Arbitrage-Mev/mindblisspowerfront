@@ -31,8 +31,9 @@ export async function POST(request) {
       headers: { "content-type": "application/json", "X-VP-Service-Token": token },
       body: JSON.stringify({
         email,
-        phone: String(body.phone || "").trim(),
-        note: String(body.note || "").trim(),
+        phone: normalizeSupportPhone(body.phone),
+        note: String(body.note || "").trim().slice(0, 500),
+        reason: String(body.reason || "").trim().slice(0, 80),
       }),
       cache: "no-store",
     });
@@ -44,4 +45,11 @@ export async function POST(request) {
   } catch {
     return NextResponse.json({ error: "No se pudo registrar tu solicitud. Intenta de nuevo." }, { status: 502 });
   }
+}
+
+function normalizeSupportPhone(value) {
+  return String(value || "")
+    .replace(/[^\d+().\s-]/g, "")
+    .trim()
+    .slice(0, 40);
 }

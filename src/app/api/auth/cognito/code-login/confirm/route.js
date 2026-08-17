@@ -18,7 +18,7 @@ export async function POST(request) {
   const requestUrl = new URL(request.url);
   const body = await request.json().catch(() => ({}));
   const email = normalizeEmail(body.email);
-  const code = String(body.code || "").trim();
+  const code = normalizeOtpCode(body.code);
 
   if (!email) {
     return NextResponse.json({ error: "Ingresa un email válido. / Enter a valid email." }, { status: 400 });
@@ -38,8 +38,11 @@ export async function POST(request) {
   const challenge = readCodeChallenge(request);
   if (!challenge || challenge.email !== email) {
     return NextResponse.json(
-      { error: "Solicita un código nuevo para continuar. / Request a new code to continue." },
-      { status: 400 }
+      {
+        error: "La sesión del código expiró. Solicita un código nuevo para continuar. / The code session expired. Request a new code to continue.",
+        needsNewCode: true,
+      },
+      { status: 409 }
     );
   }
 
@@ -84,10 +87,10 @@ export async function POST(request) {
   });
 
   if (!cognitoResponse.ok) {
-    return NextResponse.json(
-      { error: mapEmailOtpConfirmError(cognitoResponse.body) },
-      { status: mapCognitoStatus(cognitoResponse.body) }
-    );
+    const mapped = mapEmailOtpConfirmError(cognitoResponse.body);
+    const response = NextResponse.json(mapped.body, { status: mapped.status });
+    if (mapped.clearChallenge) clearCookie(response, CODE_CHALLENGE_COOKIE);
+    return response;
   }
 
   if (cognitoResponse.body.ChallengeName) {
@@ -134,13 +137,52 @@ function readCodeChallenge(request) {
 function mapEmailOtpConfirmError(body) {
   const code = getCognitoErrorCode(body);
 
-  if (code === "CodeMismatchException" || code === "NotAuthorizedException") {
-    return "El código no es válido. / The code is not valid.";
+  if (code === "CodeMismatchException") {
+    return {
+      status: 400,
+      body: { error: "El código no es válido. / The code is not valid." },
+    };
+  }
+
+  if (code === "NotAuthorizedException") {
+    const message = String(body?.message || "");
+    if (/session|expired/i.test(message)) {
+      return expiredChallengeResponse();
+    }
+    return {
+      status: 400,
+      body: { error: "El código no es válido. / The code is not valid." },
+    };
   }
 
   if (code === "ExpiredCodeException") {
-    return "El código expiró. Solicita uno nuevo. / The code expired. Request a new one.";
+    return expiredChallengeResponse();
   }
 
-  return mapCognitoError(body, "No se pudo validar el código. / The code could not be validated.");
+  if (code === "InvalidParameterException") {
+    const message = String(body?.message || "");
+    if (/session|challenge/i.test(message)) {
+      return expiredChallengeResponse();
+    }
+  }
+
+  return {
+    status: mapCognitoStatus(body),
+    body: { error: mapCognitoError(body, "No se pudo validar el código. / The code could not be validated.") },
+  };
+}
+
+function expiredChallengeResponse() {
+  return {
+    status: 409,
+    clearChallenge: true,
+    body: {
+      error: "El código expiró o fue reemplazado por uno nuevo. Solicita otro código. / The code expired or was replaced by a new one. Request another code.",
+      needsNewCode: true,
+    },
+  };
+}
+
+function normalizeOtpCode(value) {
+  return String(value || "").replace(/[\s-]+/g, "").trim();
 }

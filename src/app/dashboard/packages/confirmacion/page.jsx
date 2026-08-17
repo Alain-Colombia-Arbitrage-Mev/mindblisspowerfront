@@ -27,6 +27,7 @@ export default function PaymentConfirmationPage() {
 
   const [phase, setPhase] = useState(paid ? "verificando" : canceled ? "cancelado" : "desconocido");
   const [summary, setSummary] = useState(null);
+  const [positioned, setPositioned] = useState(false);
   const pollRef = useRef(null);
   const baselineRef = useRef(null);
 
@@ -38,7 +39,12 @@ export default function PaymentConfirmationPage() {
     const check = async () => {
       tries += 1;
       try {
-        const r = await fetch("/api/payments/me", { cache: "no-store" });
+        const [r, t] = await Promise.all([
+          fetch("/api/payments/me?fresh=1", { cache: "no-store" }),
+          fetch("/api/member/tree", { cache: "no-store" }),
+        ]);
+        const tree = t.ok ? await t.json().catch(() => null) : null;
+        if (tree?.positioned) setPositioned(true);
         if (r.ok) {
           const d = await r.json();
           setSummary(d);
@@ -46,7 +52,7 @@ export default function PaymentConfirmationPage() {
           // Baseline en la 1ª lectura; consideramos "activa" si hay al menos una
           // membresía activa (la recién comprada normalmente aparece en segundos).
           if (baselineRef.current === null) baselineRef.current = active;
-          if (active > 0) {
+          if (active > 0 && tree?.positioned) {
             setPhase("activa");
             clearInterval(pollRef.current);
             return;
@@ -108,7 +114,7 @@ export default function PaymentConfirmationPage() {
             {desconocido
               ? "No encontramos información de un pago reciente en esta sesión. Si acabas de pagar, tu membresía aparecerá en \"Mis pagos\" en unos minutos."
               : activa
-                ? "Tu membresía está activa. Tu posición en la red quedó habilitada y ya puedes operar."
+                ? "Tu membresía está activa y tu posición en la red quedó habilitada."
                 : verificando
                   ? "Estamos activando tu membresía. Esto toma solo unos segundos…"
                   : "Tu pago fue recibido. La activación de tu membresía se completará en breve; la verás reflejada en \"Mis pagos\"."}
@@ -121,10 +127,11 @@ export default function PaymentConfirmationPage() {
             >
               <Detail
                 label="Estado"
-                value={activa ? "Membresía activa" : "Procesando activación"}
+                value={activa ? "Membresía y árbol listos" : "Procesando activación"}
                 accent={activa}
               />
               <Detail label="Membresías activas" value={String(summary?.active_packages ?? "…")} />
+              <Detail label="Posición en árbol" value={positioned ? "Lista" : "Sincronizando"} accent={positioned} />
               {lastPayment && (
                 <>
                   <Detail label="Monto" value={money(lastPayment.total_usd ?? lastPayment.amount_usd)} />
@@ -154,7 +161,7 @@ export default function PaymentConfirmationPage() {
   );
 }
 
-function Detail({ label, value, accent }) {
+function Detail({ label, value, accent = false }) {
   return (
     <div>
       <div className="text-[11px] font-bold uppercase" style={{ letterSpacing: "0.12em", color: "var(--vp-subtle)" }}>

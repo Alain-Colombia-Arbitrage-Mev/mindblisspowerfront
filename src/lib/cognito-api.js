@@ -26,6 +26,7 @@ export function mapCognitoStatus(body) {
   const code = getCognitoErrorCode(body);
   if (code === "UsernameExistsException") return 409;
   if (code === "UserNotFoundException") return 404;
+  if (code === "UserNotConfirmedException" || code === "PasswordResetRequiredException") return 409;
   if (
     code === "InvalidPasswordException" ||
     code === "InvalidParameterException" ||

@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 export async function POST(request) {
   const body = await request.json().catch(() => ({}));
   const email = normalizeEmail(body.email);
-  const code = String(body.code || "").trim();
+  const code = String(body.code || "").replace(/[\s-]+/g, "").trim();
   const resend = Boolean(body.resend);
   // Antes de confirmar, el alias por email aún no existe: usar el username real.
   // Si el front no lo trae (p.ej. link de reactivación "reanudar registro"), se

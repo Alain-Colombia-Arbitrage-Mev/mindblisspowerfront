@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 export async function POST(request) {
   const body = await request.json().catch(() => ({}));
   const email = normalizeEmail(body.email);
-  const code = String(body.code || "").trim();
+  const code = String(body.code || "").replace(/[\s-]+/g, "").trim();
   const password = String(body.password || "");
 
   if (!email) {

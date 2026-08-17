@@ -24,7 +24,7 @@ export default function PaywallGate({ children }) {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/payments/me", { cache: "no-store" })
+    fetch("/api/payments/me?fresh=1", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (!cancelled) {
@@ -101,7 +101,7 @@ export default function PaywallGate({ children }) {
   );
 }
 
-function Stat({ label, value, accent }) {
+function Stat({ label, value, accent = false }) {
   return (
     <div className="rounded-2xl p-4" style={{ background: "var(--vp-bg)", border: "1px solid var(--vp-border)" }}>
       <div className="text-[10px] font-black uppercase tracking-wider" style={{ color: "var(--vp-subtle)" }}>

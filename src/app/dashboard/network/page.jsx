@@ -25,31 +25,55 @@ function StatusCard({ children }) {
 export default function NetworkPage() {
   const [tab, setTab] = useState("generation");
   const [memberName, setMemberName] = useState("");
-  const [state, setState] = useState({ loading: true, error: "", data: null });
+  const [state, setState] = useState({ loading: true, error: "", data: null, summary: null, syncing: false });
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/auth/session", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d) => {
-        if (!cancelled && d?.name) setMemberName(d.name);
-      })
-      .catch(() => {});
-    fetch("/api/member/tree")
-      .then(async (response) => {
-        const payload = await response.json().catch(() => ({}));
+    let timer = null;
+    let tries = 0;
+    const maxTries = 20; // ~60s para cubrir webhook + lag de RDS
+
+    const load = async () => {
+      tries += 1;
+      try {
+        const [session, treeResponse, summaryResponse] = await Promise.all([
+          fetch("/api/auth/session", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
+          fetch("/api/member/tree", { cache: "no-store" }),
+          fetch("/api/payments/me?fresh=1", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
+        ]);
+        const payload = await treeResponse.json().catch(() => ({}));
         if (cancelled) return;
-        if (!response.ok) {
-          setState({ loading: false, error: payload.error || "No se pudo cargar tu posición.", data: null });
+        if (session?.name) setMemberName(session.name);
+        if (!treeResponse.ok) {
+          setState({ loading: false, error: payload.error || "No se pudo cargar tu posición.", data: null, summary: summaryResponse, syncing: false });
           return;
         }
-        setState({ loading: false, error: "", data: payload });
-      })
-      .catch(() => {
-        if (!cancelled) setState({ loading: false, error: "Sin conexión con el árbol.", data: null });
-      });
+
+        const active = Number(summaryResponse?.active_packages ?? 0) > 0;
+        const latestStatus = summaryResponse?.payments?.[0]?.status;
+        const paymentReceived = active || ["paid", "activated", "needs_placement"].includes(latestStatus);
+        const shouldPoll = paymentReceived && !payload?.positioned && latestStatus !== "needs_placement" && tries < maxTries;
+
+        setState({
+          loading: false,
+          error: "",
+          data: payload,
+          summary: summaryResponse,
+          syncing: shouldPoll,
+        });
+
+        if (shouldPoll) {
+          timer = setTimeout(load, 3000);
+        }
+      } catch {
+        if (!cancelled) setState({ loading: false, error: "Sin conexión con el árbol.", data: null, summary: null, syncing: false });
+      }
+    };
+
+    load();
     return () => {
       cancelled = true;
+      if (timer) clearTimeout(timer);
     };
   }, []);
 
@@ -83,16 +107,33 @@ export default function NetworkPage() {
   }
 
   if (!state.data?.positioned) {
+    const latestStatus = state.summary?.payments?.[0]?.status;
+    const active = Number(state.summary?.active_packages ?? 0) > 0;
+    const paymentReceived = active || ["paid", "activated", "needs_placement"].includes(latestStatus);
+    const needsPlacement = latestStatus === "needs_placement";
+
     return (
       <div className="p-6">
         <StatusCard>
-          <Network size={18} style={{ color: "var(--vp-accent)" }} />
+          {state.syncing ? (
+            <Loader2 className="animate-spin" size={18} style={{ color: "var(--vp-accent)" }} />
+          ) : (
+            <Network size={18} style={{ color: "var(--vp-accent)" }} />
+          )}
           <div>
             <p className="m-0 text-sm font-bold" style={{ color: "var(--vp-text)" }}>
-              Aún no tienes posición en el árbol
+              {needsPlacement
+                ? "Tu pago requiere colocación manual"
+                : paymentReceived
+                  ? "Estamos sincronizando tu posición"
+                  : "Aún no tienes posición en el árbol"}
             </p>
             <p className="m-0 mt-1 text-xs" style={{ color: "var(--vp-muted)" }}>
-              Tu posición se asigna al activar tu primera membresía.
+              {needsPlacement
+                ? "Operaciones debe asignar tu patrocinador o nodo antes de mostrarte en el árbol binario."
+                : paymentReceived
+                  ? "Tu pago ya fue recibido. Esta pantalla se actualiza sola mientras el backend termina de reflejar tu ubicación."
+                  : "Tu posición se asigna al activar tu primera membresía."}
             </p>
           </div>
         </StatusCard>

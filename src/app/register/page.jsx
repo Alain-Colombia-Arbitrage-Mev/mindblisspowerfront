@@ -400,7 +400,7 @@ export default function RegisterPage() {
               id="confirmCode"
               label={`Código enviado a ${form.email}`}
               value={confirmCode}
-              onChange={(event) => setConfirmCode(event.target.value.replace(/\s+/g, ""))}
+              onChange={(event) => setConfirmCode(event.target.value.replace(/[\s-]+/g, ""))}
               placeholder="········"
               inputMode="numeric"
               autoComplete="one-time-code"
@@ -500,12 +500,12 @@ export default function RegisterPage() {
               <label className="mb-2 block text-xs font-bold" htmlFor="phone" style={{ color: "var(--vp-muted)" }}>
                 Teléfono <span style={{ color: "var(--vp-subtle)" }}>· recibirás aquí tu código si el correo falla</span>
               </label>
-              <div className="flex flex-col gap-2 sm:flex-row">
+              <div className="grid gap-2 sm:grid-cols-[11rem_minmax(0,1fr)]">
                 <select
                   aria-label="País"
                   value={form.dialCode}
                   onChange={(event) => updateField("dialCode", event.target.value)}
-                  className="min-h-12 rounded-lg px-2 text-sm font-semibold outline-none sm:w-[46%] sm:shrink-0"
+                  className="min-h-12 w-full rounded-lg px-3 text-sm font-semibold outline-none"
                   style={{ color: "var(--vp-text)", background: "var(--vp-surface-raised)", border: "1px solid var(--vp-border)" }}
                 >
                   {dialCodes.map(([value, label]) => (

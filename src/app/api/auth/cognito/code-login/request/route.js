@@ -65,7 +65,7 @@ export async function POST(request) {
   // activo, no lo revela → el usuario espera un código que nunca llega. Si no
   // existe, lo enrutamos a registro (SignUp sí envía el código). null = no se
   // pudo verificar ⇒ seguimos con el OTP normal (fail-safe, no bloqueamos login).
-  const { exists, confirmed } = await userStatusInPool(email);
+  const { exists, confirmed, phoneLinked, phoneVerified, phoneDestination } = await userStatusInPool(email);
   if (exists === false) {
     // Miembro legacy: existe como afiliado ACTIVO en la DB (migrado desde el
     // sistema anterior) pero todavía NO tiene cuenta Cognito → nunca creó su
@@ -110,6 +110,11 @@ export async function POST(request) {
     );
   }
 
+  if (channel === "sms" && exists === true) {
+    const phoneIssue = phoneIssueResponse({ phoneLinked, phoneVerified, phoneDestination });
+    if (phoneIssue) return phoneIssue;
+  }
+
   const startResponse = await callCognito({
     endpoint: config.endpoint,
     target: "InitiateAuth",
@@ -122,8 +127,23 @@ export async function POST(request) {
   });
 
   if (!startResponse.ok) {
+    if (getCognitoErrorCode(startResponse.body) === "UserNotConfirmedException") {
+      const resent = await resendConfirmationCode(email, config);
+      return NextResponse.json(
+        {
+          needsConfirm: true,
+          email,
+          error:
+            "Tu cuenta aún no está confirmada. Te reenviamos el código de confirmación por correo (revisa también spam). / " +
+            "Your account isn't confirmed yet. We've resent your confirmation code by email (check spam too).",
+          delivery: resent?.delivery || null,
+        },
+        { status: 409 }
+      );
+    }
+
     return NextResponse.json(
-      { error: mapEmailOtpError(startResponse.body) },
+      smsOtpErrorBody(startResponse.body, otpChallenge),
       { status: mapCognitoStatus(startResponse.body) }
     );
   }
@@ -138,7 +158,12 @@ export async function POST(request) {
 
   if (!challengeResponse.ok) {
     return NextResponse.json(
-      { error: challengeResponse.error },
+      {
+        error: challengeResponse.error,
+        needsPhoneLink: Boolean(challengeResponse.needsPhoneLink),
+        needsPhoneVerification: Boolean(challengeResponse.needsPhoneVerification),
+        reason: challengeResponse.reason || undefined,
+      },
       { status: challengeResponse.status || 400 }
     );
   }
@@ -183,7 +208,7 @@ async function resolveEmailOtpChallenge({ endpoint, config, email, body, otpChal
     return {
       ok: true,
       session: body.Session,
-      delivery: normalizeDelivery(body.ChallengeParameters),
+      delivery: normalizeDelivery(body.ChallengeParameters, otpChallenge),
     };
   }
 
@@ -192,9 +217,11 @@ async function resolveEmailOtpChallenge({ endpoint, config, email, body, otpChal
       return {
         ok: false,
         status: 409,
+        needsPhoneLink: otpChallenge === "SMS_OTP",
+        reason: otpChallenge === "SMS_OTP" ? "sms_unavailable" : undefined,
         error:
           otpChallenge === "SMS_OTP"
-            ? "No hay un teléfono válido para enviarte el código por SMS."
+            ? "No pudimos enviar SMS porque tu cuenta no tiene un teléfono vinculado y validado. Solicita ayuda para vincularlo de forma segura."
             : "El usuario o el pool no tiene EMAIL_OTP habilitado. Activa ALLOW_USER_AUTH y Email OTP en Cognito.",
       };
     }
@@ -216,7 +243,9 @@ async function resolveEmailOtpChallenge({ endpoint, config, email, body, otpChal
       return {
         ok: false,
         status: mapCognitoStatus(selectResponse.body),
-        error: mapEmailOtpError(selectResponse.body),
+        error: mapEmailOtpError(selectResponse.body, otpChallenge),
+        needsPhoneLink: otpChallenge === "SMS_OTP",
+        reason: otpChallenge === "SMS_OTP" ? "sms_unavailable" : undefined,
       };
     }
 
@@ -228,7 +257,7 @@ async function resolveEmailOtpChallenge({ endpoint, config, email, body, otpChal
       return {
         ok: true,
         session: selectResponse.body.Session,
-        delivery: normalizeDelivery(selectResponse.body.ChallengeParameters),
+        delivery: normalizeDelivery(selectResponse.body.ChallengeParameters, otpChallenge),
       };
     }
 
@@ -263,17 +292,27 @@ function hasChallenge(body, name) {
   return challenges.includes(name);
 }
 
-function normalizeDelivery(challengeParameters = {}) {
+function normalizeDelivery(challengeParameters = {}, otpChallenge = "EMAIL_OTP") {
   return {
-    Destination: challengeParameters.CODE_DELIVERY_DESTINATION || challengeParameters.email || "",
-    DeliveryMedium: "EMAIL",
+    Destination:
+      challengeParameters.CODE_DELIVERY_DESTINATION ||
+      challengeParameters.email ||
+      challengeParameters.phone_number ||
+      "",
+    DeliveryMedium: otpChallenge === "SMS_OTP" ? "SMS" : "EMAIL",
   };
 }
 
-function mapEmailOtpError(body) {
+function mapEmailOtpError(body, otpChallenge = "EMAIL_OTP") {
   const code = getCognitoErrorCode(body);
 
   if (code === "InvalidParameterException" || code === "InvalidLambdaResponseException") {
+    if (otpChallenge === "SMS_OTP") {
+      return (
+        "No pudimos enviar SMS porque tu cuenta no tiene un teléfono vinculado y validado. / " +
+        "We couldn't send SMS because your account does not have a linked and verified phone."
+      );
+    }
     return (
       "El login con código por email requiere activar ALLOW_USER_AUTH y Email OTP en Cognito. / " +
       "Email code login requires enabling ALLOW_USER_AUTH and Email OTP in Cognito."
@@ -288,6 +327,15 @@ function mapEmailOtpError(body) {
   }
 
   return mapCognitoError(body, "No se pudo enviar el código de acceso. / The access code could not be sent.");
+}
+
+function smsOtpErrorBody(body, otpChallenge = "EMAIL_OTP") {
+  const smsIssue = otpChallenge === "SMS_OTP";
+  return {
+    error: mapEmailOtpError(body, otpChallenge),
+    needsPhoneLink: smsIssue,
+    reason: smsIssue ? "sms_unavailable" : undefined,
+  };
 }
 
 // userExistsInPool consulta al backend (vp-payments, que tiene el cliente admin
@@ -312,10 +360,42 @@ async function userStatusInPool(email) {
     return {
       exists: Boolean(data.exists),
       confirmed: data.confirmed === undefined ? true : Boolean(data.confirmed),
+      phoneLinked: data.phone_linked === undefined ? null : Boolean(data.phone_linked),
+      phoneVerified: data.phone_verified === undefined ? null : Boolean(data.phone_verified),
+      phoneDestination: String(data.phone_destination || ""),
     };
   } catch {
     return { exists: null, confirmed: true };
   }
+}
+
+function phoneIssueResponse({ phoneLinked, phoneVerified, phoneDestination }) {
+  if (phoneLinked === false) {
+    return NextResponse.json(
+      {
+        error:
+          "Tu cuenta no tiene un teléfono vinculado para recibir SMS. Solicita ayuda y comparte tu número actual para validarlo.",
+        needsPhoneLink: true,
+        reason: "phone_not_linked",
+      },
+      { status: 409 }
+    );
+  }
+
+  if (phoneVerified === false) {
+    return NextResponse.json(
+      {
+        error:
+          `Tu teléfono ${phoneDestination || ""} está guardado, pero aún no está validado para recibir códigos SMS. ` +
+          "Solicita ayuda para validar o actualizar el número.",
+        needsPhoneVerification: true,
+        reason: "phone_not_verified",
+      },
+      { status: 409 }
+    );
+  }
+
+  return null;
 }
 
 // resendConfirmationCode reenvía el código de confirmación de SignUp usando el

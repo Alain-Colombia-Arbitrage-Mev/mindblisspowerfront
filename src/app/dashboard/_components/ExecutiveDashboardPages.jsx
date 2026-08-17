@@ -839,12 +839,21 @@ function WithdrawPanel({ data, onDone }) {
 
 const PLAN_LABEL = { passive_investor: "Inversionista pasivo", network: "Red" };
 
+function normalizeProfilePhone(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (!raw.startsWith("+")) return "";
+  const phone = `+${raw.slice(1).replace(/\D/g, "")}`;
+  return /^\+[1-9]\d{7,14}$/.test(phone) ? phone : "";
+}
+
 export function ProfileDashboardPage() {
   const [twoFactor, setTwoFactor] = useState(false);
   const [digest, setDigest] = useState(true);
   const [me, setMe] = useState({ name: "", email: "", referralCode: "" });
   const [summary, setSummary] = useState(null);
   const [form, setForm] = useState({ name: "", phone: "", country: "", payout_wallet_usdc: "" });
+  const [phoneVerify, setPhoneVerify] = useState({ sending: false, confirming: false, pending: false, code: "", type: "", text: "" });
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState({ type: "", text: "" });
   const editedRef = useRef(false);
@@ -884,9 +893,15 @@ export function ProfileDashboardPage() {
     setSaving(true);
     setSaveMsg({ type: "", text: "" });
     const wallet = (form.payout_wallet_usdc || "").trim();
+    const phone = normalizeProfilePhone(form.phone);
     if (wallet && !/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
       setSaving(false);
       setSaveMsg({ type: "err", text: "La dirección USDC debe ser una address ERC-20 válida (0x + 40 hex)." });
+      return;
+    }
+    if ((form.phone || "").trim() && !phone) {
+      setSaving(false);
+      setSaveMsg({ type: "err", text: "Ingresa el teléfono en formato internacional, por ejemplo +573001234567." });
       return;
     }
     try {
@@ -895,7 +910,7 @@ export function ProfileDashboardPage() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           name: (form.name || "").trim(),
-          phone: (form.phone || "").trim(),
+          phone,
           country: (form.country || "").trim(),
           payout_wallet_usdc: wallet,
         }),
@@ -905,6 +920,7 @@ export function ProfileDashboardPage() {
         const m = { invalid_wallet: "Dirección USDC inválida.", person_not_found: "No se pudo guardar (perfil no encontrado)." }[d.error] || "No se pudieron guardar los cambios.";
         setSaveMsg({ type: "err", text: m });
       } else {
+        if (phone) setForm((current) => ({ ...current, phone }));
         setSaveMsg({ type: "ok", text: "Cambios guardados." });
         // Refresca el sidebar con el nombre nuevo de inmediato (optimista).
         try { window.dispatchEvent(new CustomEvent("vp:profile-updated", { detail: { name: (form.name || "").trim() } })); } catch { /* ignore */ }
@@ -913,6 +929,55 @@ export function ProfileDashboardPage() {
       setSaveMsg({ type: "err", text: "Sin conexión. Intenta de nuevo." });
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function requestPhoneVerification() {
+    const phone = normalizeProfilePhone(form.phone);
+    if (!phone) {
+      setPhoneVerify({ sending: false, confirming: false, pending: false, code: "", type: "err", text: "Usa formato internacional: +573001234567." });
+      return;
+    }
+    setPhoneVerify((current) => ({ ...current, sending: true, type: "", text: "" }));
+    try {
+      const r = await fetch("/api/auth/cognito/phone/request", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ phone }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d.ok) {
+        setPhoneVerify((current) => ({ ...current, sending: false, type: "err", text: d.error || "No se pudo enviar el SMS de verificación." }));
+        return;
+      }
+      setForm((current) => ({ ...current, phone: d.phone || phone }));
+      setPhoneVerify({ sending: false, confirming: false, pending: true, code: "", type: "ok", text: "Código SMS enviado. Escríbelo para validar tu teléfono." });
+    } catch {
+      setPhoneVerify((current) => ({ ...current, sending: false, type: "err", text: "Sin conexión. Intenta de nuevo." }));
+    }
+  }
+
+  async function confirmPhoneVerification() {
+    const code = phoneVerify.code.replace(/[\s-]+/g, "");
+    if (!/^\d{4,8}$/.test(code)) {
+      setPhoneVerify((current) => ({ ...current, type: "err", text: "Ingresa el código SMS recibido." }));
+      return;
+    }
+    setPhoneVerify((current) => ({ ...current, confirming: true, type: "", text: "" }));
+    try {
+      const r = await fetch("/api/auth/cognito/phone/confirm", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d.ok) {
+        setPhoneVerify((current) => ({ ...current, confirming: false, type: "err", text: d.error || "No se pudo validar el teléfono." }));
+        return;
+      }
+      setPhoneVerify({ sending: false, confirming: false, pending: false, code: "", type: "ok", text: d.message || "Teléfono validado." });
+    } catch {
+      setPhoneVerify((current) => ({ ...current, confirming: false, type: "err", text: "Sin conexión. Intenta de nuevo." }));
     }
   }
 
@@ -1029,6 +1094,42 @@ export function ProfileDashboardPage() {
                 <Field label="Telefono">
                   <input className="executive-input" value={form.phone} onChange={setField("phone")} type="tel" placeholder="+57 300 000 0000" />
                 </Field>
+                <div className="md:col-span-2 border-t pt-4" style={{ borderColor: "var(--vp-border)" }}>
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+                    <div className="min-w-0 flex-1">
+                      <p className="m-0 text-sm font-bold" style={{ color: "var(--vp-text)" }}>Validación del teléfono</p>
+                      <p className="m-0 mt-1 text-xs leading-5" style={{ color: "var(--vp-muted)" }}>
+                        Valida este número en Cognito para poder recibir códigos de acceso por SMS si el correo falla.
+                      </p>
+                    </div>
+                    <button className="executive-button" type="button" onClick={requestPhoneVerification} disabled={saving || phoneVerify.sending || phoneVerify.confirming}>
+                      {phoneVerify.sending ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}
+                      {phoneVerify.sending ? "Enviando…" : "Enviar SMS"}
+                    </button>
+                  </div>
+                  {phoneVerify.pending && (
+                    <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                      <input
+                        className="executive-input"
+                        value={phoneVerify.code}
+                        onChange={(event) => setPhoneVerify((current) => ({ ...current, code: event.target.value.replace(/[\s-]+/g, "") }))}
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        maxLength={8}
+                        placeholder="Código SMS"
+                      />
+                      <button className="executive-button primary" type="button" onClick={confirmPhoneVerification} disabled={phoneVerify.confirming}>
+                        {phoneVerify.confirming ? <Loader2 className="animate-spin" size={16} /> : <ShieldCheck size={16} />}
+                        Validar
+                      </button>
+                    </div>
+                  )}
+                  {phoneVerify.text && (
+                    <p className="m-0 mt-3 text-xs font-semibold" style={{ color: phoneVerify.type === "ok" ? "var(--vp-accent)" : "#f87171" }}>
+                      {phoneVerify.text}
+                    </p>
+                  )}
+                </div>
                 <Field label="Pais">
                   <input className="executive-input" value={form.country} onChange={setField("country")} placeholder="País" />
                 </Field>

@@ -7,6 +7,7 @@ import {
   Eye,
   EyeOff,
   KeyRound,
+  LifeBuoy,
   Loader2,
   LockKeyhole,
   Mail,
@@ -51,6 +52,8 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
   const [loginCode, setLoginCode] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [accessHelpPhone, setAccessHelpPhone] = useState("");
+  const [accessHelpReason, setAccessHelpReason] = useState("");
   const [loadingAction, setLoadingAction] = useState("");
   const [resetStep, setResetStep] = useState("request");
   const [resetCode, setResetCode] = useState("");
@@ -123,6 +126,11 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
       }
 
       if (!response.ok || !payload.ok) {
+        if (channel === "sms" && (payload.needsPhoneLink || payload.needsPhoneVerification)) {
+          setAccessHelpReason(payload.reason || (payload.needsPhoneLink ? "phone_not_linked" : "phone_not_verified"));
+          setNotice(payload.error || "Tu teléfono no está listo para recibir códigos por SMS. Solicita ayuda para validarlo.");
+          return;
+        }
         setError(payload.error || "No se pudo enviar el código de acceso.");
         return;
       }
@@ -164,7 +172,12 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
       const response = await fetch("/api/auth/access-help", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: normalizedEmail, note: "Solicitud desde el login: no recibe el código." }),
+        body: JSON.stringify({
+          email: normalizedEmail,
+          phone: accessHelpPhone,
+          reason: accessHelpReason,
+          note: "Solicitud desde el login: no recibe el código.",
+        }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || !payload.ok) {
@@ -204,6 +217,12 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
       const payload = await response.json().catch(() => ({}));
 
       if (!response.ok || !payload.ok) {
+        if (payload.needsNewCode) {
+          setLoginCode("");
+          setCodeStep("request");
+          setNotice(payload.error || "El código anterior expiró o fue reemplazado. Solicita uno nuevo para continuar.");
+          return;
+        }
         setError(payload.error || "No se pudo validar el código.");
         return;
       }
@@ -417,18 +436,51 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
                 disabled={isLoading}
                 onClick={(e) => requestLoginCode(e, { channel: "sms" })}
                 icon={<Smartphone size={15} />}
+                variant="accent"
+                className="mx-auto min-w-[17rem] px-5"
               >
                 {loadingAction === "code-request-sms" ? "Enviando SMS…" : "¿No llega? Recíbelo por SMS"}
               </SecondaryButton>
-              <button
-                type="button"
-                disabled={isLoading}
-                onClick={requestAccessHelp}
-                className="block w-full text-center text-xs font-bold transition hover:opacity-80 disabled:opacity-60"
-                style={{ color: "var(--vp-accent)" }}
+              <div
+                className="space-y-2 rounded-lg p-3"
+                style={{
+                  background: "var(--vp-surface-raised)",
+                  border: "1px solid var(--vp-accent, #ffc700)",
+                }}
               >
-                {loadingAction === "access-help" ? "Registrando tu solicitud…" : "Sigo sin recibir el código — solicitar ayuda"}
-              </button>
+                <label className="block text-[11px] font-black uppercase" htmlFor="access-help-phone" style={{ color: "var(--vp-muted)" }}>
+                  Teléfono actual para soporte
+                </label>
+                <input
+                  id="access-help-phone"
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  value={accessHelpPhone}
+                  onChange={(event) => setAccessHelpPhone(normalizeAccessHelpPhone(event.target.value))}
+                  placeholder="+57 300 123 4567"
+                  className="min-h-11 w-full rounded-lg px-3 text-sm font-semibold outline-none"
+                  style={{
+                    color: "var(--vp-text)",
+                    background: "var(--vp-surface-raised)",
+                    border: "1px solid var(--vp-border)",
+                  }}
+                />
+                <button
+                  type="button"
+                  disabled={isLoading}
+                  onClick={requestAccessHelp}
+                  className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg px-4 text-center text-xs font-black transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                  style={{
+                    color: "#000",
+                    background: "var(--vp-accent, #ffc700)",
+                    border: "1px solid var(--vp-accent, #ffc700)",
+                  }}
+                >
+                  {loadingAction === "access-help" ? <Loader2 className="animate-spin" size={15} /> : <LifeBuoy size={15} />}
+                  {loadingAction === "access-help" ? "Registrando solicitud…" : "Sigo sin recibir el código — solicitar ayuda"}
+                </button>
+              </div>
             </div>
           </form>
         )
@@ -484,7 +536,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
             value={resetCode}
             autoFocus
             onChange={(value) => {
-              setResetCode(value);
+              setResetCode(value.replace(/[\s-]+/g, ""));
               setError("");
             }}
           />
@@ -669,7 +721,7 @@ function CodeField({ id, label, value, onChange, autoFocus = false }) {
         autoFocus={autoFocus}
         maxLength={8}
         value={value}
-        onChange={(event) => onChange(event.target.value.replace(/\s+/g, ""))}
+        onChange={(event) => onChange(event.target.value.replace(/[\s-]+/g, ""))}
         placeholder="········"
         className="min-h-12 w-full rounded-lg px-4 text-base font-semibold tracking-[0.4em] outline-none"
         style={{
@@ -696,6 +748,10 @@ function DeliveryHint({ email }) {
   );
 }
 
+function normalizeAccessHelpPhone(value) {
+  return value.replace(/[^\d+().\s-]/g, "").slice(0, 40);
+}
+
 function PrimaryButton({ disabled, loading, icon, children }) {
   return (
     <button
@@ -714,17 +770,19 @@ function PrimaryButton({ disabled, loading, icon, children }) {
   );
 }
 
-function SecondaryButton({ disabled, onClick, icon, children }) {
+function SecondaryButton({ disabled, onClick, icon, children, variant = "default", className = "" }) {
+  const accent = variant === "accent";
+
   return (
     <button
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className="flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 text-xs font-black transition hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-60"
+      className={`flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 text-center text-xs font-black transition hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-60 ${className}`}
       style={{
-        color: "var(--vp-text-soft)",
-        background: "var(--vp-surface-raised)",
-        border: "1px solid var(--vp-border)",
+        color: accent ? "#000" : "var(--vp-text-soft)",
+        background: accent ? "var(--vp-accent, #ffc700)" : "var(--vp-surface-raised)",
+        border: accent ? "1px solid var(--vp-accent, #ffc700)" : "1px solid var(--vp-border)",
       }}
     >
       {icon}

@@ -28,7 +28,7 @@ export default function MyPaymentsPanel() {
   const mountedRef = useRef(true);
 
   const load = () => {
-    fetch("/api/payments/me", { cache: "no-store" })
+    fetch("/api/payments/me?fresh=1", { cache: "no-store" })
       .then(async (r) => {
         const p = await r.json().catch(() => ({}));
         if (!mountedRef.current) return;
@@ -178,7 +178,7 @@ function WithdrawSection({ data, onDone }) {
 function Card({ children }) {
   return <section className="executive-panel vp-glass">{children}</section>;
 }
-function Metric({ Icon, label, value, accent }) {
+function Metric({ Icon, label, value, accent = false }) {
   return (
     <div className={`executive-card p-3 ${accent ? "vp-glass-accent" : "vp-glass"}`}>
       <div className="mb-1 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider" style={{ color: "var(--vp-subtle)" }}><Icon size={12} /> {label}</div>
