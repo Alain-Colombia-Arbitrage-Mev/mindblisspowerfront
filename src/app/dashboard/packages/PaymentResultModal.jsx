@@ -75,7 +75,7 @@ export default function PaymentResultModal() {
 
   const goToNetwork = () => {
     setResult(null);
-    router.replace("/dashboard/network");
+    router.replace("/dashboard/network?tab=tree");
   };
 
   const paid = result === "paid";

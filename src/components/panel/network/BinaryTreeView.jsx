@@ -273,7 +273,7 @@ export default function BinaryTreeView({ nodes, me }) {
   }
 
   return (
-    <NetworkViewCard title="Árbol binario" memberCount={nodes.length}>
+    <NetworkViewCard title="Árbol binario" memberCount={nodes.length + (rootNode ? 1 : 0)}>
       <BalanceBar leftCount={leftCount} rightCount={rightCount} />
 
       {!nodes.length ? (

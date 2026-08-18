@@ -76,7 +76,7 @@ export default function PaywallGate({ children }) {
         </div>
 
         <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
-          <Link href="/dashboard/network" className="executive-button primary justify-center no-underline">
+          <Link href="/dashboard/network?tab=tree" className="executive-button primary justify-center no-underline">
             <Network size={16} /> Ir a mi red
           </Link>
           <Link href="/dashboard/referrals" className="executive-button justify-center no-underline">

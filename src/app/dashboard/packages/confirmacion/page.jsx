@@ -142,7 +142,7 @@ export default function PaymentConfirmationPage() {
           )}
 
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <Link href="/dashboard/network" className="executive-button primary flex-1 justify-center no-underline">
+            <Link href="/dashboard/network?tab=tree" className="executive-button primary flex-1 justify-center no-underline">
               <Network size={16} /> Ir a mi red <ArrowRight size={15} />
             </Link>
             <Link href="/dashboard/packages" className="executive-button flex-1 justify-center no-underline">

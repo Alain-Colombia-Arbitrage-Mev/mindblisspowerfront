@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Loader2, Network } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 
 import BinaryTreeView from "@/components/panel/network/BinaryTreeView";
 import GenerationView from "@/components/panel/network/GenerationView";
 import NetworkSummaryCard from "@/components/panel/network/NetworkSummaryCard";
-import NetworkTabs from "@/components/panel/network/NetworkTabs";
+import NetworkTabs, { NETWORK_TABS } from "@/components/panel/network/NetworkTabs";
 import OperativeListView from "@/components/panel/network/OperativeListView";
 import PositionCard from "@/components/panel/network/PositionCard";
 import RankView from "@/components/panel/network/RankView";
@@ -23,9 +24,18 @@ function StatusCard({ children }) {
 }
 
 export default function NetworkPage() {
-  const [tab, setTab] = useState("generation");
+  const searchParams = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const validTabs = useMemo(() => new Set(NETWORK_TABS.map((item) => item.id)), []);
+  const [tab, setTab] = useState("tree");
   const [memberName, setMemberName] = useState("");
   const [state, setState] = useState({ loading: true, error: "", data: null, summary: null, syncing: false });
+
+  useEffect(() => {
+    if (validTabs.has(requestedTab)) {
+      setTab(requestedTab);
+    }
+  }, [requestedTab, validTabs]);
 
   useEffect(() => {
     let cancelled = false;
