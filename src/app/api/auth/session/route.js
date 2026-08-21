@@ -33,18 +33,13 @@ export async function GET() {
     claims.nickname ||
     "";
 
-  let isAdmin = false;
   let realCode = "";
   let realName = "";
   if (email) {
-    const [adm, ref] = await Promise.all([
-      callPayments(`/api/admin/check?email=${encodeURIComponent(email)}`),
-      callPayments(`/api/member/referral?email=${encodeURIComponent(email)}`),
-    ]);
-    if (isSuspended(adm) || isSuspended(ref)) {
+    const ref = await callPayments(`/api/member/referral?email=${encodeURIComponent(email)}`);
+    if (isSuspended(ref)) {
       return suspendedSessionResponse();
     }
-    if (adm.ok) isAdmin = Boolean(adm.data.is_admin);
     if (ref.ok) {
       if (ref.data.referral_code) realCode = ref.data.referral_code;
       if (ref.data.name) realName = ref.data.name;
@@ -65,7 +60,7 @@ export async function GET() {
     // no tiene código resoluble, así que devolvemos null y la UI muestra un aviso.
     // (Un código inventado se ve válido pero no resuelve a ningún sponsor.)
     referralCode: realCode || null,
-    isAdmin,
+    isAdmin: false,
   });
 }
 

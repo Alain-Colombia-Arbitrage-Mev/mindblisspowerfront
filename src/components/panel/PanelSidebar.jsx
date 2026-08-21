@@ -8,7 +8,6 @@ import {
   Medal,
   Network,
   Package,
-  ShieldCheck,
   Ticket,
   User,
   Wallet,
@@ -40,19 +39,15 @@ const NAV_ITEMS = [
   { icon: Network, label: "Team / Network", href: "/dashboard/network", also: ["/dashboard/team"] },
 ];
 
-export default function PanelSidebar({ pathname, isAdmin, member, onNavigate }) {
-  const items = isAdmin
-    ? [...NAV_ITEMS, { icon: ShieldCheck, label: "Panel Admin", href: "/dashboard/admin" }]
-    : NAV_ITEMS;
-
+export default function PanelSidebar({ pathname, member, onNavigate }) {
   return (
     <div className="flex h-full flex-col" style={{ background: "var(--vp-shell)" }}>
       <SidebarLogo onNavigate={onNavigate} />
 
-      <SidebarUserCard name={member?.name} email={member?.email} role={isAdmin ? "Administrator" : "Member"} />
+      <SidebarUserCard name={member?.name} email={member?.email} role="Member" />
 
       <nav className="mt-4 flex flex-1 flex-col gap-2 overflow-y-auto px-4 pt-2">
-        {items.map((item) =>
+        {NAV_ITEMS.map((item) =>
           item.items ? (
             <SidebarNavGroup
               key={item.label}
