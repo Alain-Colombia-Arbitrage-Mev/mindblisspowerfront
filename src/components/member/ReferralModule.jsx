@@ -1,15 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowRight, Check, Clock, Copy, RotateCw, Share2, Users } from 'lucide-react';
+import { AlertCircle, ArrowRight, Check, Clock, Copy, Loader2, RotateCw, Share2, Users } from 'lucide-react';
 import { motion } from 'framer-motion';
 import ReferralShareModal from './ReferralShareModal';
 
-const SIMULATED_REFERRALS = [
-  { id: 1, name: 'Juan García', status: 'activo', date: '2024-04-10' },
-  { id: 2, name: 'María López', status: 'activo', date: '2024-04-08' },
-  { id: 3, name: 'Carlos Martínez', status: 'registrado', date: '2024-04-07' },
-  { id: 4, name: 'Ana Rodríguez', status: 'activo', date: '2024-03-28' },
-  { id: 5, name: 'Pedro Sánchez', status: 'pendiente', date: '2024-03-25' },
-];
+const EMPTY_METRICS = { total: 0, active: 0, pending: 0 };
 
 const STATUS_CONFIG = {
   activo: { label: 'Activo', color: 'var(--vp-accent)', bg: 'var(--vp-accent-muted)', border: 'var(--vp-accent-border)' },
@@ -45,72 +39,86 @@ const buttonBase = {
 };
 
 export default function ReferralModule() {
-  const [referralCode, setReferralCode] = useState('823649');
-  const [referralLink, setReferralLink] = useState('https://app.mindblisspower.com/register?ref=823649');
+  const [referralCode, setReferralCode] = useState('');
+  const [referralLink, setReferralLink] = useState('');
+  const [referrals, setReferrals] = useState([]);
+  const [metrics, setMetrics] = useState(EMPTY_METRICS);
+  const [status, setStatus] = useState('loading');
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
-  const [generating, setGenerating] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Código real de referido desde RDS (mlm.affiliate.invitation_link).
+  const hasReferral = status === 'ready' && referralCode && referralLink;
+
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/member/referral')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (cancelled || !data?.code) return;
-        setReferralCode(data.code);
-        setReferralLink(data.link);
-      })
-      .catch(() => {});
+    loadReferral().then((next) => {
+      if (!cancelled) applyReferral(next);
+    });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const metrics = useMemo(() => ({
-    total: SIMULATED_REFERRALS.length,
-    active: SIMULATED_REFERRALS.filter((ref) => ref.status === 'activo').length,
-    pending: SIMULATED_REFERRALS.filter((ref) => ref.status !== 'activo').length,
-  }), []);
+  function applyReferral(data) {
+    if (!data) {
+      setStatus('error');
+      setReferralCode('');
+      setReferralLink('');
+      setReferrals([]);
+      setMetrics(EMPTY_METRICS);
+      return;
+    }
+    if (!data.positioned || !data.code || !data.link) {
+      setStatus('pending');
+      setReferralCode('');
+      setReferralLink('');
+      setReferrals([]);
+      setMetrics(EMPTY_METRICS);
+      return;
+    }
+    setStatus('ready');
+    setReferralCode(data.code);
+    setReferralLink(data.link);
+    setReferrals(Array.isArray(data.referrals) ? data.referrals : []);
+    setMetrics(data.metrics || EMPTY_METRICS);
+  }
+
+  async function refreshReferral() {
+    setRefreshing(true);
+    try {
+      applyReferral(await loadReferral());
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  const metricCards = useMemo(() => ([
+    { label: 'Total invitados', value: metrics.total, color: 'var(--vp-text)', note: 'directos', icon: Users },
+    { label: 'Activados', value: metrics.active, color: 'var(--vp-accent)', note: 'con membresía', icon: Check },
+    { label: 'Pendientes', value: metrics.pending, color: 'var(--vp-amber)', note: 'sin activar', icon: Clock },
+  ]), [metrics]);
 
   const copyCode = async () => {
+    if (!referralCode) return;
     await navigator.clipboard.writeText(referralCode).catch(() => {});
     setCodeCopied(true);
     setTimeout(() => setCodeCopied(false), 2500);
   };
 
   const copyLink = async () => {
+    if (!referralLink) return;
     await navigator.clipboard.writeText(referralLink).catch(() => {});
     setLinkCopied(true);
     setTimeout(() => setLinkCopied(false), 2500);
   };
 
-  // Re-sincroniza el código real desde el servidor (es estable por afiliado).
-  const generateCode = async () => {
-    setGenerating(true);
-    try {
-      const response = await fetch('/api/member/referral');
-      const data = response.ok ? await response.json() : null;
-      if (data?.code) {
-        setReferralCode(data.code);
-        setReferralLink(data.link);
-      }
-    } catch {
-      // mantiene el código actual si falla
-    }
-    setGenerating(false);
-  };
-
-  const metricCards = [
-    { label: 'Total invitados', value: metrics.total, color: 'var(--vp-text)', note: 'en tu red', icon: Users },
-    { label: 'Activados', value: metrics.active, color: 'var(--vp-accent)', note: 'con membresía', icon: Check },
-    { label: 'Pendientes', value: metrics.pending, color: 'var(--vp-amber)', note: 'sin activar', icon: Clock },
-  ];
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-      <ReferralShareModal isOpen={shareModalOpen} onClose={() => setShareModalOpen(false)} code={referralCode} memberName="You" />
+      {hasReferral ? (
+        <ReferralShareModal isOpen={shareModalOpen} onClose={() => setShareModalOpen(false)} code={referralCode} memberName="Tu red" />
+      ) : null}
 
       <motion.section
         initial={{ opacity: 0, y: 8 }}
@@ -124,55 +132,59 @@ export default function ReferralModule() {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 20 }}>
-          <div>
+          <div style={{ minWidth: 0 }}>
             <p style={{ ...labelStyle, color: 'var(--vp-accent)', marginBottom: 16 }}>Tu Código de Referido</p>
             <p
               style={{
-                color: 'var(--vp-text)',
-                fontSize: 'clamp(42px, 7vw, 64px)',
+                color: hasReferral ? 'var(--vp-text)' : 'var(--vp-muted)',
+                fontSize: 'clamp(34px, 7vw, 64px)',
                 fontWeight: 900,
                 margin: 0,
-                letterSpacing: 6,
+                letterSpacing: hasReferral ? 4 : 0,
                 lineHeight: 1,
                 fontVariantNumeric: 'tabular-nums',
+                overflowWrap: 'anywhere',
               }}
             >
-              {referralCode}
+              {status === 'loading' ? 'Cargando...' : hasReferral ? referralCode : 'Pendiente'}
             </p>
-            <p style={{ color: 'var(--vp-muted)', fontSize: 11, margin: '8px 0 0', fontWeight: 650 }}>
-              Código único · No transferible
+            <p style={{ color: 'var(--vp-muted)', fontSize: 11, margin: '8px 0 0', fontWeight: 650, maxWidth: 520 }}>
+              {helperText(status)}
             </p>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 9, minWidth: 178 }}>
             <button
               onClick={copyCode}
+              disabled={!hasReferral}
               style={{
                 ...buttonBase,
                 padding: '11px 18px',
                 background: codeCopied ? 'var(--vp-accent)' : 'var(--vp-accent-muted)',
                 color: codeCopied ? 'var(--vp-shell)' : 'var(--vp-accent)',
                 border: `1px solid ${codeCopied ? 'var(--vp-accent-strong)' : 'var(--vp-accent-border)'}`,
+                cursor: hasReferral ? 'pointer' : 'default',
+                opacity: hasReferral ? 1 : 0.55,
               }}
             >
               {codeCopied ? <Check size={14} /> : <Copy size={14} />}
               {codeCopied ? 'Copiado' : 'Copiar código'}
             </button>
             <button
-              onClick={generateCode}
-              disabled={generating}
+              onClick={refreshReferral}
+              disabled={refreshing}
               style={{
                 ...buttonBase,
                 padding: '10px 18px',
                 background: 'var(--vp-surface-raised)',
                 color: 'var(--vp-muted)',
                 border: '1px solid var(--vp-border)',
-                cursor: generating ? 'default' : 'pointer',
-                opacity: generating ? 0.6 : 1,
+                cursor: refreshing ? 'default' : 'pointer',
+                opacity: refreshing ? 0.6 : 1,
               }}
             >
-              <RotateCw size={13} style={{ animation: generating ? 'spin 1s linear infinite' : 'none' }} />
-              {generating ? 'Generando...' : 'Nuevo código'}
+              <RotateCw size={13} style={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }} />
+              {refreshing ? 'Actualizando...' : 'Actualizar'}
             </button>
           </div>
         </div>
@@ -201,20 +213,21 @@ export default function ReferralModule() {
         >
           <p
             style={{
-              color: 'var(--vp-accent)',
+              color: hasReferral ? 'var(--vp-accent)' : 'var(--vp-muted)',
               fontSize: 12,
               margin: 0,
               flex: 1,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
-              fontFamily: 'monospace',
+              fontFamily: hasReferral ? 'monospace' : 'inherit',
             }}
           >
-            {referralLink}
+            {hasReferral ? referralLink : sharePlaceholder(status)}
           </p>
           <button
             onClick={copyLink}
+            disabled={!hasReferral}
             style={{
               ...buttonBase,
               padding: '8px 13px',
@@ -223,6 +236,8 @@ export default function ReferralModule() {
               color: linkCopied ? 'var(--vp-shell)' : 'var(--vp-text-soft)',
               border: `1px solid ${linkCopied ? 'var(--vp-accent-strong)' : 'var(--vp-border)'}`,
               fontSize: 11,
+              cursor: hasReferral ? 'pointer' : 'default',
+              opacity: hasReferral ? 1 : 0.55,
             }}
           >
             {linkCopied ? <Check size={12} /> : <Copy size={12} />}
@@ -231,14 +246,16 @@ export default function ReferralModule() {
         </div>
 
         <button
-          onClick={() => setShareModalOpen(true)}
+          onClick={() => hasReferral && setShareModalOpen(true)}
+          disabled={!hasReferral}
           style={{
             ...buttonBase,
             width: '100%',
             padding: '12px 18px',
-            background: 'var(--vp-amber-muted)',
-            color: 'var(--vp-amber)',
-            border: '1px solid var(--vp-amber-border)',
+            background: hasReferral ? 'var(--vp-amber-muted)' : 'var(--vp-surface-raised)',
+            color: hasReferral ? 'var(--vp-amber)' : 'var(--vp-muted)',
+            border: `1px solid ${hasReferral ? 'var(--vp-amber-border)' : 'var(--vp-border)'}`,
+            cursor: hasReferral ? 'pointer' : 'default',
           }}
         >
           <Share2 size={14} />
@@ -282,70 +299,123 @@ export default function ReferralModule() {
           <p style={labelStyle}>Seguimiento de Invitaciones</p>
         </div>
         <div>
-          {SIMULATED_REFERRALS.map((referral, index) => {
-            const cfg = STATUS_CONFIG[referral.status] || STATUS_CONFIG.pendiente;
-            return (
-              <div
-                key={referral.id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 14,
-                  padding: '14px 22px',
-                  borderBottom: index < SIMULATED_REFERRALS.length - 1 ? '1px solid var(--vp-border)' : 'none',
-                  background: index % 2 === 0 ? 'var(--vp-surface)' : 'var(--vp-surface-raised)',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: '1 1 auto', minWidth: 0 }}>
-                  <div
-                    style={{
-                      width: 34,
-                      height: 34,
-                      borderRadius: 9,
-                      flexShrink: 0,
-                      background: 'var(--vp-accent-muted)',
-                      border: '1px solid var(--vp-accent-border)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: 'var(--vp-accent)',
-                      fontSize: 12,
-                      fontWeight: 900,
-                    }}
-                  >
-                    {referral.name[0]}
-                  </div>
-                  <p style={{ color: 'var(--vp-text)', fontSize: 13, fontWeight: 700, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {referral.name}
-                  </p>
-                </div>
-
-                <span
+          {referrals.length === 0 ? (
+            <EmptyReferralState status={status} />
+          ) : (
+            referrals.map((referral, index) => {
+              const cfg = STATUS_CONFIG[referral.status] || STATUS_CONFIG.pendiente;
+              return (
+                <div
+                  key={referral.id}
                   style={{
-                    padding: '4px 10px',
-                    borderRadius: 7,
-                    background: cfg.bg,
-                    color: cfg.color,
-                    border: `1px solid ${cfg.border}`,
-                    fontSize: 10,
-                    fontWeight: 780,
-                    whiteSpace: 'nowrap',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 14,
+                    padding: '14px 22px',
+                    borderBottom: index < referrals.length - 1 ? '1px solid var(--vp-border)' : 'none',
+                    background: index % 2 === 0 ? 'var(--vp-surface)' : 'var(--vp-surface-raised)',
                   }}
                 >
-                  {cfg.label}
-                </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: '1 1 auto', minWidth: 0 }}>
+                    <div
+                      style={{
+                        width: 34,
+                        height: 34,
+                        borderRadius: 9,
+                        flexShrink: 0,
+                        background: 'var(--vp-accent-muted)',
+                        border: '1px solid var(--vp-accent-border)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'var(--vp-accent)',
+                        fontSize: 12,
+                        fontWeight: 900,
+                      }}
+                    >
+                      {(referral.name || '?')[0]}
+                    </div>
+                    <p style={{ color: 'var(--vp-text)', fontSize: 13, fontWeight: 700, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {referral.name}
+                    </p>
+                  </div>
 
-                <p style={{ color: 'var(--vp-muted)', fontSize: 11, margin: 0, flexShrink: 0 }}>
-                  {new Date(referral.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
-                </p>
-              </div>
-            );
-          })}
+                  <span
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: 7,
+                      background: cfg.bg,
+                      color: cfg.color,
+                      border: `1px solid ${cfg.border}`,
+                      fontSize: 10,
+                      fontWeight: 780,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {cfg.label}
+                  </span>
+
+                  <p style={{ color: 'var(--vp-muted)', fontSize: 11, margin: 0, flexShrink: 0 }}>
+                    {formatDate(referral.date)}
+                  </p>
+                </div>
+              );
+            })
+          )}
         </div>
       </motion.section>
 
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
+async function loadReferral() {
+  try {
+    const response = await fetch('/api/member/referral', { cache: 'no-store' });
+    return response.ok ? await response.json() : null;
+  } catch {
+    return null;
+  }
+}
+
+function helperText(status) {
+  if (status === 'loading') return 'Consultando tu enlace real en la base de datos.';
+  if (status === 'error') return 'No se pudo consultar tu enlace. Intenta actualizar en unos segundos.';
+  if (status === 'pending') return 'El código se habilita cuando tu pago queda activado y tu cuenta entra al árbol binario.';
+  return 'Código único, permanente y resoluble para nuevas activaciones.';
+}
+
+function sharePlaceholder(status) {
+  if (status === 'loading') return 'Cargando link de referido...';
+  if (status === 'error') return 'Link no disponible temporalmente';
+  return 'Pendiente de activación y ubicación en el árbol';
+}
+
+function formatDate(value) {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+}
+
+function EmptyReferralState({ status }) {
+  const loading = status === 'loading';
+  const Icon = loading ? Loader2 : AlertCircle;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '18px 22px', background: 'var(--vp-surface-raised)' }}>
+      <Icon size={16} className={loading ? 'animate-spin' : ''} style={{ color: 'var(--vp-muted)', flexShrink: 0 }} />
+      <div>
+        <p style={{ color: 'var(--vp-text)', fontSize: 13, fontWeight: 800, margin: 0 }}>
+          {loading ? 'Cargando invitaciones...' : 'Sin invitaciones visibles'}
+        </p>
+        <p style={{ color: 'var(--vp-muted)', fontSize: 11, margin: '4px 0 0' }}>
+          {status === 'pending'
+            ? 'Cuando tu enlace quede activo, tus referidos aparecerán aquí.'
+            : 'Los registros directos por tu enlace se mostrarán en esta lista.'}
+        </p>
+      </div>
     </div>
   );
 }
