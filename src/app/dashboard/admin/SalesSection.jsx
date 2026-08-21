@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BarChart3, Loader2 } from "lucide-react";
+import { AlertTriangle, BarChart3, Loader2 } from "lucide-react";
 
 const money = (v) => `$${Number(v ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const RANGES = [7, 30, 90];
@@ -38,6 +38,7 @@ export default function SalesSection() {
     { created: 0, paid: 0, activated: 0, revenue: 0, refunded: 0 },
   );
   const cash = report?.cash_summary || {};
+  const security = report?.security_charges || {};
 
   return (
     <section className="executive-panel">
@@ -76,11 +77,22 @@ export default function SalesSection() {
         </p>
       ) : (
         <>
-          <div className="mb-4 grid gap-3 sm:grid-cols-3">
+          <div className="mb-4 grid gap-3 sm:grid-cols-4">
             <Mini label="Bruto neto" value={money(cash.gross_charged_usd)} />
             <Mini label="Reembolsado" value={money(cash.refunded_usd)} tone="var(--vp-danger)" />
             <Mini label="Cargos exitosos" value={Number(cash.successful_charges || 0).toLocaleString("en-US")} />
+            <Mini label="Cargos operativos" value={money(security.pending_charge_usd)} tone="var(--vp-danger)" />
           </div>
+          {Number(security.affected_sales || 0) > 0 ? (
+            <div className="mb-4 rounded-lg p-3 text-xs font-semibold" style={{ background: "var(--vp-danger-muted)", border: "1px solid var(--vp-danger-border)", color: "var(--vp-text)" }}>
+              <div className="mb-1 flex items-center gap-2" style={{ color: "var(--vp-danger)" }}>
+                <AlertTriangle size={14} /> {Number(security.affected_sales).toLocaleString("en-US")} procesos con cargo operativo · {money(security.unit_charge_usd)} c/u
+              </div>
+              <div style={{ color: "var(--vp-subtle)" }}>
+                Fallidos/rechazados: {Number(security.failed_sales || 0).toLocaleString("en-US")} · Reembolsos: {Number(security.refunded_sales || 0).toLocaleString("en-US")} · Seguridad: {Number(security.security_blocked_sales || 0).toLocaleString("en-US")} · Disputas: {Number(security.disputed_sales || 0).toLocaleString("en-US")} · Chargebacks: {Number(security.chargeback_sales || 0).toLocaleString("en-US")} · Ajustes manuales: {Number(security.manual_adjustments || 0).toLocaleString("en-US")}
+              </div>
+            </div>
+          ) : null}
           <div className="executive-table-wrap">
             <table className="executive-table">
               <thead>

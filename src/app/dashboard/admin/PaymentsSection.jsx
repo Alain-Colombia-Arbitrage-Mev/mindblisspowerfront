@@ -85,6 +85,8 @@ export default function PaymentsSection() {
           <option value="paid">Pagados</option>
           <option value="created">Iniciados</option>
           <option value="needs_placement">Sin colocar</option>
+          <option value="failed">Fallidos / rechazados</option>
+          <option value="expired">Expirados</option>
           <option value="refunded">Reembolsados</option>
           <option value="security_blocked">Bloqueo seguridad</option>
           <option value="disputed">Disputa</option>

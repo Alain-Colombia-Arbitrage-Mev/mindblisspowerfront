@@ -113,6 +113,7 @@ export default function FinanceSection() {
             <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
               <Kpi Icon={ArrowDownToLine} label="Dinero entrante" value={money(fin?.inflows_usd)} accent />
               <Kpi Icon={RotateCcw} label="Reembolsado" value={money(fin?.refunded_usd)} danger />
+              <Kpi Icon={AlertTriangle} label="Cargos operativos" value={money(fin?.security_pending_charges_usd)} danger />
               <Kpi Icon={Banknote} label="Packs pagados" value={num(fin?.packs_paid)} />
               <Kpi Icon={Coins} label="Comisiones distribuidas" value={money(fin?.commissions_distributed_usd)} />
               <Kpi Icon={Wallet} label="Pendiente de pago" value={money(fin?.pending_payout_usd)} />
@@ -138,6 +139,11 @@ export default function FinanceSection() {
                 </table>
               </div>
             )}
+            {Number(fin?.security_pending_charges || 0) > 0 ? (
+              <p className="mt-3 text-[11px]" style={{ color: "var(--vp-danger)" }}>
+                Cargos operativos: {num(fin.security_pending_charges)} procesos × {money(fin.security_charge_unit_usd)}. Incluye rechazos/fallidos, reembolsos, bloqueos, disputas, chargebacks y ajustes manuales auditados.
+              </p>
+            ) : null}
             <p className="mt-3 text-[11px]" style={{ color: "var(--vp-subtle)" }}>
               Tesorería ≈ entrante − comisiones distribuidas − retiros pagados. El ledger (wallet_movement) está en 0 hasta el primer cierre de período; ahí empiezan los valores reales.
             </p>
