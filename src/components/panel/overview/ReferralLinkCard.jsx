@@ -10,17 +10,31 @@ export default function ReferralLinkCard() {
   const [link, setLink] = useState("");
   const [code, setCode] = useState("");
   const [copied, setCopied] = useState(false);
+  const [status, setStatus] = useState("loading");
 
   useEffect(() => {
     let cancelled = false;
     fetch("/api/member/referral", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (cancelled || !d || d.error) return;
+        if (cancelled) return;
+        if (!d || d.error) {
+          setStatus("error");
+          return;
+        }
+        if (!d.positioned) {
+          setStatus("pending");
+          setLink("");
+          setCode("");
+          return;
+        }
         if (d.link) setLink(d.link);
         if (d.code) setCode(d.code);
+        setStatus(d.link ? "ready" : "pending");
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled) setStatus("error");
+      });
     return () => {
       cancelled = true;
     };
@@ -54,12 +68,14 @@ export default function ReferralLinkCard() {
         ) : null}
       </div>
       <p className="mb-3 text-xs leading-5" style={{ color: "var(--vp-muted)" }}>
-        Comparte este link. Quien se registre por él queda en tu red.
+        {status === "ready"
+          ? "Comparte este link. Quien se registre por él queda en tu red."
+          : "Tu link se activa cuando tu membresía queda pagada y tu posición existe en el árbol."}
       </p>
       <div className="flex flex-col gap-2 sm:flex-row">
         <input
           readOnly
-          value={link || "Cargando…"}
+          value={displayValue(status, link)}
           onFocus={(e) => e.target.select()}
           className="min-h-11 w-full min-w-0 rounded-lg px-3 text-sm font-semibold outline-none"
           style={{ background: "var(--vp-surface)", border: "1px solid var(--vp-border)", color: "var(--vp-text)" }}
@@ -76,4 +92,11 @@ export default function ReferralLinkCard() {
       </div>
     </div>
   );
+}
+
+function displayValue(status, link) {
+  if (link) return link;
+  if (status === "loading") return "Cargando link...";
+  if (status === "error") return "No se pudo consultar el link en este momento";
+  return "Pendiente de activación y ubicación en el árbol";
 }
