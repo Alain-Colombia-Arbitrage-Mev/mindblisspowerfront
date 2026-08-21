@@ -26,7 +26,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Gate de tests + build: corre las pruebas unitarias y compila EN EL RUNNER
       # antes de tocar el box. Cualquier rotura (test o build) aborta el deploy
@@ -35,7 +35,7 @@ jobs:
       # pasar los tests.
       # node 22 = misma versión que el box en prod; además `node --test` sólo
       # expande el glob "src/**/*.test.mjs" en node 21+ (en 20 falla el gate).
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 22 }
       - name: Install deps
         run: npm ci --no-audit --no-fund
@@ -54,7 +54,7 @@ jobs:
           fi
 
       - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: arn:aws:iam::522814703714:role/gh-mindbliss-front-deploy
           aws-region: ${{ env.AWS_REGION }}
