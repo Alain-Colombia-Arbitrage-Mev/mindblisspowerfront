@@ -8,7 +8,7 @@ import ActivityFeed from "./ActivityFeed";
 import SalesSection from "./SalesSection";
 import AdminNetworkTree from "./AdminNetworkTree";
 import UserInspector from "./UserInspector";
-import { ShieldCheck, Users, DollarSign, Ban, CheckCircle2, Search, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { ShieldCheck, Users, DollarSign, Ban, CheckCircle2, Search, Loader2, ChevronLeft, ChevronRight, RotateCcw } from "lucide-react";
 
 const money = (v) => `$${Number(v ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const PAGE = 25;
@@ -88,6 +88,7 @@ export default function AdminPage() {
         <Metric Icon={Users} label="Usuarios" value={summary ? Number(summary.total_users).toLocaleString("en-US") : "…"} />
         <Metric Icon={CheckCircle2} label="Membresías vendidas" value={summary ? Number(summary.total_sold).toLocaleString("en-US") : "…"} accent />
         <Metric Icon={DollarSign} label="Ingresos (Stripe)" value={summary ? money(summary.total_revenue_usd) : "…"} accent />
+        <Metric Icon={RotateCcw} label="Reembolsado" value={summary ? money(summary.refunded_usd) : "…"} />
         <Metric Icon={Ban} label="Bloqueados" value={summary ? Number(summary.blocked_users).toLocaleString("en-US") : "…"} />
       </div>
 
@@ -97,13 +98,14 @@ export default function AdminPage() {
           <h2 className="executive-section-title"><DollarSign size={18} style={{ color: "var(--vp-accent)" }} /> Total vendido por producto</h2>
           <div className="executive-table-wrap">
             <table className="executive-table">
-              <thead><tr><th>Producto</th><th>Precio</th><th>Vendidos</th><th>Ingresos</th></tr></thead>
+              <thead><tr><th>Producto</th><th>Precio</th><th>Vendidos</th><th>Ingresos</th><th>Reembolsado</th></tr></thead>
               <tbody>
                 {summary.products.map((p) => (
                   <tr key={p.package_id}>
                     <td>{p.name}</td><td>{money(p.amount_usd)}</td>
                     <td>{Number(p.sold).toLocaleString("en-US")}</td>
                     <td style={{ color: "var(--vp-accent)" }}>{money(p.revenue_usd)}</td>
+                    <td style={{ color: Number(p.refunded_usd) > 0 ? "var(--vp-danger)" : "var(--vp-subtle)" }}>{money(p.refunded_usd)}</td>
                   </tr>
                 ))}
               </tbody>

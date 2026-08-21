@@ -2,10 +2,21 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 import { callPayments } from "@/lib/admin-bff";
+import { clearCookie } from "@/lib/cognito-session";
 import { verifyIdToken } from "@/lib/verify-id-token";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const SESSION_COOKIES = [
+  "vp_access_token",
+  "vp_id_token",
+  "vp_refresh_token",
+  "vp_otp_session",
+  "vp_cognito_state",
+  "vp_cognito_nonce",
+  "vp_cognito_code_challenge",
+];
 
 export async function GET() {
   const cookieStore = await cookies();
@@ -30,6 +41,9 @@ export async function GET() {
       callPayments(`/api/admin/check?email=${encodeURIComponent(email)}`),
       callPayments(`/api/member/referral?email=${encodeURIComponent(email)}`),
     ]);
+    if (isSuspended(adm) || isSuspended(ref)) {
+      return suspendedSessionResponse();
+    }
     if (adm.ok) isAdmin = Boolean(adm.data.is_admin);
     if (ref.ok) {
       if (ref.data.referral_code) realCode = ref.data.referral_code;
@@ -53,4 +67,17 @@ export async function GET() {
     referralCode: realCode || null,
     isAdmin,
   });
+}
+
+function isSuspended(result) {
+  return result?.status === 403 && result?.data?.error === "account_suspended";
+}
+
+function suspendedSessionResponse() {
+  const response = NextResponse.json(
+    { authenticated: false, mode: "cognito", error: "account_suspended" },
+    { status: 403 }
+  );
+  for (const name of SESSION_COOKIES) clearCookie(response, name);
+  return response;
 }

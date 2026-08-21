@@ -28,12 +28,10 @@ export async function POST(request) {
     return NextResponse.json({ error: validationError }, { status: 400 });
   }
 
-  // Lista negra: estos usuarios no pueden registrarse (ban por email/teléfono/
-  // nombre). Se consulta a vp-payments ANTES de crear el usuario en Cognito.
-  // Fail-open: si el servicio no responde, NO bloqueamos el registro legítimo
-  // (el barrido posterior captura cualquier colado); solo bloqueamos ante un
-  // "blacklisted:true" explícito.
-  if (await isBlacklisted({ email, phone, fullName, birthDate })) {
+  // Lista negra: se consulta ANTES de crear el usuario en Cognito. Falla cerrado:
+  // si no se puede validar el estado de acceso, no creamos cuentas nuevas.
+  const precheck = await registrationPrecheck({ email, phone, fullName, birthDate });
+  if (precheck.blacklisted) {
     return NextResponse.json(
       {
         error:
@@ -42,6 +40,16 @@ export async function POST(request) {
         blacklisted: true,
       },
       { status: 403 }
+    );
+  }
+  if (precheck.unavailable) {
+    return NextResponse.json(
+      {
+        error:
+          "No se pudo validar tu estado de acceso. Intenta de nuevo en unos minutos. / " +
+          "We could not validate your access status. Please try again in a few minutes.",
+      },
+      { status: 503 }
     );
   }
 
@@ -125,13 +133,12 @@ export async function POST(request) {
   );
 }
 
-// isBlacklisted consulta a vp-payments si el candidato está en la lista negra.
-// Fail-open ante cualquier fallo (infra/config): devuelve false para no bloquear
-// registros legítimos por un problema transitorio.
-async function isBlacklisted({ email, phone, fullName, birthDate }) {
+// registrationPrecheck consulta a vp-payments si el candidato está en blacklist.
+// Falla cerrado ante infra/config para evitar altas sin validar.
+async function registrationPrecheck({ email, phone, fullName, birthDate }) {
   const base = process.env.VP_PAYMENTS_URL;
   const token = process.env.PAYMENTS_SERVICE_TOKEN;
-  if (!base || !token) return false;
+  if (!base || !token) return { unavailable: true };
   try {
     const resp = await fetch(`${base}/api/registration/precheck`, {
       method: "POST",
@@ -139,11 +146,11 @@ async function isBlacklisted({ email, phone, fullName, birthDate }) {
       body: JSON.stringify({ email, phone, name: fullName, birth_date: birthDate }),
       cache: "no-store",
     });
-    if (!resp.ok) return false;
     const data = await resp.json().catch(() => ({}));
-    return Boolean(data.blacklisted);
+    if (!resp.ok) return { unavailable: true };
+    return { blacklisted: Boolean(data.blacklisted) };
   } catch {
-    return false;
+    return { unavailable: true };
   }
 }
 

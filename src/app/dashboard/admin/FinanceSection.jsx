@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   Activity, AlertTriangle, ArrowDownToLine, Banknote, Building2,
-  Coins, Gauge, Loader2, ShieldCheck, TrendingUp, Trophy, Wallet,
+  Coins, Gauge, Loader2, RotateCcw, ShieldCheck, TrendingUp, Trophy, Wallet,
 } from "lucide-react";
 
 const money = (v) => `$${Number(v ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -112,6 +112,7 @@ export default function FinanceSection() {
           <>
             <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
               <Kpi Icon={ArrowDownToLine} label="Dinero entrante" value={money(fin?.inflows_usd)} accent />
+              <Kpi Icon={RotateCcw} label="Reembolsado" value={money(fin?.refunded_usd)} danger />
               <Kpi Icon={Banknote} label="Packs pagados" value={num(fin?.packs_paid)} />
               <Kpi Icon={Coins} label="Comisiones distribuidas" value={money(fin?.commissions_distributed_usd)} />
               <Kpi Icon={Wallet} label="Pendiente de pago" value={money(fin?.pending_payout_usd)} />
@@ -147,11 +148,11 @@ export default function FinanceSection() {
   );
 }
 
-function Kpi({ Icon, label, value, accent }) {
+function Kpi({ Icon, label, value, accent, danger }) {
   return (
     <div className="executive-card p-3 vp-glass">
       <div className="mb-1 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider" style={{ color: "var(--vp-subtle)" }}><Icon size={12} /> {label}</div>
-      <div className="text-lg font-semibold" style={{ color: accent ? "var(--vp-accent)" : "var(--vp-text)" }}>{value}</div>
+      <div className="text-lg font-semibold" style={{ color: danger ? "var(--vp-danger)" : accent ? "var(--vp-accent)" : "var(--vp-text)" }}>{value}</div>
     </div>
   );
 }

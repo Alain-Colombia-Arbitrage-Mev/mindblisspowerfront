@@ -33,9 +33,11 @@ export default function SalesSection() {
       paid: acc.paid + Number(r.paid),
       activated: acc.activated + Number(r.activated),
       revenue: acc.revenue + Number(r.revenue_usd),
+      refunded: acc.refunded + Number(r.refunded_usd),
     }),
-    { created: 0, paid: 0, activated: 0, revenue: 0 },
+    { created: 0, paid: 0, activated: 0, revenue: 0, refunded: 0 },
   );
+  const cash = report?.cash_summary || {};
 
   return (
     <section className="executive-panel">
@@ -73,41 +75,60 @@ export default function SalesSection() {
           Sin ventas registradas en los últimos {days} días.
         </p>
       ) : (
-        <div className="executive-table-wrap">
-          <table className="executive-table">
-            <thead>
-              <tr>
-                <th>Membresía</th>
-                <th>Precio</th>
-                <th>Iniciados</th>
-                <th>Pagados</th>
-                <th>Activados</th>
-                <th>Revenue</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.package_id}>
-                  <td>{r.name}</td>
-                  <td>{money(r.amount_usd)}</td>
-                  <td>{r.created}</td>
-                  <td>{r.paid}</td>
-                  <td>{r.activated}</td>
-                  <td style={{ color: "var(--vp-accent)", fontWeight: 600 }}>{money(r.revenue_usd)}</td>
+        <>
+          <div className="mb-4 grid gap-3 sm:grid-cols-3">
+            <Mini label="Bruto neto" value={money(cash.gross_charged_usd)} />
+            <Mini label="Reembolsado" value={money(cash.refunded_usd)} tone="var(--vp-danger)" />
+            <Mini label="Cargos exitosos" value={Number(cash.successful_charges || 0).toLocaleString("en-US")} />
+          </div>
+          <div className="executive-table-wrap">
+            <table className="executive-table">
+              <thead>
+                <tr>
+                  <th>Membresía</th>
+                  <th>Precio</th>
+                  <th>Iniciados</th>
+                  <th>Pagados</th>
+                  <th>Activados</th>
+                  <th>Revenue</th>
+                  <th>Reembolsado</th>
                 </tr>
-              ))}
-              <tr style={{ fontWeight: 700 }}>
-                <td>Total</td>
-                <td>—</td>
-                <td>{totals.created}</td>
-                <td>{totals.paid}</td>
-                <td>{totals.activated}</td>
-                <td style={{ color: "var(--vp-accent)" }}>{money(totals.revenue)}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.package_id}>
+                    <td>{r.name}</td>
+                    <td>{money(r.amount_usd)}</td>
+                    <td>{r.created}</td>
+                    <td>{r.paid}</td>
+                    <td>{r.activated}</td>
+                    <td style={{ color: "var(--vp-accent)", fontWeight: 600 }}>{money(r.revenue_usd)}</td>
+                    <td style={{ color: Number(r.refunded_usd) > 0 ? "var(--vp-danger)" : "var(--vp-subtle)" }}>{money(r.refunded_usd)}</td>
+                  </tr>
+                ))}
+                <tr style={{ fontWeight: 700 }}>
+                  <td>Total</td>
+                  <td>—</td>
+                  <td>{totals.created}</td>
+                  <td>{totals.paid}</td>
+                  <td>{totals.activated}</td>
+                  <td style={{ color: "var(--vp-accent)" }}>{money(totals.revenue)}</td>
+                  <td style={{ color: totals.refunded > 0 ? "var(--vp-danger)" : "var(--vp-subtle)" }}>{money(totals.refunded)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </section>
+  );
+}
+
+function Mini({ label, value, tone = "var(--vp-text)" }) {
+  return (
+    <div className="executive-card p-3 vp-glass">
+      <div className="mb-1 text-[10px] font-black uppercase tracking-wider" style={{ color: "var(--vp-subtle)" }}>{label}</div>
+      <div className="text-lg font-semibold" style={{ color: tone }}>{value}</div>
+    </div>
   );
 }
