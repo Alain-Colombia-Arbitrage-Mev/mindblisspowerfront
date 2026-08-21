@@ -29,7 +29,16 @@ export async function GET(request) {
              p.first_name || ' ' || p.last_name AS name,
              p.email::text AS email,
              p.status       AS person_status,
-             p.blacklisted
+             p.blacklisted,
+             EXISTS (
+               SELECT 1
+                 FROM mlm.blacklist b
+                WHERE (b.email_norm IS NOT NULL AND b.email_norm = mlm.norm_email(p.email))
+                   OR (b.phone_last10 IS NOT NULL AND b.phone_last10 = mlm.norm_phone10(p.phone_number))
+                   OR (b.name_norm IS NOT NULL
+                       AND b.name_norm = mlm.norm_name(p.first_name || ' ' || p.last_name)
+                       AND (b.birthdate IS NULL OR (p.birthday IS NOT NULL AND b.birthdate = p.birthday)))
+             ) AS listed_by_blacklist
         FROM mlm.affiliate a
         JOIN mlm.person p ON p.id = a.person_id
        WHERE a.invitation_link ILIKE ${like}
@@ -64,7 +73,7 @@ export async function GET(request) {
     const pathById = new Map(paths.map((r) => [String(r.match_id), r.path.map(String)]));
 
     const results = matches.map((m) => {
-      const banned = m.blacklisted === true || m.person_status === "suspended" || m.person_status === "banned";
+      const banned = m.blacklisted === true || m.listed_by_blacklist === true || m.person_status === "suspended" || m.person_status === "banned";
       return {
         id: String(m.id),
         handle: m.handle || "",

@@ -32,7 +32,7 @@ export async function requireAdminTree() {
 // "Baneado" = persona en lista negra o suspendida/baneada; el árbol lo pinta
 // distinto. handle sale de invitation_link (identificador público del referido).
 export function shapeNode(row) {
-  const banned = row.blacklisted === true || row.person_status === "suspended" || row.person_status === "banned";
+  const banned = row.blacklisted === true || row.listed_by_blacklist === true || row.person_status === "suspended" || row.person_status === "banned";
   return {
     id: String(row.id),
     parentId: row.parent_id == null ? null : String(row.parent_id),

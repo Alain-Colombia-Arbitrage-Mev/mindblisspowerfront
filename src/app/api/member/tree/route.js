@@ -33,6 +33,29 @@ export async function GET() {
   }
 
   try {
+    const access = await sql`
+      SELECT p.status::text AS status,
+             COALESCE(p.blacklisted, false) AS blacklisted,
+             EXISTS (
+               SELECT 1
+                 FROM mlm.blacklist b
+                WHERE (b.email_norm IS NOT NULL AND b.email_norm = mlm.norm_email(p.email))
+                   OR (b.phone_last10 IS NOT NULL AND b.phone_last10 = mlm.norm_phone10(p.phone_number))
+                   OR (b.name_norm IS NOT NULL
+                       AND b.name_norm = mlm.norm_name(p.first_name || ' ' || p.last_name)
+                       AND (b.birthdate IS NULL OR (p.birthday IS NOT NULL AND b.birthdate = p.birthday)))
+             ) AS listed_by_blacklist
+        FROM mlm.person p
+       WHERE lower(p.email) = ${email}
+       LIMIT 1`;
+
+    if (access.length > 0) {
+      const row = access[0];
+      if (row.blacklisted || row.listed_by_blacklist || ["suspended", "banned", "deleted"].includes(row.status)) {
+        return NextResponse.json({ error: "account_suspended", positioned: false }, { status: 403 });
+      }
+    }
+
     const me = await sql`
       SELECT a.id,
              a.depth,
@@ -52,6 +75,18 @@ export async function GET() {
         LEFT JOIN mlm.affiliate pa ON pa.id = a.parent_id
         LEFT JOIN mlm.person pp    ON pp.id = pa.person_id
        WHERE lower(p.email) = ${email}
+         AND a.status = 'active'
+         AND p.status = 'active'
+         AND NOT COALESCE(p.blacklisted, false)
+         AND NOT EXISTS (
+           SELECT 1
+             FROM mlm.blacklist b
+            WHERE (b.email_norm IS NOT NULL AND b.email_norm = mlm.norm_email(p.email))
+               OR (b.phone_last10 IS NOT NULL AND b.phone_last10 = mlm.norm_phone10(p.phone_number))
+               OR (b.name_norm IS NOT NULL
+                   AND b.name_norm = mlm.norm_name(p.first_name || ' ' || p.last_name)
+                   AND (b.birthdate IS NULL OR (p.birthday IS NOT NULL AND b.birthdate = p.birthday)))
+         )
        LIMIT 1`;
 
     if (me.length === 0) {
@@ -67,12 +102,38 @@ export async function GET() {
       WITH RECURSIVE sub AS (
         SELECT a.id, a.parent_id, a.position, a.status, a.current_rank_id, a.person_id, 1 AS level
           FROM mlm.affiliate a
+          JOIN mlm.person p ON p.id = a.person_id
          WHERE a.parent_id = ${root.id}
+           AND a.status = 'active'
+           AND p.status = 'active'
+           AND NOT COALESCE(p.blacklisted, false)
+           AND NOT EXISTS (
+             SELECT 1
+               FROM mlm.blacklist b
+              WHERE (b.email_norm IS NOT NULL AND b.email_norm = mlm.norm_email(p.email))
+                 OR (b.phone_last10 IS NOT NULL AND b.phone_last10 = mlm.norm_phone10(p.phone_number))
+                 OR (b.name_norm IS NOT NULL
+                     AND b.name_norm = mlm.norm_name(p.first_name || ' ' || p.last_name)
+                     AND (b.birthdate IS NULL OR (p.birthday IS NOT NULL AND b.birthdate = p.birthday)))
+           )
         UNION ALL
         SELECT a.id, a.parent_id, a.position, a.status, a.current_rank_id, a.person_id, sub.level + 1
           FROM mlm.affiliate a
           JOIN sub ON a.parent_id = sub.id
+          JOIN mlm.person p ON p.id = a.person_id
          WHERE sub.level < 3
+           AND a.status = 'active'
+           AND p.status = 'active'
+           AND NOT COALESCE(p.blacklisted, false)
+           AND NOT EXISTS (
+             SELECT 1
+               FROM mlm.blacklist b
+              WHERE (b.email_norm IS NOT NULL AND b.email_norm = mlm.norm_email(p.email))
+                 OR (b.phone_last10 IS NOT NULL AND b.phone_last10 = mlm.norm_phone10(p.phone_number))
+                 OR (b.name_norm IS NOT NULL
+                     AND b.name_norm = mlm.norm_name(p.first_name || ' ' || p.last_name)
+                     AND (b.birthdate IS NULL OR (p.birthday IS NOT NULL AND b.birthdate = p.birthday)))
+           )
       )
       SELECT d.id,
              d.parent_id,

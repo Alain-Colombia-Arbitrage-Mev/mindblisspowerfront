@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 /**
  * BFF de lista negra (solo admin, fail-closed). POST agrega (banear): además de
  * insertar en mlm.blacklist, el backend suspende la cuenta viva y deshabilita el
- * login en Cognito. Requiere email o teléfono (o nombre+fecha de nacimiento).
+ * login en Cognito. Requiere email, teléfono o nombre exacto.
  */
 export async function POST(request) {
   const email = await sessionEmail();
@@ -29,8 +29,8 @@ export async function POST(request) {
     birthdate: String(body?.birthdate || "").trim(),
     motive: String(body?.motive || "").trim(),
   };
-  if (!payload.email && !payload.phone && !(payload.fullname && payload.birthdate)) {
-    return NextResponse.json({ error: "need_email_phone_or_name_birth" }, { status: 400 });
+  if (!payload.email && !payload.phone && !payload.fullname) {
+    return NextResponse.json({ error: "need_email_phone_or_name" }, { status: 400 });
   }
 
   const { ok, status, data } = await callPayments(
