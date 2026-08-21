@@ -24,7 +24,6 @@ const PAGE_TITLES = [
       "Cada persona que invitas construye tu red. Comparte tu código de referido con intención y convierte cada invitación en un activo permanente de tu estructura binaria.",
   },
   { prefix: "/dashboard/tools", title: "Tools", subtitle: "Configuraciones" },
-  { prefix: "/dashboard/admin", title: "Panel Admin" },
 ];
 
 function pageTitleFor(pathname) {
@@ -39,7 +38,6 @@ export default function DashboardShell({ authMode, children }) {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [member, setMember] = useState(null);
-  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     setMobileMenuOpen(false);
@@ -53,7 +51,6 @@ export default function DashboardShell({ authMode, children }) {
         .then((d) => {
           if (cancelled) return;
           if (d?.name || d?.email) setMember({ name: d.name, email: d.email });
-          if (d?.isAdmin) setIsAdmin(true);
         })
         .catch(() => {});
     };
@@ -96,7 +93,6 @@ export default function DashboardShell({ authMode, children }) {
           >
             <PanelSidebar
               pathname={pathname}
-              isAdmin={isAdmin}
               member={member}
               onNavigate={() => setMobileMenuOpen(false)}
             />
@@ -108,7 +104,7 @@ export default function DashboardShell({ authMode, children }) {
         className="hidden h-full w-72 shrink-0 border-r md:block"
         style={{ borderColor: "var(--vp-border)" }}
       >
-        <PanelSidebar pathname={pathname} isAdmin={isAdmin} member={member} />
+        <PanelSidebar pathname={pathname} member={member} />
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
