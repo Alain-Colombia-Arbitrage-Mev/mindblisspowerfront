@@ -126,7 +126,14 @@ jobs:
           sleep 6
           curl -fsS http://127.0.0.1:3000/health >/dev/null && echo "mindbliss-web OK" || { echo "HEALTH FAIL"; journalctl -u mindbliss-web -n 20 --no-pager; exit 1; }
           EOS
-          jq -Rn --rawfile script /tmp/deploy.sh '{commands: ($script | split("\n"))}' > /tmp/params.json
+          {
+            echo "cat > /tmp/mindbliss-front-deploy.sh <<'REMOTE_DEPLOY'"
+            cat /tmp/deploy.sh
+            echo "REMOTE_DEPLOY"
+            echo "bash /tmp/mindbliss-front-deploy.sh"
+            echo "rm -f /tmp/mindbliss-front-deploy.sh"
+          } > /tmp/ssm-commands.sh
+          jq -Rn --rawfile script /tmp/ssm-commands.sh '{commands: ($script | split("\n"))}' > /tmp/params.json
 
           CMD_ID=$(aws ssm send-command \
             --instance-ids "${{ steps.t.outputs.instance }}" \
