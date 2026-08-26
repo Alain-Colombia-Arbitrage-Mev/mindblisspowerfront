@@ -1851,6 +1851,7 @@ export function ProductsDashboardPage() {
 }
 
 const TICKET_STATUS_LABELS = { open: "Abierto", answered: "Respondido", closed: "Cerrado" };
+const TICKET_PRIORITY_LABELS = { critical: "Critico", high: "Alta", normal: "Normal", low: "Baja" };
 
 function formatTicketDate(iso) {
   if (!iso) return "—";
@@ -1957,6 +1958,8 @@ export function SupportDashboardPage() {
                   <tr>
                     <th>Asunto</th>
                     <th>Estado</th>
+                    <th>Prioridad</th>
+                    <th>Respuesta</th>
                     <th>Fecha</th>
                   </tr>
                 </thead>
@@ -1969,6 +1972,8 @@ export function SupportDashboardPage() {
                         <td>
                           <StatusPill tone={statusTone(label)}>{label}</StatusPill>
                         </td>
+                        <td>{TICKET_PRIORITY_LABELS[t.priority] || t.priority || "Normal"}</td>
+                        <td>{t.answer || (t.status === "open" ? "En revision" : "-")}</td>
                         <td>{formatTicketDate(t.created_at)}</td>
                       </tr>
                     );
