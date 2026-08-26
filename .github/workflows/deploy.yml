@@ -9,9 +9,19 @@ name: deploy
 on:
   push:
     branches: [main, staging]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "staging|prod"
+        required: true
+        default: staging
+        type: choice
+        options:
+          - staging
+          - prod
 
 concurrency:
-  group: deploy-front-${{ github.ref_name }}
+  group: deploy-front-${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.ref_name }}
   cancel-in-progress: false
 
 permissions:
@@ -46,8 +56,31 @@ jobs:
 
       - name: Resolve target instance
         id: t
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_ENV: ${{ inputs.environment || '' }}
         run: |
-          if [ "${{ github.ref_name }}" = "main" ]; then
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            env_norm="$(printf '%s' "$INPUT_ENV" | tr '[:upper:]' '[:lower:]')"
+          elif [ "$REF_NAME" = "main" ]; then
+            env_norm=prod
+          else
+            env_norm=staging
+          fi
+
+          case "$env_norm" in
+            prod|production) env_norm=prod ;;
+            staging|stage) env_norm=staging ;;
+            *) echo "environment invalido: '$INPUT_ENV'"; exit 1 ;;
+          esac
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$env_norm" = "prod" ] && [ "$REF_NAME" != "main" ]; then
+            echo "Los deploys manuales a prod deben ejecutarse desde la rama main"
+            exit 1
+          fi
+
+          if [ "$env_norm" = "prod" ]; then
             echo "instance=i-060e76a6c26bded35" >> "$GITHUB_OUTPUT"; echo "env=prod" >> "$GITHUB_OUTPUT"
           else
             echo "instance=i-0f7f6c73503537d73" >> "$GITHUB_OUTPUT"; echo "env=staging" >> "$GITHUB_OUTPUT"
@@ -63,7 +96,7 @@ jobs:
         id: art
         run: |
           tar -czf /tmp/web.tar.gz --exclude=node_modules --exclude=.next --exclude=.git .
-          KEY="front/${{ github.ref_name }}-${{ github.sha }}.tar.gz"
+          KEY="front/${{ steps.t.outputs.env }}-${{ github.sha }}.tar.gz"
           aws s3 cp /tmp/web.tar.gz "s3://$ARTIFACT_BUCKET/$KEY" --only-show-errors
           URL=$(aws s3 presign "s3://$ARTIFACT_BUCKET/$KEY" --expires-in 1200)
           echo "key=$KEY" >> "$GITHUB_OUTPUT"
@@ -73,11 +106,22 @@ jobs:
         run: |
           printf "ARTIFACT_URL='%s'\n" "${{ steps.art.outputs.url }}" > /tmp/deploy.sh
           cat >> /tmp/deploy.sh <<'EOS'
-          set -e
+          set -euo pipefail
+          target=/opt/mindbliss/web
+          case "$target" in /opt/mindbliss/web) ;; *) echo "target invalido: $target"; exit 1 ;; esac
           curl -fsSL "$ARTIFACT_URL" -o /tmp/web.tar.gz
-          sudo -u ubuntu tar -xzf /tmp/web.tar.gz -C /opt/mindbliss/web
+          sudo -u ubuntu bash -c '
+            set -euo pipefail
+            target=/opt/mindbliss/web
+            find "$target" -mindepth 1 -maxdepth 1 \
+              ! -name ".env" \
+              ! -name ".env.local" \
+              ! -name "node_modules" \
+              -exec rm -rf {} +
+            tar -xzf /tmp/web.tar.gz -C "$target"
+          '
           rm -f /tmp/web.tar.gz
-          sudo -u ubuntu bash -c 'cd /opt/mindbliss/web && npm ci --no-audit --no-fund && npm run build' > /tmp/web-build.log 2>&1 || { tail -40 /tmp/web-build.log; exit 1; }
+          sudo -u ubuntu bash -c 'cd /opt/mindbliss/web && npm ci --no-audit --no-fund && npm run build' > /tmp/web-build.log 2>&1 || { tail -80 /tmp/web-build.log; exit 1; }
           systemctl restart mindbliss-web
           sleep 6
           curl -fsS http://127.0.0.1:3000/health >/dev/null && echo "mindbliss-web OK" || { echo "HEALTH FAIL"; journalctl -u mindbliss-web -n 20 --no-pager; exit 1; }
@@ -109,4 +153,7 @@ jobs:
 
       - name: Cleanup artifact
         if: always()
-        run: aws s3 rm "s3://$ARTIFACT_BUCKET/${{ steps.art.outputs.key }}" --only-show-errors || true
+        run: |
+          if [ -n "${{ steps.art.outputs.key }}" ]; then
+            aws s3 rm "s3://$ARTIFACT_BUCKET/${{ steps.art.outputs.key }}" --only-show-errors || true
+          fi
