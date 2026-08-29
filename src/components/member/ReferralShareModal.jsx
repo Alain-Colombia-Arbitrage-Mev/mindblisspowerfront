@@ -15,11 +15,11 @@ const toneStyles = {
   neutral: { background: 'var(--vp-surface-raised)', border: 'var(--vp-border)', color: 'var(--vp-text-soft)' },
 };
 
-export default function ReferralShareModal({ isOpen, onClose, code }) {
+export default function ReferralShareModal({ isOpen, onClose, code, link }) {
   const [copied, setCopied] = useState(null);
   const [sharing, setSharing] = useState(null);
 
-  const referralLink = `https://app.mindblisspower.com/register?ref=${code}`;
+  const referralLink = link || `https://app.mindblisspower.com/register?ref=${encodeURIComponent(code || '')}`;
   const shareText = `Únete a mi red en Mindbliss Power usando mi código de referido: ${code}. ${referralLink}`;
 
   const handleShare = (type) => {
@@ -42,11 +42,11 @@ export default function ReferralShareModal({ isOpen, onClose, code }) {
       },
       telegram: () => {
         const msg = encodeURIComponent(shareText);
-        window.open(`https://t.me/share/url?url=${referralLink}&text=${msg}`, '_blank');
+        window.open(`https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${msg}`, '_blank');
         setTimeout(() => setSharing(null), 300);
       },
       email: () => {
-        const subject = encodeURIComponent('Te invito a unirte a Vicion');
+        const subject = encodeURIComponent('Te invito a unirte a Mindbliss Power');
         const body = encodeURIComponent(shareText);
         window.open(`mailto:?subject=${subject}&body=${body}`, '_blank');
         setTimeout(() => setSharing(null), 300);

@@ -35,8 +35,8 @@ export default function GenerationView({ nodes }) {
                 <MemberChip
                   key={node.id}
                   name={node.name}
-                  detail={node.rank?.name ?? sideLabel(node.side)}
-                  active={Boolean(node.rank)}
+                  detail={`${node.rank?.name ?? "Sin rango"} · ${sideLabel(node.rootSide || node.side)}`}
+                  active={Boolean(node.activePackage)}
                 />
               ))}
             </div>

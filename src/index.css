@@ -2134,13 +2134,18 @@ html {
 /* ── Árbol binario (red de miembros) ─────────────────────────────── */
 .vp-tree-scroll {
   overflow-x: auto;
-  padding: 8px 4px 16px;
+  max-width: 100%;
+  border: 1px solid var(--vp-border);
+  border-radius: 16px;
+  background: var(--vp-bg);
+  padding: 22px 12px 18px;
   -webkit-overflow-scrolling: touch;
 }
 .vp-tree {
   display: inline-flex;
-  min-width: 100%;
+  min-width: max-content;
   justify-content: center;
+  padding: 4px 12px 18px;
 }
 .vp-tree ul,
 .vp-tree li {
@@ -2167,7 +2172,7 @@ html {
   position: relative;
   display: flex;
   justify-content: center;
-  padding-top: 20px;
+  padding-top: 22px;
 }
 /* tallo vertical: nodo padre -> barra horizontal */
 .vp-tree .vp-children::before {
@@ -2177,13 +2182,13 @@ html {
   left: 50%;
   margin-left: -1px;
   width: 2px;
-  height: 20px;
-  background: var(--vp-border-strong);
+  height: 22px;
+  background: color-mix(in srgb, var(--vp-border-strong) 78%, var(--vp-accent) 22%);
 }
 /* cada rama: mitad de la barra horizontal + caida vertical al hijo */
 .vp-tree .vp-leaf {
   position: relative;
-  padding: 24px 12px 0;
+  padding: 24px 14px 0;
 }
 .vp-tree .vp-leaf::before,
 .vp-tree .vp-leaf::after {
@@ -2193,27 +2198,37 @@ html {
   right: 50%;
   width: 50%;
   height: 24px;
-  border-top: 2px solid var(--vp-border-strong);
+  border-top: 2px solid color-mix(in srgb, var(--vp-border-strong) 78%, var(--vp-accent) 22%);
 }
 .vp-tree .vp-leaf::after {
   right: auto;
   left: 50%;
-  border-left: 2px solid var(--vp-border-strong);
+  border-left: 2px solid color-mix(in srgb, var(--vp-border-strong) 78%, var(--vp-accent) 22%);
 }
 .vp-tree .vp-leaf:first-child::before,
 .vp-tree .vp-leaf:last-child::after {
   border: 0 none;
 }
 .vp-tree .vp-leaf:last-child::before {
-  border-right: 2px solid var(--vp-border-strong);
+  border-right: 2px solid color-mix(in srgb, var(--vp-border-strong) 78%, var(--vp-accent) 22%);
   border-radius: 0 8px 0 0;
 }
 .vp-tree .vp-leaf:first-child::after {
   border-radius: 8px 0 0 0;
 }
+.vp-node {
+  transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease, transform 140ms ease;
+}
+.vp-node:hover {
+  transform: translateY(-1px);
+  border-color: var(--vp-accent-border) !important;
+}
 @media (max-width: 640px) {
+  .vp-tree-scroll {
+    padding: 16px 8px 14px;
+  }
   .vp-tree .vp-leaf {
-    padding-left: 5px;
-    padding-right: 5px;
+    padding-left: 6px;
+    padding-right: 6px;
   }
 }

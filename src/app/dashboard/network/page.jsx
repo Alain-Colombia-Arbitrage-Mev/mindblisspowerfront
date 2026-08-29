@@ -29,7 +29,9 @@ export default function NetworkPage() {
   const validTabs = useMemo(() => new Set(NETWORK_TABS.map((item) => item.id)), []);
   const [tab, setTab] = useState("tree");
   const [memberName, setMemberName] = useState("");
-  const [state, setState] = useState({ loading: true, error: "", data: null, summary: null, syncing: false });
+  const [treeDepth, setTreeDepth] = useState("8");
+  const [refreshTick, setRefreshTick] = useState(0);
+  const [state, setState] = useState({ loading: true, error: "", data: null, summary: null, referral: null, syncing: false });
 
   useEffect(() => {
     if (validTabs.has(requestedTab)) {
@@ -44,18 +46,27 @@ export default function NetworkPage() {
     const maxTries = 20; // ~60s para cubrir webhook + lag de RDS
 
     const load = async () => {
+      const firstTry = tries === 0;
       tries += 1;
+      if (firstTry) {
+        setState((prev) => ({ ...prev, loading: true, error: "", syncing: false }));
+      }
       try {
-        const [session, treeResponse, summaryResponse] = await Promise.all([
+        const treeQuery = new URLSearchParams({
+          depth: treeDepth,
+          limit: treeDepth === "all" ? "2500" : "1500",
+        });
+        const [session, treeResponse, summaryResponse, referralResponse] = await Promise.all([
           fetch("/api/auth/session", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
-          fetch("/api/member/tree", { cache: "no-store" }),
+          fetch(`/api/member/tree?${treeQuery.toString()}`, { cache: "no-store" }),
           fetch("/api/payments/me?fresh=1", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
+          fetch("/api/member/referral", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
         ]);
         const payload = await treeResponse.json().catch(() => ({}));
         if (cancelled) return;
         if (session?.name) setMemberName(session.name);
         if (!treeResponse.ok) {
-          setState({ loading: false, error: payload.error || "No se pudo cargar tu posición.", data: null, summary: summaryResponse, syncing: false });
+          setState({ loading: false, error: payload.error || "No se pudo cargar tu posición.", data: null, summary: summaryResponse, referral: referralResponse, syncing: false });
           return;
         }
 
@@ -69,6 +80,7 @@ export default function NetworkPage() {
           error: "",
           data: payload,
           summary: summaryResponse,
+          referral: referralResponse,
           syncing: shouldPoll,
         });
 
@@ -76,7 +88,7 @@ export default function NetworkPage() {
           timer = setTimeout(load, 3000);
         }
       } catch {
-        if (!cancelled) setState({ loading: false, error: "Sin conexión con el árbol.", data: null, summary: null, syncing: false });
+        if (!cancelled) setState({ loading: false, error: "Sin conexión con el árbol.", data: null, summary: null, referral: null, syncing: false });
       }
     };
 
@@ -85,7 +97,7 @@ export default function NetworkPage() {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, []);
+  }, [treeDepth, refreshTick]);
 
   if (state.loading) {
     return (
@@ -155,18 +167,20 @@ export default function NetworkPage() {
   const directs = tree.filter((node) => node.level === 1);
   const leftDirect = directs.find((node) => node.side === "L");
   const rightDirect = directs.find((node) => node.side === "R");
-  const leftCount = tree.filter((node) => node.side === "L").length;
-  const rightCount = tree.filter((node) => node.side === "R").length;
+  const leftCount = tree.filter((node) => node.rootSide === "L").length;
+  const rightCount = tree.filter((node) => node.rootSide === "R").length;
   const maxGen = tree.reduce((max, node) => Math.max(max, node.level ?? 0), 0);
   const withRank = tree.filter((node) => node.rank).length;
+  const withPackage = tree.filter((node) => node.activePackage).length;
 
   const summaryMetrics = [
-    { label: "Total", value: tree.length, tone: "positive" },
+    { label: "Visible", value: tree.length, tone: "positive" },
     { label: "Izquierda", value: leftCount, tone: "positive" },
     { label: "Derecha", value: rightCount, tone: "accent" },
-    { label: "Con Rango", value: withRank, tone: "default" },
+    { label: "Con paquete", value: withPackage, tone: "accent" },
     { label: "Directos", value: directs.length, tone: "default" },
     { label: "Gen Max", value: maxGen, tone: "default" },
+    { label: "Con Rango", value: withRank, tone: "default" },
     { label: "Mi Nivel", value: me.depth, tone: "positive", span: 2 },
   ];
 
@@ -178,6 +192,17 @@ export default function NetworkPage() {
           depth={`Nivel ${me.depth}`}
           side={me.side === "L" ? "Izquierda" : me.side === "R" ? "Derecha" : "Raíz"}
           sponsor={me.sponsor}
+          parent={me.parent}
+          affiliateId={me.affiliateId}
+          activePackage={me.activePackage}
+          rankProgress={me.rankProgress}
+          commissions={{
+            available: state.summary?.commission_available_usd,
+            maturing: state.summary?.commission_maturing_usd,
+            withdrawable: state.summary?.available_for_withdrawal_usd,
+            wallet: state.summary?.wallet_balance_usd,
+          }}
+          referral={state.referral}
           leftLeg={leftDirect?.name}
           rightLeg={rightDirect?.name}
         />
@@ -191,7 +216,17 @@ export default function NetworkPage() {
 
       <NetworkTabs active={tab} onChange={setTab} />
 
-      {tab === "tree" ? <BinaryTreeView nodes={tree} me={me} /> : null}
+      {tab === "tree" ? (
+        <BinaryTreeView
+          nodes={tree}
+          me={me}
+          meta={state.data.meta}
+          depth={treeDepth}
+          onDepthChange={setTreeDepth}
+          onRefresh={() => setRefreshTick((tick) => tick + 1)}
+          refreshing={state.loading}
+        />
+      ) : null}
       {tab === "generation" ? <GenerationView nodes={tree} /> : null}
       {tab === "rank" ? <RankView nodes={tree} /> : null}
       {tab === "list" ? <OperativeListView nodes={tree} /> : null}

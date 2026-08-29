@@ -117,7 +117,7 @@ export default function ReferralModule() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       {hasReferral ? (
-        <ReferralShareModal isOpen={shareModalOpen} onClose={() => setShareModalOpen(false)} code={referralCode} memberName="Tu red" />
+        <ReferralShareModal isOpen={shareModalOpen} onClose={() => setShareModalOpen(false)} code={referralCode} link={referralLink} memberName="Tu red" />
       ) : null}
 
       <motion.section

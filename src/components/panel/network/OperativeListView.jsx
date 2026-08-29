@@ -7,7 +7,7 @@ export default function OperativeListView({ nodes }) {
         <table className="w-full border-collapse text-left">
           <thead>
             <tr>
-              {["Miembro", "Nivel", "Pierna", "Rango"].map((header) => (
+              {["Miembro", "Nivel", "Rama", "Estado", "Rango"].map((header) => (
                 <th
                   key={header}
                   className="border-b px-4 py-3 text-[11px] font-semibold uppercase"
@@ -28,7 +28,10 @@ export default function OperativeListView({ nodes }) {
                   Nivel {node.level}
                 </td>
                 <td className="px-4 py-3 text-xs" style={{ color: "var(--vp-muted)" }}>
-                  {node.side === "L" ? "Izquierda" : node.side === "R" ? "Derecha" : "—"}
+                  {node.rootSide === "L" ? "Izquierda" : node.rootSide === "R" ? "Derecha" : "—"}
+                </td>
+                <td className="px-4 py-3 text-xs font-bold" style={{ color: node.activePackage ? "var(--vp-success)" : "var(--vp-muted)" }}>
+                  {node.activePackage ? "Paquete activo" : node.status === "active" ? "Nodo activo" : "Inactivo"}
                 </td>
                 <td className="px-4 py-3 text-xs font-bold" style={{ color: node.rank ? "var(--vp-accent)" : "var(--vp-muted)" }}>
                   {node.rank?.name ?? "Sin Rango"}

@@ -1,12 +1,39 @@
-import { useState } from 'react';
+"use client";
+
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Copy, Check, Share2 } from 'lucide-react';
 
 export default function ReferralLink({ userId, userName }) {
   const [copied, setCopied] = useState(false);
-  const referralLink = `https://vicionpower.com/join?ref=${userId}`;
+  const [referralLink, setReferralLink] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/member/referral', { cache: 'no-store' })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (cancelled) return;
+        if (data?.positioned && data?.link) {
+          setReferralLink(data.link);
+          return;
+        }
+        if (userId && typeof window !== 'undefined') {
+          setReferralLink(`${window.location.origin}/register?ref=${encodeURIComponent(userId)}`);
+        }
+      })
+      .catch(() => {
+        if (!cancelled && userId && typeof window !== 'undefined') {
+          setReferralLink(`${window.location.origin}/register?ref=${encodeURIComponent(userId)}`);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
 
   const handleCopy = () => {
+    if (!referralLink) return;
     navigator.clipboard.writeText(referralLink);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -32,7 +59,7 @@ export default function ReferralLink({ userId, userName }) {
         <Share2 size={18} style={{ color: '#10b981', flexShrink: 0 }} />
         <input
           type="text"
-          value={referralLink}
+          value={referralLink || 'Pendiente de activación y ubicación en el árbol'}
           readOnly
           style={{
             flex: 1,
@@ -49,6 +76,7 @@ export default function ReferralLink({ userId, userName }) {
       {/* Copy button */}
       <motion.button
         onClick={handleCopy}
+        disabled={!referralLink}
         whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.98 }}
         className="w-full py-3 rounded-xl font-semibold transition-all flex items-center justify-center gap-2"
@@ -57,7 +85,8 @@ export default function ReferralLink({ userId, userName }) {
           border: `1px solid ${copied ? 'rgba(16,185,129,0.5)' : 'rgba(16,185,129,0.3)'}`,
           color: '#10b981',
           fontSize: 14,
-          cursor: 'pointer',
+          cursor: referralLink ? 'pointer' : 'default',
+          opacity: referralLink ? 1 : 0.6,
         }}
         onMouseEnter={e => {
           e.currentTarget.style.background = 'rgba(16,185,129,0.25)';
@@ -81,7 +110,7 @@ export default function ReferralLink({ userId, userName }) {
 
       {/* Tips */}
       <div className="mt-6 p-4 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)' }}>
-        <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, fontWeight: 700, marginBottom: 8, margin: '0 0 8px 0' }}>💡 CONSEJOS</p>
+        <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, fontWeight: 700, marginBottom: 8, margin: '0 0 8px 0' }}>CONSEJOS</p>
         <ul style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, lineHeight: 1.6, margin: 0, paddingLeft: 20 }}>
           <li>Comparte solo con personas que creas que pueden encajar</li>
           <li>Explica primero qué es Vicion, luego comparte el link</li>
