@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 
 import { authRateLimit } from "@/lib/auth-rate-limit";
+import { authLogFields, logAuthEvent } from "@/lib/auth-observability";
 import { buildCognitoSignUpPayload, getCognitoIdentityProviderConfig } from "@/lib/cognito";
 
 export const runtime = "nodejs";
@@ -32,6 +33,7 @@ export async function POST(request) {
   // si no se puede validar el estado de acceso, no creamos cuentas nuevas.
   const precheck = await registrationPrecheck({ email, phone, fullName, birthDate });
   if (precheck.blacklisted) {
+    logAuthEvent("signup_blocked", authLogFields({ email, status: 403, reason: "blacklisted" }), "warn");
     return NextResponse.json(
       {
         error:
@@ -43,6 +45,7 @@ export async function POST(request) {
     );
   }
   if (precheck.unavailable) {
+    logAuthEvent("signup_precheck_unavailable", authLogFields({ email, status: 503, reason: "precheck_unavailable" }), "warn");
     return NextResponse.json(
       {
         error:
@@ -114,11 +117,32 @@ export async function POST(request) {
   });
 
   if (!cognitoResponse.ok) {
+    logAuthEvent(
+      "signup_failed",
+      authLogFields({
+        email,
+        status: mapCognitoStatus(cognitoResponse.body),
+        reason: getCognitoErrorCode(cognitoResponse.body) === "CodeDeliveryFailureException" ? "email_delivery_failed" : "cognito_error",
+        errorCode: getCognitoErrorCode(cognitoResponse.body),
+      }),
+      "warn"
+    );
     return NextResponse.json(
       { error: mapCognitoSignUpError(cognitoResponse.body) },
       { status: mapCognitoStatus(cognitoResponse.body) }
     );
   }
+
+  logAuthEvent(
+    "signup_created",
+    authLogFields({
+      email,
+      status: 201,
+      reason: Boolean(cognitoResponse.body.UserConfirmed) ? "confirmed" : "confirmation_required",
+      delivery: cognitoResponse.body.CodeDeliveryDetails || null,
+      extra: { phone_provided: Boolean(phone) },
+    })
+  );
 
   return NextResponse.json(
     {
@@ -235,6 +259,13 @@ function mapCognitoSignUpError(body) {
     return (
       "Demasiados intentos. Espera unos minutos antes de volver a intentar. / " +
       "Too many attempts. Wait a few minutes before trying again."
+    );
+  }
+
+  if (code === "CodeDeliveryFailureException") {
+    return (
+      "No pudimos entregar el código de activación por email. Revisa que el correo esté escrito correctamente o solicita ayuda. / " +
+      "We could not deliver the activation code by email. Check the email address or request help."
     );
   }
 

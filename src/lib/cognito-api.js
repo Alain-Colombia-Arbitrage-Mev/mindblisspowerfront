@@ -55,6 +55,8 @@ const ERROR_MESSAGES = {
   NotAuthorizedException: "Credenciales inválidas. / Invalid credentials.",
   TooManyRequestsException: "Demasiados intentos. Espera unos minutos. / Too many attempts. Wait a few minutes.",
   LimitExceededException: "Demasiados intentos. Espera unos minutos. / Too many attempts. Wait a few minutes.",
+  CodeDeliveryFailureException:
+    "No pudimos entregar el código. Usa otro canal o solicita ayuda. / We could not deliver the code. Use another channel or request help.",
 };
 
 export function mapCognitoError(

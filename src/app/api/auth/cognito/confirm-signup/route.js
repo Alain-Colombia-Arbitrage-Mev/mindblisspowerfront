@@ -2,8 +2,9 @@ import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 
 import { authRateLimit } from "@/lib/auth-rate-limit";
+import { authLogFields, logAuthEvent } from "@/lib/auth-observability";
 import { buildCognitoSecretHash, getCognitoIdentityProviderConfig } from "@/lib/cognito";
-import { callCognito, mapCognitoError, mapCognitoStatus, normalizeEmail } from "@/lib/cognito-api";
+import { callCognito, getCognitoErrorCode, mapCognitoError, mapCognitoStatus, normalizeEmail } from "@/lib/cognito-api";
 
 export const runtime = "nodejs";
 
@@ -61,14 +62,32 @@ export async function POST(request) {
       // Cuenta ya confirmada (p.ej. link de reactivación clicado tarde): no es
       // un error real — el front manda al login.
       if (/already\s+confirmed/i.test(String(response.body?.message || ""))) {
+        logAuthEvent(
+          "signup_confirmation_resend_already_confirmed",
+          authLogFields({ email, status: 200, reason: "already_confirmed" })
+        );
         return NextResponse.json({ ok: true, alreadyConfirmed: true });
       }
+      logAuthEvent(
+        "signup_confirmation_resend_failed",
+        authLogFields({
+          email,
+          status: mapCognitoStatus(response.body),
+          reason: getCognitoErrorCode(response.body) === "CodeDeliveryFailureException" ? "email_delivery_failed" : "cognito_error",
+          errorCode: getCognitoErrorCode(response.body),
+        }),
+        "warn"
+      );
       return NextResponse.json(
         { error: mapCognitoError(response.body, "No se pudo reenviar el código.") },
         { status: mapCognitoStatus(response.body) }
       );
     }
 
+    logAuthEvent(
+      "signup_confirmation_resent",
+      authLogFields({ email, status: 200, reason: "sent", delivery: response.body.CodeDeliveryDetails || null })
+    );
     return NextResponse.json({ ok: true, delivery: response.body.CodeDeliveryDetails || null });
   }
 
@@ -86,11 +105,23 @@ export async function POST(request) {
   });
 
   if (!response.ok) {
+    logAuthEvent(
+      "signup_confirmation_failed",
+      authLogFields({
+        email,
+        status: mapCognitoStatus(response.body),
+        reason: getCognitoErrorCode(response.body) || "cognito_error",
+        errorCode: getCognitoErrorCode(response.body),
+      }),
+      "warn"
+    );
     return NextResponse.json(
       { error: mapCognitoError(response.body, "No se pudo confirmar la cuenta.") },
       { status: mapCognitoStatus(response.body) }
     );
   }
+
+  logAuthEvent("signup_confirmation_success", authLogFields({ email, status: 200 }));
 
   // Notifica el registro al feed del panel admin (evento member.registered).
   // Best-effort: un fallo aquí JAMÁS afecta la confirmación del usuario.
