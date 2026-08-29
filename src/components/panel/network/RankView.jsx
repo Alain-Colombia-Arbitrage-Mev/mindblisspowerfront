@@ -35,8 +35,8 @@ export default function RankView({ nodes }) {
                 <MemberChip
                   key={node.id}
                   name={node.name}
-                  detail={`N${node.level} · ${node.side === "L" ? "Izq" : node.side === "R" ? "Der" : "—"}`}
-                  active={Boolean(node.rank)}
+                  detail={`N${node.level} · Rama ${node.rootSide === "L" ? "Izq" : node.rootSide === "R" ? "Der" : "—"}`}
+                  active={Boolean(node.activePackage)}
                 />
               ))}
             </div>

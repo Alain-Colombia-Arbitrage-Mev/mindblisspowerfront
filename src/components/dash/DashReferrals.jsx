@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Copy, Share2, CheckCircle, Users, TrendingUp, UserPlus, Mail, MessageSquare } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Copy, Share2, CheckCircle, Mail, MessageSquare } from 'lucide-react';
 
 const C = ({ children, style }) => (
   <div style={{ background: 'linear-gradient(135deg, #0d1f3c, #0a1628)', border: '1px solid rgba(59,130,246,0.18)', borderRadius: 16, padding: 20, ...style }}>
@@ -22,9 +22,25 @@ const referrals = [
 
 export default function DashReferrals() {
   const [copied, setCopied] = useState(false);
-  const link = 'https://vicionpower.com/join?ref=VP10234';
+  const [link, setLink] = useState('');
 
-  const copy = () => { navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 2000); };
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/member/referral', { cache: 'no-store' })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.positioned && data?.link) setLink(data.link);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  const copy = () => {
+    if (!link) return;
+    navigator.clipboard.writeText(link);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const checklist = [
     { step: 'Registered', done: true },
@@ -100,8 +116,8 @@ export default function DashReferrals() {
           <C>
             <Label>Invitation Tools</Label>
             <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-              <input readOnly value={link} style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '8px 12px', color: 'rgba(255,255,255,0.6)', fontSize: 11, fontFamily: 'monospace', minWidth: 0 }} />
-              <button onClick={copy} style={{ padding: '8px 14px', borderRadius: 8, background: copied ? 'rgba(52,211,153,0.2)' : 'rgba(59,130,246,0.25)', border: copied ? '1px solid rgba(52,211,153,0.4)' : '1px solid rgba(59,130,246,0.4)', cursor: 'pointer', color: copied ? '#34d399' : 'white', display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>
+              <input readOnly value={link || 'Pendiente de activación y ubicación en el árbol'} style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '8px 12px', color: 'rgba(255,255,255,0.6)', fontSize: 11, fontFamily: 'monospace', minWidth: 0 }} />
+              <button onClick={copy} disabled={!link} style={{ padding: '8px 14px', borderRadius: 8, background: copied ? 'rgba(52,211,153,0.2)' : 'rgba(59,130,246,0.25)', border: copied ? '1px solid rgba(52,211,153,0.4)' : '1px solid rgba(59,130,246,0.4)', cursor: link ? 'pointer' : 'default', opacity: link ? 1 : 0.6, color: copied ? '#34d399' : 'white', display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>
                 {copied ? <><CheckCircle size={13} /> Copied</> : <><Copy size={13} /> Copy</>}
               </button>
             </div>

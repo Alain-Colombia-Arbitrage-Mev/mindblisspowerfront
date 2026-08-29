@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNetworkHealth } from "@/lib/useNetworkHealth";
 import { useSustainability } from "@/lib/useSustainability";
+import ReferralModule from "@/components/member/ReferralModule";
 import SupportTicketForm from "./SupportTicketForm";
 import {
   Activity,
@@ -1559,39 +1560,26 @@ export function NetworkDashboardPage() {
 }
 
 export function ReferralsDashboardPage() {
-  const [referral, setReferral] = useState("");
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/auth/session", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d) => { if (!cancelled && d?.referralCode) setReferral(d.referralCode); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, []);
-  const code = referral || member.referralCode;
-  const link = code ? `https://app.mindblisspower.com/register?ref=${encodeURIComponent(code)}` : "";
-  const config = {
-    ...moduleConfigs.referrals,
-    metrics: moduleConfigs.referrals.metrics.map((m) => (m.label === "Codigo" ? { ...m, value: code || "—" } : m)),
-    cards: moduleConfigs.referrals.cards.map((c) =>
-      c.title === "Enlace personal"
-        ? {
-            ...c,
-            text: link || "Tu enlace estará disponible cuando actives tu membresía y quedes colocado en la red.",
-            status: code ? "Listo" : "Pendiente",
-          }
-        : c,
-    ),
-  };
-  return <ExecutiveModulePage config={config} />;
+  return (
+    <section className="executive-page">
+      <div className="executive-container">
+        <PageHeader
+          eyebrow={moduleConfigs.referrals.eyebrow}
+          title={moduleConfigs.referrals.title}
+          subtitle={moduleConfigs.referrals.subtitle}
+        />
+        <ReferralModule />
+      </div>
+    </section>
+  );
 }
 
 export function TeamDashboardPage() {
-  // Datos reales de la red del miembro (3 niveles) — nunca equipo simulado.
+  // Datos reales de la red del miembro — nunca equipo simulado.
   const [network, setNetwork] = useState(null);
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/member/tree", { cache: "no-store" })
+    fetch("/api/member/tree?depth=10&limit=1500", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => { if (!cancelled && d && !d.error) setNetwork(d); })
       .catch(() => {});
@@ -1604,7 +1592,7 @@ export function TeamDashboardPage() {
   const config = {
     ...moduleConfigs.team,
     metrics: [
-      { label: "Miembros", value: String(nodes.length), detail: "primeros 3 niveles", icon: Users, tone: "accent" },
+      { label: "Miembros", value: String(nodes.length), detail: "rama visible", icon: Users, tone: "accent" },
       { label: "Activos", value: String(actives), detail: "estado activo", icon: CheckCircle2, tone: "success" },
       { label: "Inactivos", value: String(nodes.length - actives), detail: "sin actividad", icon: Activity, tone: "warning" },
       { label: "Con rango", value: String(ranked), detail: "rango vigente", icon: Trophy, tone: "accent" },
@@ -1613,7 +1601,7 @@ export function TeamDashboardPage() {
       n.name,
       n.rank?.name || "Sin rango",
       n.status === "active" ? "Activo" : "Inactivo",
-      `Nivel ${n.level} · ${n.side === "L" ? "Izq" : "Der"}`,
+      `Nivel ${n.level} · Rama ${n.rootSide === "L" ? "Izq" : n.rootSide === "R" ? "Der" : "—"}`,
     ]),
   };
   return <ExecutiveModulePage config={config} />;

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { authRateLimit } from "@/lib/auth-rate-limit";
+import { authLogFields, logAuthEvent } from "@/lib/auth-observability";
 import { buildCognitoSecretHash, getCognitoIdentityProviderConfig } from "@/lib/cognito";
 import { callCognito, mapCognitoError, mapCognitoStatus, normalizeEmail, getCognitoErrorCode } from "@/lib/cognito-api";
 
@@ -42,15 +43,30 @@ export async function POST(request) {
 
   // No revelar si el usuario existe (PreventUserExistenceErrors puede variar).
   if (!response.ok && getCognitoErrorCode(response.body) === "UserNotFoundException") {
+    logAuthEvent("password_reset_request_hidden_missing_user", authLogFields({ email, status: 200, reason: "hidden_missing_user" }));
     return NextResponse.json({ ok: true, delivery: null });
   }
 
   if (!response.ok) {
+    logAuthEvent(
+      "password_reset_request_failed",
+      authLogFields({
+        email,
+        status: mapCognitoStatus(response.body),
+        reason: getCognitoErrorCode(response.body) === "CodeDeliveryFailureException" ? "email_delivery_failed" : "cognito_error",
+        errorCode: getCognitoErrorCode(response.body),
+      }),
+      "warn"
+    );
     return NextResponse.json(
       { error: mapCognitoError(response.body, "No se pudo iniciar la recuperación.") },
       { status: mapCognitoStatus(response.body) }
     );
   }
 
+  logAuthEvent(
+    "password_reset_code_sent",
+    authLogFields({ email, status: 200, reason: "sent", delivery: response.body.CodeDeliveryDetails || null })
+  );
   return NextResponse.json({ ok: true, delivery: response.body.CodeDeliveryDetails || null });
 }

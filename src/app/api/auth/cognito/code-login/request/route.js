@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 
 import { authRateLimit } from "@/lib/auth-rate-limit";
+import { authLogFields, logAuthEvent } from "@/lib/auth-observability";
 import {
   buildCognitoChallengeResponsePayload,
   buildCognitoEmailOtpStartPayload,
@@ -65,7 +66,24 @@ export async function POST(request) {
   // activo, no lo revela → el usuario espera un código que nunca llega. Si no
   // existe, lo enrutamos a registro (SignUp sí envía el código). null = no se
   // pudo verificar ⇒ seguimos con el OTP normal (fail-safe, no bloqueamos login).
-  const { exists, confirmed, phoneLinked, phoneVerified, phoneDestination } = await userStatusInPool(email);
+  const { exists, confirmed, enabled, status, phoneLinked, phoneVerified, phoneDestination } = await userStatusInPool(email);
+  logAuthEvent(
+    "otp_status_check",
+    authLogFields({
+      email,
+      channel,
+      status: 200,
+      extra: {
+        checked: exists !== null,
+        cognito_exists: exists,
+        cognito_confirmed: confirmed,
+        cognito_enabled: enabled,
+        cognito_status: status,
+        phone_linked: phoneLinked,
+        phone_verified: phoneVerified,
+      },
+    })
+  );
   if (exists === false) {
     // Miembro legacy: existe como afiliado ACTIVO en la DB (migrado desde el
     // sistema anterior) pero todavía NO tiene cuenta Cognito → nunca creó su
@@ -73,6 +91,11 @@ export async function POST(request) {
     // acceso con ESE mismo correo (el registro/SignUp sí envía el código),
     // en vez del genérico "no encontramos cuenta" que lo deja confundido.
     const legacy = await isLegacyActiveAffiliate(email);
+    logAuthEvent(
+      "otp_request_no_user",
+      authLogFields({ email, channel, status: 404, reason: legacy ? "legacy_without_cognito" : "not_registered" }),
+      "warn"
+    );
     return NextResponse.json(
       {
         error: legacy
@@ -90,6 +113,24 @@ export async function POST(request) {
     );
   }
 
+  if (exists === true && enabled === false) {
+    logAuthEvent(
+      "otp_request_blocked",
+      authLogFields({ email, channel, status: 403, reason: "user_disabled", extra: { cognito_status: status } }),
+      "warn"
+    );
+    return NextResponse.json(
+      {
+        error:
+          "Tu cuenta está deshabilitada y no puede recibir códigos de acceso. Contacta soporte si crees que es un error. / " +
+          "Your account is disabled and cannot receive access codes. Contact support if you believe this is an error.",
+        accessBlocked: true,
+        reason: "user_disabled",
+      },
+      { status: 403 }
+    );
+  }
+
   // Usuario existe pero UNCONFIRMED: el passwordless de Cognito NO envía código
   // de login hasta confirmar la cuenta → el usuario quedaba atascado con "el
   // código que nunca llega". Reenviamos el código de CONFIRMACIÓN y enrutamos al
@@ -97,6 +138,18 @@ export async function POST(request) {
   // cuando el backend lo verificó; si no se pudo (null/legacy), no bloqueamos.
   if (exists === true && confirmed === false) {
     const resent = await resendConfirmationCode(email, config);
+    logAuthEvent(
+      "signup_confirmation_resent_from_login",
+      authLogFields({
+        email,
+        channel: "email",
+        status: resent?.ok ? 409 : 502,
+        reason: resent?.ok ? "unconfirmed" : "unconfirmed_resend_failed",
+        errorCode: resent?.errorCode,
+        delivery: resent?.delivery,
+      }),
+      resent?.ok ? "info" : "warn"
+    );
     return NextResponse.json(
       {
         needsConfirm: true,
@@ -129,6 +182,18 @@ export async function POST(request) {
   if (!startResponse.ok) {
     if (getCognitoErrorCode(startResponse.body) === "UserNotConfirmedException") {
       const resent = await resendConfirmationCode(email, config);
+      logAuthEvent(
+        "signup_confirmation_resent_from_login",
+        authLogFields({
+          email,
+          channel: "email",
+          status: resent?.ok ? 409 : 502,
+          reason: resent?.ok ? "unconfirmed" : "unconfirmed_resend_failed",
+          errorCode: resent?.errorCode,
+          delivery: resent?.delivery,
+        }),
+        resent?.ok ? "info" : "warn"
+      );
       return NextResponse.json(
         {
           needsConfirm: true,
@@ -142,8 +207,20 @@ export async function POST(request) {
       );
     }
 
+    const errorBody = smsOtpErrorBody(startResponse.body, otpChallenge);
+    logAuthEvent(
+      "otp_request_failed",
+      authLogFields({
+        email,
+        channel,
+        status: mapCognitoStatus(startResponse.body),
+        reason: errorBody.reason || "cognito_error",
+        errorCode: getCognitoErrorCode(startResponse.body),
+      }),
+      "warn"
+    );
     return NextResponse.json(
-      smsOtpErrorBody(startResponse.body, otpChallenge),
+      errorBody,
       { status: mapCognitoStatus(startResponse.body) }
     );
   }
@@ -157,6 +234,16 @@ export async function POST(request) {
   });
 
   if (!challengeResponse.ok) {
+    logAuthEvent(
+      "otp_challenge_failed",
+      authLogFields({
+        email,
+        channel,
+        status: challengeResponse.status || 400,
+        reason: challengeResponse.reason || "challenge_unavailable",
+      }),
+      "warn"
+    );
     return NextResponse.json(
       {
         error: challengeResponse.error,
@@ -169,6 +256,7 @@ export async function POST(request) {
   }
 
   if (challengeResponse.tokens) {
+    logAuthEvent("otp_request_authenticated_without_code", authLogFields({ email, channel, status: 200 }));
     const response = NextResponse.json({
       ok: true,
       mode: "cognito",
@@ -190,6 +278,10 @@ export async function POST(request) {
         : "Te enviamos un código por correo. Si no aparece en 1–2 min, revisa la carpeta de spam / correo no deseado.",
     delivery: challengeResponse.delivery,
   });
+  logAuthEvent(
+    "otp_request_sent",
+    authLogFields({ email, channel, status: 200, reason: "sent", delivery: challengeResponse.delivery })
+  );
   setCodeChallengeCookie(response, requestUrl, {
     email,
     mode: "cognito",
@@ -306,6 +398,19 @@ function normalizeDelivery(challengeParameters = {}, otpChallenge = "EMAIL_OTP")
 function mapEmailOtpError(body, otpChallenge = "EMAIL_OTP") {
   const code = getCognitoErrorCode(body);
 
+  if (code === "CodeDeliveryFailureException") {
+    if (otpChallenge === "SMS_OTP") {
+      return (
+        "No pudimos entregar el SMS. Verifica que el teléfono esté activo o solicita ayuda. / " +
+        "We could not deliver the SMS. Verify the phone or request help."
+      );
+    }
+    return (
+      "Cognito no pudo entregar el código por email. Usa SMS o solicita ayuda para validar tu acceso. / " +
+      "Cognito could not deliver the email code. Use SMS or request help to validate access."
+    );
+  }
+
   if (code === "InvalidParameterException" || code === "InvalidLambdaResponseException") {
     if (otpChallenge === "SMS_OTP") {
       return (
@@ -330,11 +435,19 @@ function mapEmailOtpError(body, otpChallenge = "EMAIL_OTP") {
 }
 
 function smsOtpErrorBody(body, otpChallenge = "EMAIL_OTP") {
+  const code = getCognitoErrorCode(body);
   const smsIssue = otpChallenge === "SMS_OTP";
+  const deliveryIssue = code === "CodeDeliveryFailureException";
   return {
     error: mapEmailOtpError(body, otpChallenge),
     needsPhoneLink: smsIssue,
-    reason: smsIssue ? "sms_unavailable" : undefined,
+    reason: deliveryIssue
+      ? smsIssue
+        ? "sms_delivery_failed"
+        : "email_delivery_failed"
+      : smsIssue
+        ? "sms_unavailable"
+        : undefined,
   };
 }
 
@@ -346,26 +459,28 @@ function smsOtpErrorBody(body, otpChallenge = "EMAIL_OTP") {
 async function userStatusInPool(email) {
   const base = process.env.VP_PAYMENTS_URL;
   const token = process.env.PAYMENTS_SERVICE_TOKEN;
-  if (!base || !token) return { exists: null, confirmed: true };
+  if (!base || !token) return { exists: null, confirmed: true, enabled: true };
   try {
     const resp = await fetch(`${base}/api/auth/user-exists?email=${encodeURIComponent(email)}`, {
       headers: { "X-VP-Service-Token": token },
       cache: "no-store",
     });
-    if (!resp.ok) return { exists: null, confirmed: true };
+    if (!resp.ok) return { exists: null, confirmed: true, enabled: true };
     const data = await resp.json().catch(() => ({}));
-    if (!data.checked) return { exists: null, confirmed: true };
+    if (!data.checked) return { exists: null, confirmed: true, enabled: true };
     // confirmed ausente (backend anterior) ⇒ true: no tratar por error a un
     // usuario válido como no-confirmado.
     return {
       exists: Boolean(data.exists),
       confirmed: data.confirmed === undefined ? true : Boolean(data.confirmed),
+      enabled: data.enabled === undefined ? true : Boolean(data.enabled),
+      status: String(data.status || ""),
       phoneLinked: data.phone_linked === undefined ? null : Boolean(data.phone_linked),
       phoneVerified: data.phone_verified === undefined ? null : Boolean(data.phone_verified),
       phoneDestination: String(data.phone_destination || ""),
     };
   } catch {
-    return { exists: null, confirmed: true };
+    return { exists: null, confirmed: true, enabled: true };
   }
 }
 
@@ -417,10 +532,10 @@ async function resendConfirmationCode(email, config) {
       target: "ResendConfirmationCode",
       payload,
     });
-    if (!resp.ok) return null;
-    return { delivery: resp.body?.CodeDeliveryDetails || null };
+    if (!resp.ok) return { ok: false, errorCode: getCognitoErrorCode(resp.body) };
+    return { ok: true, delivery: resp.body?.CodeDeliveryDetails || null };
   } catch {
-    return null;
+    return { ok: false, errorCode: "network_error" };
   }
 }
 

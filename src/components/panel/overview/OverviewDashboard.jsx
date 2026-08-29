@@ -6,6 +6,7 @@ import { CreditCard, HandCoins, Network } from "lucide-react";
 import PanelFooter from "@/components/panel/PanelFooter";
 import EarningsCard from "./EarningsCard";
 import ReferralLinkCard from "./ReferralLinkCard";
+import PositionSnapshotCard from "./PositionSnapshotCard";
 import RecentSignupsCard from "./RecentSignupsCard";
 import ShortcutPill from "./ShortcutPill";
 import TicketsTodayCard from "./TicketsTodayCard";
@@ -36,7 +37,7 @@ export default function OverviewDashboard() {
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => { if (d && !d.error) setSummary(d); })
       .catch(() => {});
-    fetch("/api/member/tree", { cache: "no-store" })
+    fetch("/api/member/tree?depth=6&limit=1000", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => { if (d && !d.error) setNetwork(d); })
       .catch(() => {});
@@ -49,12 +50,15 @@ export default function OverviewDashboard() {
   const nodes = network?.positioned ? network.tree : [];
   const directs = nodes.filter((n) => n.level === 1);
 
-  const recentSignups = nodes.slice(0, 3).map((n) => ({
-    name: n.name,
-    date: `Nivel ${n.level} · ${n.side === "L" ? "Izquierda" : "Derecha"}`,
-    pack: n.rank?.name || (n.status === "active" ? "Activo" : "Inactivo"),
-    active: n.status === "active",
-  }));
+  const recentSignups = nodes.slice(0, 3).map((n) => {
+    const branch = n.rootSide || n.side;
+    return {
+      name: n.name,
+      date: `Nivel ${n.level} · ${branch === "L" ? "Rama izquierda" : branch === "R" ? "Rama derecha" : "Raíz"}`,
+      pack: n.rank?.name || (n.status === "active" ? "Activo" : "Inactivo"),
+      active: n.status === "active",
+    };
+  });
 
   const topRanks = nodes
     .filter((n) => n.rank)
@@ -82,12 +86,13 @@ export default function OverviewDashboard() {
 
       <ReferralLinkCard />
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-4">
         <EarningsCard
           total={usd(summary?.wallet_balance_usd)}
           wallet={usd(summary?.available_for_withdrawal_usd)}
           directNetwork={directs.length}
         />
+        <PositionSnapshotCard network={network} />
         <RecentSignupsCard
           signups={recentSignups}
           pendingCount={Math.max(0, nodes.length - recentSignups.length)}

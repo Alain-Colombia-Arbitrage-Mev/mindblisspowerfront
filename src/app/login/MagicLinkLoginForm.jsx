@@ -54,6 +54,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
   const [notice, setNotice] = useState("");
   const [accessHelpPhone, setAccessHelpPhone] = useState("");
   const [accessHelpReason, setAccessHelpReason] = useState("");
+  const [showAccessFallback, setShowAccessFallback] = useState(false);
   const [loadingAction, setLoadingAction] = useState("");
   const [resetStep, setResetStep] = useState("request");
   const [resetCode, setResetCode] = useState("");
@@ -84,6 +85,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     if (nextMode === "code") {
       setCodeStep("request");
       setLoginCode("");
+      setShowAccessFallback(false);
     }
 
     if (nextMode === "reset") {
@@ -99,6 +101,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     setNotice("");
     const normalizedEmail = validateEmail();
     if (!normalizedEmail) return;
+    if (channel === "email" && !resend) setShowAccessFallback(false);
 
     setLoadingAction(channel === "sms" ? "code-request-sms" : "code-request");
     try {
@@ -112,6 +115,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
       // Usuario nuevo (no está en el pool): el OTP nunca le llegaría. Lo llevamos
       // a crear cuenta con el email precargado (el registro sí envía el código).
       if (payload.needsRegister) {
+        setShowAccessFallback(false);
         setNotice("No tienes una cuenta con ese email. Te llevamos a crear una…");
         window.location.assign(`/register?email=${encodeURIComponent(normalizedEmail)}`);
         return;
@@ -120,17 +124,26 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
       // Cuenta sin confirmar: la reenviamos al paso de confirmar (resume=1), que
       // ya reenvió el código de confirmación.
       if (payload.needsConfirm) {
+        setShowAccessFallback(false);
         setNotice("Tu cuenta aún no está confirmada. Te llevamos a confirmarla…");
         window.location.assign(`/register?email=${encodeURIComponent(normalizedEmail)}&resume=1`);
         return;
       }
 
       if (!response.ok || !payload.ok) {
+        if (payload.accessBlocked) {
+          setShowAccessFallback(false);
+          setError(payload.error || "Tu cuenta no puede recibir códigos de acceso en este momento.");
+          return;
+        }
         if (channel === "sms" && (payload.needsPhoneLink || payload.needsPhoneVerification)) {
           setAccessHelpReason(payload.reason || (payload.needsPhoneLink ? "phone_not_linked" : "phone_not_verified"));
+          setShowAccessFallback(true);
           setNotice(payload.error || "Tu teléfono no está listo para recibir códigos por SMS. Solicita ayuda para validarlo.");
           return;
         }
+        setAccessHelpReason(payload.reason || "email_code_not_received");
+        setShowAccessFallback(true);
         setError(payload.error || "No se pudo enviar el código de acceso.");
         return;
       }
@@ -142,6 +155,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
       }
 
       setCodeStep("confirm");
+      setShowAccessFallback(true);
       setLoginCode("");
       codeCooldown.start();
       setNotice(
@@ -153,6 +167,8 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
               : "Te enviamos un código por correo. Si no aparece en 1–2 min, revisa la carpeta de spam."),
       );
     } catch {
+      setAccessHelpReason("auth_service_unavailable");
+      setShowAccessFallback(true);
       setError("No se pudo conectar con el servicio de acceso.");
     } finally {
       setLoadingAction("");
@@ -192,6 +208,62 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     } finally {
       setLoadingAction("");
     }
+  }
+
+  function renderAccessFallback() {
+    return (
+      <div className="space-y-2 border-t pt-3" style={{ borderColor: "var(--vp-border)" }}>
+        <SecondaryButton
+          disabled={isLoading}
+          onClick={(e) => requestLoginCode(e, { channel: "sms" })}
+          icon={<Smartphone size={15} />}
+          variant="accent"
+          className="mx-auto min-w-[17rem] px-5"
+        >
+          {loadingAction === "code-request-sms" ? "Enviando SMS…" : "¿No llega? Recíbelo por SMS"}
+        </SecondaryButton>
+        <div
+          className="space-y-2 rounded-lg p-3"
+          style={{
+            background: "var(--vp-surface-raised)",
+            border: "1px solid var(--vp-accent, #ffc700)",
+          }}
+        >
+          <label className="block text-[11px] font-black uppercase" htmlFor="access-help-phone" style={{ color: "var(--vp-muted)" }}>
+            Teléfono actual para soporte
+          </label>
+          <input
+            id="access-help-phone"
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
+            value={accessHelpPhone}
+            onChange={(event) => setAccessHelpPhone(normalizeAccessHelpPhone(event.target.value))}
+            placeholder="+57 300 123 4567"
+            className="min-h-11 w-full rounded-lg px-3 text-sm font-semibold outline-none"
+            style={{
+              color: "var(--vp-text)",
+              background: "var(--vp-surface-raised)",
+              border: "1px solid var(--vp-border)",
+            }}
+          />
+          <button
+            type="button"
+            disabled={isLoading}
+            onClick={requestAccessHelp}
+            className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg px-4 text-center text-xs font-black transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+            style={{
+              color: "#000",
+              background: "var(--vp-accent, #ffc700)",
+              border: "1px solid var(--vp-accent, #ffc700)",
+            }}
+          >
+            {loadingAction === "access-help" ? <Loader2 className="animate-spin" size={15} /> : <LifeBuoy size={15} />}
+            {loadingAction === "access-help" ? "Registrando solicitud…" : "Sigo sin recibir el código — solicitar ayuda"}
+          </button>
+        </div>
+      </div>
+    );
   }
 
   async function confirmLoginCode(event) {
@@ -397,6 +469,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
             >
               Crear cuenta nueva
             </SecondaryButton>
+            {showAccessFallback && renderAccessFallback()}
           </form>
         ) : (
           <form className="space-y-4" onSubmit={confirmLoginCode}>
@@ -431,57 +504,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
             </div>
 
             {/* Escalada sin dead-ends: SMS como canal alterno y, si nada llega, ayuda humana. */}
-            <div className="space-y-2 border-t pt-3" style={{ borderColor: "var(--vp-border)" }}>
-              <SecondaryButton
-                disabled={isLoading}
-                onClick={(e) => requestLoginCode(e, { channel: "sms" })}
-                icon={<Smartphone size={15} />}
-                variant="accent"
-                className="mx-auto min-w-[17rem] px-5"
-              >
-                {loadingAction === "code-request-sms" ? "Enviando SMS…" : "¿No llega? Recíbelo por SMS"}
-              </SecondaryButton>
-              <div
-                className="space-y-2 rounded-lg p-3"
-                style={{
-                  background: "var(--vp-surface-raised)",
-                  border: "1px solid var(--vp-accent, #ffc700)",
-                }}
-              >
-                <label className="block text-[11px] font-black uppercase" htmlFor="access-help-phone" style={{ color: "var(--vp-muted)" }}>
-                  Teléfono actual para soporte
-                </label>
-                <input
-                  id="access-help-phone"
-                  type="tel"
-                  inputMode="tel"
-                  autoComplete="tel"
-                  value={accessHelpPhone}
-                  onChange={(event) => setAccessHelpPhone(normalizeAccessHelpPhone(event.target.value))}
-                  placeholder="+57 300 123 4567"
-                  className="min-h-11 w-full rounded-lg px-3 text-sm font-semibold outline-none"
-                  style={{
-                    color: "var(--vp-text)",
-                    background: "var(--vp-surface-raised)",
-                    border: "1px solid var(--vp-border)",
-                  }}
-                />
-                <button
-                  type="button"
-                  disabled={isLoading}
-                  onClick={requestAccessHelp}
-                  className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg px-4 text-center text-xs font-black transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-                  style={{
-                    color: "#000",
-                    background: "var(--vp-accent, #ffc700)",
-                    border: "1px solid var(--vp-accent, #ffc700)",
-                  }}
-                >
-                  {loadingAction === "access-help" ? <Loader2 className="animate-spin" size={15} /> : <LifeBuoy size={15} />}
-                  {loadingAction === "access-help" ? "Registrando solicitud…" : "Sigo sin recibir el código — solicitar ayuda"}
-                </button>
-              </div>
-            </div>
+            {renderAccessFallback()}
           </form>
         )
       ) : mode === "password" ? (

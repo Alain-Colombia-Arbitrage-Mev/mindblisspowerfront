@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Check, ClipboardCheck, Eye, EyeOff, Loader2, LockKeyhole, LogIn, Mail, UserPlus, UserRound } from "lucide-react";
+import { ArrowRight, Check, ClipboardCheck, Eye, EyeOff, LifeBuoy, Loader2, LockKeyhole, LogIn, Mail, UserPlus, UserRound } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import AuthShell from "../_components/AuthShell";
@@ -325,6 +325,43 @@ export default function RegisterPage() {
     setLoading(false);
   }
 
+  async function handleRegistrationHelp() {
+    setErrors({});
+    setSuccess("");
+    const email = form.email.trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(email)) {
+      setErrors({ form: "Ingresa un email válido para solicitar ayuda." });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const phone = isValidE164(composePhone(form.dialCode, form.phone))
+        ? composePhone(form.dialCode, form.phone)
+        : `${form.dialCode} ${formatLocalPhone(form.phone)}`.trim();
+      const response = await fetch("/api/auth/access-help", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          phone,
+          reason: "signup_email_code_missing",
+          note: "Solicitud desde registro: no recibe el código de activación.",
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.ok) {
+        setErrors({ form: payload.error || "No se pudo registrar tu solicitud. Intenta de nuevo." });
+        return;
+      }
+      setSuccess("Listo. Registramos tu solicitud y soporte revisará la activación de tu cuenta.");
+    } catch {
+      setErrors({ form: "No se pudo conectar con el servicio de soporte." });
+    } finally {
+      setLoading(false);
+    }
+  }
+
   if (banned) {
     return <BannedModal />;
   }
@@ -437,6 +474,21 @@ export default function RegisterPage() {
               style={{ color: "var(--vp-muted)" }}
             >
               {resendCooldown.active ? resendCooldown.label : "Reenviar código"}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleRegistrationHelp}
+              disabled={loading}
+              className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg px-4 text-center text-xs font-black transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              style={{
+                color: "#000",
+                background: "var(--vp-accent, #ffc700)",
+                border: "1px solid var(--vp-accent, #ffc700)",
+              }}
+            >
+              {loading ? <Loader2 className="animate-spin" size={15} /> : <LifeBuoy size={15} />}
+              Sigo sin recibir el código — solicitar ayuda
             </button>
           </form>
         ) : (
