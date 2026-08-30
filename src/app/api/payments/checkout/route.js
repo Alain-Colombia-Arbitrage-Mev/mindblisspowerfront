@@ -35,7 +35,12 @@ export async function POST(request) {
   if (!Number.isInteger(packageId) || packageId <= 0) {
     return NextResponse.json({ error: "invalid-package" }, { status: 400 });
   }
-  const ref = String(body?.ref || "").trim().slice(0, 64);
+  const rawRef = String(body?.ref || "").trim().slice(0, 64);
+  const refEmail = String(body?.ref_email || "").trim().toLowerCase();
+  const ref = rawRef && refEmail === email.toLowerCase() ? rawRef : "";
+  if (rawRef && !ref) {
+    console.warn("payments/checkout ignored unbound referral", { email, refEmail });
+  }
 
   const base = process.env.VP_PAYMENTS_URL;
   const token = process.env.PAYMENTS_SERVICE_TOKEN;

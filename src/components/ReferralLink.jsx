@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Copy, Check, Share2 } from 'lucide-react';
 
-export default function ReferralLink({ userId, userName }) {
+export default function ReferralLink() {
   const [copied, setCopied] = useState(false);
   const [referralLink, setReferralLink] = useState('');
 
@@ -18,19 +18,12 @@ export default function ReferralLink({ userId, userName }) {
           setReferralLink(data.link);
           return;
         }
-        if (userId && typeof window !== 'undefined') {
-          setReferralLink(`${window.location.origin}/register?ref=${encodeURIComponent(userId)}`);
-        }
       })
-      .catch(() => {
-        if (!cancelled && userId && typeof window !== 'undefined') {
-          setReferralLink(`${window.location.origin}/register?ref=${encodeURIComponent(userId)}`);
-        }
-      });
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [userId]);
+  }, []);
 
   const handleCopy = () => {
     if (!referralLink) return;
