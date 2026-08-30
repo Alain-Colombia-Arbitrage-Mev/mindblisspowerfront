@@ -8,6 +8,7 @@ import AuthShell from "../_components/AuthShell";
 import { isMicrosoftEmail, suggestEmailFix, useResendCooldown } from "@/lib/useResendCooldown";
 import { composePhone, formatLocalPhone, isValidE164 } from "@/lib/phone";
 import { checkPassword, isValidPassword } from "@/lib/password";
+import { bindReferralToEmail, captureReferralFromUrl, normalizeReferralCode, referralCodeFromStorage } from "@/lib/referral-attribution";
 
 // Registro MÍNIMO: solo lo esencial para crear la cuenta. El resto del perfil
 // (país, ciudad, documento, fecha, preferencias) se completa en el onboarding.
@@ -18,6 +19,7 @@ const initialForm = {
   confirmPassword: "",
   dialCode: "+57",
   phone: "",
+  referralCode: "",
   acceptsPrivacy: false,
 };
 
@@ -111,10 +113,15 @@ export default function RegisterPage() {
     // con precedencia sobre el borrador guardado (es el email que acaba de teclear).
     let prefillEmail = "";
     let resume = false;
+    let referralCode = "";
     try {
       const sp = new URLSearchParams(window.location.search);
       const r = sp.get("ref");
-      if (r) localStorage.setItem("mp_ref", r.trim().slice(0, 64));
+      if (r) {
+        referralCode = captureReferralFromUrl(window.location.search)?.code || "";
+      } else {
+        referralCode = referralCodeFromStorage();
+      }
       prefillEmail = (sp.get("email") || "").trim().toLowerCase();
       resume = sp.get("resume") === "1";
     } catch (e) { /* ignore */ }
@@ -126,6 +133,7 @@ export default function RegisterPage() {
       resumeRegistration(prefillEmail);
     }
     const merged = { ...legacyStored, ...stored };
+    if (referralCode) merged.referralCode = normalizeReferralCode(referralCode);
     // El draft guarda phone en E.164 (+57300…) para la API; re-inyectarlo como
     // número local hacía que composePhone duplicara el código de país
     // (+57 + 573001234567). Restaurar el número local por separado.
@@ -190,10 +198,13 @@ export default function RegisterPage() {
 
     submittingRef.current = true;
     setLoading(true);
+    const email = form.email.trim().toLowerCase();
+    const referral = bindReferralToEmail(email);
     const draft = {
       fullName: form.fullName.trim(),
-      email: form.email.trim().toLowerCase(),
+      email,
       phone: composePhone(form.dialCode, form.phone),
+      referralCode: normalizeReferralCode(referral?.code || form.referralCode),
       acceptsPrivacy: form.acceptsPrivacy,
       company: "Mindbliss Power",
       createdAt: new Date().toISOString(),
@@ -679,7 +690,7 @@ export default function RegisterPage() {
 
         <div className="mt-6 grid gap-3 border-t pt-5 sm:grid-cols-2" style={{ borderColor: "var(--vp-border)" }}>
           <Link
-            href="/login"
+            href={form.referralCode ? `/login?ref=${encodeURIComponent(form.referralCode)}` : "/login"}
             className="flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition"
             style={{
               color: "var(--vp-text)",

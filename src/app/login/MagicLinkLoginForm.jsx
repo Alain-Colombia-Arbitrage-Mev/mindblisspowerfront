@@ -15,10 +15,11 @@ import {
   Smartphone,
   UserPlus,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { isMicrosoftEmail, suggestEmailFix, useResendCooldown } from "@/lib/useResendCooldown";
 import { checkPassword, isValidPassword } from "@/lib/password";
+import { bindReferralToEmail, captureReferralFromUrl, normalizeReferralCode } from "@/lib/referral-attribution";
 
 const AUTH_STATE_MESSAGES = {
   "invalid-email": {
@@ -43,10 +44,11 @@ const AUTH_STATE_MESSAGES = {
   },
 };
 
-export default function MagicLinkLoginForm({ authState, initialEmail = "", initialMode = "code" }) {
+export default function MagicLinkLoginForm({ authState, initialEmail = "", initialMode = "code", initialRef = "" }) {
   const [mode, setMode] = useState(() => normalizeMode(initialMode));
   const [codeStep, setCodeStep] = useState("request");
   const [email, setEmail] = useState(initialEmail);
+  const [referralCode, setReferralCode] = useState(() => normalizeReferralCode(initialRef));
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loginCode, setLoginCode] = useState("");
@@ -64,6 +66,11 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
   const authMessage = getAuthStateMessage(authState);
   const isLoading = Boolean(loadingAction);
 
+  useEffect(() => {
+    const attribution = captureReferralFromUrl(window.location.search);
+    if (attribution?.code) setReferralCode(attribution.code);
+  }, []);
+
   function normalizeEmail() {
     return email.trim().toLowerCase();
   }
@@ -75,6 +82,19 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
       return "";
     }
     return normalizedEmail;
+  }
+
+  function rememberReferralForEmail(normalizedEmail) {
+    if (!referralCode) return;
+    bindReferralToEmail(normalizedEmail);
+  }
+
+  function authPathWithReferral(path, normalizedEmail, extraParams = {}) {
+    const params = new URLSearchParams(extraParams);
+    if (normalizedEmail) params.set("email", normalizedEmail);
+    if (referralCode) params.set("ref", referralCode);
+    const query = params.toString();
+    return query ? `${path}?${query}` : path;
   }
 
   function switchMode(nextMode) {
@@ -101,6 +121,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     setNotice("");
     const normalizedEmail = validateEmail();
     if (!normalizedEmail) return;
+    rememberReferralForEmail(normalizedEmail);
     if (channel === "email" && !resend) setShowAccessFallback(false);
 
     setLoadingAction(channel === "sms" ? "code-request-sms" : "code-request");
@@ -117,7 +138,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
       if (payload.needsRegister) {
         setShowAccessFallback(false);
         setNotice("No tienes una cuenta con ese email. Te llevamos a crear una…");
-        window.location.assign(`/register?email=${encodeURIComponent(normalizedEmail)}`);
+        window.location.assign(authPathWithReferral("/register", normalizedEmail));
         return;
       }
 
@@ -126,7 +147,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
       if (payload.needsConfirm) {
         setShowAccessFallback(false);
         setNotice("Tu cuenta aún no está confirmada. Te llevamos a confirmarla…");
-        window.location.assign(`/register?email=${encodeURIComponent(normalizedEmail)}&resume=1`);
+        window.location.assign(authPathWithReferral("/register", normalizedEmail, { resume: "1" }));
         return;
       }
 
@@ -182,6 +203,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     setNotice("");
     const normalizedEmail = validateEmail();
     if (!normalizedEmail) return;
+    rememberReferralForEmail(normalizedEmail);
 
     setLoadingAction("access-help");
     try {
@@ -272,6 +294,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     setNotice("");
     const normalizedEmail = validateEmail();
     if (!normalizedEmail) return;
+    rememberReferralForEmail(normalizedEmail);
 
     const code = loginCode.trim();
     if (!/^[a-zA-Z0-9]{4,12}$/.test(code)) {
@@ -314,6 +337,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     setNotice("");
     const normalizedEmail = validateEmail();
     if (!normalizedEmail) return;
+    rememberReferralForEmail(normalizedEmail);
 
     if (!password) {
       setError("Ingresa tu contraseña.");
