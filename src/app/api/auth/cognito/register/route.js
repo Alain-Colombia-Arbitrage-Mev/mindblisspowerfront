@@ -23,6 +23,7 @@ export async function POST(request) {
   const birthDate = normalizeBirthDate(body.birthDate);
   const city = String(body.city || "").trim();
   const country = String(body.country || "").trim();
+  const referralCode = normalizeReferralCode(body.referralCode || body.referral_code || body.ref);
 
   const validationError = validateInput({ email, password, fullName });
   if (validationError) {
@@ -31,7 +32,7 @@ export async function POST(request) {
 
   // Lista negra: se consulta ANTES de crear el usuario en Cognito. Falla cerrado:
   // si no se puede validar el estado de acceso, no creamos cuentas nuevas.
-  const precheck = await registrationPrecheck({ email, phone, fullName, birthDate });
+  const precheck = await registrationPrecheck({ email, phone, fullName, birthDate, referralCode });
   if (precheck.blacklisted) {
     logAuthEvent("signup_blocked", authLogFields({ email, status: 403, reason: "blacklisted" }), "warn");
     return NextResponse.json(
@@ -53,6 +54,16 @@ export async function POST(request) {
           "We could not validate your access status. Please try again in a few minutes.",
       },
       { status: 503 }
+    );
+  }
+  if (precheck.invalidReferral) {
+    logAuthEvent("signup_referral_invalid", authLogFields({ email, status: 400, reason: "invalid_referral_code" }), "warn");
+    return NextResponse.json(
+      {
+        error:
+          "El enlace de referido no es válido o ya no está activo. Pide a tu sponsor que te comparta el enlace correcto.",
+      },
+      { status: 400 }
     );
   }
 
@@ -133,6 +144,17 @@ export async function POST(request) {
     );
   }
 
+  if (referralCode) {
+    const recorded = await recordRegistrationReferral({ email, referralCode });
+    if (!recorded.ok) {
+      logAuthEvent(
+        "signup_referral_record_failed",
+        authLogFields({ email, status: recorded.status || 503, reason: recorded.error || "referral_unavailable" }),
+        "warn"
+      );
+    }
+  }
+
   logAuthEvent(
     "signup_created",
     authLogFields({
@@ -159,7 +181,7 @@ export async function POST(request) {
 
 // registrationPrecheck consulta a vp-payments si el candidato está en blacklist.
 // Falla cerrado ante infra/config para evitar altas sin validar.
-async function registrationPrecheck({ email, phone, fullName, birthDate }) {
+async function registrationPrecheck({ email, phone, fullName, birthDate, referralCode }) {
   const base = process.env.VP_PAYMENTS_URL;
   const token = process.env.PAYMENTS_SERVICE_TOKEN;
   if (!base || !token) return { unavailable: true };
@@ -167,14 +189,33 @@ async function registrationPrecheck({ email, phone, fullName, birthDate }) {
     const resp = await fetch(`${base}/api/registration/precheck`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-VP-Service-Token": token },
-      body: JSON.stringify({ email, phone, name: fullName, birth_date: birthDate }),
+      body: JSON.stringify({ email, phone, name: fullName, birth_date: birthDate, referral_code: referralCode }),
       cache: "no-store",
     });
     const data = await resp.json().catch(() => ({}));
+    if (!resp.ok && data?.error === "invalid_referral_code") return { invalidReferral: true };
     if (!resp.ok) return { unavailable: true };
     return { blacklisted: Boolean(data.blacklisted) };
   } catch {
     return { unavailable: true };
+  }
+}
+
+async function recordRegistrationReferral({ email, referralCode }) {
+  const base = process.env.VP_PAYMENTS_URL;
+  const token = process.env.PAYMENTS_SERVICE_TOKEN;
+  if (!base || !token || !email || !referralCode) return { ok: false, status: 503, error: "unconfigured" };
+  try {
+    const resp = await fetch(`${base}/api/registration/referral-attribution`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-VP-Service-Token": token },
+      body: JSON.stringify({ email, referral_code: referralCode }),
+      cache: "no-store",
+    });
+    const data = await resp.json().catch(() => ({}));
+    return { ok: resp.ok, status: resp.status, error: data?.error || "" };
+  } catch {
+    return { ok: false, status: 502, error: "network" };
   }
 }
 
@@ -209,6 +250,10 @@ function normalizePhone(value) {
 function normalizeBirthDate(value) {
   const date = String(value || "").trim();
   return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : "1990-01-01";
+}
+
+function normalizeReferralCode(value) {
+  return String(value || "").trim().slice(0, 64);
 }
 
 function validateInput({ email, password, fullName }) {

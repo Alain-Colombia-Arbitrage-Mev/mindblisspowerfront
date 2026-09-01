@@ -275,7 +275,12 @@ export default function RegisterPage() {
       const response = await fetch("/api/auth/cognito/confirm-signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, username: cognitoUsername, code: confirmCode.trim() }),
+        body: JSON.stringify({
+          email,
+          username: cognitoUsername,
+          code: confirmCode.trim(),
+          referralCode: normalizeReferralCode(form.referralCode),
+        }),
       });
       const payload = await response.json().catch(() => ({}));
 
@@ -576,6 +581,22 @@ export default function RegisterPage() {
               <PasswordChecklist password={form.password} />
             </div>
           </div>
+
+          {form.referralCode && (
+            <div
+              className="flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-bold"
+              style={{
+                color: "var(--vp-text)",
+                background: "var(--vp-accent-muted)",
+                border: "1px solid var(--vp-accent-border)",
+              }}
+            >
+              <ClipboardCheck size={17} style={{ color: "var(--vp-accent)" }} />
+              <span className="min-w-0">
+                Referido aplicado: <span style={{ color: "var(--vp-accent)" }}>{form.referralCode}</span>
+              </span>
+            </div>
+          )}
 
           <div
             className="rounded-xl p-4"
