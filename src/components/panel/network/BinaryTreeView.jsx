@@ -87,7 +87,7 @@ function NodeCard({ node, root, side, collapsedCount, onToggle, highlighted }) {
 
   return (
     <div
-      className="vp-node relative flex min-h-[118px] flex-col gap-2 rounded-xl border p-3"
+      className="vp-node relative flex min-h-[132px] flex-col gap-2 rounded-xl border p-3"
       style={{
         width: 188,
         background: root ? "var(--vp-accent-muted)" : highlighted ? "color-mix(in srgb, var(--vp-accent) 12%, var(--vp-surface-raised))" : "var(--vp-surface-raised)",
@@ -131,6 +131,14 @@ function NodeCard({ node, root, side, collapsedCount, onToggle, highlighted }) {
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5">
+        {!root && node.directReferral ? (
+          <span
+            className="rounded-md border px-1.5 py-0.5 text-[9px] font-bold uppercase"
+            style={{ color: "#000000", background: "var(--vp-accent)", borderColor: "var(--vp-accent-strong)" }}
+          >
+            Directo
+          </span>
+        ) : null}
         <span
           className="rounded-md border px-1.5 py-0.5 text-[9px] font-bold uppercase"
           style={{
@@ -148,6 +156,12 @@ function NodeCard({ node, root, side, collapsedCount, onToggle, highlighted }) {
           </span>
         ) : null}
       </div>
+
+      {!root && node.sponsor ? (
+        <p className="m-0 truncate text-[9px] font-medium" style={{ color: "var(--vp-muted)" }} title={`Sponsor: ${node.sponsor}`}>
+          Sponsor: {node.sponsor}
+        </p>
+      ) : null}
 
       <div className="mt-auto flex items-center justify-between gap-2">
         <span className="inline-flex items-center gap-1 text-[9px] font-semibold" style={{ color: hasPackage ? "var(--vp-success)" : "var(--vp-muted)" }}>

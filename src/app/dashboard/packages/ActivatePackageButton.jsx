@@ -35,6 +35,8 @@ export default function ActivatePackageButton({ packageId, featured }) {
             ? "Tu cuenta aún no está registrada en la red."
             : data.error === "invalid_referral_code"
               ? "El enlace de referido no es válido o ya no está activo. Solicita un enlace nuevo antes de pagar."
+            : data.error === "tree_relocation_required"
+              ? "Tu cuenta requiere revisión de sponsor y árbol antes de comprar. No se generó ningún cobro; contacta soporte."
             : data.error === "payments-unconfigured"
               ? "Pagos no configurados todavía."
               : "No se pudo iniciar el pago. Intenta de nuevo."
