@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  bindReferralCodeToEmail,
   bindReferralToEmail,
   captureReferralFromUrl,
   referralForCheckout,
@@ -32,6 +33,23 @@ test("binds a referral code to the registration email before checkout", () => {
   assert.deepEqual(referralForCheckout("newuser@example.com", storage, now), {
     code: "martinezl14",
     email: "newuser@example.com",
+  });
+});
+
+test("binds the explicit registration referral instead of a stale global ref", () => {
+  const storage = new MemoryStorage({
+    mp_ref_context: JSON.stringify({
+      code: "old-cache-code",
+      createdAt: new Date(now).toISOString(),
+    }),
+    mp_ref: "old-cache-code",
+  });
+
+  bindReferralCodeToEmail("buyer@example.com", "current-form-code", storage, now);
+
+  assert.deepEqual(referralForCheckout("buyer@example.com", storage, now), {
+    code: "current-form-code",
+    email: "buyer@example.com",
   });
 });
 
