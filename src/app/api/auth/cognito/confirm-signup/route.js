@@ -13,6 +13,7 @@ export async function POST(request) {
   const email = normalizeEmail(body.email);
   const code = String(body.code || "").replace(/[\s-]+/g, "").trim();
   const resend = Boolean(body.resend);
+  const referralCode = normalizeReferralCode(body.referralCode || body.referral_code || body.ref);
   // Antes de confirmar, el alias por email aún no existe: usar el username real.
   // Si el front no lo trae (p.ej. link de reactivación "reanudar registro"), se
   // deriva igual que en el registro: determinístico por email.
@@ -125,12 +126,12 @@ export async function POST(request) {
 
   // Notifica el registro al feed del panel admin (evento member.registered).
   // Best-effort: un fallo aquí JAMÁS afecta la confirmación del usuario.
-  await notifyRegistration(email, String(body.name || "").trim());
+  await notifyRegistration(email, String(body.name || "").trim(), referralCode);
 
   return NextResponse.json({ ok: true });
 }
 
-async function notifyRegistration(email, name) {
+async function notifyRegistration(email, name, referralCode) {
   const base = process.env.VP_PAYMENTS_URL;
   const token = process.env.PAYMENTS_SERVICE_TOKEN;
   if (!base || !token || !email) return;
@@ -140,7 +141,7 @@ async function notifyRegistration(email, name) {
     await fetch(`${base}/api/events/registration`, {
       method: "POST",
       headers: { "content-type": "application/json", "X-VP-Service-Token": token },
-      body: JSON.stringify({ email, name }),
+      body: JSON.stringify({ email, name, referral_code: referralCode }),
       signal: ctrl.signal,
       cache: "no-store",
     });
@@ -148,4 +149,8 @@ async function notifyRegistration(email, name) {
   } catch {
     /* best-effort */
   }
+}
+
+function normalizeReferralCode(value) {
+  return String(value || "").trim().slice(0, 64);
 }
