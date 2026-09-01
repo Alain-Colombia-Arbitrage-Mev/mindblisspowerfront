@@ -215,6 +215,7 @@ export async function GET(request) {
                 WHERE ap.affiliate_id = d.id
                   AND ap.status = 'active'
              ) AS active_package,
+             d.sponsor_id,
              sp.first_name || ' ' || split_part(sp.last_name, ' ', 1) AS sponsor_name
         FROM sub d
         JOIN mlm.person dp    ON dp.id = d.person_id
@@ -254,6 +255,8 @@ export async function GET(request) {
         rank: d.rank_code ? { code: d.rank_code, name: d.rank_name } : null,
         status: d.status,
         activePackage: Boolean(d.active_package),
+        sponsorId: d.sponsor_id == null ? null : String(d.sponsor_id),
+        directReferral: d.sponsor_id != null && String(d.sponsor_id) === String(root.id),
         sponsor: d.sponsor_name || null,
       })),
       meta: {
