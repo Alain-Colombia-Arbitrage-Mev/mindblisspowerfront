@@ -54,6 +54,23 @@ export function bindReferralToEmail(email, storage = browserStorage(), now = Dat
   return attribution;
 }
 
+export function bindReferralCodeToEmail(email, code, storage = browserStorage(), now = Date.now(), source = "registration") {
+  const normalizedEmail = normalizeReferralEmail(email);
+  const normalizedCode = normalizeReferralCode(code);
+  if (!normalizedEmail || !normalizedCode || !storage) return null;
+
+  const attribution = {
+    code: normalizedCode,
+    email: normalizedEmail,
+    source: String(source || "registration").slice(0, 48),
+    createdAt: new Date(now).toISOString(),
+    boundAt: new Date(now).toISOString(),
+  };
+  writeJson(storage, ATTRIBUTION_KEY, attribution);
+  safeSet(storage, LEGACY_REF_KEY, normalizedCode);
+  return attribution;
+}
+
 export function referralForCheckout(email, storage = browserStorage(), now = Date.now()) {
   const normalizedEmail = normalizeReferralEmail(email);
   if (!normalizedEmail || !storage) {
@@ -72,13 +89,6 @@ export function referralForCheckout(email, storage = browserStorage(), now = Dat
 
   clearUnmatchedReferral(storage);
   return { code: "", email: "" };
-}
-
-export function referralCodeFromStorage(storage = browserStorage(), now = Date.now()) {
-  if (!storage) return "";
-  const attribution = validAttribution(readJson(storage, ATTRIBUTION_KEY), now);
-  if (normalizeReferralEmail(attribution?.email)) return "";
-  return normalizeReferralCode(attribution?.code);
 }
 
 function findDraftReferral(storage, email, now) {

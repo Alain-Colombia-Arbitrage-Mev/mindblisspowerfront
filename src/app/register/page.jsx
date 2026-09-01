@@ -8,7 +8,7 @@ import AuthShell from "../_components/AuthShell";
 import { isMicrosoftEmail, suggestEmailFix, useResendCooldown } from "@/lib/useResendCooldown";
 import { composePhone, formatLocalPhone, isValidE164 } from "@/lib/phone";
 import { checkPassword, isValidPassword } from "@/lib/password";
-import { bindReferralToEmail, captureReferralFromUrl, normalizeReferralCode, referralCodeFromStorage } from "@/lib/referral-attribution";
+import { bindReferralCodeToEmail, captureReferralFromUrl, normalizeReferralCode } from "@/lib/referral-attribution";
 
 // Registro MÍNIMO: solo lo esencial para crear la cuenta. El resto del perfil
 // (país, ciudad, documento, fecha, preferencias) se completa en el onboarding.
@@ -72,6 +72,7 @@ export default function RegisterPage() {
   const [confirmCode, setConfirmCode] = useState("");
   const [cognitoUsername, setCognitoUsername] = useState("");
   const [banned, setBanned] = useState(false);
+  const [referralEmailLock, setReferralEmailLock] = useState("");
   const resendCooldown = useResendCooldown(45);
   // Guard síncrono anti doble-submit: evita un 2º SignUp que reenvía el código
   // e invalida el primero (causa del "primer código inválido").
@@ -114,13 +115,12 @@ export default function RegisterPage() {
     let prefillEmail = "";
     let resume = false;
     let referralCode = "";
+    let loadedReferralEmailLock = "";
     try {
       const sp = new URLSearchParams(window.location.search);
       const r = sp.get("ref");
       if (r) {
         referralCode = captureReferralFromUrl(window.location.search)?.code || "";
-      } else {
-        referralCode = referralCodeFromStorage();
       }
       prefillEmail = (sp.get("email") || "").trim().toLowerCase();
       resume = sp.get("resume") === "1";
@@ -133,7 +133,20 @@ export default function RegisterPage() {
       resumeRegistration(prefillEmail);
     }
     const merged = { ...legacyStored, ...stored };
-    if (referralCode) merged.referralCode = normalizeReferralCode(referralCode);
+    if (referralCode) {
+      merged.referralCode = normalizeReferralCode(referralCode);
+    } else {
+      const draftReferralCode = normalizeReferralCode(merged.referralCode || merged.ref);
+      const draftEmail = normalizeEmailValue(merged.email);
+      const prefillEmailNorm = normalizeEmailValue(prefillEmail);
+      if (draftReferralCode && draftEmail && (!prefillEmailNorm || prefillEmailNorm === draftEmail)) {
+        merged.referralCode = draftReferralCode;
+        loadedReferralEmailLock = draftEmail;
+      } else {
+        delete merged.referralCode;
+        delete merged.ref;
+      }
+    }
     // El draft guarda phone en E.164 (+57300…) para la API; re-inyectarlo como
     // número local hacía que composePhone duplicara el código de país
     // (+57 + 573001234567). Restaurar el número local por separado.
@@ -149,11 +162,17 @@ export default function RegisterPage() {
       }
     }
     delete merged.phoneLocal;
+    setReferralEmailLock(loadedReferralEmailLock);
     setForm((current) => ({ ...current, ...merged, ...(prefillEmail ? { email: prefillEmail } : {}) }));
   }, []);
 
   function updateField(field, value) {
-    setForm((current) => ({ ...current, [field]: value }));
+    if (field === "email" && referralEmailLock && normalizeEmailValue(value) !== referralEmailLock) {
+      setForm((current) => ({ ...current, email: value, referralCode: "" }));
+      setReferralEmailLock("");
+    } else {
+      setForm((current) => ({ ...current, [field]: value }));
+    }
     setErrors((current) => {
       if (!current[field]) return current;
       const next = { ...current };
@@ -199,12 +218,16 @@ export default function RegisterPage() {
     submittingRef.current = true;
     setLoading(true);
     const email = form.email.trim().toLowerCase();
-    const referral = bindReferralToEmail(email);
+    const finalReferralCode =
+      form.referralCode && (!referralEmailLock || referralEmailLock === normalizeEmailValue(email))
+        ? normalizeReferralCode(form.referralCode)
+        : "";
+    const referral = finalReferralCode ? bindReferralCodeToEmail(email, finalReferralCode) : null;
     const draft = {
       fullName: form.fullName.trim(),
       email,
       phone: composePhone(form.dialCode, form.phone),
-      referralCode: normalizeReferralCode(referral?.code || form.referralCode),
+      referralCode: normalizeReferralCode(referral?.code),
       acceptsPrivacy: form.acceptsPrivacy,
       company: "Mindbliss Power",
       createdAt: new Date().toISOString(),
@@ -970,4 +993,9 @@ function readStoredJson(key) {
   } catch {
     return {};
   }
+}
+
+function normalizeEmailValue(value) {
+  const email = String(value || "").trim().toLowerCase();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "";
 }
