@@ -285,5 +285,5 @@ function parseDepth(value) {
 function parseLimit(value, fallback) {
   const parsed = Number(String(value || "").trim());
   if (!Number.isInteger(parsed) || parsed <= 0) return fallback;
-  return Math.min(Math.max(parsed, 50), 2500);
+  return Math.min(Math.max(parsed, 50), 5000);
 }

@@ -142,7 +142,7 @@ export default function NetworkPage() {
       try {
         const treeQuery = new URLSearchParams({
           depth: treeDepth,
-          limit: treeDepth === "all" ? "2500" : "1500",
+          limit: treeDepth === "all" ? "5000" : "1500",
         });
         const [session, treeResponse, summaryResponse, referralResponse] = await Promise.all([
           fetch("/api/auth/session", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),

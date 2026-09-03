@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, ChevronDown, Minus, Plus, RefreshCw, Search, Users } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, CheckCircle2, ChevronDown, Minus, Plus, RefreshCw, Search, Users } from "lucide-react";
 
 import NetworkViewCard from "./NetworkViewCard";
 
@@ -27,7 +27,7 @@ function normalized(value) {
 
 function nodeMatches(node, query) {
   if (!query) return false;
-  return [node.name, node.id, node.rank?.name, node.rank?.code, node.sponsor]
+  return [node.name, node.id, node.rank?.name, node.rank?.code, node.sponsor, node.sponsorId, node.side, node.rootSide]
     .some((value) => normalized(value).includes(query));
 }
 
@@ -87,6 +87,7 @@ function NodeCard({ node, root, side, collapsedCount, onToggle, highlighted }) {
 
   return (
     <div
+      id={`member-tree-node-${node.id}`}
       className="vp-node relative flex min-h-[132px] flex-col gap-2 rounded-xl border p-3"
       style={{
         width: 188,
@@ -214,13 +215,14 @@ function EmptySlot({ side }) {
   );
 }
 
-function TreeSubtree({ node, side, root, index, collapsed, onToggle, searchQuery }) {
+function TreeSubtree({ node, side, root, index, collapsed, onToggle, searchQuery, highlightId }) {
   const { bySide, countDescendants } = index;
   const kids = bySide.get(node.id) || {};
   const realKids = [kids.L, kids.R].filter(Boolean);
   const showBranches = (root || realKids.length > 0) && !collapsed.has(node.id);
   const isCollapsed = collapsed.has(node.id);
   const hiddenCount = realKids.length > 0 && isCollapsed ? countDescendants(node.id) : 0;
+  const highlighted = String(highlightId || "") === String(node.id) || nodeMatches(node, searchQuery);
 
   return (
     <li className="vp-branch">
@@ -230,7 +232,7 @@ function TreeSubtree({ node, side, root, index, collapsed, onToggle, searchQuery
           root={root}
           side={side}
           collapsedCount={hiddenCount}
-          highlighted={nodeMatches(node, searchQuery)}
+          highlighted={highlighted}
           onToggle={realKids.length > 0 ? () => onToggle(node.id) : null}
         />
       </div>
@@ -251,6 +253,7 @@ function TreeSubtree({ node, side, root, index, collapsed, onToggle, searchQuery
                       collapsed={collapsed}
                       onToggle={onToggle}
                       searchQuery={searchQuery}
+                      highlightId={highlightId}
                     />
                   </ul>
                 ) : (
@@ -290,17 +293,62 @@ function BalanceBar({ leftCount, rightCount }) {
   );
 }
 
+function TreeSearchResults({ matches, onOpen }) {
+  const visibleMatches = matches.slice(0, 10);
+
+  return (
+    <div
+      className="mb-4 rounded-xl border p-3"
+      style={{ background: "var(--vp-surface)", borderColor: "var(--vp-border)" }}
+    >
+      {matches.length === 0 ? (
+        <div className="flex items-center gap-2 text-xs font-semibold" style={{ color: "var(--vp-muted)" }}>
+          <Search size={14} />
+          No hay coincidencias en la rama cargada.
+        </div>
+      ) : (
+        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+          {visibleMatches.map((node) => (
+            <button
+              key={node.id}
+              type="button"
+              onClick={() => onOpen(node)}
+              className="flex min-w-0 items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left"
+              style={{ background: "var(--vp-bg)", borderColor: "var(--vp-border)", color: "var(--vp-text)" }}
+            >
+              <span className="min-w-0">
+                <span className="block truncate text-xs font-bold">{node.name || `Nodo #${node.id}`}</span>
+                <span className="block truncate text-[10px]" style={{ color: "var(--vp-muted)" }}>
+                  #{node.id} · {node.rank?.name || "Sin rango"} · {node.sponsor ? `Sponsor ${node.sponsor}` : "Raíz"}
+                </span>
+              </span>
+              <ArrowUpRight size={14} className="shrink-0" style={{ color: "var(--vp-accent)" }} />
+            </button>
+          ))}
+        </div>
+      )}
+      {matches.length > visibleMatches.length ? (
+        <p className="m-0 mt-2 text-[10px]" style={{ color: "var(--vp-subtle)" }}>
+          Mostrando 10 de {matches.length} coincidencias. Afina la búsqueda para abrir una ruta específica.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, onRefresh, refreshing }) {
   const rootId = me?.affiliateId ?? "__root__";
   const index = useTreeIndex(nodes, rootId);
   const [collapsed, setCollapsed] = useState(() => new Set());
   const [search, setSearch] = useState("");
+  const [highlightId, setHighlightId] = useState("");
   const searchQuery = normalized(search);
 
   const rootNode = useMemo(() => (
     me
       ? {
           id: rootId,
+          parentId: null,
           name: me.name || "Mi cuenta",
           level: 0,
           side: me.side,
@@ -311,6 +359,13 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
         }
       : null
   ), [me, rootId]);
+
+  const byId = useMemo(() => {
+    const map = new Map();
+    if (rootNode) map.set(String(rootNode.id), rootNode);
+    for (const node of nodes) map.set(String(node.id), node);
+    return map;
+  }, [nodes, rootNode]);
 
   useEffect(() => {
     const next = new Set();
@@ -346,6 +401,42 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
       else next.add(id);
       return next;
     });
+  };
+
+  const expandToNode = (node) => {
+    if (!node?.id) return;
+    const parents = [];
+    const seen = new Set();
+    let current = byId.get(String(node.id));
+    while (current?.parentId && !seen.has(String(current.parentId))) {
+      const parentId = String(current.parentId);
+      parents.push(parentId);
+      seen.add(parentId);
+      current = byId.get(parentId);
+    }
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      parents.forEach((id) => next.delete(id));
+      return next;
+    });
+    setHighlightId(String(node.id));
+    setTimeout(() => {
+      document.getElementById(`member-tree-node-${node.id}`)?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+        inline: "center",
+      });
+    }, 120);
+  };
+
+  const growDepth = () => {
+    if (!onDepthChange || depth === "all") return;
+    const current = Number(depth || meta?.depth || 8);
+    if (!Number.isFinite(current)) {
+      onDepthChange("10");
+      return;
+    }
+    onDepthChange(current >= 16 ? "all" : String(Math.min(current + 4, 16)));
   };
 
   const collapseAll = () => {
@@ -391,6 +482,10 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
           <TreeButton onClick={collapseAll} disabled={!branchIds.length}>
             <Minus size={13} />
             Colapsar
+          </TreeButton>
+          <TreeButton onClick={growDepth} disabled={depth === "all"} title="Cargar más profundidad del árbol">
+            <ChevronDown size={13} />
+            Más niveles
           </TreeButton>
         </div>
 
@@ -450,6 +545,8 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
         </span>
       </div>
 
+      {searchQuery ? <TreeSearchResults matches={matches} onOpen={expandToNode} /> : null}
+
       <div className="vp-tree-scroll">
         <div className="vp-tree">
           <ul className="vp-children-root">
@@ -461,6 +558,7 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
               collapsed={collapsed}
               onToggle={toggle}
               searchQuery={searchQuery}
+              highlightId={highlightId}
             />
           </ul>
         </div>
