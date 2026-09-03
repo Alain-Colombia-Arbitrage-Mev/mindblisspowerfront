@@ -20,6 +20,8 @@ Any change pushed to the repo will also be reflected in the Base44 Builder.
 ```
 VITE_BASE44_APP_ID=your_app_id
 VITE_BASE44_APP_BASE_URL=your_backend_url
+NEXT_PUBLIC_CHATWOOT_BASE_URL=https://soporte.mindblisspower.com
+NEXT_PUBLIC_CHATWOOT_WEBSITE_TOKEN=your_chatwoot_website_token
 
 e.g.
 VITE_BASE44_APP_ID=cbef744a8545c389ef439ea6
