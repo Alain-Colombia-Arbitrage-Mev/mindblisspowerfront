@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, ArrowUpRight, CheckCircle2, ChevronDown, Minus, Plus, RefreshCw, Search, Users } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, CheckCircle2, ChevronDown, Layers, Minus, Package, Plus, RefreshCw, Search, Users } from "lucide-react";
 
 import NetworkViewCard from "./NetworkViewCard";
 
@@ -19,6 +19,10 @@ function sideLabel(side, short = false) {
   if (side === "L") return short ? "Izq" : "Izquierda";
   if (side === "R") return short ? "Der" : "Derecha";
   return "Raíz";
+}
+
+function compactNumber(value) {
+  return Number(value ?? 0).toLocaleString("es-CO");
 }
 
 function normalized(value) {
@@ -64,7 +68,7 @@ function TreeButton({ children, active, disabled, onClick, title }) {
       title={title}
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border px-3 text-[11px] font-bold disabled:opacity-55"
+      className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-full border px-3 text-[11px] font-bold disabled:opacity-55"
       style={{
         background: active ? "var(--vp-accent)" : "var(--vp-surface-raised)",
         borderColor: active ? "var(--vp-accent-strong)" : "var(--vp-border)",
@@ -80,103 +84,90 @@ function TreeButton({ children, active, disabled, onClick, title }) {
 function NodeCard({ node, root, side, collapsedCount, onToggle, highlighted }) {
   const active = node.status === "active";
   const hasPackage = Boolean(node.activePackage);
-  const ringColor = root ? "var(--vp-accent)" : hasPackage ? "var(--vp-success)" : "var(--vp-border-strong)";
-  const avatarBg = root ? "var(--vp-accent)" : hasPackage ? "var(--vp-success)" : "var(--vp-surface-raised)";
-  const avatarText = root || hasPackage ? "#000000" : "var(--vp-muted)";
+  const online = root || hasPackage || active;
+  const ringColor = root || highlighted ? "var(--vp-accent)" : "transparent";
+  const avatarText = root ? "var(--vp-accent)" : online ? "var(--vp-text)" : "var(--vp-muted)";
   const stateLabel = root ? "Tu cuenta" : hasPackage ? "Paquete activo" : active ? "Nodo activo" : "Inactivo";
+  const packageLabel = node.rank?.name || (hasPackage ? "Pack activo" : "Sin rango");
 
   return (
     <div
       id={`member-tree-node-${node.id}`}
-      className="vp-node relative flex min-h-[132px] flex-col gap-2 rounded-xl border p-3"
+      className="vp-node relative flex min-h-[138px] flex-col items-center gap-2 rounded-2xl border px-2 py-3 text-center"
       style={{
-        width: 188,
-        background: root ? "var(--vp-accent-muted)" : highlighted ? "color-mix(in srgb, var(--vp-accent) 12%, var(--vp-surface-raised))" : "var(--vp-surface-raised)",
-        borderColor: root || highlighted ? "var(--vp-accent-border)" : "var(--vp-border)",
-        boxShadow: root ? "0 0 24px -8px var(--vp-accent)" : highlighted ? "0 0 0 2px color-mix(in srgb, var(--vp-accent) 24%, transparent)" : "none",
+        width: 120,
+        background: highlighted ? "color-mix(in srgb, var(--vp-accent) 11%, var(--vp-surface-raised))" : "var(--vp-surface-raised)",
+        borderColor: root || highlighted ? "var(--vp-accent)" : "var(--vp-border)",
+        borderWidth: root ? 2 : 1,
+        boxShadow: highlighted ? "0 0 0 2px color-mix(in srgb, var(--vp-accent) 18%, transparent)" : "none",
       }}
     >
-      {root ? (
+      <div className="relative h-12 w-12 shrink-0">
         <span
-          className="absolute -top-2 left-1/2 -translate-x-1/2 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide"
-          style={{ background: "var(--vp-accent)", color: "#000000" }}
-        >
-          Tú
-        </span>
-      ) : (
-        <span
-          className="absolute -top-1.5 -right-1.5 h-3 w-3 rounded-full border-2"
+          className="flex h-12 w-12 items-center justify-center rounded-full text-sm font-bold"
           style={{
-            background: hasPackage ? "var(--vp-success)" : active ? "var(--vp-accent)" : "var(--vp-subtle)",
-            borderColor: "var(--vp-surface)",
+            background: "linear-gradient(135deg, #1f2937 0%, #374151 100%)",
+            color: avatarText,
+            boxShadow: ringColor === "transparent" ? "none" : `0 0 0 2px ${ringColor}`,
           }}
-          title={stateLabel}
-        />
-      )}
-
-      <div className="flex min-w-0 items-center gap-2">
-        <span
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ring-2"
-          style={{ background: avatarBg, color: avatarText, boxShadow: `0 0 0 2px ${ringColor}` }}
         >
           {initialsOf(node.name) || "MB"}
         </span>
-        <div className="min-w-0 flex-1">
-          <p className="m-0 truncate text-xs font-bold" style={{ color: "var(--vp-text)" }} title={node.name}>
-            {node.name}
-          </p>
-          <p className="m-0 text-[9px] font-medium" style={{ color: "var(--vp-muted)" }}>
-            {root ? `Nodo #${node.id}` : `G${node.level} · ${sideLabel(side, true)} local`}
-          </p>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-1.5">
-        {!root && node.directReferral ? (
-          <span
-            className="rounded-md border px-1.5 py-0.5 text-[9px] font-bold uppercase"
-            style={{ color: "#000000", background: "var(--vp-accent)", borderColor: "var(--vp-accent-strong)" }}
-          >
-            Directo
-          </span>
-        ) : null}
         <span
-          className="rounded-md border px-1.5 py-0.5 text-[9px] font-bold uppercase"
+          className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2"
           style={{
-            color: node.rank ? "var(--vp-accent)" : "var(--vp-subtle)",
-            background: node.rank ? "var(--vp-accent-muted)" : "var(--vp-bg)",
-            borderColor: node.rank ? "var(--vp-accent-border)" : "var(--vp-border)",
+            background: online ? "var(--vp-accent)" : "#6b7280",
+            borderColor: "var(--vp-surface-raised)",
           }}
-          title={node.rank?.name || "Sin rango"}
-        >
-          {node.rank?.name || "Sin rango"}
-        </span>
-        {!root && node.rootSide ? (
-          <span className="rounded-md border px-1.5 py-0.5 text-[9px] font-bold" style={{ color: "var(--vp-text-soft)", borderColor: "var(--vp-border)", background: "var(--vp-bg)" }}>
-            Rama {sideLabel(node.rootSide, true)}
-          </span>
-        ) : null}
+          title={stateLabel}
+        />
       </div>
 
-      {!root && node.sponsor ? (
-        <p className="m-0 truncate text-[9px] font-medium" style={{ color: "var(--vp-muted)" }} title={`Sponsor: ${node.sponsor}`}>
-          Sponsor: {node.sponsor}
-        </p>
-      ) : null}
+      <p
+        className="m-0 min-h-[26px] w-full text-[11px] font-semibold leading-tight"
+        style={{
+          color: "var(--vp-text)",
+          display: "-webkit-box",
+          overflow: "hidden",
+          textAlign: "center",
+          WebkitBoxOrient: "vertical",
+          WebkitLineClamp: 2,
+        }}
+        title={node.name}
+      >
+        {node.name}
+      </p>
 
-      <div className="mt-auto flex items-center justify-between gap-2">
-        <span className="inline-flex items-center gap-1 text-[9px] font-semibold" style={{ color: hasPackage ? "var(--vp-success)" : "var(--vp-muted)" }}>
-          <CheckCircle2 size={10} />
-          {stateLabel}
+      <div className="flex w-full justify-center">
+        <span
+          className="inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-1 text-[9px] font-semibold"
+          style={{ color: "var(--vp-text)", background: "var(--vp-bg)", borderColor: "var(--vp-border)" }}
+          title={packageLabel}
+        >
+          <Package size={10} style={{ color: "var(--vp-accent)" }} />
+          <span className="truncate">{packageLabel}</span>
         </span>
+      </div>
+
+      <p className="m-0 text-[9px] font-medium" style={{ color: "var(--vp-muted)" }}>
+        {root ? `Nodo #${node.id}` : `G${node.level} · ${sideLabel(side, true)}`}
+      </p>
+
+      <div className="mt-auto flex min-h-6 items-center justify-center">
+        {!onToggle ? (
+          <span className="inline-flex items-center gap-1 text-[9px] font-semibold" style={{ color: online ? "var(--vp-accent)" : "var(--vp-muted)" }}>
+            <CheckCircle2 size={10} />
+            {online ? "Activo" : "Inactivo"}
+          </span>
+        ) : null}
 
         {onToggle ? (
           <button
             type="button"
             onClick={onToggle}
             aria-label={collapsedCount ? "Expandir rama" : "Colapsar rama"}
-            className="flex h-6 shrink-0 items-center gap-0.5 rounded-md border px-1.5 text-[9px] font-bold transition-colors"
-            style={{ color: "var(--vp-muted)", background: "var(--vp-surface)", borderColor: "var(--vp-border)" }}
+            className="flex h-6 shrink-0 items-center gap-0.5 rounded-full border px-1.5 text-[9px] font-bold transition-colors"
+            style={{ color: collapsedCount ? "var(--vp-muted)" : "var(--vp-accent)", background: "var(--vp-surface)", borderColor: collapsedCount ? "var(--vp-border)" : "var(--vp-accent)" }}
           >
             {collapsedCount ? (
               <>
@@ -196,14 +187,14 @@ function NodeCard({ node, root, side, collapsedCount, onToggle, highlighted }) {
 function EmptySlot({ side }) {
   return (
     <div
-      className="flex min-h-[104px] flex-col items-center justify-center gap-1 rounded-xl border border-dashed p-3 text-center"
-      style={{ width: 188, borderColor: "var(--vp-border-strong)", background: "transparent" }}
+      className="flex min-h-[118px] flex-col items-center justify-center gap-2 rounded-2xl border border-dashed p-3 text-center"
+      style={{ width: 120, borderColor: "var(--vp-border)", background: "transparent" }}
     >
       <span
-        className="flex h-8 w-8 items-center justify-center rounded-full border border-dashed"
-        style={{ borderColor: "var(--vp-border-strong)", color: "var(--vp-subtle)" }}
+        className="flex h-10 w-10 items-center justify-center rounded-full border border-dashed"
+        style={{ borderColor: "var(--vp-border)", color: "var(--vp-subtle)" }}
       >
-        <Plus size={14} />
+        <Plus size={15} />
       </span>
       <span className="text-[9px] font-semibold" style={{ color: "var(--vp-subtle)" }}>
         Disponible
@@ -336,6 +327,29 @@ function TreeSearchResults({ matches, onOpen }) {
   );
 }
 
+function TreeStatsStrip({ memberCount, maxGen, withPackage }) {
+  const stats = [
+    { Icon: Users, label: `${compactNumber(memberCount)} en tu red` },
+    { Icon: Layers, label: `Nivel ${compactNumber(maxGen)} alcanzado` },
+    { Icon: Package, label: `${compactNumber(withPackage)} con paquete` },
+  ];
+
+  return (
+    <div className="mb-4 flex flex-wrap gap-3">
+      {stats.map(({ Icon, label }) => (
+        <span
+          key={label}
+          className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-medium"
+          style={{ background: "var(--vp-surface)", borderColor: "var(--vp-border)", color: "var(--vp-text)" }}
+        >
+          <Icon size={14} style={{ color: "var(--vp-accent)" }} />
+          {label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, onRefresh, refreshing }) {
   const rootId = me?.affiliateId ?? "__root__";
   const index = useTreeIndex(nodes, rootId);
@@ -459,7 +473,9 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
   }
 
   return (
-    <NetworkViewCard title="Árbol binario" memberCount={memberCount} filterLabel={filterLabel}>
+    <>
+      <TreeStatsStrip memberCount={memberCount} maxGen={maxGen} withPackage={withPackage} />
+      <NetworkViewCard title="Estructura de tu Red" memberCount={memberCount} filterLabel={filterLabel}>
       <div className="mb-5 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex flex-wrap items-center gap-2">
           {[
@@ -531,13 +547,13 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
 
       <div className="mb-4 flex flex-wrap items-center gap-3 text-[10px] font-medium" style={{ color: "var(--vp-muted)" }}>
         <span className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full" style={{ background: "var(--vp-success)" }} /> Paquete activo
+          <span className="h-2 w-2 rounded-full" style={{ background: "var(--vp-accent)" }} /> Activo
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full" style={{ background: "var(--vp-accent)" }} /> Nodo activo
+          <span className="h-2 w-2 rounded-full" style={{ background: "#6b7280" }} /> Inactivo
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full border border-dashed" style={{ borderColor: "var(--vp-border-strong)" }} /> Disponible
+          <span className="h-2 w-2 rounded-full" style={{ background: "var(--vp-border)" }} /> Disponible
         </span>
         <span className="ml-auto flex items-center gap-1" style={{ color: searchQuery ? "var(--vp-accent)" : "var(--vp-subtle)" }}>
           <ChevronDown size={11} />
@@ -563,6 +579,7 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
           </ul>
         </div>
       </div>
-    </NetworkViewCard>
+      </NetworkViewCard>
+    </>
   );
 }
