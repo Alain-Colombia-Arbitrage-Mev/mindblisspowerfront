@@ -15,8 +15,9 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(request) {
   const params = new URL(request.url).searchParams;
+  const positionOnly = params.get("view") === "position";
   const depthLimit = parseDepth(params.get("depth"));
-  const rowLimit = parseLimit(params.get("limit"), depthLimit === 0 ? 2000 : 1000);
+  const rowLimit = parseLimit(params.get("limit"), depthLimit === 0 ? 2000 : depthLimit <= 4 ? 64 : 1000);
   const queryLimit = rowLimit + 1;
   const cookieStore = await cookies();
   const idToken = cookieStore.get("vp_id_token")?.value;
@@ -38,7 +39,7 @@ export async function GET(request) {
   }
 
   try {
-    const access = await sql`
+    const accessQuery = sql`
       SELECT p.status::text AS status,
              COALESCE(p.blacklisted, false) AS blacklisted,
              EXISTS (
@@ -54,14 +55,7 @@ export async function GET(request) {
        WHERE lower(p.email) = ${email}
        LIMIT 1`;
 
-    if (access.length > 0) {
-      const row = access[0];
-      if (row.blacklisted || row.listed_by_blacklist || ["suspended", "banned", "deleted"].includes(row.status)) {
-        return NextResponse.json({ error: "account_suspended", positioned: false }, { status: 403 });
-      }
-    }
-
-    const me = await sql`
+    const memberQuery = sql`
       SELECT a.id,
              a.parent_id,
              a.sponsor_id,
@@ -102,15 +96,52 @@ export async function GET(request) {
          )
        LIMIT 1`;
 
+    const [access, me] = await Promise.all([accessQuery, memberQuery]);
+    if (access.length > 0) {
+      const row = access[0];
+      if (row.blacklisted || row.listed_by_blacklist || ["suspended", "banned", "deleted"].includes(row.status)) {
+        return NextResponse.json({ error: "account_suspended", positioned: false }, { status: 403 });
+      }
+    }
+
     if (me.length === 0) {
       return NextResponse.json({ positioned: false }, { status: 200 });
     }
 
     const root = me[0];
+    const member = {
+      affiliateId: String(root.id),
+      name: root.full_name,
+      parentId: root.parent_id == null ? null : String(root.parent_id),
+      sponsorId: root.sponsor_id == null ? null : String(root.sponsor_id),
+      depth: root.depth,
+      side: root.position,
+      status: root.status,
+      activePackage: Boolean(root.active_package),
+      rank: root.rank_code
+        ? { code: root.rank_code, name: root.rank_name, order: root.rank_order }
+        : null,
+      sponsor: root.sponsor_name || null,
+      parent: root.parent_name || null,
+    };
 
-    let rankProgress = null;
-    try {
-      const progress = await sql`
+    if (positionOnly) {
+      return NextResponse.json({
+        positioned: true,
+        me: { ...member, rankProgress: null },
+        tree: [],
+        meta: {
+          view: "position",
+          depth: 0,
+          limit: 0,
+          returned: 0,
+          truncated: false,
+          generatedAt: new Date().toISOString(),
+        },
+      });
+    }
+
+    const rankProgressQuery = sql`
         SELECT points_left_eff::text,
                points_right_eff::text,
                points_qualifying::text,
@@ -120,31 +151,15 @@ export async function GET(request) {
                pct_to_next_rank::text
           FROM mlm.v_rank_progress
          WHERE affiliate_id = ${root.id}
-         LIMIT 1`;
-      if (progress.length > 0) {
-        const row = progress[0];
-        rankProgress = {
-          leftPoints: row.points_left_eff || "0",
-          rightPoints: row.points_right_eff || "0",
-          qualifyingPoints: row.points_qualifying || "0",
-          nextRank: row.next_rank_code
-            ? {
-                code: row.next_rank_code,
-                requiredPoints: row.next_rank_points || "0",
-                bonusUsd: row.next_rank_bonus_usd || "0",
-                progressPct: row.pct_to_next_rank || "0",
-              }
-            : null,
-        };
-      }
-    } catch (error) {
+         LIMIT 1`.catch((error) => {
       console.warn("member/tree rank progress unavailable:", error.message);
-    }
+      return [];
+    });
 
     // Subárbol descendente configurable bajo el miembro vía CTE recursivo por
     // parent_id (el árbol es profundo: sin GiST sobre path). Se incluye rootSide
     // para que los conteos izquierda/derecha sean correctos a cualquier nivel.
-    const descendants = await sql`
+    const descendantsQuery = sql`
       WITH RECURSIVE sub AS (
         SELECT a.id,
                a.parent_id,
@@ -154,23 +169,23 @@ export async function GET(request) {
                a.current_rank_id,
                a.person_id,
                a.sponsor_id,
+               (a.status <> 'active'
+                 OR p.status <> 'active'
+                 OR COALESCE(p.blacklisted, false)
+                 OR EXISTS (
+                   SELECT 1
+                     FROM mlm.blacklist b
+                    WHERE (b.email_norm IS NOT NULL AND b.email_norm = mlm.norm_email(p.email))
+                       OR (b.phone_last10 IS NOT NULL AND b.phone_last10 = mlm.norm_phone10(p.phone_number))
+                       OR (b.name_norm IS NOT NULL
+                           AND b.name_norm = mlm.norm_name(p.first_name || ' ' || p.last_name)
+                           AND (b.birthdate IS NULL OR (p.birthday IS NOT NULL AND b.birthdate = p.birthday)))
+                 )) AS unavailable,
                1 AS level,
                ARRAY[a.id]::bigint[] AS path_ids
           FROM mlm.affiliate a
           JOIN mlm.person p ON p.id = a.person_id
          WHERE a.parent_id = ${root.id}
-           AND a.status = 'active'
-           AND p.status = 'active'
-           AND NOT COALESCE(p.blacklisted, false)
-           AND NOT EXISTS (
-             SELECT 1
-               FROM mlm.blacklist b
-              WHERE (b.email_norm IS NOT NULL AND b.email_norm = mlm.norm_email(p.email))
-                 OR (b.phone_last10 IS NOT NULL AND b.phone_last10 = mlm.norm_phone10(p.phone_number))
-                 OR (b.name_norm IS NOT NULL
-                     AND b.name_norm = mlm.norm_name(p.first_name || ' ' || p.last_name)
-                     AND (b.birthdate IS NULL OR (p.birthday IS NOT NULL AND b.birthdate = p.birthday)))
-           )
         UNION ALL
         SELECT a.id,
                a.parent_id,
@@ -180,6 +195,18 @@ export async function GET(request) {
                a.current_rank_id,
                a.person_id,
                a.sponsor_id,
+               (a.status <> 'active'
+                 OR p.status <> 'active'
+                 OR COALESCE(p.blacklisted, false)
+                 OR EXISTS (
+                   SELECT 1
+                     FROM mlm.blacklist b
+                    WHERE (b.email_norm IS NOT NULL AND b.email_norm = mlm.norm_email(p.email))
+                       OR (b.phone_last10 IS NOT NULL AND b.phone_last10 = mlm.norm_phone10(p.phone_number))
+                       OR (b.name_norm IS NOT NULL
+                           AND b.name_norm = mlm.norm_name(p.first_name || ' ' || p.last_name)
+                           AND (b.birthdate IS NULL OR (p.birthday IS NOT NULL AND b.birthdate = p.birthday)))
+                 )) AS unavailable,
                sub.level + 1,
                sub.path_ids || a.id
           FROM mlm.affiliate a
@@ -187,36 +214,29 @@ export async function GET(request) {
           JOIN mlm.person p ON p.id = a.person_id
          WHERE (${depthLimit} = 0 OR sub.level < ${depthLimit})
            AND NOT (a.id = ANY(sub.path_ids))
-           AND a.status = 'active'
-           AND p.status = 'active'
-           AND NOT COALESCE(p.blacklisted, false)
-           AND NOT EXISTS (
-             SELECT 1
-               FROM mlm.blacklist b
-              WHERE (b.email_norm IS NOT NULL AND b.email_norm = mlm.norm_email(p.email))
-                 OR (b.phone_last10 IS NOT NULL AND b.phone_last10 = mlm.norm_phone10(p.phone_number))
-                 OR (b.name_norm IS NOT NULL
-                     AND b.name_norm = mlm.norm_name(p.first_name || ' ' || p.last_name)
-                     AND (b.birthdate IS NULL OR (p.birthday IS NOT NULL AND b.birthdate = p.birthday)))
-           )
       )
       SELECT d.id,
              d.parent_id,
              d.position,
              d.root_side,
              d.level,
-             dp.first_name || ' ' || split_part(dp.last_name, ' ', 1) AS display_name,
-             dr.code    AS rank_code,
-             dr.name_es AS rank_name,
-             d.status,
-             EXISTS (
+             CASE WHEN d.unavailable THEN 'Not Available'
+                  ELSE dp.first_name || ' ' || split_part(dp.last_name, ' ', 1)
+              END AS display_name,
+             CASE WHEN d.unavailable THEN NULL ELSE dr.code END AS rank_code,
+             CASE WHEN d.unavailable THEN NULL ELSE dr.name_es END AS rank_name,
+             CASE WHEN d.unavailable THEN 'unavailable'::text ELSE d.status::text END AS status,
+             (NOT d.unavailable) AND EXISTS (
                SELECT 1
                  FROM mlm.affiliate_package ap
                 WHERE ap.affiliate_id = d.id
                   AND ap.status = 'active'
              ) AS active_package,
-             d.sponsor_id,
-             sp.first_name || ' ' || split_part(sp.last_name, ' ', 1) AS sponsor_name
+             CASE WHEN d.unavailable THEN NULL ELSE d.sponsor_id END AS sponsor_id,
+             CASE WHEN d.unavailable THEN NULL
+                  ELSE sp.first_name || ' ' || split_part(sp.last_name, ' ', 1)
+              END AS sponsor_name,
+             d.unavailable
         FROM sub d
         JOIN mlm.person dp    ON dp.id = d.person_id
         LEFT JOIN mlm.rank dr ON dr.id = d.current_rank_id
@@ -225,24 +245,31 @@ export async function GET(request) {
        ORDER BY d.level, d.parent_id NULLS FIRST, d.position NULLS FIRST, d.id
        LIMIT ${queryLimit}`;
 
+    const [progress, descendants] = await Promise.all([rankProgressQuery, descendantsQuery]);
+    let rankProgress = null;
+    if (progress.length > 0) {
+      const row = progress[0];
+      rankProgress = {
+        leftPoints: row.points_left_eff || "0",
+        rightPoints: row.points_right_eff || "0",
+        qualifyingPoints: row.points_qualifying || "0",
+        nextRank: row.next_rank_code
+          ? {
+              code: row.next_rank_code,
+              requiredPoints: row.next_rank_points || "0",
+              bonusUsd: row.next_rank_bonus_usd || "0",
+              progressPct: row.pct_to_next_rank || "0",
+            }
+          : null,
+      };
+    }
+
     const visibleDescendants = descendants.slice(0, rowLimit);
 
     return NextResponse.json({
       positioned: true,
       me: {
-        affiliateId: String(root.id),
-        name: root.full_name,
-        parentId: root.parent_id == null ? null : String(root.parent_id),
-        sponsorId: root.sponsor_id == null ? null : String(root.sponsor_id),
-        depth: root.depth,
-        side: root.position,
-        status: root.status,
-        activePackage: Boolean(root.active_package),
-        rank: root.rank_code
-          ? { code: root.rank_code, name: root.rank_name, order: root.rank_order }
-          : null,
-        sponsor: root.sponsor_name || null,
-        parent: root.parent_name || null,
+        ...member,
         rankProgress,
       },
       tree: visibleDescendants.map((d) => ({
@@ -254,6 +281,7 @@ export async function GET(request) {
         name: d.display_name,
         rank: d.rank_code ? { code: d.rank_code, name: d.rank_name } : null,
         status: d.status,
+        unavailable: Boolean(d.unavailable),
         activePackage: Boolean(d.active_package),
         sponsorId: d.sponsor_id == null ? null : String(d.sponsor_id),
         directReferral: d.sponsor_id != null && String(d.sponsor_id) === String(root.id),
@@ -276,9 +304,9 @@ export async function GET(request) {
 function parseDepth(value) {
   const raw = String(value || "").trim().toLowerCase();
   if (["all", "full", "complete", "completo", "completa"].includes(raw)) return 0;
-  if (!raw) return 8;
+  if (!raw) return 4;
   const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed <= 0) return 8;
+  if (!Number.isInteger(parsed) || parsed <= 0) return 4;
   return Math.min(parsed, 16);
 }
 

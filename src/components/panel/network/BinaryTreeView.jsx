@@ -31,6 +31,7 @@ function normalized(value) {
 
 function nodeMatches(node, query) {
   if (!query) return false;
+  if (node?.unavailable) return false;
   return [node.name, node.id, node.rank?.name, node.rank?.code, node.sponsor, node.sponsorId, node.side, node.rootSide]
     .some((value) => normalized(value).includes(query));
 }
@@ -82,13 +83,14 @@ function TreeButton({ children, active, disabled, onClick, title }) {
 }
 
 function NodeCard({ node, root, side, collapsedCount, onToggle, highlighted }) {
+  const unavailable = Boolean(node.unavailable);
   const active = node.status === "active";
   const hasPackage = Boolean(node.activePackage);
-  const online = root || hasPackage || active;
+  const online = !unavailable && (root || hasPackage || active);
   const ringColor = root || highlighted ? "var(--vp-accent)" : "transparent";
-  const avatarText = root ? "var(--vp-accent)" : online ? "var(--vp-text)" : "var(--vp-muted)";
-  const stateLabel = root ? "Tu cuenta" : hasPackage ? "Paquete activo" : active ? "Nodo activo" : "Inactivo";
-  const packageLabel = node.rank?.name || (hasPackage ? "Pack activo" : "Sin rango");
+  const avatarText = unavailable ? "#ffffff" : root ? "var(--vp-accent)" : online ? "var(--vp-text)" : "var(--vp-muted)";
+  const stateLabel = unavailable ? "Not Available" : root ? "Tu cuenta" : hasPackage ? "Paquete activo" : active ? "Nodo activo" : "Inactivo";
+  const packageLabel = unavailable ? "Cuenta protegida" : node.rank?.name || (hasPackage ? "Pack activo" : "Sin rango");
 
   return (
     <div
@@ -96,8 +98,8 @@ function NodeCard({ node, root, side, collapsedCount, onToggle, highlighted }) {
       className="vp-node relative flex min-h-[138px] flex-col items-center gap-2 rounded-2xl border px-2 py-3 text-center"
       style={{
         width: 120,
-        background: highlighted ? "color-mix(in srgb, var(--vp-accent) 11%, var(--vp-surface-raised))" : "var(--vp-surface-raised)",
-        borderColor: root || highlighted ? "var(--vp-accent)" : "var(--vp-border)",
+        background: unavailable ? "#050505" : highlighted ? "color-mix(in srgb, var(--vp-accent) 11%, var(--vp-surface-raised))" : "var(--vp-surface-raised)",
+        borderColor: unavailable ? "#27272a" : root || highlighted ? "var(--vp-accent)" : "var(--vp-border)",
         borderWidth: root ? 2 : 1,
         boxShadow: highlighted ? "0 0 0 2px color-mix(in srgb, var(--vp-accent) 18%, transparent)" : "none",
       }}
@@ -106,18 +108,18 @@ function NodeCard({ node, root, side, collapsedCount, onToggle, highlighted }) {
         <span
           className="flex h-12 w-12 items-center justify-center rounded-full text-sm font-bold"
           style={{
-            background: "linear-gradient(135deg, #1f2937 0%, #374151 100%)",
+            background: unavailable ? "#1e2a8a" : "linear-gradient(135deg, #1f2937 0%, #374151 100%)",
             color: avatarText,
             boxShadow: ringColor === "transparent" ? "none" : `0 0 0 2px ${ringColor}`,
           }}
         >
-          {initialsOf(node.name) || "MB"}
+          {unavailable ? "NA" : initialsOf(node.name) || "MB"}
         </span>
         <span
           className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2"
           style={{
             background: online ? "var(--vp-accent)" : "#6b7280",
-            borderColor: "var(--vp-surface-raised)",
+            borderColor: unavailable ? "#050505" : "var(--vp-surface-raised)",
           }}
           title={stateLabel}
         />
@@ -126,14 +128,14 @@ function NodeCard({ node, root, side, collapsedCount, onToggle, highlighted }) {
       <p
         className="m-0 min-h-[26px] w-full text-[11px] font-semibold leading-tight"
         style={{
-          color: "var(--vp-text)",
+          color: unavailable ? "#ffffff" : "var(--vp-text)",
           display: "-webkit-box",
           overflow: "hidden",
           textAlign: "center",
           WebkitBoxOrient: "vertical",
           WebkitLineClamp: 2,
         }}
-        title={node.name}
+        title={unavailable ? "Not Available" : node.name}
       >
         {node.name}
       </p>
@@ -141,23 +143,23 @@ function NodeCard({ node, root, side, collapsedCount, onToggle, highlighted }) {
       <div className="flex w-full justify-center">
         <span
           className="inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-1 text-[9px] font-semibold"
-          style={{ color: "var(--vp-text)", background: "var(--vp-bg)", borderColor: "var(--vp-border)" }}
+          style={{ color: unavailable ? "#d4d4d8" : "var(--vp-text)", background: unavailable ? "#111111" : "var(--vp-bg)", borderColor: unavailable ? "#3f3f46" : "var(--vp-border)" }}
           title={packageLabel}
         >
-          <Package size={10} style={{ color: "var(--vp-accent)" }} />
+          {unavailable ? <AlertTriangle size={10} style={{ color: "#a1a1aa" }} /> : <Package size={10} style={{ color: "var(--vp-accent)" }} />}
           <span className="truncate">{packageLabel}</span>
         </span>
       </div>
 
       <p className="m-0 text-[9px] font-medium" style={{ color: "var(--vp-muted)" }}>
-        {root ? `Nodo #${node.id}` : `G${node.level} · ${sideLabel(side, true)}`}
+        {unavailable ? `G${node.level} · ${sideLabel(side, true)}` : root ? `Nodo #${node.id}` : `G${node.level} · ${sideLabel(side, true)}`}
       </p>
 
       <div className="mt-auto flex min-h-6 items-center justify-center">
         {!onToggle ? (
           <span className="inline-flex items-center gap-1 text-[9px] font-semibold" style={{ color: online ? "var(--vp-accent)" : "var(--vp-muted)" }}>
             <CheckCircle2 size={10} />
-            {online ? "Activo" : "Inactivo"}
+            {unavailable ? "Not Available" : online ? "Activo" : "Inactivo"}
           </span>
         ) : null}
 
@@ -445,9 +447,9 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
 
   const growDepth = () => {
     if (!onDepthChange || depth === "all") return;
-    const current = Number(depth || meta?.depth || 8);
+    const current = Number(depth || meta?.depth || 4);
     if (!Number.isFinite(current)) {
-      onDepthChange("10");
+      onDepthChange("8");
       return;
     }
     onDepthChange(current >= 16 ? "all" : String(Math.min(current + 4, 16)));
@@ -457,8 +459,16 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
     setCollapsed(new Set(branchIds.filter((id) => id !== rootId)));
   };
 
-  const leftCount = nodes.filter((node) => node.rootSide === "L").length;
-  const rightCount = nodes.filter((node) => node.rootSide === "R").length;
+  const { leftCount, rightCount, maxGen, withPackage } = useMemo(() => {
+    const stats = { leftCount: 0, rightCount: 0, maxGen: 0, withPackage: 0 };
+    for (const node of nodes) {
+      if (node.rootSide === "L") stats.leftCount += 1;
+      if (node.rootSide === "R") stats.rightCount += 1;
+      if (node.activePackage) stats.withPackage += 1;
+      stats.maxGen = Math.max(stats.maxGen, Number(node.level || 0));
+    }
+    return stats;
+  }, [nodes]);
   const memberCount = nodes.length + (rootNode ? 1 : 0);
   const filterLabel = meta?.depth === "all" ? "Rama completa" : `${meta?.depth ?? depth} niveles`;
 
@@ -479,8 +489,9 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
       <div className="mb-5 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex flex-wrap items-center gap-2">
           {[
-            ["6", "6 niveles"],
-            ["10", "10 niveles"],
+            ["4", "4 niveles · rápido"],
+            ["8", "8 niveles"],
+            ["12", "12 niveles"],
             ["all", "Rama completa"],
           ].map(([value, label]) => (
             <TreeButton key={value} active={depth === value} onClick={() => onDepthChange?.(value)}>
