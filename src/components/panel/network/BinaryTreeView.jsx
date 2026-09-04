@@ -24,7 +24,7 @@ import NetworkViewCard from "./NetworkViewCard";
 
 const INITIAL_LOAD_LEVELS = 4;
 const MIN_LOAD_LEVELS = 2;
-const MAX_LOAD_LEVELS = 16;
+const MAX_LOAD_LEVELS = 32;
 const TREE_EXPAND_ALL_LIMIT = 511;
 const TREE_VISIBLE_EXPANSION_LIMIT = 64;
 

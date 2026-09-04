@@ -307,7 +307,7 @@ function parseDepth(value) {
   if (!raw) return 4;
   const parsed = Number(raw);
   if (!Number.isInteger(parsed) || parsed <= 0) return 4;
-  return Math.min(parsed, 16);
+  return Math.min(parsed, 32);
 }
 
 function parseLimit(value, fallback) {
