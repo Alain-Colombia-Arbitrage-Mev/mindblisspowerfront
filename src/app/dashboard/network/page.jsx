@@ -28,6 +28,13 @@ function money(value) {
   return `$${Number(value ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function treeRowLimit(depth) {
+  if (depth === "all") return "5000";
+  const parsed = Number(depth);
+  if (!Number.isFinite(parsed)) return "64";
+  return String(Math.min(5000, Math.max(64, (2 ** (parsed + 1)) - 2)));
+}
+
 function paymentStatusCopy(status, active) {
   if (active) {
     return {
@@ -116,10 +123,9 @@ export default function NetworkPage() {
   const requestedTab = searchParams.get("tab");
   const validTabs = useMemo(() => new Set(NETWORK_TABS.map((item) => item.id)), []);
   const [tab, setTab] = useState("tree");
-  const [memberName, setMemberName] = useState("");
-  const [treeDepth, setTreeDepth] = useState("8");
+  const [treeDepth, setTreeDepth] = useState("4");
   const [refreshTick, setRefreshTick] = useState(0);
-  const [state, setState] = useState({ loading: true, error: "", data: null, summary: null, referral: null, syncing: false });
+  const [state, setState] = useState({ loading: true, refreshing: false, error: "", data: null, summary: null, referral: null, syncing: false });
 
   useEffect(() => {
     if (validTabs.has(requestedTab)) {
@@ -131,30 +137,31 @@ export default function NetworkPage() {
     let cancelled = false;
     let timer = null;
     let tries = 0;
+    const controller = new AbortController();
     const maxTries = 20; // ~60s para cubrir webhook + lag de RDS
 
     const load = async () => {
       const firstTry = tries === 0;
       tries += 1;
       if (firstTry) {
-        setState((prev) => ({ ...prev, loading: true, error: "", syncing: false }));
+        setState((prev) => ({ ...prev, loading: !prev.data, refreshing: Boolean(prev.data), error: "", syncing: false }));
       }
       try {
         const treeQuery = new URLSearchParams({
           depth: treeDepth,
-          limit: treeDepth === "all" ? "5000" : "1500",
+          limit: treeRowLimit(treeDepth),
         });
-        const [session, treeResponse, summaryResponse, referralResponse] = await Promise.all([
-          fetch("/api/auth/session", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
-          fetch(`/api/member/tree?${treeQuery.toString()}`, { cache: "no-store" }),
-          fetch("/api/payments/me?fresh=1", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
-          fetch("/api/member/referral", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
+        const [treeResponse, summaryResponse, referralResponse] = await Promise.all([
+          fetch(`/api/member/tree?${treeQuery.toString()}`, { cache: "no-store", signal: controller.signal }),
+          fetch("/api/payments/me?fresh=1", { cache: "no-store", signal: controller.signal }).then((r) => (r.ok ? r.json() : null)),
+          fetch("/api/member/referral", { cache: "no-store", signal: controller.signal }).then((r) => (r.ok ? r.json() : null)),
         ]);
         const payload = await treeResponse.json().catch(() => ({}));
         if (cancelled) return;
-        if (session?.name) setMemberName(session.name);
         if (!treeResponse.ok) {
-          setState({ loading: false, error: payload.error || "No se pudo cargar tu posición.", data: null, summary: summaryResponse, referral: referralResponse, syncing: false });
+          setState((prev) => prev.data
+            ? { ...prev, loading: false, refreshing: false }
+            : { loading: false, refreshing: false, error: payload.error || "No se pudo cargar tu posición.", data: null, summary: summaryResponse, referral: referralResponse, syncing: false });
           return;
         }
 
@@ -165,6 +172,7 @@ export default function NetworkPage() {
 
         setState({
           loading: false,
+          refreshing: false,
           error: "",
           data: payload,
           summary: summaryResponse,
@@ -175,14 +183,19 @@ export default function NetworkPage() {
         if (shouldPoll) {
           timer = setTimeout(load, 3000);
         }
-      } catch {
-        if (!cancelled) setState({ loading: false, error: "Sin conexión con el árbol.", data: null, summary: null, referral: null, syncing: false });
+      } catch (error) {
+        if (!cancelled && error?.name !== "AbortError") {
+          setState((prev) => prev.data
+            ? { ...prev, loading: false, refreshing: false }
+            : { loading: false, refreshing: false, error: "Sin conexión con el árbol.", data: null, summary: null, referral: null, syncing: false });
+        }
       }
     };
 
     load();
     return () => {
       cancelled = true;
+      controller.abort();
       if (timer) clearTimeout(timer);
     };
   }, [treeDepth, refreshTick]);
@@ -343,7 +356,7 @@ export default function NetworkPage() {
           rightLeg={rightDirect?.name}
         />
         <NetworkSummaryCard
-          memberName={memberName || me.name || "Mi red"}
+          memberName={me.name || "Mi red"}
           leftCount={leftCount}
           rightCount={rightCount}
           metrics={summaryMetrics}
@@ -360,7 +373,7 @@ export default function NetworkPage() {
           depth={treeDepth}
           onDepthChange={setTreeDepth}
           onRefresh={() => setRefreshTick((tick) => tick + 1)}
-          refreshing={state.loading}
+          refreshing={state.refreshing}
         />
       ) : null}
       {tab === "generation" ? <GenerationView nodes={tree} /> : null}
