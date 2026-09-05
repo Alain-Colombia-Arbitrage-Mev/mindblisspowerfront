@@ -106,6 +106,28 @@ function collectVisibleRows(rootNode, index, collapsed) {
   return rows;
 }
 
+function safeVisibleDepth(nodes, hasRoot) {
+  if (nodes.length + (hasRoot ? 1 : 0) <= TREE_EXPAND_ALL_LIMIT) return null;
+
+  const countsByLevel = new Map();
+  for (const node of nodes) {
+    const level = Math.max(0, Number(node.level || 0));
+    countsByLevel.set(level, (countsByLevel.get(level) || 0) + 1);
+  }
+
+  let visibleCount = hasRoot ? 1 : 0;
+  let deepestSafeLevel = 0;
+  const levels = [...countsByLevel.keys()].sort((left, right) => left - right);
+  for (const level of levels) {
+    const nextCount = visibleCount + countsByLevel.get(level);
+    if (nextCount > TREE_EXPAND_ALL_LIMIT) break;
+    visibleCount = nextCount;
+    deepestSafeLevel = level;
+  }
+
+  return Math.max(1, deepestSafeLevel);
+}
+
 function TreeButton({ children, active, disabled, onClick, title }) {
   return (
     <button
@@ -113,7 +135,7 @@ function TreeButton({ children, active, disabled, onClick, title }) {
       title={title}
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg border px-3 text-[11px] font-bold disabled:opacity-55 sm:min-h-8"
+      className="inline-flex min-h-11 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-3 text-[11px] font-bold disabled:opacity-55 sm:min-h-8"
       style={{
         background: active ? "var(--vp-accent)" : "var(--vp-surface-raised)",
         borderColor: active ? "var(--vp-accent-strong)" : "var(--vp-border)",
@@ -211,7 +233,9 @@ function NodeCard({ node, root, side, collapsedCount, onToggle, highlighted }) {
           <button
             type="button"
             onClick={onToggle}
-            aria-label={collapsedCount ? "Expandir rama" : "Colapsar rama"}
+            aria-label={collapsedCount ? `Mostrar ${collapsedCount} descendientes` : "Colapsar rama"}
+            aria-expanded={!collapsedCount}
+            title={collapsedCount ? `Mostrar ${collapsedCount} descendientes` : "Colapsar esta rama"}
             className="flex h-6 shrink-0 items-center gap-0.5 rounded-full border px-1.5 text-[9px] font-bold transition-colors"
             style={{ color: collapsedCount ? "var(--vp-muted)" : "var(--vp-accent)", background: "var(--vp-surface)", borderColor: collapsedCount ? "var(--vp-border)" : "var(--vp-accent)" }}
           >
@@ -434,9 +458,7 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
     return ids;
   }, [index, nodes, rootId]);
 
-  const [collapsed, setCollapsed] = useState(() => new Set(
-    branchIds.filter((id) => Number(byId.get(String(id))?.level || 0) >= 3),
-  ));
+  const [collapsed, setCollapsed] = useState(() => new Set());
   const knownBranchIds = useRef(new Set(branchIds.map(String)));
   const [search, setSearch] = useState("");
   const [highlightId, setHighlightId] = useState("");
@@ -447,6 +469,10 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
       : INITIAL_LOAD_LEVELS;
   });
   const searchQuery = normalized(search);
+  const safetyDepth = useMemo(
+    () => safeVisibleDepth(nodes, Boolean(rootNode)),
+    [nodes, rootNode],
+  );
 
   useEffect(() => {
     const currentIds = new Set(branchIds.map(String));
@@ -454,14 +480,18 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
       const next = new Set([...previous].filter((id) => currentIds.has(String(id))));
       for (const id of currentIds) {
         const node = byId.get(id);
-        if (!knownBranchIds.current.has(id) && Number(node?.level || 0) >= 3) {
+        if (
+          safetyDepth != null
+          && !knownBranchIds.current.has(id)
+          && Number(node?.level || 0) >= safetyDepth
+        ) {
           next.add(id);
         }
       }
       return next;
     });
     knownBranchIds.current = currentIds;
-  }, [branchIds, byId]);
+  }, [branchIds, byId, safetyDepth]);
 
   useEffect(() => {
     if (depth === "all") return;
@@ -513,11 +543,21 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
 
   const loadRequestedDepth = () => {
     const requested = String(loadLevels);
+    setCollapsed(new Set(
+      safetyDepth == null
+        ? []
+        : branchIds.filter((id) => Number(byId.get(String(id))?.level || 0) >= safetyDepth).map(String),
+    ));
     if (requested === String(depth)) onRefresh?.();
     else onDepthChange?.(requested);
   };
 
   const loadAllLevels = () => {
+    setCollapsed(new Set(
+      safetyDepth == null
+        ? []
+        : branchIds.filter((id) => Number(byId.get(String(id))?.level || 0) >= safetyDepth).map(String),
+    ));
     if (depth === "all") onRefresh?.();
     else onDepthChange?.("all");
   };
@@ -549,7 +589,13 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
   };
 
   const expandVisibleLevel = () => {
-    if (!collapsedVisibleBranches.length) return;
+    if (!collapsedVisibleBranches.length) {
+      if (!canLoadNextDepth) return;
+      const nextDepth = Math.min(MAX_LOAD_LEVELS, numericDepth + 1);
+      setLoadLevels(nextDepth);
+      onDepthChange?.(String(nextDepth));
+      return;
+    }
     const shallowestDepth = collapsedVisibleBranches.reduce(
       (shallowest, row) => Math.min(shallowest, row.depth),
       Number.POSITIVE_INFINITY,
@@ -580,6 +626,11 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
     }
     return stats;
   }, [nodes]);
+  const numericDepth = Number(meta?.depth ?? depth);
+  const canLoadNextDepth = depth !== "all"
+    && Number.isFinite(numericDepth)
+    && numericDepth < MAX_LOAD_LEVELS
+    && maxGen >= numericDepth;
   const memberCount = nodes.length + (rootNode ? 1 : 0);
   const loadedLevel = meta?.depth === "all"
     ? maxGen
@@ -600,10 +651,9 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
     <>
       <TreeStatsStrip memberCount={memberCount} maxGen={maxGen} withPackage={withPackage} />
       <NetworkViewCard title="Estructura de tu Red" memberCount={memberCount} filterLabel={filterLabel}>
-      <div className="mb-5 flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-        <div className="w-full overflow-x-auto pb-1 xl:w-auto">
-          <div className="flex min-w-max items-stretch gap-2">
-            <div className="rounded-xl border p-2" style={{ background: "var(--vp-surface-raised)", borderColor: "var(--vp-border)" }}>
+      <div className="mb-5 space-y-3">
+        <div className="grid gap-3 2xl:grid-cols-2">
+            <div className="min-w-0 rounded-xl border p-3" style={{ background: "var(--vp-surface-raised)", borderColor: "var(--vp-border)" }}>
               <div className="mb-2 flex items-center justify-between gap-4 px-1">
                 <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: "var(--vp-text-soft)" }}>
                   Profundidad cargada
@@ -612,7 +662,7 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
                   {depth === "all" ? `Todos · nivel ${maxGen}` : `Actual ${loadedLevel} · máximo ${MAX_LOAD_LEVELS}`}
                 </span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <div className="flex items-center rounded-lg border" style={{ background: "var(--vp-surface)", borderColor: "var(--vp-border)" }}>
                   <button
                     type="button"
@@ -644,7 +694,7 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
                 </div>
                 <TreeButton active={depth !== "all" && String(loadLevels) === String(depth)} onClick={loadRequestedDepth} disabled={refreshing}>
                   <Download size={13} />
-                  Cargar hasta este nivel
+                  Cargar y mostrar
                 </TreeButton>
                 <TreeButton active={depth === "all"} onClick={loadAllLevels} disabled={refreshing} title="Cargar todos los niveles disponibles de tu red">
                   <Layers size={13} />
@@ -657,7 +707,7 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
               </div>
             </div>
 
-            <div className="rounded-xl border p-2" style={{ background: "var(--vp-surface-raised)", borderColor: "var(--vp-border)" }}>
+            <div className="min-w-0 rounded-xl border p-3" style={{ background: "var(--vp-surface-raised)", borderColor: "var(--vp-border)" }}>
               <div className="mb-2 flex items-center justify-between gap-4 px-1">
                 <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: "var(--vp-text-soft)" }}>
                   Ramas visibles
@@ -666,12 +716,12 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
                   Nivel {visibleLevel} de {loadedLevel} · {compactNumber(visibleRows.length)} {visibleRows.length === 1 ? "nodo" : "nodos"}
                 </span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <TreeButton onClick={collapseVisibleLevel} disabled={visibleLevel <= 0 || refreshing}>
                   <ChevronsUp size={13} />
                   Colapsar un nivel
                 </TreeButton>
-                <TreeButton onClick={expandVisibleLevel} disabled={!collapsedVisibleBranches.length || refreshing}>
+                <TreeButton onClick={expandVisibleLevel} disabled={(!collapsedVisibleBranches.length && !canLoadNextDepth) || refreshing}>
                   <ChevronsDown size={13} />
                   Expandir un nivel
                 </TreeButton>
@@ -689,10 +739,9 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
                 </TreeButton>
               </div>
             </div>
-          </div>
         </div>
 
-        <label className="relative w-full xl:w-80">
+        <label className="relative block w-full">
           <Search size={14} style={{ color: "var(--vp-muted)", left: 12, position: "absolute", top: "50%", transform: "translateY(-50%)" }} />
           <input
             type="search"
@@ -729,6 +778,16 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
         >
           <AlertTriangle size={14} className="mt-0.5 shrink-0" />
           La rama tiene más registros que el límite visual actual. Se muestran {meta.returned} de {meta.limit}+ nodos; usa búsqueda o solicita un export operativo para auditoría completa.
+        </div>
+      ) : null}
+
+      {safetyDepth != null ? (
+        <div
+          className="mb-4 flex items-start gap-2 rounded-xl border p-3 text-[11px]"
+          style={{ background: "var(--vp-accent-muted)", borderColor: "var(--vp-accent-border)", color: "var(--vp-text-soft)" }}
+        >
+          <GitBranch size={14} className="mt-0.5 shrink-0" style={{ color: "var(--vp-accent)" }} />
+          Para mantener una navegación fluida, el árbol grande se abrió inicialmente hasta el nivel {safetyDepth}. Usa “Expandir un nivel” o el botón + de cada usuario para continuar bajando.
         </div>
       ) : null}
 
