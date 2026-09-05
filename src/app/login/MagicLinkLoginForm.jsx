@@ -19,7 +19,7 @@ import { useEffect, useState } from "react";
 
 import { isMicrosoftEmail, suggestEmailFix, useResendCooldown } from "@/lib/useResendCooldown";
 import { checkPassword, isValidPassword } from "@/lib/password";
-import { bindReferralToEmail, captureReferralFromUrl, normalizeReferralCode } from "@/lib/referral-attribution";
+import { bindReferralToEmail, captureReferralFromUrl, normalizePlacementSide, normalizeReferralCode } from "@/lib/referral-attribution";
 
 const AUTH_STATE_MESSAGES = {
   "invalid-email": {
@@ -44,11 +44,12 @@ const AUTH_STATE_MESSAGES = {
   },
 };
 
-export default function MagicLinkLoginForm({ authState, initialEmail = "", initialMode = "code", initialRef = "" }) {
+export default function MagicLinkLoginForm({ authState, initialEmail = "", initialMode = "code", initialRef = "", initialSide = "" }) {
   const [mode, setMode] = useState(() => normalizeMode(initialMode));
   const [codeStep, setCodeStep] = useState("request");
   const [email, setEmail] = useState(initialEmail);
   const [referralCode, setReferralCode] = useState(() => normalizeReferralCode(initialRef));
+  const [preferredSide, setPreferredSide] = useState(() => normalizePlacementSide(initialSide));
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loginCode, setLoginCode] = useState("");
@@ -68,7 +69,10 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
 
   useEffect(() => {
     const attribution = captureReferralFromUrl(window.location.search);
-    if (attribution?.code) setReferralCode(attribution.code);
+    if (attribution?.code) {
+      setReferralCode(attribution.code);
+      setPreferredSide(normalizePlacementSide(attribution.side));
+    }
   }, []);
 
   function normalizeEmail() {
@@ -93,6 +97,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     const params = new URLSearchParams(extraParams);
     if (normalizedEmail) params.set("email", normalizedEmail);
     if (referralCode) params.set("ref", referralCode);
+    if (referralCode && preferredSide) params.set("side", preferredSide);
     const query = params.toString();
     return query ? `${path}?${query}` : path;
   }

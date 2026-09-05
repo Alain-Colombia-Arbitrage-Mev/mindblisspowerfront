@@ -24,6 +24,7 @@ export async function POST(request) {
   const city = String(body.city || "").trim();
   const country = String(body.country || "").trim();
   const referralCode = normalizeReferralCode(body.referralCode || body.referral_code || body.ref);
+  const preferredSide = normalizePlacementSide(body.preferredSide || body.preferred_side || body.side);
 
   const validationError = validateInput({ email, password, fullName });
   if (validationError) {
@@ -32,7 +33,7 @@ export async function POST(request) {
 
   // Lista negra: se consulta ANTES de crear el usuario en Cognito. Falla cerrado:
   // si no se puede validar el estado de acceso, no creamos cuentas nuevas.
-  const precheck = await registrationPrecheck({ email, phone, fullName, birthDate, referralCode });
+  const precheck = await registrationPrecheck({ email, phone, fullName, birthDate, referralCode, preferredSide });
   if (precheck.blacklisted) {
     logAuthEvent("signup_blocked", authLogFields({ email, status: 403, reason: "blacklisted" }), "warn");
     return NextResponse.json(
@@ -145,7 +146,7 @@ export async function POST(request) {
   }
 
   if (referralCode) {
-    const recorded = await recordRegistrationReferral({ email, referralCode });
+    const recorded = await recordRegistrationReferral({ email, referralCode, preferredSide });
     if (!recorded.ok) {
       logAuthEvent(
         "signup_referral_record_failed",
@@ -181,7 +182,7 @@ export async function POST(request) {
 
 // registrationPrecheck consulta a vp-payments si el candidato está en blacklist.
 // Falla cerrado ante infra/config para evitar altas sin validar.
-async function registrationPrecheck({ email, phone, fullName, birthDate, referralCode }) {
+async function registrationPrecheck({ email, phone, fullName, birthDate, referralCode, preferredSide }) {
   const base = process.env.VP_PAYMENTS_URL;
   const token = process.env.PAYMENTS_SERVICE_TOKEN;
   if (!base || !token) return { unavailable: true };
@@ -189,7 +190,7 @@ async function registrationPrecheck({ email, phone, fullName, birthDate, referra
     const resp = await fetch(`${base}/api/registration/precheck`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-VP-Service-Token": token },
-      body: JSON.stringify({ email, phone, name: fullName, birth_date: birthDate, referral_code: referralCode }),
+      body: JSON.stringify({ email, phone, name: fullName, birth_date: birthDate, referral_code: referralCode, preferred_side: preferredSide }),
       cache: "no-store",
     });
     const data = await resp.json().catch(() => ({}));
@@ -201,7 +202,7 @@ async function registrationPrecheck({ email, phone, fullName, birthDate, referra
   }
 }
 
-async function recordRegistrationReferral({ email, referralCode }) {
+async function recordRegistrationReferral({ email, referralCode, preferredSide }) {
   const base = process.env.VP_PAYMENTS_URL;
   const token = process.env.PAYMENTS_SERVICE_TOKEN;
   if (!base || !token || !email || !referralCode) return { ok: false, status: 503, error: "unconfigured" };
@@ -209,7 +210,7 @@ async function recordRegistrationReferral({ email, referralCode }) {
     const resp = await fetch(`${base}/api/registration/referral-attribution`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-VP-Service-Token": token },
-      body: JSON.stringify({ email, referral_code: referralCode }),
+      body: JSON.stringify({ email, referral_code: referralCode, preferred_side: preferredSide }),
       cache: "no-store",
     });
     const data = await resp.json().catch(() => ({}));
@@ -254,6 +255,11 @@ function normalizeBirthDate(value) {
 
 function normalizeReferralCode(value) {
   return String(value || "").trim().slice(0, 64);
+}
+
+function normalizePlacementSide(value) {
+  const side = String(value || "").trim().toUpperCase();
+  return side === "L" || side === "R" ? side : "";
 }
 
 function validateInput({ email, password, fullName }) {

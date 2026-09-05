@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, ArrowRight, Check, Clock, Copy, Loader2, RotateCw, Share2, Users } from 'lucide-react';
+import { AlertCircle, ArrowDownLeft, ArrowDownRight, ArrowRight, Check, Clock, Copy, Loader2, RotateCw, Share2, Users } from 'lucide-react';
 import { motion } from 'framer-motion';
 import ReferralShareModal from './ReferralShareModal';
 
@@ -40,16 +40,16 @@ const buttonBase = {
 
 export default function ReferralModule() {
   const [referralCode, setReferralCode] = useState('');
-  const [referralLink, setReferralLink] = useState('');
+  const [referralLinks, setReferralLinks] = useState({ left: '', right: '' });
   const [referrals, setReferrals] = useState([]);
   const [metrics, setMetrics] = useState(EMPTY_METRICS);
   const [status, setStatus] = useState('loading');
-  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [shareSide, setShareSide] = useState('');
   const [codeCopied, setCodeCopied] = useState(false);
-  const [linkCopied, setLinkCopied] = useState(false);
+  const [linkCopied, setLinkCopied] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
-  const hasReferral = status === 'ready' && referralCode && referralLink;
+  const hasReferral = status === 'ready' && referralCode && referralLinks.left && referralLinks.right;
 
   useEffect(() => {
     let cancelled = false;
@@ -65,22 +65,23 @@ export default function ReferralModule() {
     if (!data) {
       setStatus('error');
       setReferralCode('');
-      setReferralLink('');
+      setReferralLinks({ left: '', right: '' });
       setReferrals([]);
       setMetrics(EMPTY_METRICS);
       return;
     }
-    if (!data.positioned || !data.code || !data.link) {
+    const links = referralLinksFrom(data);
+    if (!data.positioned || !data.code || !links.left || !links.right) {
       setStatus('pending');
       setReferralCode('');
-      setReferralLink('');
+      setReferralLinks({ left: '', right: '' });
       setReferrals([]);
       setMetrics(EMPTY_METRICS);
       return;
     }
     setStatus('ready');
     setReferralCode(data.code);
-    setReferralLink(data.link);
+    setReferralLinks(links);
     setReferrals(Array.isArray(data.referrals) ? data.referrals : []);
     setMetrics(data.metrics || EMPTY_METRICS);
   }
@@ -107,17 +108,24 @@ export default function ReferralModule() {
     setTimeout(() => setCodeCopied(false), 2500);
   };
 
-  const copyLink = async () => {
-    if (!referralLink) return;
-    await navigator.clipboard.writeText(referralLink).catch(() => {});
-    setLinkCopied(true);
-    setTimeout(() => setLinkCopied(false), 2500);
+  const copyLink = async (side) => {
+    const link = referralLinks[side];
+    if (!link) return;
+    await navigator.clipboard.writeText(link).catch(() => {});
+    setLinkCopied(side);
+    setTimeout(() => setLinkCopied(''), 2500);
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       {hasReferral ? (
-        <ReferralShareModal isOpen={shareModalOpen} onClose={() => setShareModalOpen(false)} code={referralCode} link={referralLink} memberName="Tu red" />
+        <ReferralShareModal
+          isOpen={Boolean(shareSide)}
+          onClose={() => setShareSide('')}
+          code={referralCode}
+          link={referralLinks[shareSide] || ''}
+          side={shareSide}
+        />
       ) : null}
 
       <motion.section
@@ -196,72 +204,35 @@ export default function ReferralModule() {
         transition={{ duration: 0.18, delay: 0.04 }}
         style={{ ...cardStyle, padding: '24px clamp(20px, 3vw, 28px)', borderRadius: 16 }}
       >
-        <p style={{ ...labelStyle, marginBottom: 16 }}>Compartir</p>
+        <p style={{ ...labelStyle, marginBottom: 8 }}>Elige una rama para compartir</p>
+        <p style={{ color: 'var(--vp-muted)', fontSize: 11, lineHeight: 1.6, margin: '0 0 16px' }}>
+          Si la primera posición está ocupada, la nueva alta continúa debajo por el mismo lado sin cambiar tu patrocinio directo.
+        </p>
 
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-            padding: '12px 14px',
-            borderRadius: 11,
-            background: 'var(--vp-surface-raised)',
-            border: '1px solid var(--vp-border)',
-            marginBottom: 12,
-            minWidth: 0,
-          }}
-        >
-          <p
-            style={{
-              color: hasReferral ? 'var(--vp-accent)' : 'var(--vp-muted)',
-              fontSize: 12,
-              margin: 0,
-              flex: 1,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              fontFamily: hasReferral ? 'monospace' : 'inherit',
-            }}
-          >
-            {hasReferral ? referralLink : sharePlaceholder(status)}
-          </p>
-          <button
-            onClick={copyLink}
-            disabled={!hasReferral}
-            style={{
-              ...buttonBase,
-              padding: '8px 13px',
-              flexShrink: 0,
-              background: linkCopied ? 'var(--vp-accent)' : 'var(--vp-surface)',
-              color: linkCopied ? 'var(--vp-shell)' : 'var(--vp-text-soft)',
-              border: `1px solid ${linkCopied ? 'var(--vp-accent-strong)' : 'var(--vp-border)'}`,
-              fontSize: 11,
-              cursor: hasReferral ? 'pointer' : 'default',
-              opacity: hasReferral ? 1 : 0.55,
-            }}
-          >
-            {linkCopied ? <Check size={12} /> : <Copy size={12} />}
-            {linkCopied ? 'Copiado' : 'Copiar'}
-          </button>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 12 }}>
+          <SideShareCard
+            side="left"
+            title="Enlace izquierdo"
+            direction="L → L"
+            Icon={ArrowDownLeft}
+            link={referralLinks.left}
+            status={status}
+            copied={linkCopied === 'left'}
+            onCopy={() => copyLink('left')}
+            onShare={() => hasReferral && setShareSide('left')}
+          />
+          <SideShareCard
+            side="right"
+            title="Enlace derecho"
+            direction="R → R"
+            Icon={ArrowDownRight}
+            link={referralLinks.right}
+            status={status}
+            copied={linkCopied === 'right'}
+            onCopy={() => copyLink('right')}
+            onShare={() => hasReferral && setShareSide('right')}
+          />
         </div>
-
-        <button
-          onClick={() => hasReferral && setShareModalOpen(true)}
-          disabled={!hasReferral}
-          style={{
-            ...buttonBase,
-            width: '100%',
-            padding: '12px 18px',
-            background: hasReferral ? 'var(--vp-amber-muted)' : 'var(--vp-surface-raised)',
-            color: hasReferral ? 'var(--vp-amber)' : 'var(--vp-muted)',
-            border: `1px solid ${hasReferral ? 'var(--vp-amber-border)' : 'var(--vp-border)'}`,
-            cursor: hasReferral ? 'pointer' : 'default',
-          }}
-        >
-          <Share2 size={14} />
-          Compartir invitación
-          <ArrowRight size={13} style={{ opacity: 0.65 }} />
-        </button>
       </motion.section>
 
       <motion.section
@@ -378,6 +349,56 @@ async function loadReferral() {
   } catch {
     return null;
   }
+}
+
+function referralLinksFrom(data) {
+  const left = data?.links?.left || data?.link_left || data?.link || '';
+  const right = data?.links?.right || data?.link_right || linkWithSide(left, 'R');
+  return { left, right };
+}
+
+function linkWithSide(link, side) {
+  if (!link) return '';
+  try {
+    const url = new URL(link);
+    url.searchParams.set('side', side);
+    return url.toString();
+  } catch {
+    return link;
+  }
+}
+
+function SideShareCard({ title, direction, Icon, link, status, copied, onCopy, onShare }) {
+  const enabled = Boolean(link);
+  return (
+    <section style={{ borderRadius: 13, padding: 14, background: 'var(--vp-surface-raised)', border: '1px solid var(--vp-border)', minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        <span style={{ width: 36, height: 36, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 10, background: 'var(--vp-accent-muted)', color: 'var(--vp-accent)', border: '1px solid var(--vp-accent-border)' }}>
+          <Icon size={17} />
+        </span>
+        <div>
+          <p style={{ color: 'var(--vp-text)', fontSize: 13, fontWeight: 850, margin: 0 }}>{title}</p>
+          <p style={{ color: 'var(--vp-subtle)', fontSize: 10, fontWeight: 750, margin: '3px 0 0' }}>Secuencia {direction}</p>
+        </div>
+      </div>
+
+      <p title={link} style={{ color: enabled ? 'var(--vp-accent)' : 'var(--vp-muted)', fontFamily: enabled ? 'monospace' : 'inherit', fontSize: 10, margin: '0 0 12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {enabled ? link : sharePlaceholder(status)}
+      </p>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <button onClick={onCopy} disabled={!enabled} style={{ ...buttonBase, padding: '10px 12px', background: copied ? 'var(--vp-accent)' : 'var(--vp-surface)', color: copied ? 'var(--vp-shell)' : 'var(--vp-text-soft)', border: `1px solid ${copied ? 'var(--vp-accent-strong)' : 'var(--vp-border)'}`, opacity: enabled ? 1 : 0.55 }}>
+          {copied ? <Check size={13} /> : <Copy size={13} />}
+          {copied ? 'Copiado' : 'Copiar'}
+        </button>
+        <button onClick={onShare} disabled={!enabled} style={{ ...buttonBase, padding: '10px 12px', background: enabled ? 'var(--vp-amber-muted)' : 'var(--vp-surface)', color: enabled ? 'var(--vp-amber)' : 'var(--vp-muted)', border: `1px solid ${enabled ? 'var(--vp-amber-border)' : 'var(--vp-border)'}`, opacity: enabled ? 1 : 0.55 }}>
+          <Share2 size={13} />
+          Compartir
+          <ArrowRight size={12} style={{ opacity: 0.65 }} />
+        </button>
+      </div>
+    </section>
+  );
 }
 
 function helperText(status) {

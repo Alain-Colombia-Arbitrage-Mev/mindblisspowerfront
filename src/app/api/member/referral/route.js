@@ -80,7 +80,8 @@ export async function GET() {
 
     const affiliate = rows[0];
     const code = affiliate.invitation_link || deriveCode(affiliate.id);
-    const link = `${REF_BASE_URL}/register?ref=${encodeURIComponent(code)}`;
+    const linkLeft = `${REF_BASE_URL}/register?ref=${encodeURIComponent(code)}&side=L`;
+    const linkRight = `${REF_BASE_URL}/register?ref=${encodeURIComponent(code)}&side=R`;
     const referrals = await sql`
       SELECT child.id,
              trim(rp.first_name || ' ' || split_part(rp.last_name, ' ', 1)) AS display_name,
@@ -120,7 +121,11 @@ export async function GET() {
     return NextResponse.json({
       positioned: true,
       code,
-      link,
+      // `link` remains for older clients; new UI uses the explicit pair.
+      link: linkLeft,
+      link_left: linkLeft,
+      link_right: linkRight,
+      links: { left: linkLeft, right: linkRight },
       generated: !affiliate.invitation_link,
       metrics: {
         total: normalizedReferrals.length,

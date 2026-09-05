@@ -15,12 +15,13 @@ const toneStyles = {
   neutral: { background: 'var(--vp-surface-raised)', border: 'var(--vp-border)', color: 'var(--vp-text-soft)' },
 };
 
-export default function ReferralShareModal({ isOpen, onClose, code, link }) {
+export default function ReferralShareModal({ isOpen, onClose, code, link, side }) {
   const [copied, setCopied] = useState(null);
   const [sharing, setSharing] = useState(null);
 
   const referralLink = link || `https://app.mindblisspower.com/register?ref=${encodeURIComponent(code || '')}`;
-  const shareText = `Únete a mi red en Mindbliss Power usando mi código de referido: ${code}. ${referralLink}`;
+  const sideLabel = side === 'right' ? 'derecha' : 'izquierda';
+  const shareText = `Únete a mi red en Mindbliss Power por mi rama ${sideLabel}, usando mi código de referido: ${code}. ${referralLink}`;
 
   const handleShare = (type) => {
     setSharing(type);
@@ -86,7 +87,7 @@ export default function ReferralShareModal({ isOpen, onClose, code, link }) {
           >
             <div className="mb-6 flex items-center justify-between">
               <p style={{ color: 'var(--vp-accent)', fontSize: 10, fontWeight: 850, letterSpacing: '1.5px', textTransform: 'uppercase', margin: 0 }}>
-                Compartir Red
+                Compartir rama {sideLabel}
               </p>
               <button
                 aria-label="Cerrar"
@@ -168,7 +169,7 @@ export default function ReferralShareModal({ isOpen, onClose, code, link }) {
 
             <div className="rounded-lg p-3" style={{ background: 'var(--vp-surface-raised)', border: '1px solid var(--vp-border)' }}>
               <p style={{ color: 'var(--vp-text-soft)', fontSize: 11, lineHeight: 1.5, margin: 0 }}>
-                Enlace: <span style={{ color: 'var(--vp-accent)', fontFamily: 'monospace', fontSize: 10 }}>{referralLink}</span>
+                Enlace {sideLabel}: <span style={{ color: 'var(--vp-accent)', fontFamily: 'monospace', fontSize: 10 }}>{referralLink}</span>
               </p>
             </div>
 

@@ -8,7 +8,7 @@ import AuthShell from "../_components/AuthShell";
 import { isMicrosoftEmail, suggestEmailFix, useResendCooldown } from "@/lib/useResendCooldown";
 import { composePhone, formatLocalPhone, isValidE164 } from "@/lib/phone";
 import { checkPassword, isValidPassword } from "@/lib/password";
-import { bindReferralCodeToEmail, captureReferralFromUrl, normalizeReferralCode } from "@/lib/referral-attribution";
+import { bindReferralCodeToEmail, captureReferralFromUrl, normalizePlacementSide, normalizeReferralCode } from "@/lib/referral-attribution";
 
 // Registro MÍNIMO: solo lo esencial para crear la cuenta. El resto del perfil
 // (país, ciudad, documento, fecha, preferencias) se completa en el onboarding.
@@ -20,6 +20,7 @@ const initialForm = {
   dialCode: "+57",
   phone: "",
   referralCode: "",
+  preferredSide: "",
   acceptsPrivacy: false,
 };
 
@@ -115,12 +116,15 @@ export default function RegisterPage() {
     let prefillEmail = "";
     let resume = false;
     let referralCode = "";
+    let preferredSide = "";
     let loadedReferralEmailLock = "";
     try {
       const sp = new URLSearchParams(window.location.search);
       const r = sp.get("ref");
       if (r) {
-        referralCode = captureReferralFromUrl(window.location.search)?.code || "";
+        const attribution = captureReferralFromUrl(window.location.search);
+        referralCode = attribution?.code || "";
+        preferredSide = normalizePlacementSide(attribution?.side);
       }
       prefillEmail = (sp.get("email") || "").trim().toLowerCase();
       resume = sp.get("resume") === "1";
@@ -135,16 +139,20 @@ export default function RegisterPage() {
     const merged = { ...legacyStored, ...stored };
     if (referralCode) {
       merged.referralCode = normalizeReferralCode(referralCode);
+      merged.preferredSide = preferredSide;
     } else {
       const draftReferralCode = normalizeReferralCode(merged.referralCode || merged.ref);
       const draftEmail = normalizeEmailValue(merged.email);
       const prefillEmailNorm = normalizeEmailValue(prefillEmail);
       if (draftReferralCode && draftEmail && (!prefillEmailNorm || prefillEmailNorm === draftEmail)) {
         merged.referralCode = draftReferralCode;
+        merged.preferredSide = normalizePlacementSide(merged.preferredSide || merged.side);
         loadedReferralEmailLock = draftEmail;
       } else {
         delete merged.referralCode;
         delete merged.ref;
+        delete merged.preferredSide;
+        delete merged.side;
       }
     }
     // El draft guarda phone en E.164 (+57300…) para la API; re-inyectarlo como
@@ -168,7 +176,7 @@ export default function RegisterPage() {
 
   function updateField(field, value) {
     if (field === "email" && referralEmailLock && normalizeEmailValue(value) !== referralEmailLock) {
-      setForm((current) => ({ ...current, email: value, referralCode: "" }));
+      setForm((current) => ({ ...current, email: value, referralCode: "", preferredSide: "" }));
       setReferralEmailLock("");
     } else {
       setForm((current) => ({ ...current, [field]: value }));
@@ -228,6 +236,7 @@ export default function RegisterPage() {
       email,
       phone: composePhone(form.dialCode, form.phone),
       referralCode: normalizeReferralCode(referral?.code),
+      preferredSide: normalizePlacementSide(referral?.side || form.preferredSide),
       acceptsPrivacy: form.acceptsPrivacy,
       company: "Mindbliss Power",
       createdAt: new Date().toISOString(),
@@ -303,6 +312,7 @@ export default function RegisterPage() {
           username: cognitoUsername,
           code: confirmCode.trim(),
           referralCode: normalizeReferralCode(form.referralCode),
+          preferredSide: normalizePlacementSide(form.preferredSide),
         }),
       });
       const payload = await response.json().catch(() => ({}));
@@ -617,6 +627,7 @@ export default function RegisterPage() {
               <ClipboardCheck size={17} style={{ color: "var(--vp-accent)" }} />
               <span className="min-w-0">
                 Referido aplicado: <span style={{ color: "var(--vp-accent)" }}>{form.referralCode}</span>
+                {form.preferredSide ? ` · Rama ${form.preferredSide === "L" ? "izquierda" : "derecha"}` : ""}
               </span>
             </div>
           )}
@@ -734,7 +745,7 @@ export default function RegisterPage() {
 
         <div className="mt-6 grid gap-3 border-t pt-5 sm:grid-cols-2" style={{ borderColor: "var(--vp-border)" }}>
           <Link
-            href={form.referralCode ? `/login?ref=${encodeURIComponent(form.referralCode)}` : "/login"}
+            href={form.referralCode ? `/login?ref=${encodeURIComponent(form.referralCode)}${form.preferredSide ? `&side=${form.preferredSide}` : ""}` : "/login"}
             className="flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition"
             style={{
               color: "var(--vp-text)",

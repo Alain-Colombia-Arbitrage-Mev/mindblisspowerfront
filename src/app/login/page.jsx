@@ -13,6 +13,7 @@ export default async function LoginPage({ searchParams }) {
   const authState = sp.auth;
   const initialEmail = typeof sp.email === "string" ? sp.email : "";
   const initialRef = typeof sp.ref === "string" ? sp.ref : "";
+  const initialSide = sp.side === "L" || sp.side === "R" ? sp.side : "";
 
   return (
     <AuthShell
@@ -41,10 +42,10 @@ export default async function LoginPage({ searchParams }) {
           boxShadow: "var(--vp-shadow)",
         }}
       >
-        <MagicLinkLoginForm authState={authState} initialEmail={initialEmail} initialRef={initialRef} />
+        <MagicLinkLoginForm authState={authState} initialEmail={initialEmail} initialRef={initialRef} initialSide={initialSide} />
 
         <div className="mt-6 flex items-center justify-center gap-3 border-t pt-5 text-sm" style={{ borderColor: "var(--vp-border)" }}>
-          <Link href={initialRef ? `/register?ref=${encodeURIComponent(initialRef)}` : "/register"} className="font-bold transition hover:opacity-80" style={{ color: "var(--vp-text-soft)" }}>
+          <Link href={initialRef ? `/register?ref=${encodeURIComponent(initialRef)}${initialSide ? `&side=${initialSide}` : ""}` : "/register"} className="font-bold transition hover:opacity-80" style={{ color: "var(--vp-text-soft)" }}>
             Crear cuenta
           </Link>
           <span style={{ color: "var(--vp-border-strong)" }}>·</span>

@@ -7,6 +7,11 @@ export function normalizeReferralCode(value) {
   return String(value || "").trim().slice(0, 64);
 }
 
+export function normalizePlacementSide(value) {
+  const side = String(value || "").trim().toUpperCase();
+  return side === "L" || side === "R" ? side : "";
+}
+
 export function normalizeReferralEmail(value) {
   const email = String(value || "").trim().toLowerCase();
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "";
@@ -18,8 +23,10 @@ export function captureReferralFromUrl(search, storage = browserStorage(), now =
   if (!code || !storage) return null;
 
   const email = normalizeReferralEmail(params.get("email"));
+  const side = normalizePlacementSide(params.get("side"));
   const attribution = {
     code,
+    side,
     email: email || null,
     source: "url",
     createdAt: new Date(now).toISOString(),
@@ -44,6 +51,7 @@ export function bindReferralToEmail(email, storage = browserStorage(), now = Dat
 
   const attribution = {
     code,
+    side: normalizePlacementSide(source?.side),
     email: normalizedEmail,
     source: source?.source || "registration",
     createdAt: source?.createdAt || new Date(now).toISOString(),
@@ -59,8 +67,11 @@ export function bindReferralCodeToEmail(email, code, storage = browserStorage(),
   const normalizedCode = normalizeReferralCode(code);
   if (!normalizedEmail || !normalizedCode || !storage) return null;
 
+  const current = validAttribution(readJson(storage, ATTRIBUTION_KEY), now);
+  const inheritedSide = current?.code === normalizedCode ? normalizePlacementSide(current.side) : "";
   const attribution = {
     code: normalizedCode,
+    side: inheritedSide,
     email: normalizedEmail,
     source: String(source || "registration").slice(0, 48),
     createdAt: new Date(now).toISOString(),
@@ -79,12 +90,12 @@ export function referralForCheckout(email, storage = browserStorage(), now = Dat
 
   const draft = findDraftReferral(storage, normalizedEmail, now);
   if (draft?.code) {
-    return { code: draft.code, email: normalizedEmail };
+    return withPlacementSide(draft.code, normalizedEmail, draft.side);
   }
 
   const attribution = validAttribution(readJson(storage, ATTRIBUTION_KEY), now);
   if (attribution?.code && normalizeReferralEmail(attribution.email) === normalizedEmail) {
-    return { code: normalizeReferralCode(attribution.code), email: normalizedEmail };
+    return withPlacementSide(normalizeReferralCode(attribution.code), normalizedEmail, attribution.side);
   }
 
   clearUnmatchedReferral(storage);
@@ -99,7 +110,12 @@ function findDraftReferral(storage, email, now) {
     if (!code) continue;
     const createdAt = Date.parse(draft.createdAt || "");
     if (Number.isFinite(createdAt) && now - createdAt > ATTRIBUTION_TTL_MS) continue;
-    return { code, source: "registration_draft", createdAt: draft.createdAt };
+    return {
+      code,
+      side: normalizePlacementSide(draft.preferredSide || draft.side),
+      source: "registration_draft",
+      createdAt: draft.createdAt,
+    };
   }
   return null;
 }
@@ -109,7 +125,12 @@ function validAttribution(value, now) {
   if (!code) return null;
   const createdAt = Date.parse(value.createdAt || "");
   if (Number.isFinite(createdAt) && now - createdAt > ATTRIBUTION_TTL_MS) return null;
-  return { ...value, code };
+  return { ...value, code, side: normalizePlacementSide(value?.side) };
+}
+
+function withPlacementSide(code, email, side) {
+  const normalizedSide = normalizePlacementSide(side);
+  return normalizedSide ? { code, email, side: normalizedSide } : { code, email };
 }
 
 function clearUnmatchedReferral(storage) {

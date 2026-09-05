@@ -36,6 +36,29 @@ test("binds a referral code to the registration email before checkout", () => {
   });
 });
 
+test("keeps the requested binary side bound to the same registration email", () => {
+  const storage = new MemoryStorage();
+  captureReferralFromUrl("?ref=martinezl14&side=L", storage, now);
+  bindReferralToEmail("left@example.com", storage, now);
+
+  assert.deepEqual(referralForCheckout("left@example.com", storage, now), {
+    code: "martinezl14",
+    email: "left@example.com",
+    side: "L",
+  });
+});
+
+test("rejects an unknown binary side instead of forwarding it", () => {
+  const storage = new MemoryStorage();
+  captureReferralFromUrl("?ref=martinezl14&side=center", storage, now);
+  bindReferralToEmail("buyer@example.com", storage, now);
+
+  assert.deepEqual(referralForCheckout("buyer@example.com", storage, now), {
+    code: "martinezl14",
+    email: "buyer@example.com",
+  });
+});
+
 test("binds the explicit registration referral instead of a stale global ref", () => {
   const storage = new MemoryStorage({
     mp_ref_context: JSON.stringify({

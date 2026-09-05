@@ -26,7 +26,12 @@ export default function ActivatePackageButton({ packageId, featured }) {
       const resp = await fetch("/api/payments/checkout", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ package_id: packageId, ref: attribution.code, ref_email: attribution.email }),
+        body: JSON.stringify({
+          package_id: packageId,
+          ref: attribution.code,
+          ref_email: attribution.email,
+          preferred_side: attribution.side || "",
+        }),
       });
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok || !data.url) {

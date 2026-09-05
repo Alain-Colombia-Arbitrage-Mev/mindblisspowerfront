@@ -38,6 +38,7 @@ export async function POST(request) {
   const rawRef = String(body?.ref || "").trim().slice(0, 64);
   const refEmail = String(body?.ref_email || "").trim().toLowerCase();
   const ref = rawRef && refEmail === email.toLowerCase() ? rawRef : "";
+  const preferredSide = ref ? normalizePlacementSide(body?.preferred_side) : "";
   if (rawRef && !ref) {
     console.warn("payments/checkout ignored unbound referral", { email, refEmail });
   }
@@ -56,7 +57,14 @@ export async function POST(request) {
         "X-VP-Service-Token": token,
         ...(await idTokenHeader()),
       },
-      body: JSON.stringify({ email, package_id: packageId, ref, name: claims.name, phone: claims.phone }),
+      body: JSON.stringify({
+        email,
+        package_id: packageId,
+        ref,
+        preferred_side: preferredSide,
+        name: claims.name,
+        phone: claims.phone,
+      }),
       cache: "no-store",
     });
     const payload = await resp.json().catch(() => ({}));
@@ -68,6 +76,11 @@ export async function POST(request) {
     console.error("payments/checkout proxy failed:", error.message);
     return NextResponse.json({ error: "payments-unreachable" }, { status: 502 });
   }
+}
+
+function normalizePlacementSide(value) {
+  const side = String(value || "").trim().toUpperCase();
+  return side === "L" || side === "R" ? side : "";
 }
 
 async function claimsFromIdToken(token) {
