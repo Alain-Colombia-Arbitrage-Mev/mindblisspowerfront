@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { mergeOnboardingIdentity } from "./onboarding-profile.js";
+import { mergeOnboardingIdentity, toBrowserOnboardingDraft } from "./onboarding-profile.js";
 
 test("recovers an existing member from the verified session without a browser draft", () => {
   const result = mergeOnboardingIdentity({
@@ -48,4 +48,53 @@ test("preserves a new registration draft when there is no authenticated session"
 
   assert.equal(result.authenticated, false);
   assert.deepEqual(result.data, stored);
+});
+
+test("hydrates private onboarding fields from the authenticated backend", () => {
+  const result = mergeOnboardingIdentity({
+    stored: { email: "member@example.com", documentNumber: "stale-browser-value" },
+    session: { authenticated: true, email: "member@example.com" },
+    onboarding: {
+      city: "Bogotá",
+      document_type: "cc",
+      document_number: "123456789",
+      birth_date: "1990-06-15",
+      address: "Carrera 1 # 2-3",
+      support_needs: "Contacto en la tarde",
+      accepts_privacy: true,
+      accepts_communications: false,
+    },
+  });
+
+  assert.equal(result.data.documentNumber, "123456789");
+  assert.equal(result.data.birthDate, "1990-06-15");
+  assert.equal(result.data.acceptsCommunications, false);
+});
+
+test("browser draft uses an allowlist and excludes private onboarding fields", () => {
+  const safe = toBrowserOnboardingDraft({
+    email: "member@example.com",
+    fullName: "Member Example",
+    city: "Bogotá",
+    documentNumber: "123456789",
+    birthDate: "1990-06-15",
+    address: "Carrera 1 # 2-3",
+    supportNeeds: "Salud",
+    preferredLanguage: "es",
+    futureSensitiveField: "must-not-leak",
+  });
+
+  assert.deepEqual(safe, {
+    email: "member@example.com",
+    fullName: "Member Example",
+    phone: undefined,
+    country: undefined,
+    city: "Bogotá",
+    documentType: undefined,
+    preferredLanguage: "es",
+    communicationChannel: undefined,
+    memberInterest: undefined,
+    acceptsPrivacy: undefined,
+    acceptsCommunications: undefined,
+  });
 });

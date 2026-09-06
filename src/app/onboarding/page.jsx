@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { mergeOnboardingIdentity } from "@/lib/onboarding-profile";
+import { mergeOnboardingIdentity, toBrowserOnboardingDraft } from "@/lib/onboarding-profile";
 import AuthShell from "../_components/AuthShell";
 
 const steps = [
@@ -81,6 +81,8 @@ export default function OnboardingPage() {
   const [errors, setErrors] = useState({});
   const [loaded, setLoaded] = useState(false);
   const [identityStatus, setIdentityStatus] = useState("loading");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -105,6 +107,7 @@ export default function OnboardingPage() {
 
       let session = {};
       let profile = {};
+      let onboarding = {};
       let sessionUnavailable = false;
 
       try {
@@ -113,8 +116,12 @@ export default function OnboardingPage() {
         if (!sessionResponse.ok) sessionUnavailable = sessionResponse.status >= 500;
 
         if (sessionResponse.ok && session.authenticated) {
-          const profileResponse = await fetch("/api/member/profile", { cache: "no-store", signal: controller.signal });
+          const [profileResponse, onboardingResponse] = await Promise.all([
+            fetch("/api/member/profile", { cache: "no-store", signal: controller.signal }),
+            fetch("/api/member/onboarding", { cache: "no-store", signal: controller.signal }),
+          ]);
           if (profileResponse.ok) profile = await profileResponse.json().catch(() => ({}));
+          if (onboardingResponse.ok) onboarding = await onboardingResponse.json().catch(() => ({}));
         }
       } catch (error) {
         if (error?.name === "AbortError") return;
@@ -122,9 +129,13 @@ export default function OnboardingPage() {
       }
 
       if (cancelled) return;
-      const hydrated = mergeOnboardingIdentity({ stored, session, profile });
+      const hydrated = mergeOnboardingIdentity({ stored, session, profile, onboarding });
       setData((current) => ({ ...current, ...hydrated.data }));
       setIdentityStatus(hydrated.authenticated ? "authenticated" : sessionUnavailable ? "unavailable" : "anonymous");
+      // Elimina copias completas heredadas; el efecto siguiente reescribe sólo
+      // el subconjunto permitido para UX, sin documento/nacimiento/dirección.
+      localStorage.removeItem("mp_onboarding");
+      localStorage.removeItem("vp_onboarding");
       setLoaded(true);
     }
 
@@ -137,14 +148,16 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     if (!loaded) return;
-    localStorage.setItem("mp_onboarding_draft", JSON.stringify(data));
-    localStorage.setItem("vp_onboarding_draft", JSON.stringify(data));
+    const browserDraft = toBrowserOnboardingDraft(data);
+    localStorage.setItem("mp_onboarding_draft", JSON.stringify(browserDraft));
+    localStorage.setItem("vp_onboarding_draft", JSON.stringify(browserDraft));
   }, [data, loaded]);
 
   const progress = useMemo(() => Math.round(((activeStep + 1) / steps.length) * 100), [activeStep]);
   const ActiveIcon = steps[activeStep].icon;
 
   function updateField(field, value) {
+    setSaveError("");
     setData((current) => ({ ...current, [field]: value }));
     setErrors((current) => {
       if (!current[field]) return current;
@@ -170,6 +183,17 @@ export default function OnboardingPage() {
     if (stepIndex === 1) {
       if (!data.country.trim()) nextErrors.country = "El país es requerido.";
       if (!data.city.trim()) nextErrors.city = "La ciudad es requerida.";
+      if (data.documentNumber && !/^[\p{L}\p{N}][\p{L}\p{N} ./-]{2,39}$/u.test(data.documentNumber.trim())) {
+        nextErrors.documentNumber = "Ingresa un número de documento válido.";
+      }
+      if (data.birthDate) {
+        const birthDate = new Date(`${data.birthDate}T00:00:00.000Z`);
+        const now = new Date();
+        const oldest = new Date(Date.UTC(now.getUTCFullYear() - 120, now.getUTCMonth(), now.getUTCDate()));
+        if (Number.isNaN(birthDate.getTime()) || birthDate > now || birthDate < oldest) {
+          nextErrors.birthDate = "Ingresa una fecha de nacimiento válida.";
+        }
+      }
     }
 
     if (stepIndex === 3 && !data.acceptsPrivacy) {
@@ -181,6 +205,10 @@ export default function OnboardingPage() {
   }
 
   function goNext() {
+    if (identityStatus !== "authenticated") {
+      setSaveError("Inicia sesión para continuar. Así podremos guardar tus datos de forma segura.");
+      return;
+    }
     if (!validateStep(activeStep)) return;
     if (activeStep === steps.length - 1) {
       finishOnboarding();
@@ -194,11 +222,52 @@ export default function OnboardingPage() {
     setActiveStep((current) => Math.max(0, current - 1));
   }
 
-  function finishOnboarding() {
+  async function finishOnboarding() {
+    if (saving) return;
+    setSaving(true);
+    setSaveError("");
     const userId = localStorage.getItem("user_id") || `member-${Date.now()}`;
     const activatedAt = new Date().toISOString();
     const normalizedName = data.fullName.trim() || "Miembro Mindbliss";
     const normalizedEmail = data.email.trim().toLowerCase();
+
+    try {
+      const response = await fetch("/api/member/onboarding", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: normalizedName,
+          phone: data.phone.trim(),
+          country: data.country.trim(),
+          city: data.city.trim(),
+          documentType: data.documentType,
+          documentNumber: data.documentNumber.trim(),
+          birthDate: data.birthDate,
+          address: data.address.trim(),
+          preferredLanguage: data.preferredLanguage,
+          communicationChannel: data.communicationChannel,
+          memberInterest: data.memberInterest,
+          supportNeeds: data.supportNeeds.trim(),
+          acceptsPrivacy: data.acceptsPrivacy,
+          acceptsCommunications: data.acceptsCommunications,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.ok) {
+        if (response.status === 401) setIdentityStatus("anonymous");
+        setSaveError(
+          response.status === 401
+            ? "Tu sesión venció. Inicia sesión nuevamente para guardar el perfil."
+            : "No pudimos guardar el perfil. Revisa los datos e intenta de nuevo."
+        );
+        setSaving(false);
+        return;
+      }
+    } catch {
+      setSaveError("No pudimos conectar con el servicio. Tus datos no se guardaron; intenta de nuevo.");
+      setSaving(false);
+      return;
+    }
 
     const userData = {
       id: userId,
@@ -207,9 +276,6 @@ export default function OnboardingPage() {
       phone: data.phone.trim(),
       country: data.country.trim() || "Colombia",
       city: data.city.trim(),
-      document_type: data.documentType,
-      document_number: data.documentNumber.trim(),
-      birth_date: data.birthDate,
       preferred_language: data.preferredLanguage,
       communication_channel: data.communicationChannel,
       member_interest: data.memberInterest,
@@ -223,7 +289,7 @@ export default function OnboardingPage() {
     };
 
     const completedOnboarding = {
-      ...data,
+      ...toBrowserOnboardingDraft(data),
       fullName: normalizedName,
       email: normalizedEmail,
       completed: true,
@@ -242,11 +308,7 @@ export default function OnboardingPage() {
     localStorage.removeItem("mp_onboarding_draft");
     localStorage.removeItem("vp_onboarding_draft");
 
-    if (identityStatus === "authenticated") {
-      router.push("/dashboard/profile");
-    } else {
-      router.push(`/login?email=${encodeURIComponent(normalizedEmail)}`);
-    }
+    router.push("/dashboard/profile");
   }
 
   return (
@@ -313,9 +375,12 @@ export default function OnboardingPage() {
                 key={step.id}
                 type="button"
                 onClick={() => {
-                  if (index <= activeStep || validateStep(activeStep)) setActiveStep(index);
+                  if (index <= activeStep || (identityStatus === "authenticated" && validateStep(activeStep))) {
+                    setActiveStep(index);
+                  }
                 }}
-                className="min-h-14 rounded-lg p-2 text-xs font-bold transition"
+                disabled={index > activeStep && identityStatus !== "authenticated"}
+                className="min-h-14 rounded-lg p-2 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-50"
                 style={{
                   color: active || complete ? "var(--vp-accent)" : "var(--vp-muted)",
                   background: active || complete ? "var(--vp-accent-muted)" : "var(--vp-surface-raised)",
@@ -400,6 +465,12 @@ export default function OnboardingPage() {
                       ? "El email proviene de tu sesión verificada. Puedes corregir aquí tu nombre o teléfono antes de continuar."
                       : "Puedes corregir aquí tu nombre o teléfono antes de continuar."}
                   </p>
+                  {identityStatus !== "authenticated" && (
+                    <div className="rounded-lg p-4 text-sm font-semibold" style={{ color: "var(--vp-amber)", background: "var(--vp-amber-muted)", border: "1px solid var(--vp-amber-border)" }}>
+                      Para proteger tus datos, inicia sesión antes de continuar.{" "}
+                      <Link href={`/login?email=${encodeURIComponent(data.email)}`} style={{ color: "var(--vp-accent)", textDecoration: "underline" }}>Iniciar sesión</Link>.
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -415,6 +486,7 @@ export default function OnboardingPage() {
                   onChange={(event) => updateField("country", event.target.value)}
                   error={errors.country}
                   autoComplete="country-name"
+                  maxLength={80}
                   required
                 />
                 <Field
@@ -424,6 +496,7 @@ export default function OnboardingPage() {
                   onChange={(event) => updateField("city", event.target.value)}
                   error={errors.city}
                   autoComplete="address-level2"
+                  maxLength={120}
                   required
                 />
                 <SelectField
@@ -438,7 +511,9 @@ export default function OnboardingPage() {
                   label="Número de documento"
                   value={data.documentNumber}
                   onChange={(event) => updateField("documentNumber", event.target.value)}
+                  error={errors.documentNumber}
                   autoComplete="off"
+                  maxLength={40}
                 />
                 <Field
                   id="birthDate"
@@ -446,7 +521,9 @@ export default function OnboardingPage() {
                   type="date"
                   value={data.birthDate}
                   onChange={(event) => updateField("birthDate", event.target.value)}
+                  error={errors.birthDate}
                   autoComplete="bday"
+                  max={new Date().toISOString().slice(0, 10)}
                 />
                 <Field
                   id="address"
@@ -454,6 +531,7 @@ export default function OnboardingPage() {
                   value={data.address}
                   onChange={(event) => updateField("address", event.target.value)}
                   autoComplete="street-address"
+                  maxLength={240}
                 />
               </div>
             </div>
@@ -484,6 +562,7 @@ export default function OnboardingPage() {
                 value={data.supportNeeds}
                 onChange={(event) => updateField("supportNeeds", event.target.value)}
                 placeholder="Comparte alguna preferencia, necesidad de contacto o contexto relevante."
+                maxLength={1000}
               />
 
               <SwitchRow
@@ -528,6 +607,15 @@ export default function OnboardingPage() {
           )}
         </div>
 
+        {saveError && (
+          <div className="mt-5 rounded-lg p-4 text-sm font-semibold" role="alert" style={{ color: "var(--vp-danger)", background: "var(--vp-danger-muted)", border: "1px solid var(--vp-danger-border)" }}>
+            {saveError}{" "}
+            {identityStatus !== "authenticated" && (
+              <Link href={`/login?email=${encodeURIComponent(data.email)}`} style={{ color: "var(--vp-accent)", textDecoration: "underline" }}>Iniciar sesión</Link>
+            )}
+          </div>
+        )}
+
         <div className="mt-7 flex flex-col-reverse gap-3 border-t pt-5 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: "var(--vp-border)" }}>
           <div className="flex gap-3">
             <Link
@@ -560,7 +648,7 @@ export default function OnboardingPage() {
           <button
             type="button"
             onClick={goNext}
-            disabled={!loaded || !data.email}
+            disabled={!loaded || !data.email || identityStatus !== "authenticated" || saving}
             className="flex min-h-12 items-center justify-center gap-2 rounded-lg px-5 py-3 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50"
             style={{
               color: "var(--vp-shell)",
@@ -568,8 +656,8 @@ export default function OnboardingPage() {
               border: "1px solid var(--vp-accent-strong)",
             }}
           >
-            {activeStep === steps.length - 1 ? "Entrar al portal" : "Continuar"}
-            <ArrowRight size={16} />
+            {saving ? "Guardando de forma segura…" : activeStep === steps.length - 1 ? "Guardar y entrar" : "Continuar"}
+            {saving ? <Loader2 className="animate-spin" size={16} /> : <ArrowRight size={16} />}
           </button>
         </div>
       </section>
