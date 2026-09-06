@@ -9,10 +9,12 @@ import {
   HeartHandshake,
   IdCard,
   Languages,
+  Loader2,
   ShieldCheck,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { mergeOnboardingIdentity } from "@/lib/onboarding-profile";
 import AuthShell from "../_components/AuthShell";
 
 const steps = [
@@ -78,25 +80,59 @@ export default function OnboardingPage() {
   const [data, setData] = useState(initialData);
   const [errors, setErrors] = useState({});
   const [loaded, setLoaded] = useState(false);
+  const [identityStatus, setIdentityStatus] = useState("loading");
 
   useEffect(() => {
-    const registrationDraft = readStoredJson("mp_registration_draft");
-    const legacyRegistrationDraft = readStoredJson("vp_registration_draft");
-    const onboarding = readStoredJson("mp_onboarding");
-    const legacyOnboarding = readStoredJson("vp_onboarding");
-    const onboardingDraft = readStoredJson("mp_onboarding_draft");
-    const legacyOnboardingDraft = readStoredJson("vp_onboarding_draft");
+    let cancelled = false;
+    const controller = new AbortController();
 
-    setData((current) => ({
-      ...current,
-      ...legacyRegistrationDraft,
-      ...registrationDraft,
-      ...legacyOnboarding,
-      ...onboarding,
-      ...legacyOnboardingDraft,
-      ...onboardingDraft,
-    }));
-    setLoaded(true);
+    async function hydrateIdentity() {
+      const localUser = readStoredJson("user_data");
+      const stored = {
+        ...(localUser.email ? {
+          fullName: localUser.name,
+          email: localUser.email,
+          phone: localUser.phone,
+          country: localUser.country,
+        } : {}),
+        ...readStoredJson("vp_registration_draft"),
+        ...readStoredJson("mp_registration_draft"),
+        ...readStoredJson("vp_onboarding"),
+        ...readStoredJson("mp_onboarding"),
+        ...readStoredJson("vp_onboarding_draft"),
+        ...readStoredJson("mp_onboarding_draft"),
+      };
+
+      let session = {};
+      let profile = {};
+      let sessionUnavailable = false;
+
+      try {
+        const sessionResponse = await fetch("/api/auth/session", { cache: "no-store", signal: controller.signal });
+        session = await sessionResponse.json().catch(() => ({}));
+        if (!sessionResponse.ok) sessionUnavailable = sessionResponse.status >= 500;
+
+        if (sessionResponse.ok && session.authenticated) {
+          const profileResponse = await fetch("/api/member/profile", { cache: "no-store", signal: controller.signal });
+          if (profileResponse.ok) profile = await profileResponse.json().catch(() => ({}));
+        }
+      } catch (error) {
+        if (error?.name === "AbortError") return;
+        sessionUnavailable = true;
+      }
+
+      if (cancelled) return;
+      const hydrated = mergeOnboardingIdentity({ stored, session, profile });
+      setData((current) => ({ ...current, ...hydrated.data }));
+      setIdentityStatus(hydrated.authenticated ? "authenticated" : sessionUnavailable ? "unavailable" : "anonymous");
+      setLoaded(true);
+    }
+
+    hydrateIdentity();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, []);
 
   useEffect(() => {
@@ -206,7 +242,11 @@ export default function OnboardingPage() {
     localStorage.removeItem("mp_onboarding_draft");
     localStorage.removeItem("vp_onboarding_draft");
 
-    router.push("/dashboard/profile");
+    if (identityStatus === "authenticated") {
+      router.push("/dashboard/profile");
+    } else {
+      router.push(`/login?email=${encodeURIComponent(normalizedEmail)}`);
+    }
   }
 
   return (
@@ -302,20 +342,51 @@ export default function OnboardingPage() {
                   Bienvenido a Mindbliss Power
                 </div>
                 <p className="text-sm leading-6" style={{ color: "var(--vp-text-soft)" }}>
-                  Confirmamos los datos de tu registro. Solo completa lo que falta para activar tu perfil.
+                  {identityStatus === "loading"
+                    ? "Estamos consultando tu cuenta y los datos guardados en Mindbliss."
+                    : identityStatus === "authenticated"
+                      ? "Recuperamos tu cuenta verificada y los datos guardados en Mindbliss. Solo completa lo que falta."
+                      : "Recuperamos el borrador guardado en este navegador. Solo completa lo que falta para activar tu perfil."}
                 </p>
               </div>
 
-              {!data.email ? (
-                <div className="rounded-lg p-4 text-sm font-semibold" style={{ color: "var(--vp-danger)", background: "var(--vp-danger-muted)", border: "1px solid var(--vp-danger-border)" }}>
-                  No encontramos tus datos de registro. <Link href="/register" style={{ color: "var(--vp-accent)", textDecoration: "underline" }}>Crea tu cuenta primero</Link>.
+              {!loaded ? (
+                <div className="flex items-center gap-2 rounded-lg p-4 text-sm font-semibold" style={{ color: "var(--vp-text-soft)", background: "var(--vp-surface-raised)", border: "1px solid var(--vp-border)" }}>
+                  <Loader2 size={16} className="animate-spin" style={{ color: "var(--vp-accent)" }} />
+                  Consultando tu sesión y tu perfil…
+                </div>
+              ) : !data.email ? (
+                <div className="rounded-lg p-4 text-sm font-semibold" style={{ color: "var(--vp-amber)", background: "var(--vp-amber-muted)", border: "1px solid var(--vp-amber-border)" }}>
+                  {identityStatus === "unavailable"
+                    ? "No pudimos consultar tu cuenta en este momento. Intenta iniciar sesión nuevamente."
+                    : "No hay una sesión activa para consultar tu cuenta. Si ya estás registrado, inicia sesión; no necesitas crear otra cuenta."}{" "}
+                  <Link href="/login" style={{ color: "var(--vp-accent)", textDecoration: "underline" }}>Iniciar sesión</Link>.
                 </div>
               ) : (
                 <>
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <SummaryItem label="Nombre" value={data.fullName || "—"} />
-                    <SummaryItem label="Email" value={data.email} />
-                    <SummaryItem label="Teléfono" value={data.phone || "—"} />
+                    <Field
+                      id="fullName"
+                      label="Nombre completo"
+                      value={data.fullName}
+                      onChange={(event) => updateField("fullName", event.target.value)}
+                      error={errors.fullName}
+                      autoComplete="name"
+                      maxLength={120}
+                      required
+                    />
+                    <SummaryItem label={identityStatus === "authenticated" ? "Email verificado" : "Email de registro"} value={data.email} />
+                    <Field
+                      id="phone"
+                      label="Teléfono"
+                      type="tel"
+                      value={data.phone}
+                      onChange={(event) => updateField("phone", event.target.value)}
+                      error={errors.phone}
+                      autoComplete="tel"
+                      maxLength={24}
+                      required
+                    />
                     <SelectField
                       id="communicationChannel"
                       label="Canal de contacto"
@@ -325,7 +396,9 @@ export default function OnboardingPage() {
                     />
                   </div>
                   <p className="text-xs" style={{ color: "var(--vp-subtle)" }}>
-                    ¿Algún dato incorrecto? <Link href="/register" style={{ color: "var(--vp-accent)", textDecoration: "underline" }}>Edítalo en tu registro</Link>.
+                    {identityStatus === "authenticated"
+                      ? "El email proviene de tu sesión verificada. Puedes corregir aquí tu nombre o teléfono antes de continuar."
+                      : "Puedes corregir aquí tu nombre o teléfono antes de continuar."}
                   </p>
                 </>
               )}
@@ -487,7 +560,8 @@ export default function OnboardingPage() {
           <button
             type="button"
             onClick={goNext}
-            className="flex min-h-12 items-center justify-center gap-2 rounded-lg px-5 py-3 text-sm font-black transition"
+            disabled={!loaded || !data.email}
+            className="flex min-h-12 items-center justify-center gap-2 rounded-lg px-5 py-3 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50"
             style={{
               color: "var(--vp-shell)",
               background: "var(--vp-accent)",

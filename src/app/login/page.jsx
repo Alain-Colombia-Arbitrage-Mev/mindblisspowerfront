@@ -52,10 +52,6 @@ export default async function LoginPage({ searchParams }) {
           <Link href="/forgot-password" className="font-bold transition hover:opacity-80" style={{ color: "var(--vp-text-soft)" }}>
             Recuperar contraseña
           </Link>
-          <span style={{ color: "var(--vp-border-strong)" }}>·</span>
-          <Link href="/onboarding" className="font-bold transition hover:opacity-80" style={{ color: "var(--vp-accent)" }}>
-            Completar perfil
-          </Link>
         </div>
       </div>
     </AuthShell>
