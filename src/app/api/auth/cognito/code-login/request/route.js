@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-
 import { NextResponse } from "next/server";
 
 import { authRateLimit } from "@/lib/auth-rate-limit";
@@ -7,10 +5,10 @@ import { authLogFields, logAuthEvent } from "@/lib/auth-observability";
 import {
   buildCognitoChallengeResponsePayload,
   buildCognitoEmailOtpStartPayload,
-  buildCognitoSecretHash,
   getCognitoIdentityProviderConfig,
 } from "@/lib/cognito";
 import { callCognito, getCognitoErrorCode, mapCognitoError, mapCognitoStatus, normalizeEmail } from "@/lib/cognito-api";
+import { buildUnconfirmedLoginTransition } from "@/lib/cognito-otp-policy";
 import {
   buildUserFromIdToken,
   setCognitoSessionCookies,
@@ -133,34 +131,11 @@ export async function POST(request) {
 
   // Usuario existe pero UNCONFIRMED: el passwordless de Cognito NO envía código
   // de login hasta confirmar la cuenta → el usuario quedaba atascado con "el
-  // código que nunca llega". Reenviamos el código de CONFIRMACIÓN y enrutamos al
-  // paso de confirmar (mismo flujo que el registro). confirmed===false sólo
-  // cuando el backend lo verificó; si no se pudo (null/legacy), no bloqueamos.
+  // código que nunca llega". Enrutamos al paso de confirmar, que realiza UN solo
+  // envío. Antes se reenviaba aquí y otra vez al cargar /register?resume=1,
+  // invalidando el primer código y provocando LimitExceededException.
   if (exists === true && confirmed === false) {
-    const resent = await resendConfirmationCode(email, config);
-    logAuthEvent(
-      "signup_confirmation_resent_from_login",
-      authLogFields({
-        email,
-        channel: "email",
-        status: resent?.ok ? 409 : 502,
-        reason: resent?.ok ? "unconfirmed" : "unconfirmed_resend_failed",
-        errorCode: resent?.errorCode,
-        delivery: resent?.delivery,
-      }),
-      resent?.ok ? "info" : "warn"
-    );
-    return NextResponse.json(
-      {
-        needsConfirm: true,
-        email,
-        error:
-          "Tu cuenta aún no está confirmada. Te reenviamos el código de confirmación por correo (revisa también spam). / " +
-          "Your account isn't confirmed yet. We've resent your confirmation code by email (check spam too).",
-        delivery: resent?.delivery || null,
-      },
-      { status: 409 }
-    );
+    return unconfirmedLoginResponse(email);
   }
 
   if (channel === "sms" && exists === true) {
@@ -181,30 +156,7 @@ export async function POST(request) {
 
   if (!startResponse.ok) {
     if (getCognitoErrorCode(startResponse.body) === "UserNotConfirmedException") {
-      const resent = await resendConfirmationCode(email, config);
-      logAuthEvent(
-        "signup_confirmation_resent_from_login",
-        authLogFields({
-          email,
-          channel: "email",
-          status: resent?.ok ? 409 : 502,
-          reason: resent?.ok ? "unconfirmed" : "unconfirmed_resend_failed",
-          errorCode: resent?.errorCode,
-          delivery: resent?.delivery,
-        }),
-        resent?.ok ? "info" : "warn"
-      );
-      return NextResponse.json(
-        {
-          needsConfirm: true,
-          email,
-          error:
-            "Tu cuenta aún no está confirmada. Te reenviamos el código de confirmación por correo (revisa también spam). / " +
-            "Your account isn't confirmed yet. We've resent your confirmation code by email (check spam too).",
-          delivery: resent?.delivery || null,
-        },
-        { status: 409 }
-      );
+      return unconfirmedLoginResponse(email);
     }
 
     const errorBody = smsOtpErrorBody(startResponse.body, otpChallenge);
@@ -513,30 +465,12 @@ function phoneIssueResponse({ phoneLinked, phoneVerified, phoneDestination }) {
   return null;
 }
 
-// resendConfirmationCode reenvía el código de confirmación de SignUp usando el
-// username determinístico mp_<hash> (igual que el registro/confirm-signup).
-// Best-effort: cualquier fallo ⇒ null (el caller igual enruta a confirmar).
-async function resendConfirmationCode(email, config) {
-  try {
-    const username = `mp_${createHash("sha256").update(email).digest("hex").slice(0, 40)}`;
-    const payload = { ClientId: config.clientId, Username: username };
-    if (config.clientSecret) {
-      payload.SecretHash = buildCognitoSecretHash({
-        username,
-        clientId: config.clientId,
-        clientSecret: config.clientSecret,
-      });
-    }
-    const resp = await callCognito({
-      endpoint: config.endpoint,
-      target: "ResendConfirmationCode",
-      payload,
-    });
-    if (!resp.ok) return { ok: false, errorCode: getCognitoErrorCode(resp.body) };
-    return { ok: true, delivery: resp.body?.CodeDeliveryDetails || null };
-  } catch {
-    return { ok: false, errorCode: "network_error" };
-  }
+function unconfirmedLoginResponse(email) {
+  logAuthEvent(
+    "signup_confirmation_required_from_login",
+    authLogFields({ email, channel: "email", status: 409, reason: "single_resend_on_confirmation_page" })
+  );
+  return NextResponse.json(buildUnconfirmedLoginTransition(email), { status: 409 });
 }
 
 // isLegacyActiveAffiliate: true si el email corresponde a un afiliado ACTIVO en
