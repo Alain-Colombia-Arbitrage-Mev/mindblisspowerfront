@@ -80,6 +80,7 @@ export default function RegisterPage() {
   const submittingRef = useRef(false);
   // Guard del auto-reenvío del link de reactivación (StrictMode monta 2 veces).
   const resumedRef = useRef(false);
+  const otpSubmittingRef = useRef(false);
 
   async function resumeRegistration(email) {
     setForm((current) => ({ ...current, email }));
@@ -98,6 +99,7 @@ export default function RegisterPage() {
       }
       if (!response.ok || !payload.ok) {
         setErrors({ form: payload.error || "No se pudo reenviar el código. Intenta con «Reenviar código»." });
+        if (response.status === 429) resendCooldown.start(payload.retryAfterSec || 60);
       } else {
         resendCooldown.start();
         setSuccess(`Te enviamos un código nuevo a ${email} para activar tu cuenta. Si no aparece en 1–2 min, revisa la carpeta de spam / correo no deseado.`);
@@ -261,6 +263,14 @@ export default function RegisterPage() {
       }
 
       if (!response.ok || !payload.ok) {
+        if (isExistingAccountResponse(payload)) {
+          localStorage.removeItem("mp_registration_draft");
+          localStorage.removeItem("vp_registration_draft");
+          setSuccess("Ya existe una cuenta con ese email. Te llevamos al ingreso para pedir tu código de acceso.");
+          setLoading(false);
+          router.push(`/login?email=${encodeURIComponent(email)}`);
+          return;
+        }
         setErrors({ form: payload.error || "No se pudo crear la cuenta." });
         setLoading(false);
         return;
@@ -292,6 +302,7 @@ export default function RegisterPage() {
 
   async function handleConfirm(event) {
     event.preventDefault();
+    if (otpSubmittingRef.current || loading) return;
     setErrors({});
     setSuccess("");
 
@@ -301,6 +312,7 @@ export default function RegisterPage() {
     }
 
     setLoading(true);
+    otpSubmittingRef.current = true;
     const email = form.email.trim().toLowerCase();
 
     try {
@@ -340,11 +352,14 @@ export default function RegisterPage() {
     } catch {
       setErrors({ form: "No se pudo conectar con el servicio de registro." });
       setLoading(false);
+    } finally {
+      otpSubmittingRef.current = false;
     }
   }
 
   async function handleResendCode() {
-    if (resendCooldown.active || loading) return;
+    if (otpSubmittingRef.current || resendCooldown.active || loading) return;
+    otpSubmittingRef.current = true;
     setErrors({});
     setSuccess("");
     setLoading(true);
@@ -364,14 +379,18 @@ export default function RegisterPage() {
 
       if (!response.ok || !payload.ok) {
         setErrors({ form: payload.error || "No se pudo reenviar el código." });
+        if (response.status === 429) resendCooldown.start(payload.retryAfterSec || 60);
       } else {
+        setConfirmCode("");
         resendCooldown.start();
         setSuccess("Código reenviado. Revisa tu correo (y la carpeta de spam).");
       }
     } catch {
       setErrors({ form: "No se pudo conectar con el servicio de registro." });
+    } finally {
+      otpSubmittingRef.current = false;
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   async function handleRegistrationHelp() {
@@ -1009,4 +1028,12 @@ function readStoredJson(key) {
 function normalizeEmailValue(value) {
   const email = String(value || "").trim().toLowerCase();
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "";
+}
+
+function isExistingAccountResponse(payload) {
+  if (!payload || typeof payload !== "object") return false;
+  if (payload.accountExists || payload.needsLogin) return true;
+  return /ya existe una cuenta|account with that email already exists|usernameexists/i.test(
+    String(payload.error || "")
+  );
 }

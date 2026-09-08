@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 import { authRateLimit } from "@/lib/auth-rate-limit";
+import { authLogFields, logAuthEvent } from "@/lib/auth-observability";
 import { getCognitoIdentityProviderConfig } from "@/lib/cognito";
 import { callCognito, getCognitoErrorCode, mapCognitoError, mapCognitoStatus } from "@/lib/cognito-api";
 import { verifyIdToken } from "@/lib/verify-id-token";
@@ -39,12 +40,14 @@ export async function POST(request) {
   });
 
   if (!response.ok) {
+    logAuthEvent("phone_verification_failed", authLogFields({ email: c.email, channel: "sms", status: mapCognitoStatus(response.body), errorCode: getCognitoErrorCode(response.body) }), "warn");
     return NextResponse.json(
       { error: mapPhoneVerifyError(response.body) },
       { status: mapCognitoStatus(response.body) }
     );
   }
 
+  logAuthEvent("phone_verification_success", authLogFields({ email: c.email, channel: "sms", status: 200 }));
   return NextResponse.json({ ok: true, message: "Teléfono validado. Ya puedes usar SMS como canal alterno de acceso." });
 }
 

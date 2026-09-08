@@ -2,8 +2,10 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 import { authRateLimit } from "@/lib/auth-rate-limit";
+import { authLogFields, logAuthEvent } from "@/lib/auth-observability";
+import { requestPhoneVerification } from "@/lib/cognito-otp-policy";
 import { getCognitoIdentityProviderConfig } from "@/lib/cognito";
-import { callCognito, mapCognitoError, mapCognitoStatus } from "@/lib/cognito-api";
+import { callCognito, getCognitoErrorCode, mapCognitoError, mapCognitoStatus } from "@/lib/cognito-api";
 import { verifyIdToken } from "@/lib/verify-id-token";
 
 export const runtime = "nodejs";
@@ -28,33 +30,21 @@ export async function POST(request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const update = await callCognito({
+  const verify = await requestPhoneVerification({
+    call: callCognito,
     endpoint: config.endpoint,
-    target: "UpdateUserAttributes",
-    payload: {
-      AccessToken: c.accessToken,
-      UserAttributes: [{ Name: "phone_number", Value: phone }],
-    },
-  });
-  if (!update.ok) {
-    return NextResponse.json(
-      { error: mapCognitoError(update.body, "No se pudo vincular el teléfono en Cognito.") },
-      { status: mapCognitoStatus(update.body) }
-    );
-  }
-
-  const verify = await callCognito({
-    endpoint: config.endpoint,
-    target: "GetUserAttributeVerificationCode",
-    payload: { AccessToken: c.accessToken, AttributeName: "phone_number" },
+    accessToken: c.accessToken,
+    phone,
   });
   if (!verify.ok) {
+    logAuthEvent("phone_verification_send_failed", authLogFields({ email: c.email, channel: "sms", status: mapCognitoStatus(verify.body), errorCode: getCognitoErrorCode(verify.body) }), "warn");
     return NextResponse.json(
       { error: mapCognitoError(verify.body, "No se pudo enviar el código SMS de verificación.") },
       { status: mapCognitoStatus(verify.body) }
     );
   }
 
+  logAuthEvent("phone_verification_sent", authLogFields({ email: c.email, channel: "sms", status: 200, delivery: verify.body.CodeDeliveryDetails }));
   return NextResponse.json({
     ok: true,
     phone,

@@ -15,7 +15,7 @@ import {
   Smartphone,
   UserPlus,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { isMicrosoftEmail, suggestEmailFix, useResendCooldown } from "@/lib/useResendCooldown";
 import { checkPassword, isValidPassword } from "@/lib/password";
@@ -53,6 +53,9 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loginCode, setLoginCode] = useState("");
+  const [codeChannel, setCodeChannel] = useState("email");
+  const [codeRecipient, setCodeRecipient] = useState("");
+  const otpSubmittingRef = useRef(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [accessHelpPhone, setAccessHelpPhone] = useState("");
@@ -121,7 +124,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
 
   async function requestLoginCode(event, { resend = false, channel = "email" } = {}) {
     event?.preventDefault();
-    if (resend && codeCooldown.active) return;
+    if (otpSubmittingRef.current || isLoading || codeCooldown.active) return;
     setError("");
     setNotice("");
     const normalizedEmail = validateEmail();
@@ -129,6 +132,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     rememberReferralForEmail(normalizedEmail);
     if (channel === "email" && !resend) setShowAccessFallback(false);
 
+    otpSubmittingRef.current = true;
     setLoadingAction(channel === "sms" ? "code-request-sms" : "code-request");
     try {
       const response = await fetch("/api/auth/cognito/code-login/request", {
@@ -157,6 +161,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
       }
 
       if (!response.ok || !payload.ok) {
+        if (response.status === 429) codeCooldown.start(payload.retryAfterSec || 60);
         if (payload.accessBlocked) {
           setShowAccessFallback(false);
           setError(payload.error || "Tu cuenta no puede recibir códigos de acceso en este momento.");
@@ -181,6 +186,8 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
       }
 
       setCodeStep("confirm");
+      setCodeChannel(channel);
+      setCodeRecipient(normalizedEmail);
       setShowAccessFallback(true);
       setLoginCode("");
       codeCooldown.start();
@@ -197,6 +204,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
       setShowAccessFallback(true);
       setError("No se pudo conectar con el servicio de acceso.");
     } finally {
+      otpSubmittingRef.current = false;
       setLoadingAction("");
     }
   }
@@ -241,13 +249,13 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     return (
       <div className="space-y-2 border-t pt-3" style={{ borderColor: "var(--vp-border)" }}>
         <SecondaryButton
-          disabled={isLoading}
+          disabled={isLoading || codeCooldown.active}
           onClick={(e) => requestLoginCode(e, { channel: "sms" })}
           icon={<Smartphone size={15} />}
           variant="accent"
-          className="mx-auto min-w-[17rem] px-5"
+          className="mx-auto w-full min-w-0 px-5"
         >
-          {loadingAction === "code-request-sms" ? "Enviando SMS…" : "¿No llega? Recíbelo por SMS"}
+          {loadingAction === "code-request-sms" ? "Enviando SMS…" : codeCooldown.active ? `SMS disponible en ${codeCooldown.remaining}s` : "¿No llega? Recíbelo por SMS"}
         </SecondaryButton>
         <div
           className="space-y-2 rounded-lg p-3"
@@ -295,18 +303,20 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
 
   async function confirmLoginCode(event) {
     event.preventDefault();
+    if (otpSubmittingRef.current || isLoading) return;
     setError("");
     setNotice("");
-    const normalizedEmail = validateEmail();
+    const normalizedEmail = codeRecipient;
     if (!normalizedEmail) return;
     rememberReferralForEmail(normalizedEmail);
 
-    const code = loginCode.trim();
+    const code = loginCode.replace(/[\s-]+/g, "").trim();
     if (!/^[a-zA-Z0-9]{4,12}$/.test(code)) {
-      setError("Ingresa el código que recibiste por correo.");
+      setError(codeChannel === "sms" ? "Ingresa el código que recibiste por SMS." : "Ingresa el código que recibiste por correo.");
       return;
     }
 
+    otpSubmittingRef.current = true;
     setLoadingAction("code-confirm");
     try {
       const response = await fetch("/api/auth/cognito/code-login/confirm", {
@@ -332,6 +342,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     } catch {
       setError("No se pudo conectar con el servicio de acceso.");
     } finally {
+      otpSubmittingRef.current = false;
       setLoadingAction("");
     }
   }
@@ -359,6 +370,10 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
       const payload = await response.json().catch(() => ({}));
 
       if (!response.ok || !payload.ok) {
+        if (payload.needsConfirm) {
+          window.location.assign(authPathWithReferral("/register", normalizedEmail, { resume: "1" }));
+          return;
+        }
         setError(payload.error || "No se pudo iniciar sesión.");
         return;
       }
@@ -374,12 +389,13 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
 
   async function requestPasswordResetCode(event, { resend = false } = {}) {
     event?.preventDefault();
-    if (resend && resetCooldown.active) return;
+    if (otpSubmittingRef.current || isLoading || resetCooldown.active) return;
     setError("");
     setNotice("");
     const normalizedEmail = validateEmail();
     if (!normalizedEmail) return;
 
+    otpSubmittingRef.current = true;
     setLoadingAction("reset-request");
     try {
       const response = await fetch("/api/auth/cognito/forgot-password", {
@@ -390,6 +406,11 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
       const payload = await response.json().catch(() => ({}));
 
       if (!response.ok || !payload.ok) {
+        if (response.status === 429) resetCooldown.start(payload.retryAfterSec || 60);
+        if (payload.needsConfirm) {
+          window.location.assign(authPathWithReferral("/register", normalizedEmail, { resume: "1" }));
+          return;
+        }
         setError(payload.error || "No se pudo iniciar la recuperación.");
         return;
       }
@@ -404,6 +425,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     } catch {
       setError("No se pudo conectar con el servicio de acceso.");
     } finally {
+      otpSubmittingRef.current = false;
       setLoadingAction("");
     }
   }
@@ -466,7 +488,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
           style={{ background: "var(--vp-surface-raised)", border: "1px solid var(--vp-border)" }}
         >
           <ModeButton active={mode === "code"} onClick={() => switchMode("code")}>
-            Código al correo
+            {codeStep === "confirm" && codeChannel === "sms" ? "Código por SMS" : "Código al correo"}
           </ModeButton>
           <ModeButton active={mode === "password"} onClick={() => switchMode("password")}>
             Contraseña
@@ -478,12 +500,12 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
         codeStep === "request" ? (
           <form className="space-y-4" onSubmit={requestLoginCode}>
             <p className="text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
-              Recibe un código de acceso en tu correo y entra sin abrir pantallas externas de Cognito.
+              Recibe un código en tu correo para entrar a tu cuenta.
             </p>
             <EmailField email={email} setEmail={setEmail} onClearError={() => setError("")} />
 
-            <PrimaryButton disabled={isLoading} loading={loadingAction === "code-request"} icon={<ShieldCheck size={16} />}>
-              Enviar código
+            <PrimaryButton disabled={isLoading || codeCooldown.active} loading={loadingAction === "code-request"} icon={<ShieldCheck size={16} />}>
+              {codeCooldown.active ? codeCooldown.label : "Enviar código"}
             </PrimaryButton>
 
             <p className="text-center text-xs" style={{ color: "var(--vp-muted)" }}>
@@ -502,7 +524,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
           </form>
         ) : (
           <form className="space-y-4" onSubmit={confirmLoginCode}>
-            <EmailField email={email} setEmail={setEmail} onClearError={() => setError("")} />
+            <EmailField email={codeRecipient} readOnly setEmail={setEmail} onClearError={() => setError("")} />
             <CodeField
               id="login-code"
               label="Código de acceso"
@@ -513,7 +535,9 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
                 setError("");
               }}
             />
-            <DeliveryHint email={email} />
+            {codeChannel === "sms" ? (
+              <p className="text-xs leading-5" style={{ color: "var(--vp-subtle)" }}>Ingresa el último código recibido por SMS en tu teléfono registrado.</p>
+            ) : <DeliveryHint email={codeRecipient} />}
 
             <PrimaryButton disabled={isLoading} loading={loadingAction === "code-confirm"} icon={<ArrowRight size={16} />}>
               Entrar con código
@@ -525,7 +549,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
               </SecondaryButton>
               <SecondaryButton
                 disabled={isLoading || codeCooldown.active}
-                onClick={(e) => requestLoginCode(e, { resend: true })}
+                onClick={(e) => requestLoginCode(e, { resend: true, channel: codeChannel })}
                 icon={<KeyRound size={15} />}
               >
                 {codeCooldown.active ? codeCooldown.label : "Reenviar"}
@@ -572,8 +596,8 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
           </p>
           <EmailField email={email} setEmail={setEmail} onClearError={() => setError("")} />
 
-          <PrimaryButton disabled={isLoading} loading={loadingAction === "reset-request"} icon={<KeyRound size={16} />}>
-            Enviar código
+          <PrimaryButton disabled={isLoading || resetCooldown.active} loading={loadingAction === "reset-request"} icon={<KeyRound size={16} />}>
+            {resetCooldown.active ? resetCooldown.label : "Enviar código"}
           </PrimaryButton>
           <SecondaryButton disabled={isLoading} onClick={() => switchMode("password")} icon={<ArrowLeft size={15} />}>
             Volver a iniciar sesión
@@ -674,7 +698,7 @@ function Message({ tone, children }) {
   );
 }
 
-function EmailField({ email, setEmail, onClearError }) {
+function EmailField({ email, setEmail, onClearError, readOnly = false }) {
   return (
     <div>
       <label className="mb-2 block text-sm font-bold" htmlFor="email" style={{ color: "var(--vp-text)" }}>
@@ -690,6 +714,7 @@ function EmailField({ email, setEmail, onClearError }) {
           id="email"
           type="email"
           value={email}
+          readOnly={readOnly}
           onChange={(event) => {
             setEmail(event.target.value);
             onClearError();
@@ -704,7 +729,7 @@ function EmailField({ email, setEmail, onClearError }) {
           }}
         />
       </div>
-      {suggestEmailFix(email) && (
+      {!readOnly && suggestEmailFix(email) && (
         <button
           type="button"
           onClick={() => {
@@ -771,11 +796,11 @@ function CodeField({ id, label, value, onChange, autoFocus = false }) {
         inputMode="numeric"
         autoComplete="one-time-code"
         autoFocus={autoFocus}
-        maxLength={8}
+        maxLength={12}
         value={value}
         onChange={(event) => onChange(event.target.value.replace(/[\s-]+/g, ""))}
         placeholder="········"
-        className="min-h-12 w-full rounded-lg px-4 text-base font-semibold tracking-[0.4em] outline-none"
+        className="min-h-12 w-full rounded-lg px-4 text-base font-semibold outline-none"
         style={{
           color: "var(--vp-text)",
           background: "var(--vp-surface-raised)",

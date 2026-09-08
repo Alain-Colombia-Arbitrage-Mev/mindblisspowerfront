@@ -3,18 +3,25 @@
  * (x-amz-json-1.1 protocol, no SDK dependency).
  */
 
-export async function callCognito({ endpoint, target, payload }) {
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-amz-json-1.1",
-      "X-Amz-Target": `AWSCognitoIdentityProviderService.${target}`,
-    },
-    body: JSON.stringify(payload),
-  });
+export async function callCognito({ endpoint, target, payload, timeoutMs = 15_000 }) {
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-amz-json-1.1",
+        "X-Amz-Target": `AWSCognitoIdentityProviderService.${target}`,
+      },
+      body: JSON.stringify(payload),
+      cache: "no-store",
+      signal: AbortSignal.timeout(timeoutMs),
+    });
 
-  const body = await response.json().catch(() => ({}));
-  return { ok: response.ok, status: response.status, body };
+    const body = await response.json();
+    return { ok: response.ok, status: response.status, body };
+  } catch {
+    // Never retry OTP mutations: the first request may already have sent a code.
+    return { ok: false, status: 503, body: { __type: "AuthServiceUnavailable" } };
+  }
 }
 
 export function getCognitoErrorCode(body) {
@@ -24,6 +31,7 @@ export function getCognitoErrorCode(body) {
 
 export function mapCognitoStatus(body) {
   const code = getCognitoErrorCode(body);
+  if (code === "AuthServiceUnavailable") return 503;
   if (code === "UsernameExistsException") return 409;
   if (code === "UserNotFoundException") return 404;
   if (code === "UserNotConfirmedException" || code === "PasswordResetRequiredException") return 409;
@@ -42,6 +50,7 @@ export function mapCognitoStatus(body) {
 
 // Mensajes bilingües (ES / EN). Bilingual messages (ES / EN).
 const ERROR_MESSAGES = {
+  AuthServiceUnavailable: "No pudimos confirmar la respuesta del servicio. Si recibiste un código, consérvalo y espera antes de solicitar otro.",
   UsernameExistsException: "Ya existe una cuenta con ese email. / An account with that email already exists.",
   UserNotFoundException: "No existe una cuenta con ese email. / No account exists with that email.",
   UserNotConfirmedException:

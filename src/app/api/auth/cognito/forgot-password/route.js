@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 
 import { authRateLimit } from "@/lib/auth-rate-limit";
 import { authLogFields, logAuthEvent } from "@/lib/auth-observability";
+import { buildUnconfirmedLoginTransition } from "@/lib/cognito-otp-policy";
+import { cognitoUserStatus } from "@/lib/cognito-user-status";
 import { buildCognitoSecretHash, getCognitoIdentityProviderConfig } from "@/lib/cognito";
 import { callCognito, mapCognitoError, mapCognitoStatus, normalizeEmail, getCognitoErrorCode } from "@/lib/cognito-api";
 
@@ -16,7 +18,7 @@ export async function POST(request) {
   }
 
   // Envío de correo de recuperación: rate limit por email + IP (preset "send").
-  const limited = authRateLimit(request, { name: "forgot-password", preset: "send", email });
+  const limited = authRateLimit(request, { name: "forgot-password-precheck", preset: "login", email });
   if (limited) return limited;
 
   let config;
@@ -26,6 +28,12 @@ export async function POST(request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  const account = await cognitoUserStatus(email);
+  if (account.exists === true && account.enabled && account.status === "UNCONFIRMED") {
+    return NextResponse.json(buildUnconfirmedLoginTransition(email), { status: 409 });
+  }
+  const sendLimited = authRateLimit(request, { name: "forgot-password", preset: "send", email });
+  if (sendLimited) return sendLimited;
   const payload = { ClientId: config.clientId, Username: email };
   if (config.clientSecret) {
     payload.SecretHash = buildCognitoSecretHash({

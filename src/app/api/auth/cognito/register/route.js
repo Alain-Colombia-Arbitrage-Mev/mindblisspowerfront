@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { authRateLimit } from "@/lib/auth-rate-limit";
 import { authLogFields, logAuthEvent } from "@/lib/auth-observability";
 import { buildCognitoSignUpPayload, getCognitoIdentityProviderConfig } from "@/lib/cognito";
+import { callCognito } from "@/lib/cognito-api";
 
 export const runtime = "nodejs";
 
@@ -30,6 +31,11 @@ export async function POST(request) {
   if (validationError) {
     return NextResponse.json({ error: validationError }, { status: 400 });
   }
+  if (body.phone && !phone) {
+    return NextResponse.json({ error: "Revisa el teléfono e incluye el código de país." }, { status: 400 });
+  }
+  const sendLimited = authRateLimit(request, { name: "signup-code", preset: "send", email });
+  if (sendLimited) return sendLimited;
 
   // Lista negra: se consulta ANTES de crear el usuario en Cognito. Falla cerrado:
   // si no se puede validar el estado de acceso, no creamos cuentas nuevas.
@@ -118,7 +124,7 @@ export async function POST(request) {
 
   const cognitoResponse = await callCognito({
     endpoint: config.endpoint,
-    target: "AWSCognitoIdentityProviderService.SignUp",
+    target: "SignUp",
     payload: buildCognitoSignUpPayload({
       clientId: config.clientId,
       clientSecret: config.clientSecret,
@@ -129,19 +135,27 @@ export async function POST(request) {
   });
 
   if (!cognitoResponse.ok) {
+    const errorCode = getCognitoErrorCode(cognitoResponse.body);
+    const status = mapCognitoStatus(cognitoResponse.body);
     logAuthEvent(
       "signup_failed",
       authLogFields({
         email,
-        status: mapCognitoStatus(cognitoResponse.body),
-        reason: getCognitoErrorCode(cognitoResponse.body) === "CodeDeliveryFailureException" ? "email_delivery_failed" : "cognito_error",
-        errorCode: getCognitoErrorCode(cognitoResponse.body),
+        status,
+        reason: errorCode === "CodeDeliveryFailureException" ? "email_delivery_failed" : "cognito_error",
+        errorCode,
       }),
       "warn"
     );
+    const responseBody = { error: mapCognitoSignUpError(cognitoResponse.body) };
+    if (errorCode === "UsernameExistsException") {
+      responseBody.accountExists = true;
+      responseBody.needsLogin = true;
+      responseBody.email = email;
+    }
     return NextResponse.json(
-      { error: mapCognitoSignUpError(cognitoResponse.body) },
-      { status: mapCognitoStatus(cognitoResponse.body) }
+      responseBody,
+      { status }
     );
   }
 
@@ -220,20 +234,6 @@ async function recordRegistrationReferral({ email, referralCode, preferredSide }
   }
 }
 
-async function callCognito({ endpoint, target, payload }) {
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-amz-json-1.1",
-      "X-Amz-Target": target,
-    },
-    body: JSON.stringify(payload),
-  });
-
-  const body = await response.json().catch(() => ({}));
-  return { ok: response.ok, status: response.status, body };
-}
-
 function readJson(request) {
   return request.json().catch(() => ({}));
 }
@@ -279,6 +279,7 @@ function getCognitoErrorCode(body) {
 
 function mapCognitoStatus(body) {
   const code = getCognitoErrorCode(body);
+  if (code === "AuthServiceUnavailable") return 503;
   if (code === "UsernameExistsException") return 409;
   if (code === "InvalidPasswordException" || code === "InvalidParameterException") return 400;
   if (code === "TooManyRequestsException" || code === "LimitExceededException") return 429;

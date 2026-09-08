@@ -8,13 +8,14 @@ import {
   getCognitoIdentityProviderConfig,
 } from "@/lib/cognito";
 import { callCognito, getCognitoErrorCode, mapCognitoError, mapCognitoStatus, normalizeEmail } from "@/lib/cognito-api";
-import { buildUnconfirmedLoginTransition } from "@/lib/cognito-otp-policy";
+import { buildUnconfirmedLoginTransition, otpChallengeUsername, phoneOtpIssue } from "@/lib/cognito-otp-policy";
 import {
   buildUserFromIdToken,
   setCognitoSessionCookies,
   setSessionCookie,
 } from "@/lib/cognito-session";
 import { memberDb } from "@/lib/member-db";
+import { cognitoUserStatus } from "@/lib/cognito-user-status";
 
 export const runtime = "nodejs";
 
@@ -34,14 +35,14 @@ export async function POST(request) {
   }
 
   // Envío de código por correo: rate limit por email + IP (preset "send").
-  const limited = authRateLimit(request, { name: "code-login-request", preset: "send", email });
+  const limited = authRateLimit(request, { name: "code-login-precheck", preset: "login", email });
   if (limited) return limited;
 
   let config;
   try {
     config = getCognitoIdentityProviderConfig(process.env);
   } catch (error) {
-    if (!hasAnyCognitoRuntimeConfig(process.env)) {
+    if (process.env.NODE_ENV !== "production" && !hasAnyCognitoRuntimeConfig(process.env)) {
       if (!isDemoEmailAllowed(process.env, email)) {
         return NextResponse.json({ error: "No existe una cuenta demo con ese email." }, { status: 404 });
       }
@@ -64,7 +65,7 @@ export async function POST(request) {
   // activo, no lo revela → el usuario espera un código que nunca llega. Si no
   // existe, lo enrutamos a registro (SignUp sí envía el código). null = no se
   // pudo verificar ⇒ seguimos con el OTP normal (fail-safe, no bloqueamos login).
-  const { exists, confirmed, enabled, status, phoneLinked, phoneVerified, phoneDestination } = await userStatusInPool(email);
+  const { exists, confirmed, enabled, status, phoneLinked, phoneVerified } = await cognitoUserStatus(email);
   logAuthEvent(
     "otp_status_check",
     authLogFields({
@@ -139,10 +140,12 @@ export async function POST(request) {
   }
 
   if (channel === "sms" && exists === true) {
-    const phoneIssue = phoneIssueResponse({ phoneLinked, phoneVerified, phoneDestination });
-    if (phoneIssue) return phoneIssue;
+    const phoneIssue = phoneOtpIssue({ phoneLinked });
+    if (phoneIssue) return NextResponse.json(phoneIssue, { status: 409 });
   }
 
+  const sendLimited = authRateLimit(request, { name: "code-login-request", preset: "send", email });
+  if (sendLimited) return sendLimited;
   const startResponse = await callCognito({
     endpoint: config.endpoint,
     target: "InitiateAuth",
@@ -238,6 +241,7 @@ export async function POST(request) {
     email,
     mode: "cognito",
     challengeName: otpChallenge,
+    username: challengeResponse.username || email,
     session: challengeResponse.session,
   });
   return response;
@@ -249,8 +253,10 @@ async function resolveEmailOtpChallenge({ endpoint, config, email, body, otpChal
   }
 
   if (body.ChallengeName === otpChallenge) {
+    if (!body.Session) return { ok: false, status: 502, error: "No se pudo preparar la verificación. Espera antes de solicitar otro código." };
     return {
       ok: true,
+      username: otpChallengeUsername(body, email),
       session: body.Session,
       delivery: normalizeDelivery(body.ChallengeParameters, otpChallenge),
     };
@@ -276,7 +282,7 @@ async function resolveEmailOtpChallenge({ endpoint, config, email, body, otpChal
       payload: buildCognitoChallengeResponsePayload({
         clientId: config.clientId,
         clientSecret: config.clientSecret,
-        username: email,
+        username: otpChallengeUsername(body, email),
         session: body.Session,
         challengeName: "SELECT_CHALLENGE",
         responses: { ANSWER: otpChallenge },
@@ -298,8 +304,10 @@ async function resolveEmailOtpChallenge({ endpoint, config, email, body, otpChal
     }
 
     if (selectResponse.body.ChallengeName === otpChallenge) {
+      if (!selectResponse.body.Session) return { ok: false, status: 502, error: "No se pudo preparar la verificación. Espera antes de solicitar otro código." };
       return {
         ok: true,
+        username: otpChallengeUsername(selectResponse.body, otpChallengeUsername(body, email)),
         session: selectResponse.body.Session,
         delivery: normalizeDelivery(selectResponse.body.ChallengeParameters, otpChallenge),
       };
@@ -392,7 +400,7 @@ function smsOtpErrorBody(body, otpChallenge = "EMAIL_OTP") {
   const deliveryIssue = code === "CodeDeliveryFailureException";
   return {
     error: mapEmailOtpError(body, otpChallenge),
-    needsPhoneLink: smsIssue,
+    needsPhoneLink: smsIssue && code === "InvalidParameterException",
     reason: deliveryIssue
       ? smsIssue
         ? "sms_delivery_failed"
@@ -401,68 +409,6 @@ function smsOtpErrorBody(body, otpChallenge = "EMAIL_OTP") {
         ? "sms_unavailable"
         : undefined,
   };
-}
-
-// userExistsInPool consulta al backend (vp-payments, que tiene el cliente admin
-// de Cognito) si el email ya está en el pool. Devuelve true/false, o null si no
-// se pudo verificar (servicio no configurado, error, o el backend no tiene el
-// admin de Cognito) — en cuyo caso el caller NO bloquea el login. Gated por el
-// service token; el rate limit de arriba ("send") acota el oráculo de enumeración.
-async function userStatusInPool(email) {
-  const base = process.env.VP_PAYMENTS_URL;
-  const token = process.env.PAYMENTS_SERVICE_TOKEN;
-  if (!base || !token) return { exists: null, confirmed: true, enabled: true };
-  try {
-    const resp = await fetch(`${base}/api/auth/user-exists?email=${encodeURIComponent(email)}`, {
-      headers: { "X-VP-Service-Token": token },
-      cache: "no-store",
-    });
-    if (!resp.ok) return { exists: null, confirmed: true, enabled: true };
-    const data = await resp.json().catch(() => ({}));
-    if (!data.checked) return { exists: null, confirmed: true, enabled: true };
-    // confirmed ausente (backend anterior) ⇒ true: no tratar por error a un
-    // usuario válido como no-confirmado.
-    return {
-      exists: Boolean(data.exists),
-      confirmed: data.confirmed === undefined ? true : Boolean(data.confirmed),
-      enabled: data.enabled === undefined ? true : Boolean(data.enabled),
-      status: String(data.status || ""),
-      phoneLinked: data.phone_linked === undefined ? null : Boolean(data.phone_linked),
-      phoneVerified: data.phone_verified === undefined ? null : Boolean(data.phone_verified),
-      phoneDestination: String(data.phone_destination || ""),
-    };
-  } catch {
-    return { exists: null, confirmed: true, enabled: true };
-  }
-}
-
-function phoneIssueResponse({ phoneLinked, phoneVerified, phoneDestination }) {
-  if (phoneLinked === false) {
-    return NextResponse.json(
-      {
-        error:
-          "Tu cuenta no tiene un teléfono vinculado para recibir SMS. Solicita ayuda y comparte tu número actual para validarlo.",
-        needsPhoneLink: true,
-        reason: "phone_not_linked",
-      },
-      { status: 409 }
-    );
-  }
-
-  if (phoneVerified === false) {
-    return NextResponse.json(
-      {
-        error:
-          `Tu teléfono ${phoneDestination || ""} está guardado, pero aún no está validado para recibir códigos SMS. ` +
-          "Solicita ayuda para validar o actualizar el número.",
-        needsPhoneVerification: true,
-        reason: "phone_not_verified",
-      },
-      { status: 409 }
-    );
-  }
-
-  return null;
 }
 
 function unconfirmedLoginResponse(email) {

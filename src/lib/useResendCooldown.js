@@ -11,7 +11,10 @@ export function useResendCooldown(seconds = 45) {
   const [remaining, setRemaining] = useState(0);
   const timerRef = useRef(null);
 
-  const start = useCallback(() => setRemaining(seconds), [seconds]);
+  const start = useCallback((retryAfter = seconds) => {
+    const duration = Number(retryAfter);
+    setRemaining(Number.isFinite(duration) && duration > 0 ? Math.ceil(duration) : seconds);
+  }, [seconds]);
 
   useEffect(() => {
     if (remaining <= 0) return undefined;
@@ -44,17 +47,20 @@ const DOMAIN_TYPO_FIXES = {
   "gmai.com": "gmail.com",
   "gmail.co": "gmail.com",
   "gmail.con": "gmail.com",
+  "gmail.com.com": "gmail.com",
   "gemail.com": "gmail.com",
   "hotmial.com": "hotmail.com",
   "hotmal.com": "hotmail.com",
   "hotmai.com": "hotmail.com",
   "hotmail.con": "hotmail.com",
+  "hotmail.co": "hotmail.com",
   "outlok.com": "outlook.com",
   "outloo.com": "outlook.com",
   "outlook.con": "outlook.com",
   "yaho.com": "yahoo.com",
   "yahooo.com": "yahoo.com",
   "yahoo.con": "yahoo.com",
+  "hayoo.com": "yahoo.com",
   "icloud.con": "icloud.com",
   "icloud.co": "icloud.com",
   "iclod.com": "icloud.com",

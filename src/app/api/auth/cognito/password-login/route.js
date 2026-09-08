@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { authRateLimit } from "@/lib/auth-rate-limit";
+import { buildUnconfirmedLoginTransition } from "@/lib/cognito-otp-policy";
+import { callCognito as callCognitoApi, mapCognitoError } from "@/lib/cognito-api";
 import {
   buildCognitoChallengeResponsePayload,
   buildCognitoPasswordAuthPayload,
@@ -37,7 +39,7 @@ export async function POST(request) {
   try {
     config = getCognitoIdentityProviderConfig(process.env);
   } catch (error) {
-    if (!hasAnyCognitoRuntimeConfig(process.env)) {
+    if (process.env.NODE_ENV !== "production" && !hasAnyCognitoRuntimeConfig(process.env)) {
       if (!isDemoCredentialAllowed(process.env, email, password)) {
         return NextResponse.json({ error: "Email o contraseña incorrectos." }, { status: 401 });
       }
@@ -61,6 +63,9 @@ export async function POST(request) {
   });
 
   if (!cognitoResponse.ok) {
+    if (getCognitoErrorCode(cognitoResponse.body) === "UserNotConfirmedException") {
+      return NextResponse.json(buildUnconfirmedLoginTransition(email), { status: 409 });
+    }
     return NextResponse.json(
       { error: mapCognitoAuthError(cognitoResponse.body) },
       { status: mapCognitoStatus(cognitoResponse.body) }
@@ -250,17 +255,7 @@ async function resolveNewPasswordRequired({ endpoint, config, email, password, b
 }
 
 async function callCognito({ endpoint, target, payload }) {
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-amz-json-1.1",
-      "X-Amz-Target": target,
-    },
-    body: JSON.stringify(payload),
-  });
-
-  const body = await response.json().catch(() => ({}));
-  return { ok: response.ok, status: response.status, body };
+  return callCognitoApi({ endpoint, target: target.split(".").pop(), payload });
 }
 
 function readJson(request) {
@@ -360,6 +355,7 @@ function getCognitoErrorCode(body) {
 
 function mapCognitoStatus(body) {
   const code = getCognitoErrorCode(body);
+  if (code === "AuthServiceUnavailable") return 503;
   if (code === "UserNotConfirmedException") return 403;
   if (code === "PasswordResetRequiredException") return 403;
   if (code === "TooManyRequestsException" || code === "LimitExceededException") return 429;
@@ -369,6 +365,7 @@ function mapCognitoStatus(body) {
 
 function mapCognitoAuthError(body) {
   const code = getCognitoErrorCode(body);
+  if (code === "AuthServiceUnavailable") return mapCognitoError(body);
 
   if (code === "UserNotConfirmedException") {
     return (

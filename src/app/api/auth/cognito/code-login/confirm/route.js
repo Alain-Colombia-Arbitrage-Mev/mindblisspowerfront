@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { authRateLimit } from "@/lib/auth-rate-limit";
+import { authLogFields, logAuthEvent } from "@/lib/auth-observability";
 import { buildCognitoChallengeResponsePayload, getCognitoIdentityProviderConfig } from "@/lib/cognito";
 import { callCognito, getCognitoErrorCode, mapCognitoError, mapCognitoStatus, normalizeEmail } from "@/lib/cognito-api";
 import {
@@ -47,6 +48,9 @@ export async function POST(request) {
   }
 
   if (challenge.mode === "demo") {
+    if (process.env.NODE_ENV === "production") {
+      return NextResponse.json({ error: "Solicita un código nuevo.", needsNewCode: true }, { status: 409 });
+    }
     if (code !== challenge.code) {
       return NextResponse.json({ error: "El código no es válido. / The code is not valid." }, { status: 400 });
     }
@@ -79,7 +83,7 @@ export async function POST(request) {
     payload: buildCognitoChallengeResponsePayload({
       clientId: config.clientId,
       clientSecret: config.clientSecret,
-      username: email,
+      username: challenge.username || email,
       session: challenge.session,
       challengeName,
       responses: { [responseKey]: code },
@@ -87,6 +91,7 @@ export async function POST(request) {
   });
 
   if (!cognitoResponse.ok) {
+    logAuthEvent("otp_confirmation_failed", authLogFields({ email, channel: challengeName === "SMS_OTP" ? "sms" : "email", status: mapCognitoStatus(cognitoResponse.body), errorCode: getCognitoErrorCode(cognitoResponse.body) }), "warn");
     const mapped = mapEmailOtpConfirmError(cognitoResponse.body);
     const response = NextResponse.json(mapped.body, { status: mapped.status });
     if (mapped.clearChallenge) clearCookie(response, CODE_CHALLENGE_COOKIE);
@@ -112,6 +117,7 @@ export async function POST(request) {
     );
   }
 
+  logAuthEvent("otp_confirmation_success", authLogFields({ email, channel: challengeName === "SMS_OTP" ? "sms" : "email", status: 200 }));
   const response = NextResponse.json({
     ok: true,
     mode: "cognito",

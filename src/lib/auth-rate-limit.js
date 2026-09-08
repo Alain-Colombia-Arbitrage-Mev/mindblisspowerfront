@@ -14,6 +14,7 @@
 import { NextResponse } from "next/server";
 
 import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { otpSendRules } from "@/lib/otp-send-policy";
 
 const MIN = 60_000;
 
@@ -59,6 +60,7 @@ export function authRateLimit(request, { name, preset, email }) {
     rules.push({ key: `${name}:email:${email}`, limit: conf.email.limit, windowMs: conf.email.windowMs });
   }
 
+  if (preset === "send") rules.push(...otpSendRules(email));
   const result = rateLimit(rules);
   if (result.allowed) return null;
 
