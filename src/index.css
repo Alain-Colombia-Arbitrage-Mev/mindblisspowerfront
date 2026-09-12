@@ -2136,14 +2136,14 @@ html {
   overflow-x: auto;
   max-width: 100%;
   border: 1px solid var(--vp-border);
-  border-radius: 24px;
+  border-radius: 18px;
   background: var(--vp-bg);
-  padding: 48px 24px 28px;
+  padding: 34px 20px 26px;
   -webkit-overflow-scrolling: touch;
 }
 .vp-tree {
   display: inline-flex;
-  min-width: max-content;
+  min-width: 100%;
   justify-content: center;
   padding: 0 16px 18px;
 }
@@ -2217,11 +2217,89 @@ html {
   border-radius: 8px 0 0 0;
 }
 .vp-node {
-  transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease, transform 140ms ease;
+  align-items: center;
+  background: var(--vp-surface-raised);
+  border: 1px solid var(--vp-border);
+  border-radius: 16px;
+  color: var(--vp-text);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 142px;
+  padding: 12px 8px;
+  text-align: center;
+  transition: background 140ms ease, border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+  width: 120px;
 }
-.vp-node:hover {
-  transform: translateY(-1px);
+.vp-node:hover,
+.vp-node:focus-visible {
   border-color: var(--vp-accent-border) !important;
+  outline: none;
+  transform: translateY(-1px);
+}
+.vp-node-name {
+  color: var(--vp-text);
+  display: -webkit-box;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  min-height: 26px;
+  overflow: hidden;
+  text-align: center;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  width: 100%;
+}
+.vp-node-pack {
+  align-items: center;
+  background: var(--vp-bg);
+  border: 1px solid var(--vp-border);
+  border-radius: 999px;
+  color: var(--vp-text);
+  display: inline-flex;
+  font-size: 9px;
+  font-weight: 700;
+  gap: 4px;
+  justify-content: center;
+  max-width: 100%;
+  padding: 4px 8px;
+}
+.vp-node-toggle {
+  align-items: center;
+  background: var(--vp-surface);
+  border: 1px solid var(--vp-accent);
+  border-radius: 999px;
+  color: var(--vp-accent);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 9px;
+  font-weight: 800;
+  gap: 2px;
+  min-height: 22px;
+  padding: 2px 7px;
+}
+.vp-empty-slot {
+  align-items: center;
+  background: transparent;
+  border: 1px dashed var(--vp-border);
+  border-radius: 16px;
+  color: var(--vp-subtle);
+  display: flex;
+  flex-direction: column;
+  font-size: 9px;
+  font-weight: 700;
+  gap: 7px;
+  justify-content: center;
+  min-height: 118px;
+  padding: 12px 8px;
+  text-align: center;
+  width: 120px;
+}
+.vp-empty-slot small {
+  color: var(--vp-subtle);
+  font-size: 8px;
+  font-weight: 600;
+  text-transform: uppercase;
 }
 @media (max-width: 640px) {
   .vp-tree-scroll {

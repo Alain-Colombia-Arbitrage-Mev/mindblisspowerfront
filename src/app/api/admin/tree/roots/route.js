@@ -38,20 +38,7 @@ export async function GET() {
              EXISTS(
                SELECT 1
                  FROM mlm.affiliate c
-                 JOIN mlm.person cp ON cp.id = c.person_id
                 WHERE c.parent_id = a.id
-                  AND c.status = 'active'
-                  AND cp.status = 'active'
-                  AND NOT COALESCE(cp.blacklisted, false)
-                  AND NOT EXISTS (
-                    SELECT 1
-                      FROM mlm.blacklist b
-                     WHERE (b.email_norm IS NOT NULL AND b.email_norm = mlm.norm_email(cp.email))
-                        OR (b.phone_last10 IS NOT NULL AND b.phone_last10 = mlm.norm_phone10(cp.phone_number))
-                        OR (b.name_norm IS NOT NULL
-                            AND b.name_norm = mlm.norm_name(cp.first_name || ' ' || cp.last_name)
-                            AND (b.birthdate IS NULL OR (cp.birthday IS NOT NULL AND b.birthdate = cp.birthday)))
-                  )
              ) AS has_children
         FROM mlm.affiliate a
         JOIN mlm.person p      ON p.id = a.person_id

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowUpRight,
+  Award,
   CheckCircle2,
   ChevronDown,
   ChevronsDown,
@@ -22,6 +23,7 @@ import {
 
 import NetworkViewCard from "./NetworkViewCard";
 
+const EMPTY_ARRAY = [];
 const INITIAL_LOAD_LEVELS = 4;
 const MIN_LOAD_LEVELS = 2;
 const MAX_LOAD_LEVELS = 32;
@@ -38,14 +40,34 @@ function initialsOf(name) {
     .toUpperCase();
 }
 
+function canonicalSide(side) {
+  const value = String(side || "").trim().toUpperCase();
+  if (["L", "LEFT", "IZQ", "IZQUIERDA"].includes(value)) return "L";
+  if (["R", "RIGHT", "DER", "DERECHA"].includes(value)) return "R";
+  return null;
+}
+
 function sideLabel(side, short = false) {
-  if (side === "L") return short ? "Izq" : "Izquierda";
-  if (side === "R") return short ? "Der" : "Derecha";
+  const normalizedSide = canonicalSide(side);
+  if (normalizedSide === "L") return short ? "Izq" : "Izquierda";
+  if (normalizedSide === "R") return short ? "Der" : "Derecha";
   return "Raíz";
 }
 
 function compactNumber(value) {
   return Number(value ?? 0).toLocaleString("es-CO");
+}
+
+function normalizeTreeNode(node) {
+  if (node?.id == null || node.id === "") return null;
+  return {
+    ...node,
+    id: String(node.id),
+    parentId: node.parentId == null ? null : String(node.parentId),
+    sponsorId: node.sponsorId == null ? null : String(node.sponsorId),
+    side: canonicalSide(node.side),
+    rootSide: canonicalSide(node.rootSide),
+  };
 }
 
 function normalized(value) {
@@ -60,18 +82,20 @@ function nodeMatches(node, query) {
 }
 
 /** Índice padre -> { L, R } y contador de descendientes por nodo. */
-function useTreeIndex(nodes, rootId) {
+function useTreeIndex(nodes) {
   return useMemo(() => {
     const bySide = new Map(); // parentId -> { L?, R? }
-    for (const node of nodes) {
-      const key = node.parentId ?? rootId;
+    for (const node of nodes || EMPTY_ARRAY) {
+      const key = node.parentId == null ? null : String(node.parentId);
+      const side = canonicalSide(node.side);
+      if (!key || !side) continue;
       if (!bySide.has(key)) bySide.set(key, {});
-      bySide.get(key)[node.side] = node;
+      if (!bySide.get(key)[side]) bySide.get(key)[side] = node;
     }
     const countCache = new Map();
     const countDescendants = (id) => {
       if (countCache.has(id)) return countCache.get(id);
-      const kids = bySide.get(id);
+      const kids = bySide.get(String(id));
       let total = 0;
       if (kids) {
         for (const child of Object.values(kids)) {
@@ -82,7 +106,7 @@ function useTreeIndex(nodes, rootId) {
       return total;
     };
     return { bySide, countDescendants };
-  }, [nodes, rootId]);
+  }, [nodes]);
 }
 
 function collectVisibleRows(rootNode, index, collapsed) {
@@ -96,7 +120,7 @@ function collectVisibleRows(rootNode, index, collapsed) {
     if (repeated || collapsed.has(nodeId)) return;
 
     ancestors.add(nodeId);
-    const kids = index.bySide.get(node.id) || {};
+    const kids = index.bySide.get(String(node.id)) || {};
     if (kids.L) walk(kids.L, depth + 1, ancestors);
     if (kids.R) walk(kids.R, depth + 1, ancestors);
     ancestors.delete(nodeId);
@@ -148,27 +172,27 @@ function TreeButton({ children, active, disabled, onClick, title }) {
   );
 }
 
-function NodeCard({ node, root, side, collapsedCount, onToggle, highlighted }) {
+function NodeCard({ node, root, side, leftCount = 0, rightCount = 0, collapsedCount, onToggle, highlighted }) {
   const unavailable = Boolean(node.unavailable);
   const active = node.status === "active";
   const hasPackage = Boolean(node.activePackage);
   const online = !unavailable && (root || hasPackage || active);
-  const ringColor = root || highlighted ? "var(--vp-accent)" : "transparent";
   const avatarText = unavailable ? "#ffffff" : root ? "var(--vp-accent)" : online ? "var(--vp-text)" : "var(--vp-muted)";
   const stateLabel = unavailable ? "Not Available" : root ? "Tu cuenta" : hasPackage ? "Paquete activo" : active ? "Nodo activo" : "Inactivo";
-  const packageLabel = unavailable ? "Cuenta protegida" : node.rank?.name || (hasPackage ? "Pack activo" : "Sin rango");
+  const rankLabel = unavailable ? "Cuenta protegida" : node.rank?.name || "Sin rango";
+  const dotColor = unavailable ? "var(--vp-danger)" : online ? "var(--vp-accent)" : "#6b7280";
 
   return (
     <div
       id={`member-tree-node-${node.id}`}
-      className="vp-node relative flex min-h-[138px] flex-col items-center gap-2 rounded-2xl border px-2 py-3 text-center"
+      className="vp-node"
       style={{
-        width: 120,
         background: unavailable ? "#050505" : highlighted ? "color-mix(in srgb, var(--vp-accent) 11%, var(--vp-surface-raised))" : "var(--vp-surface-raised)",
         borderColor: unavailable ? "#27272a" : root || highlighted ? "var(--vp-accent)" : "var(--vp-border)",
         borderWidth: root ? 2 : 1,
         boxShadow: highlighted ? "0 0 0 2px color-mix(in srgb, var(--vp-accent) 18%, transparent)" : "none",
       }}
+      title={`${unavailable ? "Not Available" : node.name || "Nodo"} · ${rankLabel} · Red I ${compactNumber(leftCount)} / D ${compactNumber(rightCount)}`}
     >
       <div className="relative h-12 w-12 shrink-0">
         <span
@@ -176,7 +200,6 @@ function NodeCard({ node, root, side, collapsedCount, onToggle, highlighted }) {
           style={{
             background: unavailable ? "#1e2a8a" : "linear-gradient(135deg, #1f2937 0%, #374151 100%)",
             color: avatarText,
-            boxShadow: ringColor === "transparent" ? "none" : `0 0 0 2px ${ringColor}`,
           }}
         >
           {unavailable ? "NA" : initialsOf(node.name) || "MB"}
@@ -184,42 +207,36 @@ function NodeCard({ node, root, side, collapsedCount, onToggle, highlighted }) {
         <span
           className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2"
           style={{
-            background: online ? "var(--vp-accent)" : "#6b7280",
+            background: dotColor,
             borderColor: unavailable ? "#050505" : "var(--vp-surface-raised)",
           }}
           title={stateLabel}
         />
       </div>
 
-      <p
-        className="m-0 min-h-[26px] w-full text-[11px] font-semibold leading-tight"
-        style={{
-          color: unavailable ? "#ffffff" : "var(--vp-text)",
-          display: "-webkit-box",
-          overflow: "hidden",
-          textAlign: "center",
-          WebkitBoxOrient: "vertical",
-          WebkitLineClamp: 2,
-        }}
-        title={unavailable ? "Not Available" : node.name}
-      >
-        {node.name}
-      </p>
+      <span className="vp-node-name" style={{ color: unavailable ? "#ffffff" : undefined }} title={unavailable ? "Not Available" : node.name}>
+        {unavailable ? "Not Available" : node.name || `Nodo #${node.id}`}
+      </span>
 
-      <div className="flex w-full justify-center">
-        <span
-          className="inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-1 text-[9px] font-semibold"
-          style={{ color: unavailable ? "#d4d4d8" : "var(--vp-text)", background: unavailable ? "#111111" : "var(--vp-bg)", borderColor: unavailable ? "#3f3f46" : "var(--vp-border)" }}
-          title={packageLabel}
-        >
-          {unavailable ? <AlertTriangle size={10} style={{ color: "#a1a1aa" }} /> : <Package size={10} style={{ color: "var(--vp-accent)" }} />}
-          <span className="truncate">{packageLabel}</span>
+      <span className="vp-node-pack" style={{ color: unavailable ? "#d4d4d8" : undefined, background: unavailable ? "#111111" : undefined, borderColor: unavailable ? "#3f3f46" : undefined }} title={rankLabel}>
+        {unavailable ? <AlertTriangle size={10} style={{ color: "#a1a1aa" }} /> : <Award size={10} style={{ color: "var(--vp-accent)" }} />}
+        <span className="truncate">{rankLabel}</span>
+      </span>
+
+      <span className="grid w-full grid-cols-2 overflow-hidden rounded-lg border text-left" style={{ background: "var(--vp-bg)", borderColor: "var(--vp-border)" }}>
+        <span className="min-w-0 px-1.5 py-1">
+          <span className="block text-[7px] font-black uppercase tracking-wide" style={{ color: "var(--vp-subtle)" }}>Red I</span>
+          <span className="block truncate text-[9px] font-bold" style={{ color: unavailable ? "#ffffff" : "var(--vp-text)" }}>{compactNumber(leftCount)}</span>
         </span>
-      </div>
+        <span className="min-w-0 border-l px-1.5 py-1" style={{ borderColor: "var(--vp-border)" }}>
+          <span className="block text-[7px] font-black uppercase tracking-wide" style={{ color: "var(--vp-subtle)" }}>Red D</span>
+          <span className="block truncate text-[9px] font-bold" style={{ color: unavailable ? "#ffffff" : "var(--vp-text)" }}>{compactNumber(rightCount)}</span>
+        </span>
+      </span>
 
-      <p className="m-0 text-[9px] font-medium" style={{ color: "var(--vp-muted)" }}>
-        {unavailable ? `G${node.level} · ${sideLabel(side, true)}` : root ? `Nodo #${node.id}` : `G${node.level} · ${sideLabel(side, true)}`}
-      </p>
+      <span className="text-[9px] font-medium" style={{ color: "var(--vp-muted)" }}>
+        {root ? "Tu cuenta" : sideLabel(side)} · #{node.id}
+      </span>
 
       <div className="mt-auto flex min-h-6 items-center justify-center">
         {!onToggle ? (
@@ -236,7 +253,7 @@ function NodeCard({ node, root, side, collapsedCount, onToggle, highlighted }) {
             aria-label={collapsedCount ? `Mostrar ${collapsedCount} descendientes` : "Colapsar rama"}
             aria-expanded={!collapsedCount}
             title={collapsedCount ? `Mostrar ${collapsedCount} descendientes` : "Colapsar esta rama"}
-            className="flex h-6 shrink-0 items-center gap-0.5 rounded-full border px-1.5 text-[9px] font-bold transition-colors"
+            className="vp-node-toggle"
             style={{ color: collapsedCount ? "var(--vp-muted)" : "var(--vp-accent)", background: "var(--vp-surface)", borderColor: collapsedCount ? "var(--vp-border)" : "var(--vp-accent)" }}
           >
             {collapsedCount ? (
@@ -256,34 +273,30 @@ function NodeCard({ node, root, side, collapsedCount, onToggle, highlighted }) {
 
 function EmptySlot({ side }) {
   return (
-    <div
-      className="flex min-h-[118px] flex-col items-center justify-center gap-2 rounded-2xl border border-dashed p-3 text-center"
-      style={{ width: 120, borderColor: "var(--vp-border)", background: "transparent" }}
-    >
+    <div className="vp-empty-slot">
       <span
-        className="flex h-10 w-10 items-center justify-center rounded-full border border-dashed"
-        style={{ borderColor: "var(--vp-border)", color: "var(--vp-subtle)" }}
+        className="flex h-7 w-7 items-center justify-center rounded-full border border-dashed"
+        style={{ borderColor: "var(--vp-border)" }}
       >
-        <Plus size={15} />
+        <Plus size={12} />
       </span>
-      <span className="text-[9px] font-semibold" style={{ color: "var(--vp-subtle)" }}>
-        Disponible
-      </span>
-      <span className="text-[8px] font-medium uppercase" style={{ color: "var(--vp-subtle)" }}>
-        {sideLabel(side)}
-      </span>
+      <span>Disponible</span>
+      <small>{sideLabel(side)}</small>
     </div>
   );
 }
 
 function TreeSubtree({ node, side, root, index, collapsed, onToggle, searchQuery, highlightId }) {
   const { bySide, countDescendants } = index;
-  const kids = bySide.get(node.id) || {};
+  const nodeId = String(node.id);
+  const kids = bySide.get(nodeId) || {};
   const realKids = [kids.L, kids.R].filter(Boolean);
-  const showBranches = (root || realKids.length > 0) && !collapsed.has(node.id);
-  const isCollapsed = collapsed.has(node.id);
-  const hiddenCount = realKids.length > 0 && isCollapsed ? countDescendants(node.id) : 0;
-  const highlighted = String(highlightId || "") === String(node.id) || nodeMatches(node, searchQuery);
+  const showBranches = (root || realKids.length > 0) && !collapsed.has(nodeId);
+  const isCollapsed = collapsed.has(nodeId);
+  const hiddenCount = realKids.length > 0 && isCollapsed ? countDescendants(nodeId) : 0;
+  const leftCount = kids.L ? 1 + countDescendants(kids.L.id) : 0;
+  const rightCount = kids.R ? 1 + countDescendants(kids.R.id) : 0;
+  const highlighted = String(highlightId || "") === nodeId || nodeMatches(node, searchQuery);
 
   return (
     <li className="vp-branch">
@@ -292,9 +305,11 @@ function TreeSubtree({ node, side, root, index, collapsed, onToggle, searchQuery
           node={node}
           root={root}
           side={side}
+          leftCount={leftCount}
+          rightCount={rightCount}
           collapsedCount={hiddenCount}
           highlighted={highlighted}
-          onToggle={realKids.length > 0 ? () => onToggle(node.id) : null}
+          onToggle={realKids.length > 0 ? () => onToggle(nodeId) : null}
         />
       </div>
 
@@ -421,8 +436,12 @@ function TreeStatsStrip({ memberCount, maxGen, withPackage }) {
 }
 
 export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, onRefresh, refreshing }) {
-  const rootId = me?.affiliateId ?? "__root__";
-  const index = useTreeIndex(nodes, rootId);
+  const rootId = String(me?.affiliateId ?? "__root__");
+  const treeNodes = useMemo(
+    () => (Array.isArray(nodes) ? nodes : EMPTY_ARRAY).map(normalizeTreeNode).filter(Boolean),
+    [nodes],
+  );
+  const index = useTreeIndex(treeNodes);
 
   const rootNode = useMemo(() => (
     me
@@ -431,7 +450,7 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
           parentId: null,
           name: me.name || "Mi cuenta",
           level: 0,
-          side: me.side,
+          side: canonicalSide(me.side),
           rootSide: null,
           status: me.status,
           activePackage: me.activePackage,
@@ -443,20 +462,20 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
   const byId = useMemo(() => {
     const map = new Map();
     if (rootNode) map.set(String(rootNode.id), rootNode);
-    for (const node of nodes) map.set(String(node.id), node);
+    for (const node of treeNodes) map.set(String(node.id), node);
     return map;
-  }, [nodes, rootNode]);
+  }, [treeNodes, rootNode]);
 
   const branchIds = useMemo(() => {
     const ids = [];
     const rootKids = index.bySide.get(rootId);
     if (rootKids && [rootKids.L, rootKids.R].some(Boolean)) ids.push(rootId);
-    for (const node of nodes) {
-      const kids = index.bySide.get(node.id);
+    for (const node of treeNodes) {
+      const kids = index.bySide.get(String(node.id));
       if (kids && [kids.L, kids.R].some(Boolean)) ids.push(node.id);
     }
     return ids;
-  }, [index, nodes, rootId]);
+  }, [index, treeNodes, rootId]);
 
   const [collapsed, setCollapsed] = useState(() => new Set());
   const knownBranchIds = useRef(new Set(branchIds.map(String)));
@@ -470,8 +489,8 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
   });
   const searchQuery = normalized(search);
   const safetyDepth = useMemo(
-    () => safeVisibleDepth(nodes, Boolean(rootNode)),
-    [nodes, rootNode],
+    () => safeVisibleDepth(treeNodes, Boolean(rootNode)),
+    [treeNodes, rootNode],
   );
 
   useEffect(() => {
@@ -503,8 +522,8 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
 
   const matches = useMemo(() => {
     if (!searchQuery) return [];
-    return [rootNode, ...nodes].filter(Boolean).filter((node) => nodeMatches(node, searchQuery));
-  }, [nodes, rootNode, searchQuery]);
+    return [rootNode, ...treeNodes].filter(Boolean).filter((node) => nodeMatches(node, searchQuery));
+  }, [treeNodes, rootNode, searchQuery]);
 
   const toggle = (id) => {
     setCollapsed((prev) => {
@@ -612,32 +631,32 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
   };
 
   const expandAllLoaded = () => {
-    if (nodes.length + 1 > TREE_EXPAND_ALL_LIMIT) return;
+    if (treeNodes.length + 1 > TREE_EXPAND_ALL_LIMIT) return;
     setCollapsed(new Set());
   };
 
   const { leftCount, rightCount, maxGen, withPackage } = useMemo(() => {
     const stats = { leftCount: 0, rightCount: 0, maxGen: 0, withPackage: 0 };
-    for (const node of nodes) {
+    for (const node of treeNodes) {
       if (node.rootSide === "L") stats.leftCount += 1;
       if (node.rootSide === "R") stats.rightCount += 1;
       if (node.activePackage) stats.withPackage += 1;
       stats.maxGen = Math.max(stats.maxGen, Number(node.level || 0));
     }
     return stats;
-  }, [nodes]);
+  }, [treeNodes]);
   const numericDepth = Number(meta?.depth ?? depth);
   const canLoadNextDepth = depth !== "all"
     && Number.isFinite(numericDepth)
     && numericDepth < MAX_LOAD_LEVELS
     && maxGen >= numericDepth;
-  const memberCount = nodes.length + (rootNode ? 1 : 0);
+  const memberCount = treeNodes.length + (rootNode ? 1 : 0);
   const loadedLevel = meta?.depth === "all"
     ? maxGen
     : Math.max(maxGen, Number(meta?.depth ?? depth ?? 0));
   const filterLabel = meta?.depth === "all" ? "Todos los niveles" : `${meta?.depth ?? depth} niveles`;
 
-  if (!nodes.length && !rootNode) {
+  if (!treeNodes.length && !rootNode) {
     return (
       <NetworkViewCard title="Árbol binario" memberCount={0}>
         <p className="m-0 py-6 text-center text-xs" style={{ color: "var(--vp-muted)" }}>
@@ -650,7 +669,7 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
   return (
     <>
       <TreeStatsStrip memberCount={memberCount} maxGen={maxGen} withPackage={withPackage} />
-      <NetworkViewCard title="Estructura de tu Red" memberCount={memberCount} filterLabel={filterLabel}>
+      <NetworkViewCard title="Vista visual del árbol" memberCount={memberCount} filterLabel={filterLabel}>
       <div className="mb-5 space-y-3">
         <div className="grid gap-3 2xl:grid-cols-2">
             <div className="min-w-0 rounded-xl border p-3" style={{ background: "var(--vp-surface-raised)", borderColor: "var(--vp-border)" }}>
@@ -756,7 +775,7 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
 
       <BalanceBar leftCount={leftCount} rightCount={rightCount} />
 
-      {!nodes.length ? (
+      {!treeNodes.length ? (
         <div
           className="mb-5 flex flex-col items-center gap-2 rounded-xl border border-dashed p-6 text-center"
           style={{ borderColor: "var(--vp-border-strong)" }}
