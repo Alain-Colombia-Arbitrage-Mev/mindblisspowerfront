@@ -41,7 +41,7 @@ export default function PaymentConfirmationPage() {
       try {
         const [r, t] = await Promise.all([
           fetch("/api/payments/me?fresh=1", { cache: "no-store" }),
-          fetch("/api/member/tree", { cache: "no-store" }),
+          fetch("/api/member/tree?view=position", { cache: "no-store" }),
         ]);
         const tree = t.ok ? await t.json().catch(() => null) : null;
         if (tree?.positioned) setPositioned(true);

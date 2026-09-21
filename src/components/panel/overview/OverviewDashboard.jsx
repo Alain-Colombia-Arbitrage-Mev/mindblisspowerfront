@@ -37,7 +37,7 @@ export default function OverviewDashboard() {
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => { if (d && !d.error) setSummary(d); })
       .catch(() => {});
-    fetch("/api/member/tree?depth=6&limit=1000", { cache: "no-store" })
+    fetch("/api/member/tree?depth=4&limit=64", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => { if (d && !d.error) setNetwork(d); })
       .catch(() => {});

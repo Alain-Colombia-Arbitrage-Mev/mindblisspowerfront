@@ -39,7 +39,7 @@ export default function PaymentResultModal() {
       try {
         const [summary, tree] = await Promise.all([
           fetch("/api/payments/me?fresh=1", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
-          fetch("/api/member/tree", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
+          fetch("/api/member/tree?view=position", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
         ]);
         if (cancelled) return;
         const active = Number(summary?.active_packages ?? 0) > 0;

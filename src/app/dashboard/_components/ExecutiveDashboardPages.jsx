@@ -1579,7 +1579,7 @@ export function TeamDashboardPage() {
   const [network, setNetwork] = useState(null);
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/member/tree?depth=10&limit=1500", { cache: "no-store" })
+    fetch("/api/member/tree?depth=6&limit=200", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => { if (!cancelled && d && !d.error) setNetwork(d); })
       .catch(() => {});
@@ -1792,7 +1792,7 @@ export function RankDashboardPage() {
     let cancelled = false;
     Promise.all([
       fetch("/api/member/ranks", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
-      fetch("/api/member/tree", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/member/tree?view=position", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
     ])
       .then(([rk, tree]) => {
         if (cancelled) return;
