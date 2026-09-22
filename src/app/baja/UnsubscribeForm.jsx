@@ -9,7 +9,9 @@ export default function UnsubscribeForm({ token }) {
     const data = await r.json().catch(() => ({}));
     setState({ busy: false, done: r.ok, error: r.ok ? "" : data.error || "No se pudo procesar." });
   };
-  if (state.done) return <p style={{ marginTop: 24 }}>Listo. No volverás a recibir comunicados generales.</p>;
+  // aria-live: el resultado aparece sin cambiar de página, así que un lector de
+  // pantalla no lo anunciaría; "polite" espera a que termine la locución en curso.
+  if (state.done) return <p aria-live="polite" style={{ marginTop: 24 }}>Listo. No volverás a recibir comunicados generales.</p>;
   return (
     <div style={{ marginTop: 24 }}>
       <button
@@ -25,7 +27,7 @@ export default function UnsubscribeForm({ token }) {
       >
         {state.busy ? "Procesando…" : "Confirmar baja"}
       </button>
-      {state.error && <p style={{ color: "#f87171", marginTop: 12 }}>{state.error}</p>}
+      <p aria-live="polite" style={{ color: "#f87171", marginTop: state.error ? 12 : 0 }}>{state.error}</p>
     </div>
   );
 }
