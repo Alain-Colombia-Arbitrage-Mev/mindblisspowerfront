@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { CreditCard, HandCoins, Network } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AlertCircle, CreditCard, HandCoins, LifeBuoy, Network, RefreshCw } from "lucide-react";
+import Link from "next/link";
 
 import PanelFooter from "@/components/panel/PanelFooter";
 import EarningsCard from "./EarningsCard";
@@ -9,45 +10,64 @@ import ReferralLinkCard from "./ReferralLinkCard";
 import PositionSnapshotCard from "./PositionSnapshotCard";
 import RecentSignupsCard from "./RecentSignupsCard";
 import ShortcutPill from "./ShortcutPill";
-import TicketsTodayCard from "./TicketsTodayCard";
 import TopRanksCard from "./TopRanksCard";
 
 const SHORTCUTS = [
-  { icon: HandCoins, label: "Solicitar Retiro", href: "/dashboard/withdrawals" },
-  { icon: Network, label: "Ver Árbol de Red", href: "/dashboard/network" },
-  { icon: CreditCard, label: "Gestionar Pagos", href: "/dashboard/payments" },
+  { icon: HandCoins, label: "Solicitar retiro", href: "/dashboard/withdrawals" },
+  { icon: Network, label: "Ver mi red", href: "/dashboard/network" },
+  { icon: CreditCard, label: "Mis pagos", href: "/dashboard/payments" },
 ];
 
 function usd(value) {
-  return `$${Number(value ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (value == null || !Number.isFinite(Number(value))) return "—";
+  return `$${Number(value).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 /**
  * Overview del miembro con datos REALES:
  *  - saldo/billetera desde /api/payments/me (vp-payments; migración 2.0 ⇒ $0.00)
  *  - red directa, últimos de la red y rangos desde /api/member/tree
- * Sin datos simulados: si un endpoint falla se muestran ceros/listas vacías.
+ * Los fallos de carga no se representan como saldos o posiciones vacios.
  */
 export default function OverviewDashboard() {
   const [summary, setSummary] = useState(null);
   const [network, setNetwork] = useState(null);
+  const [summaryStatus, setSummaryStatus] = useState("loading");
+  const [networkStatus, setNetworkStatus] = useState("loading");
+  const request = useRef(null);
 
   const load = useCallback(() => {
-    fetch("/api/payments/me", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (d && !d.error) setSummary(d); })
-      .catch(() => {});
-    fetch("/api/member/tree?depth=4&limit=64", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (d && !d.error) setNetwork(d); })
-      .catch(() => {});
+    request.current?.abort();
+    const controller = new AbortController();
+    request.current = controller;
+    setSummaryStatus("loading");
+    setNetworkStatus("loading");
+    const loadPart = async (url, setData, setStatus) => {
+      try {
+        const response = await fetch(url, { cache: "no-store", signal: controller.signal });
+        if (!response.ok) throw new Error("unavailable");
+        const data = await response.json();
+        if (!data || data.error) throw new Error("unavailable");
+        if (!controller.signal.aborted) {
+          setData(data);
+          setStatus("ready");
+        }
+      } catch {
+        if (!controller.signal.aborted) setStatus("error");
+      }
+    };
+    return Promise.all([
+      loadPart("/api/payments/me", setSummary, setSummaryStatus),
+      loadPart("/api/member/tree?depth=4&limit=64", setNetwork, setNetworkStatus),
+    ]);
   }, []);
 
   useEffect(() => {
     load();
+    return () => request.current?.abort();
   }, [load]);
 
-  const nodes = network?.positioned ? network.tree : [];
+  const nodes = network?.positioned && Array.isArray(network.tree) ? network.tree : [];
   const directs = nodes.filter((n) => n.level === 1);
 
   const recentSignups = nodes.slice(0, 3).map((n) => {
@@ -71,44 +91,53 @@ export default function OverviewDashboard() {
     }));
 
   return (
-    <div className="relative flex min-h-full flex-col gap-8 p-6 lg:p-10">
-      <span
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 mx-auto h-72 max-w-4xl rounded-full"
-        style={{ background: "var(--vp-accent)", opacity: 0.04, filter: "blur(100px)" }}
-      />
-
-      <div className="flex flex-wrap gap-4">
-        {SHORTCUTS.map((shortcut) => (
-          <ShortcutPill key={shortcut.href} {...shortcut} />
-        ))}
+    <div className="vp-overview flex min-h-full flex-col" aria-busy={summaryStatus === "loading" || networkStatus === "loading"}>
+      <div className="vp-overview-actions">
+        <div className="vp-overview-shortcuts">{SHORTCUTS.map((shortcut) => <ShortcutPill key={shortcut.href} {...shortcut} />)}</div>
+        <button className="vp-shell-icon" type="button" onClick={load} disabled={summaryStatus === "loading" || networkStatus === "loading"} aria-label="Actualizar resumen" title="Actualizar resumen"><RefreshCw size={17} /></button>
       </div>
 
-      <ReferralLinkCard />
-
-      <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-4">
-        <EarningsCard
+      <div className="vp-overview-grid">
+        {summaryStatus === "loading" ? <LoadingPanel label="Cargando billetera" /> : summaryStatus === "error" ? <ErrorPanel title="Billetera no disponible" onRetry={load} /> : <EarningsCard
           total={usd(summary?.wallet_balance_usd)}
           wallet={usd(summary?.available_for_withdrawal_usd)}
           directNetwork={directs.length}
-        />
-        <PositionSnapshotCard network={network} />
+          networkReady={networkStatus === "ready"}
+        />}
+        {networkStatus === "loading" ? <><LoadingPanel label="Cargando posición" /><LoadingPanel label="Cargando red" /></> : networkStatus === "error" ? <ErrorPanel title="Red no disponible" onRetry={load} /> : <>
+          <PositionSnapshotCard network={network} />
         <RecentSignupsCard
           signups={recentSignups}
           pendingCount={Math.max(0, nodes.length - recentSignups.length)}
           onRefresh={load}
           onSeeAll={() => window.location.assign("/dashboard/network")}
         />
-        <TicketsTodayCard pendingCount={0} />
+        </>}
       </div>
+
+      <ReferralLinkCard />
 
       {/* Sin gráfica de "volumen": la directiva árbol 2.0 prohíbe mostrar
           volumen al miembro, y la curva anterior era simulada ($100M falsos). */}
-      <div className="flex flex-col gap-6 xl:flex-row">
-        <TopRanksCard ranks={topRanks} />
+      <div className="vp-overview-secondary">
+        {networkStatus === "ready" ? <TopRanksCard ranks={topRanks} /> : null}
+        <div className="vp-overview-support">
+          <LifeBuoy size={22} style={{ color: "var(--vp-accent)" }} />
+          <h2>Centro de soporte</h2>
+          <p>Consulta tus solicitudes o contacta al equipo de atención.</p>
+          <Link href="/dashboard/support" className="executive-button">Mis solicitudes</Link>
+        </div>
       </div>
 
       <PanelFooter />
     </div>
   );
+}
+
+function LoadingPanel({ label }) {
+  return <section className="vp-overview-loading" role="status" aria-label={label}><span className="sr-only">{label}</span><span aria-hidden="true" /><span aria-hidden="true" /><span aria-hidden="true" /><span aria-hidden="true" /></section>;
+}
+
+function ErrorPanel({ title, onRetry }) {
+  return <section className="vp-overview-error" role="alert"><AlertCircle size={22} style={{ color: "var(--vp-danger)" }} /><h2>{title}</h2><p>No se pudieron consultar los datos. Intenta nuevamente.</p><button type="button" className="executive-button" onClick={onRetry}><RefreshCw size={15} />Reintentar</button></section>;
 }

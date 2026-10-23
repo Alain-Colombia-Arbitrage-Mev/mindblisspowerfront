@@ -1,30 +1,27 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
+import { matchesRoute } from "@/lib/member-navigation.mjs";
 
 export default function SidebarNavGroup({ icon: Icon, label, items, pathname, onNavigate }) {
   const isChildActive = (item) =>
-    item.exact ? pathname === item.href : pathname.startsWith(item.href);
+    item.exact ? pathname === item.href : matchesRoute(pathname, item.href);
   const groupActive = items.some(isChildActive);
-  const [open, setOpen] = useState(groupActive);
-  const expanded = open || groupActive;
+  const [open, setOpen] = useState(null);
+  const expanded = open ?? groupActive;
+  const id = useId();
 
   return (
     <div>
       <button
         type="button"
         aria-expanded={expanded}
-        className="flex h-12 w-full cursor-pointer items-center justify-between rounded-lg px-4"
-        style={{
-          background: groupActive
-            ? "linear-gradient(90deg, rgba(250, 204, 21, 0.1), rgba(250, 204, 21, 0))"
-            : "transparent",
-          border: 0,
-          borderLeft: `2px solid ${groupActive ? "var(--vp-accent)" : "transparent"}`,
-        }}
-        onClick={() => setOpen((current) => !current)}
+        aria-controls={id}
+        className="vp-sidebar-link vp-sidebar-group"
+        data-active={groupActive}
+        onClick={() => setOpen(!expanded)}
       >
         <span className="flex items-center">
           <span className="flex w-7 shrink-0 items-center">
@@ -42,17 +39,13 @@ export default function SidebarNavGroup({ icon: Icon, label, items, pathname, on
       </button>
 
       {expanded ? (
-        <div className="ml-3 mt-1 flex flex-col gap-1 pl-2.5" style={{ borderLeft: "1px solid var(--vp-border)" }}>
+        <div id={id} className="vp-sidebar-children">
           {items.map((item) => {
             const active = isChildActive(item);
             return (
-              <Link key={item.href} href={item.href} onClick={onNavigate} className="block no-underline">
+              <Link key={item.href} href={item.href} onClick={onNavigate} className="vp-sidebar-link" aria-current={active ? "page" : undefined}>
                 <span
-                  className="block rounded-lg px-3 py-2 text-[13px]"
-                  style={{
-                    background: active ? "rgba(250, 204, 21, 0.1)" : "transparent",
-                    color: active ? "var(--vp-accent)" : "var(--vp-muted)",
-                  }}
+                  className="text-[13px]"
                 >
                   {item.label}
                 </span>

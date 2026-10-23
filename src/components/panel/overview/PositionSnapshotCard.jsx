@@ -8,7 +8,7 @@ function sideLabel(side) {
 
 function MiniStat({ label, value }) {
   return (
-    <div className="min-w-0 rounded-xl border px-3 py-2" style={{ background: "var(--vp-bg)", borderColor: "var(--vp-border)" }}>
+    <div className="min-w-0 py-2">
       <p className="m-0 text-[10px] font-semibold" style={{ color: "var(--vp-muted)" }}>
         {label}
       </p>
@@ -60,7 +60,7 @@ export default function PositionSnapshotCard({ network }) {
               <MiniStat label="Pierna" value={sideLabel(me.side)} />
               <MiniStat label="Rango" value={me.rank?.name || "Sin rango"} />
             </div>
-            <div className="rounded-xl border p-3" style={{ background: "var(--vp-bg)", borderColor: "var(--vp-border)" }}>
+            <div className="border-t pt-3" style={{ borderColor: "var(--vp-border)" }}>
               <p className="m-0 text-[10px] font-semibold" style={{ color: "var(--vp-muted)" }}>
                 Padre binario
               </p>

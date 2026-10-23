@@ -55,10 +55,10 @@ export default function ReferralLinkCard() {
   }
 
   return (
-    <div className="rounded-2xl p-5" style={{ background: "var(--vp-surface-raised)", border: "1px solid var(--vp-border)" }}>
+    <div className="vp-overview-referral">
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <Share2 size={18} style={{ color: "var(--vp-accent)" }} />
-        <h3 className="text-sm font-bold" style={{ color: "var(--vp-text)" }}>Tus enlaces de red</h3>
+        <h2 className="text-sm font-bold" style={{ color: "var(--vp-text)" }}>Tus enlaces de red</h2>
         {code ? <span className="ml-auto text-xs font-semibold" style={{ color: "var(--vp-muted)" }}>Código: {code}</span> : null}
       </div>
       <p className="mb-4 text-xs leading-5" style={{ color: "var(--vp-muted)" }}>
