@@ -12,6 +12,25 @@ test('shapeSummary derives margin pct and leg balance', () => {
   assert.equal(out.legBalancePct, 60); // stronger leg share
 });
 
+test('shapeSummary treats decimal strings as numbers when combining binary volumes', () => {
+  const out = shapeSummary({
+    kpis: { inflows: '1000.00', margin: '700.00' },
+    network: { leftVolume: '60.00', rightVolume: '40.00' },
+  });
+  assert.equal(out.marginPct, 70);
+  assert.equal(out.legBalancePct, 60);
+  assert.equal(out.network.leftVolume, 60);
+  assert.equal(out.network.rightVolume, 40);
+});
+
+test('shapeSummary tolerates missing summary sections', () => {
+  for (const raw of [undefined, null, {}, { kpis: null, network: null }]) {
+    const out = shapeSummary(raw);
+    assert.equal(out.marginPct, 0);
+    assert.equal(out.legBalancePct, 50);
+  }
+});
+
 test('marginStatus thresholds', () => {
   assert.equal(marginStatus(70), 'healthy');
   assert.equal(marginStatus(15), 'warning');
