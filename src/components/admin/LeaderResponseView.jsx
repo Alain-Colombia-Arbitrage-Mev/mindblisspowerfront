@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Phone, Mail, AlertCircle, Users, Clock, TrendingUp } from 'lucide-react';
+import { Phone, Mail, Clock } from 'lucide-react';
 
 export default function LeaderResponseView() {
   const [selectedLeader, setSelectedLeader] = useState(null);

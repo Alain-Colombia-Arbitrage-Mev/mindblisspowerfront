@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Zap, CheckCircle, AlertCircle, Clock, TrendingUp } from 'lucide-react';
+import { CheckCircle, AlertCircle, Clock, TrendingUp } from 'lucide-react';
 import AutoModeEngine from '@/lib/AutoModeEngine';
 
 export default function AutoModePanel() {

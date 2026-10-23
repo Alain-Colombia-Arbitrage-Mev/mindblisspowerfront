@@ -3,7 +3,7 @@
  * Step-by-step withdrawal process
  */
 import { useState } from 'react';
-import { X, Check, Download, Mail, DollarSign } from 'lucide-react';
+import { X, Check, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const STEPS = ['info', 'bmp', 'email', 'amount', 'confirm', 'success'];

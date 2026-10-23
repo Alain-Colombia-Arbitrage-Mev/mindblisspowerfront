@@ -1,6 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, AlertTriangle, Clock, DollarSign, Zap } from 'lucide-react';
-import UserManagementEngine from '@/lib/UserManagementEngine';
+import { X, Clock, DollarSign } from 'lucide-react';
 
 export default function NetworkNodePanel({ node, onClose, onAction }) {
   if (!node) return null;

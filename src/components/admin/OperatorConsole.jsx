@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Settings, Eye, AlertCircle } from 'lucide-react';
+import { Settings, Eye } from 'lucide-react';
 
 export default function OperatorConsole() {
   const [activeFilter, setActiveFilter] = useState('all');

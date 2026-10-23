@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Edit2, Pause, Play, Zap } from 'lucide-react';
+import { Plus, Pause, Play } from 'lucide-react';
 
 export default function CampaignManager() {
   const [campaigns, setCampaigns] = useState([

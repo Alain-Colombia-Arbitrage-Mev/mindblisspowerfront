@@ -4,7 +4,6 @@
  * Designed as an operational panel — not a modal, not a card, not a chat.
  */
 import { useState } from 'react';
-import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { getModuleColor } from '@/lib/aiCopilot';
 import {

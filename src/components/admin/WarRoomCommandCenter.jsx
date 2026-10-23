@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
 import { useSimulation } from '@/lib/SimulationEngine';
 import { createWarRoomNavigation } from '@/lib/warRoomNavigationContext';
 import { getRootLeader } from '@/lib/warRoomDataAdapter';

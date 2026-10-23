@@ -1,6 +1,6 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { AlertTriangle, Zap, TrendingUp, Eye } from 'lucide-react';
+import { AlertTriangle, Zap } from 'lucide-react';
 
 /**
  * Visual Overlay Layer

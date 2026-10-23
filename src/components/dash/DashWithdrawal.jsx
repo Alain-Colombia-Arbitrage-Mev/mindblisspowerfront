@@ -1,4 +1,4 @@
-import { Wallet, ExternalLink, Shield, AlertCircle, ArrowRight } from 'lucide-react';
+import { Wallet, ExternalLink, AlertCircle, ArrowRight } from 'lucide-react';
 
 export default function DashWithdrawal() {
   return (

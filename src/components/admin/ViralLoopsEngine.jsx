@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Share2, Gift, Users, TrendingUp, Zap, BarChart3 } from 'lucide-react';
+import { Share2, Gift, Users, BarChart3 } from 'lucide-react';
 import ReferralControl from './ReferralControl';
 import ShareTriggers from './ShareTriggers';
 import RewardLogic from './RewardLogic';

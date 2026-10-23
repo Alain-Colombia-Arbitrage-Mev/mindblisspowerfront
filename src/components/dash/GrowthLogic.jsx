@@ -1,4 +1,4 @@
-import { TrendingUp, Users, Award, Target, ArrowRight, BookOpen } from 'lucide-react';
+import { TrendingUp, Users, Target, ArrowRight, BookOpen } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const fadeUp = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } };

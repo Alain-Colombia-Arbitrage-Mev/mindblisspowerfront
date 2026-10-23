@@ -3,8 +3,8 @@
  * Recursive expansion with progressive node loading
  * PHASES 1-8, 11
  */
-import { useState, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState } from 'react';
+import { motion } from 'framer-motion';
 import { Home } from 'lucide-react';
 import ExpandableTreeNode from './ExpandableTreeNode';
 

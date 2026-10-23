@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { AlertCircle, CheckCircle, Users, Lightbulb, TrendingUp, Target } from 'lucide-react';
+import { AlertCircle, Users, Lightbulb, TrendingUp, Target } from 'lucide-react';
 
 const GUIDE_SECTIONS = [
   {

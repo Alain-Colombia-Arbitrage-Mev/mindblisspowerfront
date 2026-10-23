@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Mail, Phone, Flag, Eye } from 'lucide-react';
 import TeamMemberCard from './TeamMemberCard';
 
 export default function PremiumTeamTable({ members, selectedMember, onSelectMember, selectedMembers, onSelectCheckbox, sortBy, sortOrder, filters, searchTerm, tags, onToggleTag, onMessage, onContact, onView }) {

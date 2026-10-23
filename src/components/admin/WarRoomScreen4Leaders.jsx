@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import AnimatedNumber from '@/components/admin/AnimatedNumber';
-import { Users, Globe, TrendingUp, Award } from 'lucide-react';
+import { Users, Globe, Award } from 'lucide-react';
 
 export default function WarRoomScreen4Leaders({ sim, presentationMode }) {
   const kpis = sim.kpis;

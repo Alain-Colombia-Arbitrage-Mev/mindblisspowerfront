@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
-import { Users, Heart, Globe, Zap } from 'lucide-react';
-import { MOVEMENT_TERMS, MOVEMENT_MESSAGING } from '@/lib/movementLanguage';
+import { Users, Heart, Globe } from 'lucide-react';
+import { MOVEMENT_TERMS } from '@/lib/movementLanguage';
 
 const fadeUp = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } };
 

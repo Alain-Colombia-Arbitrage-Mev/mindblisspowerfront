@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Clock, Filter, Download, Star, UserPlus, Award, DollarSign, ArrowUp } from 'lucide-react';
-import { DCard, PageHeader, SectionLabel, Badge, FilterBar, DisclaimerBox, PrimaryBtn } from './DashShared';
+import { Download, Star, UserPlus, Award, DollarSign, ArrowUp } from 'lucide-react';
+import { DCard, PageHeader, SectionLabel, Badge, DisclaimerBox, PrimaryBtn } from './DashShared';
 
 const eventTypes = { activation: { icon: Star, color: '#f59e0b' }, referral: { icon: UserPlus, color: '#22c55e' }, rank: { icon: Award, color: '#a78bfa' }, cycle: { icon: DollarSign, color: '#3b82f6' }, milestone: { icon: ArrowUp, color: '#60a5fa' } };
 

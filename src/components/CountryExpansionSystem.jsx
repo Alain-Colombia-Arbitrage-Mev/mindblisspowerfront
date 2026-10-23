@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { Globe, User, CheckCircle2, Lock, AlertCircle, TrendingUp } from 'lucide-react';
+import { Globe, CheckCircle2, Lock, AlertCircle, TrendingUp } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function CountryExpansionSystem() {

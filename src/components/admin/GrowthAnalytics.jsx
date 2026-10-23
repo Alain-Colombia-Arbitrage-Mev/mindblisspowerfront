@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { TrendingUp, Calendar, Download } from 'lucide-react';
+import { Download } from 'lucide-react';
 import GrowthMetricsCards from './GrowthMetricsCards';
 import GrowthCharts from './GrowthCharts';
 import GrowthComparison from './GrowthComparison';

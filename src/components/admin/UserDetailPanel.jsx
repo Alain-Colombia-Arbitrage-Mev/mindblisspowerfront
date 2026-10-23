@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Mail, Phone, Calendar, Shield, Edit2, CheckCircle, AlertCircle, Send } from 'lucide-react';
+import { X, Mail, Phone, Shield, CheckCircle, Send } from 'lucide-react';
 import UserManagementEngine from '@/lib/UserManagementEngine';
 
 const STATUS_COLORS = {

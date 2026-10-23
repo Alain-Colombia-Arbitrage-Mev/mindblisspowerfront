@@ -1,4 +1,4 @@
-import { Star, Award, Zap, Users, CheckCircle, TrendingUp, Lock } from 'lucide-react';
+import { CheckCircle, Lock } from 'lucide-react';
 
 const achievements = [
   { icon: '🚀', label: 'Primer acceso', desc: 'Ingresaste al sistema', unlocked: true },

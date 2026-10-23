@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle, AlertCircle, Zap, Clock } from 'lucide-react';
+import { CheckCircle, Zap, Clock } from 'lucide-react';
 import AIBrainEngine from '@/lib/AIBrainEngine';
 
 export default function AIBrainActions() {

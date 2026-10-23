@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { AlertTriangle, CheckCircle2, TrendingUp, Zap, Copy, MousePointer, RefreshCw } from 'lucide-react';
+import { AlertTriangle, TrendingUp, Zap, Copy, MousePointer, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function AIControlDashboard() {

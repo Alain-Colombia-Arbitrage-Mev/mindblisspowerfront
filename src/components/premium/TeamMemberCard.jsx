@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MessageSquare, Phone, Mail, Eye } from 'lucide-react';
+import { MessageSquare, Phone, Eye } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { getRankColor, getInvestmentStatusColor } from './LiveIndicator';
 import NetworkGraphEngine from './NetworkGraphEngine';

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
   import { motion, AnimatePresence } from 'framer-motion';
-  import { X, TrendingUp, Users, DollarSign, AlertCircle, Loader2, ChevronUp, Home, ChevronLeft } from 'lucide-react';
+  import { X, TrendingUp, Users, DollarSign, AlertCircle, ChevronUp, Home } from 'lucide-react';
   import { useNavigate } from 'react-router-dom';
   import useButtonAction from '@/hooks/useButtonAction';
   import WarRoomActionPanel from './WarRoomActionPanel';

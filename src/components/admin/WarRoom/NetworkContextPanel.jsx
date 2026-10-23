@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { ChevronUp, Share2, AlertCircle, Users } from 'lucide-react';
+import { ChevronUp, AlertCircle, Users } from 'lucide-react';
 import unifiedDataEngine from '@/lib/UnifiedDataEngine';
 
 export default function NetworkContextPanel({ node }) {

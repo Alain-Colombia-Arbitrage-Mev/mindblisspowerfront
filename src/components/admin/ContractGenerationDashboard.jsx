@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FileText, CheckCircle, Clock, Send, Eye, Plus, Filter } from 'lucide-react';
+import { FileText, CheckCircle, Clock, Send, Eye } from 'lucide-react';
 import ContractGenerator from '@/lib/ContractGenerator';
 import { motion } from 'framer-motion';
 

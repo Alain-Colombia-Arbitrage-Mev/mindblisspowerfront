@@ -1,8 +1,7 @@
-import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useStatus } from '@/hooks/useStatus';
 import StatusBadge from './StatusBadge';
-import { CheckCircle, ArrowRight, TrendingUp, Calendar, BookOpen, Shield as ShieldIcon } from 'lucide-react';
+import { CheckCircle, ArrowRight, Calendar, BookOpen, Shield as ShieldIcon } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 
 const fadeUp = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } };

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { User, Lock, Bell, Globe, Wallet, Eye, Shield, ChevronRight } from 'lucide-react';
+import { User, Lock, Bell, Globe, Wallet, Eye } from 'lucide-react';
 
 const C = ({ children, style }) => (
   <div style={{ background: 'linear-gradient(135deg, #0d1f3c, #0a1628)', border: '1px solid rgba(59,130,246,0.18)', borderRadius: 16, padding: 20, ...style }}>

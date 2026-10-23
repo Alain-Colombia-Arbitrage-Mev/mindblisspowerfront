@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import useActivityLog from '@/hooks/useActivityLog';
-import { Activity, CheckCircle2, AlertCircle, Clock } from 'lucide-react';
+import { Activity, CheckCircle2, AlertCircle } from 'lucide-react';
 
 /**
  * Admin Activity Feed

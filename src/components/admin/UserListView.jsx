@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Edit2, Ban, RefreshCw, Mail, Lock, Trash2 } from 'lucide-react';
+import { Search, Edit2, Ban, RefreshCw } from 'lucide-react';
 import UserManagementEngine from '@/lib/UserManagementEngine';
 
 const STATUS_COLORS = {

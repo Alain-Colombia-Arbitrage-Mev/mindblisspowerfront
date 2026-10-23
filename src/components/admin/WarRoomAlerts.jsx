@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { AlertTriangle, ShieldAlert, TrendingDown, Clock, Users } from 'lucide-react';
+import { AlertTriangle, ShieldAlert, TrendingDown, Clock } from 'lucide-react';
 import AIPriorityFeed from './AIPriorityFeed';
 
 const CRITICAL_ALERTS = [

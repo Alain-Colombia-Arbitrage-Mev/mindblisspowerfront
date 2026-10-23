@@ -14,7 +14,7 @@ import {
 import {
   Brain, ShieldAlert, TrendingUp, Users, BarChart3, CreditCard,
   BookOpen, Headphones, Zap, ListChecks, ChevronRight, Info,
-  Lightbulb, AlertTriangle, Activity, ArrowUpRight
+  Lightbulb, AlertTriangle
 } from 'lucide-react';
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────

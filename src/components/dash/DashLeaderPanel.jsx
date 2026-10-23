@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Users, TrendingUp, Lock, CheckCircle, AlertCircle, Phone, Mail, UserPlus, Share2, Target, BookOpen, Activity, Award, Lightbulb, GraduationCap, Clock } from 'lucide-react';
+import { Lock, CheckCircle, AlertCircle, Phone, Mail, UserPlus, Activity, Lightbulb } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const fadeUp = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } };

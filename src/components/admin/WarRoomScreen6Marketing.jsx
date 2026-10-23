@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import AnimatedNumber from '@/components/admin/AnimatedNumber';
-import { Zap, Target, TrendingUp, BarChart3 } from 'lucide-react';
+import { Target, TrendingUp, BarChart3 } from 'lucide-react';
 
 export default function WarRoomScreen6Marketing({ sim, presentationMode }) {
   const campaigns = [

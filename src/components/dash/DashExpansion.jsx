@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Zap, Users, Repeat, MessageCircle, ChevronDown, ChevronUp, TrendingUp, Shield, Calendar, Play, CheckCircle, ArrowRight } from 'lucide-react';
+import { Zap, Users, Repeat, MessageCircle, ChevronDown, ChevronUp, TrendingUp, Calendar, CheckCircle, ArrowRight } from 'lucide-react';
 
 const C = ({ children, style }) => (
   <div style={{ background: 'linear-gradient(135deg, #0d1f3c, #0a1628)', border: '1px solid rgba(59,130,246,0.18)', borderRadius: 16, padding: 20, ...style }}>

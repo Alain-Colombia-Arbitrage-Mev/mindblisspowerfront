@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { X, Radar, AlertTriangle, TrendingDown, Users } from 'lucide-react';
+import { X, Radar, TrendingDown, Users } from 'lucide-react';
 
 export default function NetworkAuditScan({ node, onClose }) {
   const [scanning, setScanning] = useState(true);

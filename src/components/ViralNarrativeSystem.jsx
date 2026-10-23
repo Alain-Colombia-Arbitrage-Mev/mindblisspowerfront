@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, AlertCircle, CheckCircle, Zap } from 'lucide-react';
-import { VIRAL_SCRIPTS, VIDEO_GUIDELINES, CONTENT_PILLARS, ANTI_PATTERNS } from '@/lib/viralScripts';
+import { AlertCircle, CheckCircle, Zap } from 'lucide-react';
+import { VIRAL_SCRIPTS, VIDEO_GUIDELINES, CONTENT_PILLARS } from '@/lib/viralScripts';
 
 const fadeUp = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } };
 

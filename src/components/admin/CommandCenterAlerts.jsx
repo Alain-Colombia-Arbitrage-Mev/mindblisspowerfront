@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { AlertTriangle, AlertCircle, Zap, X } from 'lucide-react';
+import { AlertTriangle, AlertCircle, X } from 'lucide-react';
 import { useState } from 'react';
 
 export default function CommandCenterAlerts() {

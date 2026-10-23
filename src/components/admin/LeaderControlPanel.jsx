@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Users, DollarSign, AlertTriangle, TrendingUp, Activity } from 'lucide-react';
+import { Users, DollarSign, AlertTriangle, Activity } from 'lucide-react';
 
 export default function LeaderControlPanel({ leader, network }) {
   if (!leader || !network) return null;

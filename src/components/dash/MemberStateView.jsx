@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Lock, CheckCircle, TrendingUp, Users, Shield, BookOpen, ChevronRight, Unlock, Star, Zap } from 'lucide-react';
+import { Lock, CheckCircle, TrendingUp, Users, Shield, ChevronRight, Unlock, Star, Zap } from 'lucide-react';
 
 const STATES = {
   basic: {

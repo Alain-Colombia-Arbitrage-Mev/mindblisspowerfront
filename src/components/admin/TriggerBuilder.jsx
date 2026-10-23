@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { Zap, Plus } from 'lucide-react';
+import { Zap } from 'lucide-react';
 
 export default function TriggerBuilder({ onSelect }) {
   const triggers = [

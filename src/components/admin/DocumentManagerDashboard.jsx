@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Filter, Archive, Eye, Download, Trash2, FileText, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import { Search, Archive, Eye, Trash2, FileText, CheckCircle, Clock, AlertCircle } from 'lucide-react';
 import DocumentManager from '@/lib/DocumentManager';
 import { motion } from 'framer-motion';
 

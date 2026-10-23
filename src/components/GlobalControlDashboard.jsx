@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { AlertTriangle, TrendingUp, Users, Activity, CheckCircle2, Clock, Zap } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function GlobalControlDashboard() {

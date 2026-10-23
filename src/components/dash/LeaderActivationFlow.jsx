@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Lock, CheckCircle, ArrowRight, BookOpen, MessageCircle, Play, Link2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 

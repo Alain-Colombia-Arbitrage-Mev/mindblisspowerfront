@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, AlertTriangle, Clock, CheckCircle2, ArrowRight } from 'lucide-react';
+import { X, AlertTriangle, Clock, ArrowRight } from 'lucide-react';
 
 export default function WarRoomFocusView({ isOpen, onClose, item, type }) {
   if (!item) return null;

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Edit2, Trash2, Clock } from 'lucide-react';
+import { Plus, Trash2, Clock } from 'lucide-react';
 
 export default function ContentScheduler() {
   const [contents, setContents] = useState([

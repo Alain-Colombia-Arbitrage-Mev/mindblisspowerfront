@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Loader2, CheckCircle, AlertTriangle, Lock, Unlock } from 'lucide-react';
+import { Loader2, CheckCircle, Lock } from 'lucide-react';
 
 const fadeUp = { hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0 } };
 

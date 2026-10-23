@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { AlertTriangle, CheckCircle, Clock, Zap, TrendingUp, FileText, Signature } from 'lucide-react';
+import { AlertTriangle, CheckCircle } from 'lucide-react';
 import LegalAI from '@/lib/LegalAI';
 import { motion } from 'framer-motion';
 

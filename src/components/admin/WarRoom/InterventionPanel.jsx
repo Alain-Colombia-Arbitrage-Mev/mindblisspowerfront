@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, Shield, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
+import { X, CheckCircle, Loader2 } from 'lucide-react';
 import dataConsistency from '@/lib/DataConsistencyHelper';
 
 export default function InterventionPanel({ node, onClose, onApply }) {

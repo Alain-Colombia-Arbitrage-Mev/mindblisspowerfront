@@ -2,7 +2,8 @@ import { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { X, Bell } from 'lucide-react';
-import { getPriorityColor } from '@/lib/notificationEngine';
+// Preserve legacy notification-data initialization.
+import '@/lib/notificationEngine';
 
 export default function NotificationPanel({ notifications, onClose }) {
   const navigate = useNavigate();

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Filter, CheckCircle, AlertCircle, Clock, BarChart3, Download } from 'lucide-react';
+import { Search, CheckCircle, AlertCircle, Clock, BarChart3, Download } from 'lucide-react';
 import LegalAuditSystem from '@/lib/LegalAuditSystem';
 import { motion } from 'framer-motion';
 

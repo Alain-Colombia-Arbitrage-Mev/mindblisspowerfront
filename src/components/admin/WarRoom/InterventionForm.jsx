@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, CheckCircle2, AlertCircle } from 'lucide-react';
+import { X, CheckCircle2 } from 'lucide-react';
 
 const INTERVENTION_TYPES = ['capacitación', 'auditoría', 'seguimiento', 'cambio_asesor', 'suspensión_temporal', 'otro'];
 const PRIORITIES = ['baja', 'media', 'alta', 'crítica'];

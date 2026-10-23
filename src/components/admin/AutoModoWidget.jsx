@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Zap, AlertCircle, CheckCircle, Clock, Settings } from 'lucide-react';
+import { Zap, AlertCircle, CheckCircle, Clock } from 'lucide-react';
 import AutoModeEngineV2 from '@/lib/AutoModeEngineV2';
 
 export default function AutoModoWidget({ compact = false }) {

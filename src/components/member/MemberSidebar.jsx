@@ -1,7 +1,7 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Home, Network, Users, TrendingUp, Mail, DollarSign, Activity, HelpCircle, User, Lock, Zap, Power, Cpu, ShoppingBag, Share2, Wallet, ArrowUpRight, FileText } from 'lucide-react';
 import { getUserType, getModuleVisibility, USER_TYPES } from '@/lib/userTypeEngine';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 
 const ALL_SECTIONS = [
   {

@@ -6,9 +6,8 @@
 
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, ChevronDown, X, Users, TrendingUp } from 'lucide-react';
+import { Search, Users } from 'lucide-react';
 import DNAPanel from '@/components/DNAPanel';
-import dashboardDataService from '@/lib/DashboardDataService';
 import unifiedDataEngine from '@/lib/UnifiedDataEngine';
 
 export default function AdminUsersPanel() {

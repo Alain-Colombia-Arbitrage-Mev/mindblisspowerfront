@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CheckCircle, AlertCircle, Clock } from 'lucide-react';
+import { CheckCircle, AlertCircle } from 'lucide-react';
 
 export default function AutomationLogs() {
   const [logs] = useState([

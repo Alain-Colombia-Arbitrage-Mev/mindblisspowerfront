@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Eye, EyeOff, Zap, Settings } from 'lucide-react';
+import { Eye, EyeOff, Zap } from 'lucide-react';
 
 /**
  * Overlay Control Panel

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AlertCircle, Calculator, TrendingUp, Users, Award } from 'lucide-react';
+import { AlertCircle, Calculator, Users, Award } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 const C = ({ children, style }) => (

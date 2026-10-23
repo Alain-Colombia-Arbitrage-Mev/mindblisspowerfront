@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle, X, AlertCircle } from 'lucide-react';
+import { CheckCircle } from 'lucide-react';
 import AutoModeEngine from '@/lib/AutoModeEngine';
 
 export default function ApprovalQueue({ onApprove }) {

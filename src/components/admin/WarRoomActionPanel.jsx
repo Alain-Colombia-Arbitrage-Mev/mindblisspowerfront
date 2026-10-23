@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { generateApprovalQueue, generateEscalationQueue } from '@/lib/AutoModeEngine';
-import { Clock, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Zap } from 'lucide-react';
+import { Clock, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react';
 
 export default function WarRoomActionPanel({ onActionClick }) {
   const approvals = generateApprovalQueue().filter(a => a.status === 'pending');

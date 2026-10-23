@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, AlertTriangle, CheckCircle, Clock, Mail } from 'lucide-react';
+import { X, AlertTriangle, CheckCircle, Mail } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 
 export default function AlertCenter() {

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Send, CheckCircle, AlertCircle, Clock } from 'lucide-react';
+import { Send, CheckCircle, Clock } from 'lucide-react';
 
 export default function PlatformPublisher() {
   const [publishQueue, setPublishQueue] = useState([

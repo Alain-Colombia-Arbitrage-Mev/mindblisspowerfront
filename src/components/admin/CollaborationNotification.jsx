@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
-import { base44 } from '@/api/base44Client';
+// Preserve legacy SDK and browser-parameter initialization.
+import '@/api/base44Client';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertCircle, CheckCircle, UserPlus, AlertTriangle, Bell } from 'lucide-react';
 

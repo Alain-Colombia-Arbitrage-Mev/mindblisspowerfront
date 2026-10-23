@@ -3,7 +3,7 @@
  */
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, ChevronRight, Play, CheckCircle2, Clock, X, Users, AlertTriangle } from 'lucide-react';
+import { ChevronDown, ChevronRight, Play, CheckCircle2, Clock, X, Users } from 'lucide-react';
 
 const SEV_COLOR = { critical: '#ef4444', high: '#fb923c', medium: '#f59e0b', low: '#6b7280' };
 const STATUS_CONFIG = {

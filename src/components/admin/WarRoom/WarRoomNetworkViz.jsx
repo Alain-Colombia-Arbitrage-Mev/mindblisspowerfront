@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { useState, useMemo } from 'react';
-import { ChevronUp, Home, ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronUp, Home, ChevronRight } from 'lucide-react';
 import { getRootLeader, getWarRoomLeaders, getWarRoomLeaderById } from '@/lib/warRoomDataAdapter';
 
 /**

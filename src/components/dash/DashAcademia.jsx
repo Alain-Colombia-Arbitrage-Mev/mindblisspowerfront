@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BookOpen, CheckCircle, Lock, Play, Star, Award, ChevronRight } from 'lucide-react';
+import { CheckCircle, Lock, Play, ChevronRight } from 'lucide-react';
 
 const courses = [
   {

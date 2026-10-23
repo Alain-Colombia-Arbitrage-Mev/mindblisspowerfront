@@ -9,7 +9,6 @@
  * - Branch strength indicators
  */
 
-import BinaryTreeCalculationEngine from '@/lib/BinaryTreeCalculationEngine';
 
 class NetworkGraphEngine {
   /**

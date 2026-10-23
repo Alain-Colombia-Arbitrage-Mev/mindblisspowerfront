@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Brain, Zap, ListChecks, AlertTriangle } from 'lucide-react';
+import { Brain, Zap, AlertTriangle } from 'lucide-react';
 
 export default function WarRoomScreen5AI({ sim, presentationMode }) {
   // Sample AI decisions and actions

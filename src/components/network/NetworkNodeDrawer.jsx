@@ -4,7 +4,7 @@
  */
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, Mail, Phone, Globe, MessageSquare, User, Star, Activity, ChevronRight, Eye } from 'lucide-react';
+import { X, Mail, Phone, Globe, MessageSquare, User, Star, Activity, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const SIDE_COLOR = {
