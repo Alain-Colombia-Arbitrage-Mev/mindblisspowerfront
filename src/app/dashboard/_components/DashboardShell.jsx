@@ -7,6 +7,7 @@ import PanelHeader from "@/components/panel/PanelHeader";
 import PanelSidebar from "@/components/panel/PanelSidebar";
 import NavigationDrawer from "@/components/panel/NavigationDrawer";
 import { memberPageFor } from "@/lib/member-navigation.mjs";
+import { MemberSessionContext } from "@/lib/member-session-context";
 import "@/components/panel/panel-shell.css";
 
 export default function DashboardShell({ authMode, children }) {
@@ -26,7 +27,12 @@ export default function DashboardShell({ authMode, children }) {
         .then((r) => r.json())
         .then((d) => {
           if (cancelled) return;
-          if (d?.name || d?.email) setMember({ name: d.name, email: d.email });
+          if (d?.name || d?.email)
+            setMember({
+              name: d.name,
+              email: d.email,
+              referralCode: d.referralCode,
+            });
         })
         .catch(() => {});
     };
@@ -52,24 +58,38 @@ export default function DashboardShell({ authMode, children }) {
   const { title, section } = memberPageFor(pathname);
 
   return (
-    <div className="vp-dashboard-shell">
-      <a className="vp-skip-link" href="#member-main">Ir al contenido</a>
-      <NavigationDrawer open={mobileMenuOpen} onClose={closeMenu}>
-        <PanelSidebar pathname={pathname} member={member} onNavigate={closeMenu} />
-      </NavigationDrawer>
-      <aside className="vp-panel-sidebar">
-        <PanelSidebar pathname={pathname} member={member} />
-      </aside>
+    <MemberSessionContext.Provider value={member}>
+      <div className="vp-dashboard-shell">
+        <a className="vp-skip-link" href="#member-main">
+          Ir al contenido
+        </a>
+        <NavigationDrawer open={mobileMenuOpen} onClose={closeMenu}>
+          <PanelSidebar
+            pathname={pathname}
+            member={member}
+            onNavigate={closeMenu}
+          />
+        </NavigationDrawer>
+        <aside className="vp-panel-sidebar">
+          <PanelSidebar pathname={pathname} member={member} />
+        </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <PanelHeader
-          title={title}
-          section={section}
-          mobileMenuOpen={mobileMenuOpen}
-          onToggleMobileMenu={() => setMobileMenuOpen((current) => !current)}
-        />
-        <main id="member-main" tabIndex={-1} className="vp-dashboard-main flex-1 overflow-y-auto">{children}</main>
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <PanelHeader
+            title={title}
+            section={section}
+            mobileMenuOpen={mobileMenuOpen}
+            onToggleMobileMenu={() => setMobileMenuOpen((current) => !current)}
+          />
+          <main
+            id="member-main"
+            tabIndex={-1}
+            className="vp-dashboard-main flex-1 overflow-y-auto"
+          >
+            {children}
+          </main>
+        </div>
       </div>
-    </div>
+    </MemberSessionContext.Provider>
   );
 }

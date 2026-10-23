@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNetworkHealth } from "@/lib/useNetworkHealth";
 import { useSustainability } from "@/lib/useSustainability";
+import { useMemberSession } from "@/lib/member-session-context";
+import { readRankCatalog } from "@/lib/rank-catalog.mjs";
 import ReferralModule from "@/components/member/ReferralModule";
 import SupportTicketForm from "./SupportTicketForm";
 import {
@@ -197,16 +199,8 @@ function Field({ label, children }) {
 }
 
 export function DashboardOverviewPage() {
-  const [referral, setReferral] = useState("");
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/auth/session", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d) => { if (!cancelled && d?.referralCode) setReferral(d.referralCode); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, []);
-  const displayReferral = referral || member.referralCode;
+  const session = useMemberSession();
+  const displayReferral = session?.referralCode || member.referralCode;
   return (
     <section className="executive-page">
       <div className="executive-container">
@@ -851,7 +845,8 @@ function normalizeProfilePhone(value) {
 export function ProfileDashboardPage() {
   const [twoFactor, setTwoFactor] = useState(false);
   const [digest, setDigest] = useState(true);
-  const [me, setMe] = useState({ name: "", email: "", referralCode: "" });
+  const session = useMemberSession();
+  const me = { name: session?.name || "", email: session?.email || "", referralCode: session?.referralCode || "" };
   const [summary, setSummary] = useState(null);
   const [form, setForm] = useState({ name: "", phone: "", country: "", payout_wallet_usdc: "" });
   const [phoneVerify, setPhoneVerify] = useState({ sending: false, confirming: false, pending: false, code: "", type: "", text: "" });
@@ -861,12 +856,6 @@ export function ProfileDashboardPage() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/auth/session", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d) => {
-        if (!cancelled && d) setMe({ name: d.name || "", email: d.email || "", referralCode: d.referralCode || "" });
-      })
-      .catch(() => {});
     fetch("/api/payments/me", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => { if (!cancelled && d && !d.error) setSummary(d); })
@@ -1791,7 +1780,7 @@ export function RankDashboardPage() {
   useEffect(() => {
     let cancelled = false;
     Promise.all([
-      fetch("/api/member/ranks", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
+      readRankCatalog(),
       fetch("/api/member/tree?view=position", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
     ])
       .then(([rk, tree]) => {
