@@ -6,7 +6,8 @@ import { rateLimit, __resetRateLimit } from "./rate-limit.js";
 test("allows up to the limit then blocks within the window", () => {
   __resetRateLimit();
   const t0 = 1_000_000;
-  const rule = (now) => rateLimit([{ key: "a", limit: 3, windowMs: 60_000 }], now);
+  const rule = (now) =>
+    rateLimit([{ key: "a", limit: 3, windowMs: 60_000 }], now);
 
   assert.equal(rule(t0).allowed, true);
   assert.equal(rule(t0 + 1).allowed, true);
@@ -45,7 +46,13 @@ test("multi-rule is atomic: a blocked email rule does not consume the IP rule", 
   // La IP no debió contar el 2º intento: aún tiene 99 de cupo.
   let allowed = 0;
   for (let i = 0; i < 99; i += 1) {
-    if (rateLimit([{ key: "ip:1.2.3.4", limit: 100, windowMs: 60_000 }], now + 2 + i).allowed) allowed += 1;
+    if (
+      rateLimit(
+        [{ key: "ip:1.2.3.4", limit: 100, windowMs: 60_000 }],
+        now + 2 + i,
+      ).allowed
+    )
+      allowed += 1;
   }
   assert.equal(allowed, 99);
 });
@@ -53,7 +60,43 @@ test("multi-rule is atomic: a blocked email rule does not consume the IP rule", 
 test("separate keys are independent", () => {
   __resetRateLimit();
   const now = 4_000_000;
-  assert.equal(rateLimit([{ key: "k1", limit: 1, windowMs: 60_000 }], now).allowed, true);
-  assert.equal(rateLimit([{ key: "k1", limit: 1, windowMs: 60_000 }], now + 1).allowed, false);
-  assert.equal(rateLimit([{ key: "k2", limit: 1, windowMs: 60_000 }], now + 1).allowed, true);
+  assert.equal(
+    rateLimit([{ key: "k1", limit: 1, windowMs: 60_000 }], now).allowed,
+    true,
+  );
+  assert.equal(
+    rateLimit([{ key: "k1", limit: 1, windowMs: 60_000 }], now + 1).allowed,
+    false,
+  );
+  assert.equal(
+    rateLimit([{ key: "k2", limit: 1, windowMs: 60_000 }], now + 1).allowed,
+    true,
+  );
+});
+
+test("counter storage is bounded without evicting active OTP budgets", () => {
+  __resetRateLimit();
+  const now = 5_000_000;
+  for (let index = 0; index < 50_000; index++) {
+    assert.equal(
+      rateLimit([{ key: `key:${index}`, limit: 2, windowMs: 3_600_000 }], now)
+        .allowed,
+      true,
+    );
+  }
+  assert.deepEqual(
+    rateLimit([{ key: "overflow", limit: 1, windowMs: 60_000 }], now),
+    { allowed: false, retryAfterSec: 60 },
+  );
+  assert.equal(
+    rateLimit([{ key: "key:0", limit: 2, windowMs: 3_600_000 }], now).allowed,
+    true,
+  );
+  assert.equal(
+    rateLimit(
+      [{ key: "overflow", limit: 1, windowMs: 60_000 }],
+      now + 3_600_001,
+    ).allowed,
+    true,
+  );
 });

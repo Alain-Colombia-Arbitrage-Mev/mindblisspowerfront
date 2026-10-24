@@ -26,6 +26,7 @@ export const PRESETS = {
   verify: { ip: { limit: 10, windowMs: MIN }, email: { limit: 10, windowMs: MIN } },
   // Alta de cuenta.
   register: { ip: { limit: 15, windowMs: MIN } },
+  catalog: { email: { limit: 5, windowMs: MIN } },
   // Baja de comunicados: NO envía correo, y un comunicado a toda la base
   // concentra miles de bajas en pocos minutos. Detrás de un CGNAT o del proxy
   // de imágenes/enlaces de Gmail muchas personas comparten IP, así que el

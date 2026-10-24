@@ -49,7 +49,16 @@ export function authRateLimit(request, { name, preset, email }) {
   if (result.allowed) return null;
 
   return NextResponse.json(
-    { error: tooManyMessage(result.retryAfterSec), retryAfterSec: result.retryAfterSec },
-    { status: 429, headers: { "Retry-After": String(result.retryAfterSec) } }
+    {
+      error: tooManyMessage(result.retryAfterSec),
+      retryAfterSec: result.retryAfterSec,
+    },
+    {
+      status: 429,
+      headers: {
+        "Retry-After": String(result.retryAfterSec),
+        "Cache-Control": "private, no-store",
+      },
+    },
   );
 }

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 
 import { memberDb } from "@/lib/member-db";
 import { verifiedEmailFromIdToken } from "@/lib/verify-id-token";
+import { memberReadLimit, withMemberTreeCapacity } from "@/lib/member-read-policy.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,13 +24,20 @@ export async function GET(request) {
   const idToken = cookieStore.get("vp_id_token")?.value;
 
   if (!idToken) {
-    return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+    return NextResponse.json({ error: "unauthenticated" }, { status: 401, headers: { "Cache-Control": "private, no-store" } });
   }
 
   const email = await verifiedEmailFromIdToken(idToken);
   if (!email) {
-    return NextResponse.json({ error: "session-invalid" }, { status: 401 });
+    return NextResponse.json({ error: "session-invalid" }, { status: 401, headers: { "Cache-Control": "private, no-store" } });
   }
+
+  const limited = memberReadLimit(email, positionOnly ? "position" : "tree");
+  if (limited) return limited;
+  return withMemberTreeCapacity(() => readTree(email, { positionOnly, depthLimit, rowLimit, queryLimit }));
+}
+
+async function readTree(email, { positionOnly, depthLimit, rowLimit, queryLimit }) {
 
   let sql;
   try {
