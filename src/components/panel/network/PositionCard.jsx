@@ -32,7 +32,7 @@ function StatBox({ label, value, tone = "accent" }) {
   );
 }
 
-function LegRow({ label, occupant }) {
+function LegRow({ label, occupant, known }) {
   return (
     <div
       className="flex min-w-0 items-center justify-between gap-3 rounded-xl border p-3"
@@ -48,9 +48,9 @@ function LegRow({ label, occupant }) {
           background: occupant ? "var(--vp-accent-muted)" : "var(--vp-surface-raised)",
           borderColor: occupant ? "var(--vp-accent-border)" : "var(--vp-border)",
         }}
-        title={occupant || "Disponible"}
+        title={occupant || (known ? "Disponible" : "Sin cargar")}
       >
-        {occupant || "Disponible"}
+        {occupant || (known ? "Disponible" : "Sin cargar")}
       </span>
     </div>
   );
@@ -78,6 +78,7 @@ export default function PositionCard({
   referral,
   leftLeg,
   rightLeg,
+  childSlotsKnown = false,
 }) {
   const [copied, setCopied] = useState(false);
   const hasRankProgress = Boolean(rankProgress);
@@ -163,8 +164,8 @@ export default function PositionCard({
       </div>
 
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <LegRow label="Pierna izquierda" occupant={leftLeg} />
-        <LegRow label="Pierna derecha" occupant={rightLeg} />
+        <LegRow label="Pierna izquierda" occupant={leftLeg} known={childSlotsKnown} />
+        <LegRow label="Pierna derecha" occupant={rightLeg} known={childSlotsKnown} />
       </div>
 
       <div

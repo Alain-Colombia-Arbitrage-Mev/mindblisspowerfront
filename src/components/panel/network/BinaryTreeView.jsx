@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 
 import NetworkViewCard from "./NetworkViewCard";
+import { buildBinaryTreeIndex, canonicalSide, childSlotState } from "@/lib/tree-read-model.mjs";
 
 const EMPTY_ARRAY = [];
 const INITIAL_LOAD_LEVELS = 4;
@@ -38,13 +39,6 @@ function initialsOf(name) {
     .map((part) => part[0])
     .join("")
     .toUpperCase();
-}
-
-function canonicalSide(side) {
-  const value = String(side || "").trim().toUpperCase();
-  if (["L", "LEFT", "IZQ", "IZQUIERDA"].includes(value)) return "L";
-  if (["R", "RIGHT", "DER", "DERECHA"].includes(value)) return "R";
-  return null;
 }
 
 function sideLabel(side, short = false) {
@@ -83,30 +77,7 @@ function nodeMatches(node, query) {
 
 /** Índice padre -> { L, R } y contador de descendientes por nodo. */
 function useTreeIndex(nodes) {
-  return useMemo(() => {
-    const bySide = new Map(); // parentId -> { L?, R? }
-    for (const node of nodes || EMPTY_ARRAY) {
-      const key = node.parentId == null ? null : String(node.parentId);
-      const side = canonicalSide(node.side);
-      if (!key || !side) continue;
-      if (!bySide.has(key)) bySide.set(key, {});
-      if (!bySide.get(key)[side]) bySide.get(key)[side] = node;
-    }
-    const countCache = new Map();
-    const countDescendants = (id) => {
-      if (countCache.has(id)) return countCache.get(id);
-      const kids = bySide.get(String(id));
-      let total = 0;
-      if (kids) {
-        for (const child of Object.values(kids)) {
-          total += 1 + countDescendants(child.id);
-        }
-      }
-      countCache.set(id, total);
-      return total;
-    };
-    return { bySide, countDescendants };
-  }, [nodes]);
+  return useMemo(() => buildBinaryTreeIndex(nodes || EMPTY_ARRAY), [nodes]);
 }
 
 function collectVisibleRows(rootNode, index, collapsed) {
@@ -186,6 +157,10 @@ function NodeCard({ node, root, side, leftCount = 0, rightCount = 0, collapsedCo
     <div
       id={`member-tree-node-${node.id}`}
       className="vp-node"
+      data-node-id={node.id}
+      data-parent-id={node.parentId ?? undefined}
+      data-side={side || undefined}
+      data-unavailable={unavailable || undefined}
       style={{
         background: unavailable ? "#050505" : highlighted ? "color-mix(in srgb, var(--vp-accent) 11%, var(--vp-surface-raised))" : "var(--vp-surface-raised)",
         borderColor: unavailable ? "#27272a" : root || highlighted ? "var(--vp-accent)" : "var(--vp-border)",
@@ -198,7 +173,7 @@ function NodeCard({ node, root, side, leftCount = 0, rightCount = 0, collapsedCo
         <span
           className="flex h-12 w-12 items-center justify-center rounded-full text-sm font-bold"
           style={{
-            background: unavailable ? "#1e2a8a" : "linear-gradient(135deg, #1f2937 0%, #374151 100%)",
+            background: "var(--vp-surface)",
             color: avatarText,
           }}
         >
@@ -223,7 +198,7 @@ function NodeCard({ node, root, side, leftCount = 0, rightCount = 0, collapsedCo
         <span className="truncate">{rankLabel}</span>
       </span>
 
-      <span className="grid w-full grid-cols-2 overflow-hidden rounded-lg border text-left" style={{ background: "var(--vp-bg)", borderColor: "var(--vp-border)" }}>
+      <span className="vp-node-metrics grid w-full grid-cols-2 overflow-hidden border text-left" style={{ background: "var(--vp-bg)", borderColor: "var(--vp-border)" }}>
         <span className="min-w-0 px-1.5 py-1">
           <span className="block text-[7px] font-black uppercase tracking-wide" style={{ color: "var(--vp-subtle)" }}>Red I</span>
           <span className="block truncate text-[9px] font-bold" style={{ color: unavailable ? "#ffffff" : "var(--vp-text)" }}>{compactNumber(leftCount)}</span>
@@ -234,7 +209,7 @@ function NodeCard({ node, root, side, leftCount = 0, rightCount = 0, collapsedCo
         </span>
       </span>
 
-      <span className="text-[9px] font-medium" style={{ color: "var(--vp-muted)" }}>
+      <span className="vp-node-position" style={{ color: "var(--vp-muted)" }}>
         {root ? "Tu cuenta" : sideLabel(side)} · #{node.id}
       </span>
 
@@ -242,7 +217,7 @@ function NodeCard({ node, root, side, leftCount = 0, rightCount = 0, collapsedCo
         {!onToggle ? (
           <span className="inline-flex items-center gap-1 text-[9px] font-semibold" style={{ color: online ? "var(--vp-accent)" : "var(--vp-muted)" }}>
             <CheckCircle2 size={10} />
-            {unavailable ? "Not Available" : online ? "Activo" : "Inactivo"}
+            {unavailable ? "Not Available" : node.hasChildren && node.childrenComplete === false ? "Rama sin cargar" : online ? "Activo" : "Inactivo"}
           </span>
         ) : null}
 
@@ -271,22 +246,22 @@ function NodeCard({ node, root, side, leftCount = 0, rightCount = 0, collapsedCo
   );
 }
 
-function EmptySlot({ side }) {
+function EmptySlot({ side, state }) {
   return (
-    <div className="vp-empty-slot">
+    <div className="vp-empty-slot" data-slot-state={state}>
       <span
         className="flex h-7 w-7 items-center justify-center rounded-full border border-dashed"
         style={{ borderColor: "var(--vp-border)" }}
       >
-        <Plus size={12} />
+        {state === "available" ? <Plus size={14} /> : <Layers size={14} />}
       </span>
-      <span>Disponible</span>
+      <span>{state === "available" ? "Disponible" : "Sin cargar"}</span>
       <small>{sideLabel(side)}</small>
     </div>
   );
 }
 
-function TreeSubtree({ node, side, root, index, collapsed, onToggle, searchQuery, highlightId }) {
+function TreeSubtree({ node, side, root, index, collapsed, onToggle, searchQuery, highlightId, path = [] }) {
   const { bySide, countDescendants } = index;
   const nodeId = String(node.id);
   const kids = bySide.get(nodeId) || {};
@@ -297,6 +272,7 @@ function TreeSubtree({ node, side, root, index, collapsed, onToggle, searchQuery
   const leftCount = kids.L ? 1 + countDescendants(kids.L.id) : 0;
   const rightCount = kids.R ? 1 + countDescendants(kids.R.id) : 0;
   const highlighted = String(highlightId || "") === nodeId || nodeMatches(node, searchQuery);
+  if (path.includes(nodeId)) return <li className="vp-branch" role="alert">Ruta cíclica · #{nodeId}</li>;
 
   return (
     <li className="vp-branch">
@@ -330,11 +306,12 @@ function TreeSubtree({ node, side, root, index, collapsed, onToggle, searchQuery
                       onToggle={onToggle}
                       searchQuery={searchQuery}
                       highlightId={highlightId}
+                      path={[...path, nodeId]}
                     />
                   </ul>
                 ) : (
                   <div className="vp-branch-node">
-                    <EmptySlot side={childSide} />
+                    <EmptySlot side={childSide} state={childSlotState(node, child)} />
                   </div>
                 )}
               </li>
@@ -355,11 +332,11 @@ function BalanceBar({ leftCount, rightCount }) {
   return (
     <div className="mb-5 space-y-2">
       <div className="flex items-center justify-between gap-3 text-[10px] font-bold uppercase">
-        <span style={{ color: "var(--vp-text-soft)" }}>Izquierda · {leftCount}</span>
+        <span style={{ color: "var(--vp-text-soft)" }}>Izq. cargada · {leftCount}</span>
         <span style={{ color: "var(--vp-muted)" }}>
           {total ? (balanced === 0 ? "Equilibrado" : `Diferencia ${balanced}`) : "Sin descendientes"}
         </span>
-        <span style={{ color: "var(--vp-text-soft)" }}>{rightCount} · Derecha</span>
+        <span style={{ color: "var(--vp-text-soft)" }}>{rightCount} · Der. cargada</span>
       </div>
       <div className="flex h-2.5 w-full overflow-hidden rounded-full" style={{ background: "var(--vp-surface-raised)" }}>
         <div style={{ width: `${total ? leftPct : 50}%`, background: "var(--vp-accent)" }} />
@@ -414,8 +391,8 @@ function TreeSearchResults({ matches, onOpen }) {
 
 function TreeStatsStrip({ memberCount, maxGen, withPackage }) {
   const stats = [
-    { Icon: Users, label: `${compactNumber(memberCount)} en tu red` },
-    { Icon: Layers, label: `Nivel ${compactNumber(maxGen)} alcanzado` },
+    { Icon: Users, label: `${compactNumber(memberCount)} nodos cargados` },
+    { Icon: Layers, label: `Nivel ${compactNumber(maxGen)} cargado` },
     { Icon: Package, label: `${compactNumber(withPackage)} con paquete` },
   ];
 
@@ -437,6 +414,16 @@ function TreeStatsStrip({ memberCount, maxGen, withPackage }) {
 
 export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, onRefresh, refreshing }) {
   const rootId = String(me?.affiliateId ?? "__root__");
+  const canvasRef = useRef(null);
+  useEffect(() => {
+    const center = () => {
+      const canvas = canvasRef.current;
+      if (canvas) canvas.scrollLeft = Math.max(0, (canvas.scrollWidth - canvas.clientWidth) / 2);
+    };
+    center();
+    window.addEventListener("resize", center);
+    return () => window.removeEventListener("resize", center);
+  }, [rootId]);
   const treeNodes = useMemo(
     () => (Array.isArray(nodes) ? nodes : EMPTY_ARRAY).map(normalizeTreeNode).filter(Boolean),
     [nodes],
@@ -454,6 +441,8 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
           rootSide: null,
           status: me.status,
           activePackage: me.activePackage,
+          hasChildren: me.hasChildren,
+          childrenComplete: me.childrenComplete,
           rank: me.rank ? { code: me.rank.code, name: me.rank.name } : null,
         }
       : null
@@ -477,7 +466,13 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
     return ids;
   }, [index, treeNodes, rootId]);
 
-  const [collapsed, setCollapsed] = useState(() => new Set());
+  const safetyDepth = useMemo(
+    () => safeVisibleDepth(treeNodes, Boolean(rootNode)),
+    [treeNodes, rootNode],
+  );
+  const [collapsed, setCollapsed] = useState(() => new Set(
+    safetyDepth == null ? [] : branchIds.filter((id) => Number(byId.get(String(id))?.level || 0) >= safetyDepth).map(String),
+  ));
   const knownBranchIds = useRef(new Set(branchIds.map(String)));
   const [search, setSearch] = useState("");
   const [highlightId, setHighlightId] = useState("");
@@ -488,10 +483,6 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
       : INITIAL_LOAD_LEVELS;
   });
   const searchQuery = normalized(search);
-  const safetyDepth = useMemo(
-    () => safeVisibleDepth(treeNodes, Boolean(rootNode)),
-    [treeNodes, rootNode],
-  );
 
   useEffect(() => {
     const currentIds = new Set(branchIds.map(String));
@@ -651,9 +642,7 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
     && numericDepth < MAX_LOAD_LEVELS
     && maxGen >= numericDepth;
   const memberCount = treeNodes.length + (rootNode ? 1 : 0);
-  const loadedLevel = meta?.depth === "all"
-    ? maxGen
-    : Math.max(maxGen, Number(meta?.depth ?? depth ?? 0));
+  const loadedLevel = maxGen;
   const filterLabel = meta?.depth === "all" ? "Todos los niveles" : `${meta?.depth ?? depth} niveles`;
 
   if (!treeNodes.length && !rootNode) {
@@ -667,12 +656,12 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
   }
 
   return (
-    <>
+    <div className="member-binary-workspace">
       <TreeStatsStrip memberCount={memberCount} maxGen={maxGen} withPackage={withPackage} />
       <NetworkViewCard title="Vista visual del árbol" memberCount={memberCount} filterLabel={filterLabel}>
       <div className="mb-5 space-y-3">
-        <div className="grid gap-3 2xl:grid-cols-2">
-            <div className="min-w-0 rounded-xl border p-3" style={{ background: "var(--vp-surface-raised)", borderColor: "var(--vp-border)" }}>
+        <div className="member-tree-toolbar">
+            <div className="member-tree-control-group">
               <div className="mb-2 flex items-center justify-between gap-4 px-1">
                 <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: "var(--vp-text-soft)" }}>
                   Profundidad cargada
@@ -715,9 +704,9 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
                   <Download size={13} />
                   Cargar y mostrar
                 </TreeButton>
-                <TreeButton active={depth === "all"} onClick={loadAllLevels} disabled={refreshing} title="Cargar todos los niveles disponibles de tu red">
+                <TreeButton active={depth === "all"} onClick={loadAllLevels} disabled={refreshing} title="Consultar hasta 5000 nodos sin limitar generaciones">
                   <Layers size={13} />
-                  Todos mis niveles
+                  Vista ampliada
                 </TreeButton>
                 <TreeButton onClick={onRefresh} disabled={refreshing} title="Actualizar árbol">
                   <RefreshCw size={13} className={refreshing ? "animate-spin" : ""} />
@@ -726,7 +715,8 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
               </div>
             </div>
 
-            <div className="min-w-0 rounded-xl border p-3" style={{ background: "var(--vp-surface-raised)", borderColor: "var(--vp-border)" }}>
+            <details className="member-tree-control-group member-tree-advanced">
+              <summary><GitBranch size={14} aria-hidden="true" />Ramas visibles · Nivel {visibleLevel}</summary>
               <div className="mb-2 flex items-center justify-between gap-4 px-1">
                 <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: "var(--vp-text-soft)" }}>
                   Ramas visibles
@@ -757,7 +747,7 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
                   Colapsar todo
                 </TreeButton>
               </div>
-            </div>
+            </details>
         </div>
 
         <label className="relative block w-full">
@@ -774,6 +764,7 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
       </div>
 
       <BalanceBar leftCount={leftCount} rightCount={rightCount} />
+      {index.issues.length ? <p role="alert" className="border-y py-3 text-sm" style={{ color: "var(--vp-danger)", borderColor: "var(--vp-danger-border)" }}>La lectura contiene posiciones duplicadas. Requiere revisión; no se han movido nodos.</p> : null}
 
       {!treeNodes.length ? (
         <div
@@ -820,15 +811,17 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
         <span className="flex items-center gap-1.5">
           <span className="h-2 w-2 rounded-full" style={{ background: "var(--vp-border)" }} /> Disponible
         </span>
+        <span className="flex items-center gap-1.5"><AlertTriangle size={12} style={{ color: "var(--vp-danger)" }} />Not Available</span>
+        <span className="flex items-center gap-1.5"><Layers size={12} />Sin cargar</span>
         <span className="ml-auto flex items-center gap-1" style={{ color: searchQuery ? "var(--vp-accent)" : "var(--vp-subtle)" }}>
           <ChevronDown size={11} />
-          {searchQuery ? `${matches.length} coincidencia${matches.length === 1 ? "" : "s"}` : "Toca +/− para desplegar ramas"}
+          {searchQuery ? `${matches.length} coincidencia${matches.length === 1 ? "" : "s"}` : ""}
         </span>
       </div>
 
       {searchQuery ? <TreeSearchResults matches={matches} onOpen={expandToNode} /> : null}
 
-      <div className="vp-tree-scroll">
+      <div className="vp-tree-scroll" ref={canvasRef}>
         <div className="vp-tree">
           <ul className="vp-children-root">
             <TreeSubtree
@@ -845,6 +838,6 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
         </div>
       </div>
       </NetworkViewCard>
-    </>
+    </div>
   );
 }
