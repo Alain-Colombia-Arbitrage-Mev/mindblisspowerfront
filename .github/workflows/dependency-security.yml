@@ -1,0 +1,22 @@
+name: Dependency security
+on:
+  pull_request:
+  push:
+    branches: [main, staging, feature/security-dependencies-20261024]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.16.0
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm audit --audit-level=low
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build

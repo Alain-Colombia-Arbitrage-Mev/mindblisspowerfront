@@ -49,6 +49,8 @@ jobs:
         with: { node-version: 22 }
       - name: Install deps
         run: npm ci --no-audit --no-fund
+      - name: Dependency security gate
+        run: npm audit --audit-level=low
       - name: Typecheck gate
         run: npm run typecheck
       - name: Lint gate
