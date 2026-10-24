@@ -1,3 +1,22 @@
+/**
+ * @typedef {Object} OnboardingDraft
+ * @property {string} [email]
+ * @property {string} [fullName]
+ * @property {string} [phone]
+ * @property {string} [country]
+ * @property {string} [city]
+ * @property {string} [documentType]
+ * @property {string} [documentNumber]
+ * @property {string} [birthDate]
+ * @property {string} [address]
+ * @property {string} [preferredLanguage]
+ * @property {string} [communicationChannel]
+ * @property {string} [memberInterest]
+ * @property {string} [supportNeeds]
+ * @property {boolean} [acceptsPrivacy]
+ * @property {boolean} [acceptsCommunications]
+ */
+
 function clean(value) {
   return String(value || "").trim();
 }
@@ -10,12 +29,14 @@ export function normalizeOnboardingEmail(value) {
  * Mezcla el borrador del navegador con la identidad verificada del servidor.
  * Si hay sesión, el email de Cognito es autoritativo y nunca reutilizamos datos
  * locales pertenecientes a otra cuenta que haya usado el mismo dispositivo.
+ * @param {{stored?: OnboardingDraft, session?: {email?: string, authenticated?: boolean, name?: string}, profile?: {first_name?: string, last_name?: string, phone?: string, country?: string}, onboarding?: {city?: string, document_type?: string, document_number?: string, birth_date?: string, address?: string, preferred_language?: string, communication_channel?: string, member_interest?: string, support_needs?: string, accepts_privacy?: boolean, accepts_communications?: boolean}}} [identity]
  */
 export function mergeOnboardingIdentity({ stored = {}, session = {}, profile = {}, onboarding = {} } = {}) {
   const sessionEmail = normalizeOnboardingEmail(session.email);
   const storedEmail = normalizeOnboardingEmail(stored.email);
   const authenticated = Boolean(session.authenticated && sessionEmail);
   const sameAccountDraft = !authenticated || storedEmail === sessionEmail;
+  /** @type {OnboardingDraft} */
   const merged = sameAccountDraft ? { ...stored } : {};
 
   if (!authenticated) {
@@ -59,6 +80,7 @@ export function mergeOnboardingIdentity({ stored = {}, session = {}, profile = {
 /**
  * Lista blanca para el borrador del navegador. Si el formulario incorpora
  * campos nuevos en el futuro, no terminarán en localStorage por accidente.
+ * @param {OnboardingDraft} [data]
  */
 export function toBrowserOnboardingDraft(data = {}) {
   return {

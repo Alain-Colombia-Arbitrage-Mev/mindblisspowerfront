@@ -3,7 +3,6 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Menu, X, ChevronRight, Globe, Twitter, Instagram, Linkedin, Facebook, ArrowRight } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import NotificationBell from './NotificationBell';
-import ConversionButton from './ConversionButton';
 import LiveActivityNotification from './LiveActivityNotification';
 
 // LOCKED NAVIGATION STRUCTURE — DO NOT MODIFY

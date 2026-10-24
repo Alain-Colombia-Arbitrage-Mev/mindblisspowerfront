@@ -1,5 +1,4 @@
 import { motion } from 'framer-motion';
-import { Lock } from 'lucide-react';
 
 export default function AchievementBadge({ achievement, index = 0 }) {
   const { unlocked, icon, label, desc, color, xp } = achievement;

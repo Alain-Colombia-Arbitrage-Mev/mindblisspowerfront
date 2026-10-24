@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { AlertTriangle, TrendingUp, Users, CreditCard, Crown, ShoppingBag } from 'lucide-react';
+import { AlertTriangle, Crown, ShoppingBag } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import AlertCenter from './AlertCenter';
 

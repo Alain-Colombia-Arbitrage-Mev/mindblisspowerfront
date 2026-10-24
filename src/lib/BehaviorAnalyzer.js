@@ -51,7 +51,7 @@ class BehaviorAnalyzer {
 
   calculateActivityLevel(user, history) {
     // Based on last activity and history count
-    const daysInactive = (Date.now() - new Date(user.lastActivity)) / (1000 * 60 * 60 * 24);
+    const daysInactive = (Date.now() - (new Date(user.lastActivity)).getTime()) / (1000 * 60 * 60 * 24);
     const activityScore = Math.max(0, 100 - (daysInactive * 5));
     const historyBonus = Math.min(30, history.length * 2);
     return Math.min(100, activityScore + historyBonus);
@@ -73,7 +73,7 @@ class BehaviorAnalyzer {
     riskScore += overduePayments * 10;
 
     // Inactivity risk
-    const daysInactive = (Date.now() - new Date(user.lastActivity)) / (1000 * 60 * 60 * 24);
+    const daysInactive = (Date.now() - (new Date(user.lastActivity)).getTime()) / (1000 * 60 * 60 * 24);
     if (daysInactive > 30) riskScore += 20;
 
     // Low commitment risk
@@ -106,7 +106,7 @@ class BehaviorAnalyzer {
       }).map(u => u.id),
 
       abandonedAccounts: users.filter(u => {
-        const daysInactive = (Date.now() - new Date(u.lastActivity)) / (1000 * 60 * 60 * 24);
+        const daysInactive = (Date.now() - (new Date(u.lastActivity)).getTime()) / (1000 * 60 * 60 * 24);
         return daysInactive > 60;
       }).map(u => u.id),
     };

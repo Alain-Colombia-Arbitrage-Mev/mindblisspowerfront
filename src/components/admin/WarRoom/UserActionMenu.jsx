@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Eye, DownloadCloud, Clock, DollarSign, FileText, LogIn, Users, AlertTriangle, Award, Zap, ChevronRight } from 'lucide-react';
+import { Eye, Clock, DollarSign, FileText, LogIn, Users, AlertTriangle, Award, Zap, ChevronRight } from 'lucide-react';
 
 const actions = [
   { icon: Eye, label: 'Ver perfil completo', type: 'profile', color: '#3b82f6' },

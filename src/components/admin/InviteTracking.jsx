@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BarChart3, TrendingUp } from 'lucide-react';
+import { TrendingUp } from 'lucide-react';
 
 export default function InviteTracking() {
   const [metrics] = useState({

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { TrendingUp, Info } from 'lucide-react';
+import { Info } from 'lucide-react';
 
 export default function SimulationEngine() {
   const [level, setLevel] = useState(5000);

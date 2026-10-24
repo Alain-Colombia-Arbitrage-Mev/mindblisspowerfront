@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Share2, MessageCircle, Lightbulb, ChevronDown } from 'lucide-react';
+import { Share2, MessageCircle, Lightbulb } from 'lucide-react';
 import ReferralLink from './ReferralLink';
 import ReferralScripts from './ReferralScripts';
 import GrowthGuide from './GrowthGuide';
@@ -113,7 +113,7 @@ export default function InternalGrowthHub({ user }) {
         transition={{ duration: 0.3 }}
       >
         {expandedSection === 'link' && (
-          <ReferralLink userId={user?.id || 'user123'} userName={user?.full_name || 'Usuario'} />
+          <ReferralLink />
         )}
         {expandedSection === 'scripts' && (
           <ReferralScripts />

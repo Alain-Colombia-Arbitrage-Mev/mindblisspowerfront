@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { useSimulation } from '@/lib/SimulationEngine';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Check, X, Zap, Pause, Play, AlertTriangle, Menu, Settings, TrendingUp } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Check, X, Zap, Pause, Play, AlertTriangle, Menu, TrendingUp } from 'lucide-react';
 
 const TabletControlMode = () => {
   const [currentScreen, setCurrentScreen] = useState(0);

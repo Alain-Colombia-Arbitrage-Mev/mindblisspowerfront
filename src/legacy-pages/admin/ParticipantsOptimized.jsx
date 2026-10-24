@@ -201,7 +201,7 @@ export default function ParticipantsOptimized() {
                         </span>
                       </td>
                       <td className="px-3 py-2.5"><span className="px-1.5 py-0.5 rounded text-xs font-semibold" style={{ background: `${sc.color}15`, color: sc.color }}>{sc.label}</span></td>
-                      <td className="px-3 py-2.5"><span style={{ color: p.verified ? '#10b981' : '#fb923c' }}>{'✓' || '○'}</span></td>
+                      <td className="px-3 py-2.5"><span style={{ color: p.verified === true ? '#10b981' : '#fb923c' }}>{p.verified === true ? '✓' : '○'}</span></td>
                       <td className="px-3 py-2.5">
                         <span style={{ color: p.activity === 'high' ? '#10b981' : p.activity === 'medium' ? '#fb923c' : '#6b7280' }}>
                           {p.activity === 'high' ? '🟢' : p.activity === 'medium' ? '🟡' : '⚫'}

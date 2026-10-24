@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { X, Mail, Phone, Globe, Flag, MessageSquare } from 'lucide-react';
+import { X, Mail, Phone, Globe, MessageSquare } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import platformDataCore from '@/lib/platformDataCore';
 

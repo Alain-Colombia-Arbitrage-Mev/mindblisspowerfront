@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { Heart, MessageCircle, Share, Eye } from 'lucide-react';
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export default function EngagementMetrics() {
   const [metrics] = useState({

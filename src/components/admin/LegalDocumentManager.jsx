@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FileText, CheckCircle, Clock, AlertCircle, Download, Eye, Zap } from 'lucide-react';
+import { FileText, CheckCircle, Clock, AlertCircle, Eye, Zap } from 'lucide-react';
 import LegalFramework from '@/lib/LegalFramework';
 import { motion } from 'framer-motion';
 

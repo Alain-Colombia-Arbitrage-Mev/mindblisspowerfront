@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, TrendingUp } from 'lucide-react';
+import { Plus } from 'lucide-react';
 
 export default function GrowthExperiments() {
   const [experiments, setExperiments] = useState([

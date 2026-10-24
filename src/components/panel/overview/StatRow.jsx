@@ -1,10 +1,9 @@
 import { ArrowUp } from "lucide-react";
 
-export default function StatRow({ icon: Icon, label, value, trendUp }) {
+export default function StatRow({ icon: Icon, label, value, trendUp = false }) {
   return (
     <div
-      className="flex items-center justify-between rounded-2xl p-4"
-      style={{ background: "var(--vp-bg)", border: "1px solid var(--vp-border)" }}
+      className="vp-stat-row flex items-center justify-between rounded-2xl p-4"
     >
       <span className="flex items-center gap-3">
         <span

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { Globe, CheckCircle2, Lock, AlertCircle, Zap } from 'lucide-react';
+import { Globe, CheckCircle2, AlertCircle, Zap } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function CulturalMessagingAdapter() {

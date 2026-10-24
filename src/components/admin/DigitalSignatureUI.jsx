@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CheckCircle, Clock, AlertCircle, Signature, Copy, Download, Eye } from 'lucide-react';
+import { CheckCircle, Signature, Copy, Download } from 'lucide-react';
 import DigitalSignatureSystem from '@/lib/DigitalSignatureSystem';
 import { motion } from 'framer-motion';
 

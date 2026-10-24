@@ -6,7 +6,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { analyzeGrowth, PRIORITY } from '@/lib/aiGrowthEngine';
+import { analyzeGrowth } from '@/lib/aiGrowthEngine';
 import { Sparkles, ArrowRight, RefreshCw, ChevronRight } from 'lucide-react';
 
 const ACTION_ICONS = {

@@ -81,7 +81,7 @@ class PatternDetector {
       .map(u => ({
         userId: u.id,
         name: u.name,
-        daysInactive: Math.floor((Date.now() - new Date(u.lastActivity)) / (1000 * 60 * 60 * 24)),
+        daysInactive: Math.floor((Date.now() - (new Date(u.lastActivity)).getTime()) / (1000 * 60 * 60 * 24)),
         pattern: 'potential_churn',
       }));
   }

@@ -27,7 +27,7 @@ function AnimatedNumber({ value, prefix = '', suffix = '', duration = 1200 }) {
   );
 }
 
-export default function FinancialKPICard({ icon, label, value, prefix = '', suffix = '', unit, color, live = false, delay = 0, subValue, subLabel }) {
+export default function FinancialKPICard({ icon = null, label, value, prefix = '', suffix = '', unit, color, live = false, delay = 0, subValue = undefined, subLabel = '' }) {
   const accentColor = color || 'var(--vp-accent)';
 
   return (

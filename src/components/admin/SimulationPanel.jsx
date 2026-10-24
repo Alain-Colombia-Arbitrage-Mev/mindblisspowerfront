@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, Pause, RotateCcw, Zap, Activity, Clock, AlertCircle } from 'lucide-react';
+import { Play, Pause, RotateCcw, Zap, Activity, Clock } from 'lucide-react';
 import { simEngine, useSimulation } from '@/lib/SimulationEngine';
 import AnimatedNumber from '@/components/admin/AnimatedNumber';
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Users, Filter, Maximize2, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
+import { Maximize2, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
 
 const statColor = 'rgba(255,255,255,0.5)';
 const C = ({ children, style }) => (

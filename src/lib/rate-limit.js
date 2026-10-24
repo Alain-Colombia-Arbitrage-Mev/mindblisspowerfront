@@ -15,14 +15,12 @@ let lastSweep = 0;
 
 const HOUR_MS = 3_600_000;
 const SWEEP_EVERY_MS = 60_000;
-const SWEEP_SIZE = 20_000;
+const MAX_BUCKETS = 50_000;
 
 function prune(key, windowMs, now) {
   let hits = buckets.get(key);
   if (!hits) {
-    hits = [];
-    buckets.set(key, hits);
-    return hits;
+    return [];
   }
   const cutoff = now - windowMs;
   // Los timestamps entran en orden creciente, así que basta con recortar el frente.
@@ -33,10 +31,11 @@ function prune(key, windowMs, now) {
 }
 
 function maybeSweep(now) {
-  if (now - lastSweep < SWEEP_EVERY_MS && buckets.size < SWEEP_SIZE) return;
+  if (now - lastSweep < SWEEP_EVERY_MS) return;
   lastSweep = now;
   for (const [key, hits] of buckets) {
-    if (hits.length === 0 || hits[hits.length - 1] <= now - HOUR_MS) buckets.delete(key);
+    if (hits.length === 0 || hits[hits.length - 1] <= now - HOUR_MS)
+      buckets.delete(key);
   }
 }
 
@@ -54,18 +53,29 @@ function maybeSweep(now) {
  * @returns {{allowed:boolean, retryAfterSec:number}}
  */
 export function rateLimit(rules, now = Date.now()) {
+  maybeSweep(now);
   let blockedRetry = 0;
   for (const rule of rules) {
     const hits = prune(rule.key, rule.windowMs, now);
     if (hits.length >= rule.limit) {
-      const retryAfterSec = Math.max(1, Math.ceil((hits[0] + rule.windowMs - now) / 1000));
+      const retryAfterSec = Math.max(
+        1,
+        Math.ceil((hits[0] + rule.windowMs - now) / 1000),
+      );
       if (retryAfterSec > blockedRetry) blockedRetry = retryAfterSec;
     }
   }
   if (blockedRetry > 0) return { allowed: false, retryAfterSec: blockedRetry };
 
-  for (const rule of rules) buckets.get(rule.key).push(now);
-  maybeSweep(now);
+  const newKeys = new Set(
+    rules.filter((rule) => !buckets.has(rule.key)).map((rule) => rule.key),
+  );
+  if (buckets.size + newKeys.size > MAX_BUCKETS)
+    return { allowed: false, retryAfterSec: 60 };
+  for (const rule of rules) {
+    if (!buckets.has(rule.key)) buckets.set(rule.key, []);
+    buckets.get(rule.key).push(now);
+  }
   return { allowed: true, retryAfterSec: 0 };
 }
 
@@ -76,7 +86,10 @@ export function rateLimit(rules, now = Date.now()) {
  * evadir los límites por IP (p.ej. el preset "register", que es solo-IP). */
 export function clientIp(request) {
   const xff = request.headers.get("x-forwarded-for") || "";
-  const hops = xff.split(",").map((h) => h.trim()).filter(Boolean);
+  const hops = xff
+    .split(",")
+    .map((h) => h.trim())
+    .filter(Boolean);
   const ip = hops.length > 0 ? hops[hops.length - 1] : "";
   return ip || request.headers.get("x-real-ip") || "unknown";
 }

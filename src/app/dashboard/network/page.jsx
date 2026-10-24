@@ -12,6 +12,8 @@ import NetworkTabs, { NETWORK_TABS } from "@/components/panel/network/NetworkTab
 import OperativeListView from "@/components/panel/network/OperativeListView";
 import PositionCard from "@/components/panel/network/PositionCard";
 import RankView from "@/components/panel/network/RankView";
+import { treeRefreshFailure } from "@/lib/tree-read-model.mjs";
+import { readMemberParts, validMemberTree, validMemberSummary, validMemberReferral } from "@/lib/member-read.mjs";
 
 function StatusCard({ children }) {
   return (
@@ -94,7 +96,7 @@ function paymentStatusCopy(status, active) {
   };
 }
 
-function DetailTile({ icon: Icon, label, value, accent }) {
+function DetailTile({ icon: Icon, label, value, accent = false }) {
   return (
     <div
       className="flex min-w-0 items-start gap-3 rounded-xl border p-4"
@@ -118,6 +120,15 @@ function DetailTile({ icon: Icon, label, value, accent }) {
   );
 }
 
+function ReadIssues({ state, onRetry }) {
+  const issues = [["Pagos", state.summaryError], ["Enlaces de red", state.referralError]].filter(([, error]) => error);
+  if (!issues.length) return null;
+  return <div role="alert" className="flex flex-wrap items-center gap-3 border-y py-3 text-sm" style={{ borderColor: "var(--vp-amber-border)", color: "var(--vp-amber)" }}>
+    <ShieldAlert size={18} /><div className="min-w-0 flex-1">{issues.map(([label, error]) => <p key={label} className="m-0">{label}: {error.message}</p>)}</div>
+    <button type="button" className="executive-button" onClick={onRetry} disabled={state.refreshing}><RefreshCw size={16} />Reintentar</button>
+  </div>;
+}
+
 export default function NetworkPage() {
   const searchParams = useSearchParams();
   const requestedTab = searchParams.get("tab");
@@ -125,7 +136,7 @@ export default function NetworkPage() {
   const [tab, setTab] = useState("tree");
   const [treeDepth, setTreeDepth] = useState("4");
   const [refreshTick, setRefreshTick] = useState(0);
-  const [state, setState] = useState({ loading: true, refreshing: false, error: "", data: null, summary: null, referral: null, syncing: false });
+  const [state, setState] = useState({ loading: true, refreshing: false, error: "", errorStatus: 0, refreshError: "", data: null, summary: null, referral: null, summaryError: null, referralError: null, syncing: false });
 
   useEffect(() => {
     if (validTabs.has(requestedTab)) {
@@ -143,51 +154,42 @@ export default function NetworkPage() {
     const load = async () => {
       const firstTry = tries === 0;
       tries += 1;
-      if (firstTry) {
-        setState((prev) => ({ ...prev, loading: !prev.data, refreshing: Boolean(prev.data), error: "", syncing: false }));
-      }
+      if (firstTry) setState((prev) => ({ ...prev, loading: !prev.data, refreshing: Boolean(prev.data), error: "", refreshError: "", summary: null, referral: null, summaryError: null, referralError: null, syncing: false }));
       try {
         const treeQuery = new URLSearchParams({
           depth: treeDepth,
           limit: treeRowLimit(treeDepth),
         });
-        const [treeResponse, summaryResponse, referralResponse] = await Promise.all([
-          fetch(`/api/member/tree?${treeQuery.toString()}`, { cache: "no-store", signal: controller.signal }),
-          fetch("/api/payments/me?fresh=1", { cache: "no-store", signal: controller.signal }).then((r) => (r.ok ? r.json() : null)),
-          fetch("/api/member/referral", { cache: "no-store", signal: controller.signal }).then((r) => (r.ok ? r.json() : null)),
-        ]);
-        const payload = await treeResponse.json().catch(() => ({}));
-        if (cancelled) return;
-        if (!treeResponse.ok) {
-          setState((prev) => prev.data
-            ? { ...prev, loading: false, refreshing: false }
-            : { loading: false, refreshing: false, error: payload.error || "No se pudo cargar tu posición.", data: null, summary: summaryResponse, referral: referralResponse, syncing: false });
-          return;
-        }
-
-        const active = Number(summaryResponse?.active_packages ?? 0) > 0;
-        const latestStatus = summaryResponse?.payments?.[0]?.status;
+        const results = await readMemberParts({
+          tree: { url: `/api/member/tree?${treeQuery}`, validate: validMemberTree },
+          summary: { url: `/api/payments/me${tries > 1 ? "?fresh=1" : ""}`, validate: validMemberSummary },
+          referral: { url: "/api/member/referral", validate: validMemberReferral },
+        }, { signal: controller.signal, onPart: (key, result) => {
+          if (cancelled) return;
+          if ([401, 403].includes(result.error?.status)) {
+            setState(prev => treeRefreshFailure(prev, result.error.status, result.error.message));
+          } else if (key === "tree") {
+            setState(prev => result.error ? treeRefreshFailure(prev, result.error.status, result.error.message)
+              : { ...prev, loading: false, refreshing: false, error: "", refreshError: "", data: result.data });
+          } else {
+            setState(prev => ({ ...prev, [key]: result.data || null, [`${key}Error`]: result.error || null }));
+          }
+        } });
+        if (cancelled || Object.values(results).some(result => [401, 403].includes(result.error?.status)) || !results.tree.data) return;
+        const payload = results.tree.data;
+        const summary = results.summary.data;
+        const active = Number(summary?.active_packages ?? 0) > 0;
+        const latestStatus = summary?.payments?.[0]?.status;
         const paymentReceived = active || ["paid", "activated", "needs_placement"].includes(latestStatus);
         const shouldPoll = paymentReceived && !payload?.positioned && latestStatus !== "needs_placement" && tries < maxTries;
-
-        setState({
-          loading: false,
-          refreshing: false,
-          error: "",
-          data: payload,
-          summary: summaryResponse,
-          referral: referralResponse,
-          syncing: shouldPoll,
-        });
+        setState(prev => ({ ...prev, syncing: shouldPoll }));
 
         if (shouldPoll) {
           timer = setTimeout(load, 3000);
         }
       } catch (error) {
         if (!cancelled && error?.name !== "AbortError") {
-          setState((prev) => prev.data
-            ? { ...prev, loading: false, refreshing: false }
-            : { loading: false, refreshing: false, error: "Sin conexión con el árbol.", data: null, summary: null, referral: null, syncing: false });
+          setState((prev) => treeRefreshFailure(prev, 0, "Sin conexión con el árbol."));
         }
       }
     };
@@ -218,12 +220,15 @@ export default function NetworkPage() {
       <div className="p-6">
         <StatusCard>
           <span className="text-sm font-semibold" style={{ color: "var(--vp-muted)" }}>
-            {state.error === "tree-unavailable"
+            {state.error === "account_suspended" ? "Esta cuenta tiene el acceso a la red restringido."
+              : state.error === "tree-unavailable"
               ? "El árbol estará disponible cuando finalice la migración."
-              : /^[a-z0-9-]+$/.test(state.error)
+              : /^[a-z0-9_-]+$/.test(state.error)
                 ? "No se pudo cargar tu red en este momento. Intenta de nuevo más tarde."
                 : state.error}
           </span>
+          {state.errorStatus === 401 ? <Link href="/login" className="executive-button">Iniciar sesion</Link>
+            : <button type="button" className="executive-button" onClick={() => setRefreshTick(tick => tick + 1)}><RefreshCw size={15} />Reintentar</button>}
         </StatusCard>
       </div>
     );
@@ -235,7 +240,11 @@ export default function NetworkPage() {
     const active = Number(state.summary?.active_packages ?? 0) > 0;
     const paymentReceived = active || ["paid", "activated", "needs_placement"].includes(latestStatus);
     const needsPlacement = latestStatus === "needs_placement";
-    const statusCopy = paymentStatusCopy(latestStatus, active);
+    const statusCopy = state.summary ? paymentStatusCopy(latestStatus, active) : {
+      title: state.summaryError ? "Estado de pago no disponible" : "Consultando estado de pago",
+      detail: state.summaryError ? "No se pudo confirmar el estado de tus pagos." : "Esperando la consulta de pagos.",
+      tone: "var(--vp-muted)",
+    };
     const sponsorLabel =
       latestPayment?.sponsor_name ||
       latestPayment?.sponsor_email ||
@@ -246,6 +255,7 @@ export default function NetworkPage() {
 
     return (
       <div className="flex flex-col gap-4 p-6">
+        <ReadIssues state={state} onRetry={() => setRefreshTick(tick => tick + 1)} />
         <StatusCard>
           {state.syncing ? (
             <Loader2 className="animate-spin" size={18} style={{ color: "var(--vp-accent)" }} />
@@ -301,7 +311,7 @@ export default function NetworkPage() {
               <RefreshCw size={14} />
               Actualizar
             </button>
-            {!paymentReceived ? (
+            {state.summary && !paymentReceived ? (
               <Link href="/dashboard/packages" className="inline-flex min-h-10 items-center justify-center rounded-lg px-3 text-xs font-bold no-underline" style={{ background: "var(--vp-accent)", color: "#000000" }}>
                 Completar membresía
               </Link>
@@ -335,6 +345,8 @@ export default function NetworkPage() {
 
   return (
     <div className="flex min-h-full flex-col gap-6 p-6">
+      <ReadIssues state={state} onRetry={() => setRefreshTick(tick => tick + 1)} />
+      {state.refreshError ? <div role="alert" className="flex flex-wrap items-center gap-3 border-y py-3 text-sm" style={{ borderColor: "var(--vp-amber-border)", color: "var(--vp-amber)" }}><ShieldAlert size={18} /><span className="flex-1">{state.refreshError}</span><button type="button" className="executive-button" onClick={() => setRefreshTick((tick) => tick + 1)}><RefreshCw size={16} />Reintentar</button></div> : null}
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <PositionCard
           rank={me.rank?.name}
@@ -352,8 +364,9 @@ export default function NetworkPage() {
             wallet: state.summary?.wallet_balance_usd,
           }}
           referral={state.referral}
-          leftLeg={leftDirect?.name}
-          rightLeg={rightDirect?.name}
+          leftLeg={leftDirect ? leftDirect.name || `Nodo #${leftDirect.id}` : null}
+          rightLeg={rightDirect ? rightDirect.name || `Nodo #${rightDirect.id}` : null}
+          childSlotsKnown={me.childrenComplete === true}
         />
         <NetworkSummaryCard
           memberName={me.name || "Mi red"}

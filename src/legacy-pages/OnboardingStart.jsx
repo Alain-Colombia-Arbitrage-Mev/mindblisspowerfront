@@ -34,7 +34,7 @@ const PARTICIPATION_LEVELS = [
 const TOTAL_STEPS = 13;
 
 // --- Shared UI primitives ---
-function Field({ label, value, onChange, placeholder, type = 'text', options }) {
+function Field({ label, value, onChange, placeholder = '', type = 'text', options = null }) {
   if (options) {
     return (
       <div style={{ marginBottom: 14 }}>
@@ -57,7 +57,7 @@ function Field({ label, value, onChange, placeholder, type = 'text', options }) 
   );
 }
 
-function PrimaryBtn({ children, onClick, loading, success, disabled }) {
+function PrimaryBtn({ children, onClick, loading = false, success = false, disabled = false }) {
   return (
     <button onClick={onClick} disabled={disabled || loading || success}
       style={{
@@ -76,7 +76,7 @@ function PrimaryBtn({ children, onClick, loading, success, disabled }) {
   );
 }
 
-function Card({ children, glow }) {
+function Card({ children, glow = false }) {
   return (
     <div style={{
       background: 'linear-gradient(135deg,rgba(13,31,60,0.8),rgba(10,22,40,0.9))',

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { CheckCircle, Loader, ArrowRight } from 'lucide-react';
 import simulatedApi from '@/api/simulatedApi';
 

@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Lock, AlertTriangle } from 'lucide-react';
+import { Lock } from 'lucide-react';
 
 /**
  * Lock Notice Component

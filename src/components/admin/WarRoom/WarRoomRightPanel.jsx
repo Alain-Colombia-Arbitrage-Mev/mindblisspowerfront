@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
   import { motion, AnimatePresence } from 'framer-motion';
-  import { X, TrendingUp, Users, DollarSign, AlertCircle, Loader2, ChevronUp, Home, ChevronLeft } from 'lucide-react';
+  import { X, TrendingUp, Users, DollarSign, AlertCircle, ChevronUp, Home } from 'lucide-react';
   import { useNavigate } from 'react-router-dom';
   import useButtonAction from '@/hooks/useButtonAction';
   import WarRoomActionPanel from './WarRoomActionPanel';
@@ -12,7 +12,6 @@ import { useState, useEffect } from 'react';
   import InterventionForm from './InterventionForm';
   import NetworkContextPanel from './NetworkContextPanel';
   import { getWarRoomLeaderDNA } from '@/lib/warRoomDataAdapter';
-  import DataConsistencyHelper from '@/lib/DataConsistencyHelper';
 
 /**
  * ZONE 4: RIGHT RESPONSE COLUMN
@@ -90,17 +89,10 @@ export default function WarRoomRightPanel({ selectedNode, onClose, navigation, o
     aiAction.reset();
   };
 
-  const handleInterventionApply = (data) => {
+  const handleUnsupportedIntervention = () => {
     setPanelType(null);
-    setActionPanel({ title: 'Intervención Aplicada', message: `Asesor asignado: ${data.advisor} · Prioridad: ${data.priority}`, state: 'success' });
-  };
-
-  const handleAIExecute = () => {
-    if (nodeData) {
-      DataConsistencyHelper.applyIntervention(nodeData.id, 'IA-System', 'auto');
-    }
-    setPanelType(null);
-    setActionPanel({ title: 'IA Ejecutada', message: 'Recomendación aplicada · Asesor asignado · Seguimiento agendado', state: 'success' });
+    setInterventionPanel(false);
+    setActionPanel({ title: 'Accion no disponible', message: 'La intervencion requiere un servicio administrativo autorizado. No se aplicaron cambios.', state: 'error' });
   };
 
   const handleUserAction = (actionType) => {
@@ -178,26 +170,6 @@ export default function WarRoomRightPanel({ selectedNode, onClose, navigation, o
         navigate(targetRoute);
       }
     }, 1500);
-  };
-
-  const handleInterventionExecute = (data) => {
-    // Apply intervention to data model
-    if (nodeData?.id) {
-      DataConsistencyHelper.applyIntervention(nodeData.id, data.advisor, data.type);
-    }
-    
-    // Close intervention panel
-    setInterventionPanel(false);
-    
-    // Show success confirmation
-    setActionPanel({
-      title: 'Intervención Registrada ✓',
-      message: `${data.type.replace(/_/g, ' ')} asignado a ${data.advisor} · Prioridad: ${data.priority}`,
-      state: 'success'
-    });
-    
-    // Auto-close after 3 seconds
-    setTimeout(() => setActionPanel(null), 3000);
   };
 
   return (
@@ -375,7 +347,7 @@ export default function WarRoomRightPanel({ selectedNode, onClose, navigation, o
         <InterventionForm
           node={nodeData || selectedNode}
           onClose={() => setInterventionPanel(false)}
-          onExecute={handleInterventionExecute}
+          onExecute={handleUnsupportedIntervention}
         />
       )}
 
@@ -385,7 +357,7 @@ export default function WarRoomRightPanel({ selectedNode, onClose, navigation, o
           <InterventionPanel
             node={nodeData || selectedNode}
             onClose={() => setPanelType(null)}
-            onApply={handleInterventionApply}
+            onApply={handleUnsupportedIntervention}
           />
         )}
         {panelType === 'history' && (
@@ -404,7 +376,7 @@ export default function WarRoomRightPanel({ selectedNode, onClose, navigation, o
           <AIReasoningPanel
             node={nodeData || selectedNode}
             onClose={() => setPanelType(null)}
-            onExecute={handleAIExecute}
+            onExecute={handleUnsupportedIntervention}
           />
         )}
       </AnimatePresence>

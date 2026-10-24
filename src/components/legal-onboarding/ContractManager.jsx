@@ -1,4 +1,5 @@
-import { base44 } from '@/api/base44Client';
+// Preserve legacy SDK and browser-parameter initialization.
+import '@/api/base44Client';
 
 export class ContractManager {
   /**

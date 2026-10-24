@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, CheckCircle2, AlertCircle } from 'lucide-react';
+import { X, CheckCircle2 } from 'lucide-react';
 
 const INTERVENTION_TYPES = ['capacitación', 'auditoría', 'seguimiento', 'cambio_asesor', 'suspensión_temporal', 'otro'];
 const PRIORITIES = ['baja', 'media', 'alta', 'crítica'];
@@ -126,7 +126,7 @@ export default function InterventionForm({ node, onClose, onExecute }) {
             value={formData.notes}
             onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
             placeholder="Detalles de la intervención..."
-            rows="3"
+            rows={3}
             className="w-full px-2 py-2 rounded-lg text-xs bg-white/5 border border-white/10 text-white placeholder:text-white/30 focus:outline-none focus:border-blue-500 resize-none"
           />
         </div>

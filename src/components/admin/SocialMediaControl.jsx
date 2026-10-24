@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Zap, Calendar, Share2, TrendingUp, Target } from 'lucide-react';
+import { Calendar, Share2, TrendingUp, Target } from 'lucide-react';
 import ContentScheduler from './ContentScheduler';
 import PlatformPublisher from './PlatformPublisher';
 import EngagementMetrics from './EngagementMetrics';

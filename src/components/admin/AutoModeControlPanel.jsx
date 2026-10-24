@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Power, AlertTriangle, Zap, Shield } from 'lucide-react';
+import { Power, AlertTriangle, Shield } from 'lucide-react';
 
 /**
  * Auto Mode Control Panel

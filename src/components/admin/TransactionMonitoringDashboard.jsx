@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { AlertTriangle, TrendingUp, CheckCircle, XCircle, Eye, Clock } from 'lucide-react';
+import { AlertTriangle, TrendingUp, CheckCircle, Clock } from 'lucide-react';
 import TransactionMonitor from '@/lib/TransactionMonitor';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 
 const getRiskColor = (level) => {
   const colors = { low: '#10b981', medium: '#fb923c', high: '#ef4444' };

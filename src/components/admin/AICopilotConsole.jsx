@@ -9,11 +9,9 @@ import { useSimulation } from '@/lib/SimulationEngine';
 import { generateCopilotActions, recordActionExecution, getActionHistory, getModuleColor } from '@/lib/aiCopilot';
 import CopilotExecutionPanel from './CopilotExecutionPanel';
 import {
-  RotateCcw, History, ChevronRight, ExternalLink,
-  Users, CreditCard, Headphones, Zap, Shield, BookOpen, BarChart3, Lock,
-  AlertTriangle, ArrowRight, Clock, CheckCircle2
+  RotateCcw, ChevronRight,
+  Users, CreditCard, Headphones, Zap, Shield, BookOpen, BarChart3, Lock, Clock, CheckCircle2
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
 
 const SEV = {
   critical: { color: '#ef4444', bg: 'rgba(239,68,68,0.08)', border: 'rgba(239,68,68,0.25)', label: 'CRITICAL' },

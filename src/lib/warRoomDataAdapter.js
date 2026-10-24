@@ -129,6 +129,11 @@ export function getWarRoomLeaderById(leaderId) {
   return {
     ...profile,
     rank_icon: getRankIcon(user.rank),
+    descendant_count: profile.total_descendants,
+    members: profile.total_descendants,
+    criticality: profile.payment_summary?.vencido_count > 0 ||
+      (profile.total_descendants > 0 && profile.left_count === 0 && profile.right_count === 0) ? 'high' : 'normal',
+    node_weight: Math.floor(profile.total_descendants / 10),
   };
 }
 
@@ -152,7 +157,7 @@ export function getWarRoomLeaderDNA(leaderId) {
   const networkInvestment = descendants.reduce((sum, d) => sum + (d.investment || 0), 0);
   
   // Get commission events for this user
-  const commissionEvents = (platformDataCore.commission_ledger || []).filter(c => c.user_id === leaderId && c.status === 'completado');
+  const commissionEvents = (platformDataCore.commission_events || []).filter(c => c.user_id === leaderId && c.status === 'completado');
   const monthlyIncome = commissionEvents.reduce((sum, c) => sum + (c.event_amount || 0), 0);
   
   // Get payment summary
@@ -313,7 +318,7 @@ export function getWarRoomAlerts() {
       status: alert.status || 'active',
     }))
     .filter(a => a.status === 'active')
-    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    .sort((a, b) => (new Date(b.created_at)).getTime() - (new Date(a.created_at)).getTime());
 }
 
 /**

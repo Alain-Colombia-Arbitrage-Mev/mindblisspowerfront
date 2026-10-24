@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { Users, ChevronDown } from "lucide-react";
 
-function TreeNode({ name, level, side, children }) {
+function TreeNode({ name, level, side = null, children = null }) {
   return (
     <div className="flex flex-col items-center">
       <div className="w-28 p-3 rounded-xl bg-card border border-border/50 text-center hover:border-primary/40 transition-all">

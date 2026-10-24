@@ -75,7 +75,7 @@ export default function TreeListView({ dataset, onSelect }) {
         {/* Side filter */}
         {['all','left','right'].map(s => (
           <button key={s} onClick={() => setFilterSide(s)}
-            style={{ padding: '5px 10px', borderRadius: 7, border: 'none', fontSize: 9, fontWeight: 800, cursor: 'pointer',
+            style={{ padding: '5px 10px', borderRadius: 7, fontSize: 9, fontWeight: 800, cursor: 'pointer',
               background: filterSide === s ? (s === 'left' ? 'var(--vp-accent-muted)' : s === 'right' ? 'var(--vp-amber-muted)' : 'var(--vp-surface-raised)') : 'var(--vp-surface)',
               color: filterSide === s ? (s === 'left' ? 'var(--vp-accent)' : s === 'right' ? 'var(--vp-amber)' : 'var(--vp-text)') : 'var(--vp-muted)',
               border: '1px solid var(--vp-border)',
@@ -87,7 +87,7 @@ export default function TreeListView({ dataset, onSelect }) {
         {/* Status filter */}
         {['all','activo','inactivo'].map(s => (
           <button key={s} onClick={() => setFilterStatus(s)}
-            style={{ padding: '5px 10px', borderRadius: 7, border: 'none', fontSize: 9, fontWeight: 800, cursor: 'pointer',
+            style={{ padding: '5px 10px', borderRadius: 7, fontSize: 9, fontWeight: 800, cursor: 'pointer',
               background: filterStatus === s ? 'var(--vp-accent-muted)' : 'var(--vp-surface)',
               color: filterStatus === s ? 'var(--vp-accent)' : 'var(--vp-muted)',
               border: '1px solid var(--vp-border)',

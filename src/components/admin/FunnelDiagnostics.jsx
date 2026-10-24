@@ -263,7 +263,7 @@ export default function FunnelDiagnostics() {
             LOSS RATE
           </p>
           <p style={{ color: '#fb923c', fontSize: 22, fontWeight: 900, margin: 0 }}>
-            {(100 - overallConversionRate)}%
+            {(100 - Number(overallConversionRate))}%
           </p>
         </div>
       </motion.div>

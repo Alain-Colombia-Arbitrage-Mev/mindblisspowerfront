@@ -30,7 +30,7 @@ export default function PremiumChart({
   const animationProps = animated ? {
     isAnimationActive: true,
     animationDuration: 1000,
-    animationEasing: 'ease-in-out',
+    animationEasing: /** @type {const} */ ('ease-in-out'),
   } : {
     isAnimationActive: false,
   };

@@ -1,4 +1,4 @@
-import { FileText, Download, Eye, Award, Shield, FileCheck, Receipt, Star } from 'lucide-react';
+import { FileText, Download, Eye, Award, Shield, FileCheck, Receipt } from 'lucide-react';
 
 const C = ({ children, style }) => (
   <div style={{ background: 'linear-gradient(135deg, #0d1f3c, #0a1628)', border: '1px solid rgba(59,130,246,0.18)', borderRadius: 16, padding: 20, ...style }}>

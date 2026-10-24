@@ -2,7 +2,6 @@
  * EXPANDABLE TREE NODE — Recursive node with expansion support
  * PHASES 1-7: Expansion state, child loading, visual stack, collapse option
  */
-import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
 

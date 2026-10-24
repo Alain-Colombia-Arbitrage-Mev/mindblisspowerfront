@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { TrendingDown, AlertCircle, Users } from 'lucide-react';
+import { TrendingDown, AlertCircle } from 'lucide-react';
 
 // Mock funnel data
 const FUNNEL_STEPS = [

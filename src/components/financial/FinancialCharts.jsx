@@ -2,12 +2,12 @@ import { motion } from 'framer-motion';
 import { useState } from 'react';
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 
 const COLORS = ['var(--vp-accent)', 'var(--vp-amber)', 'var(--vp-text-soft)', 'var(--vp-accent-strong)'];
 
-const CustomTooltip = ({ active, payload, label }) => {
+const CustomTooltip = ({ active = false, payload = [], label = "" }) => {
   if (!active || !payload?.length) return null;
   return (
     <div style={{ background: 'var(--vp-surface)', border: '1px solid var(--vp-border)', borderRadius: 10, padding: '10px 14px', boxShadow: 'var(--vp-shadow)' }}>

@@ -110,7 +110,7 @@ export default function MemberWarRoom() {
     return descendants.slice(0, 5).map((member, idx) => ({
       id: `a-${idx}`, member: member.name, action: 'Se unió a la red',
       timestamp: new Date(Date.now() - Math.random() * 86400000),
-    })).sort((a, b) => b.timestamp - a.timestamp);
+    })).sort((a, b) => (b.timestamp).getTime() - (a.timestamp).getTime());
   }, [userId]);
 
   return (
@@ -141,7 +141,7 @@ export default function MemberWarRoom() {
               </p>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10 }}>
-              <div style={{ display: 'flex', items: 'center', gap: 8, padding: '6px 14px', borderRadius: 20, background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.25)', display: 'flex', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 8, padding: '6px 14px', borderRadius: 20, background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.25)', alignItems: 'center' }}>
                 <LiveDot color="#3b82f6" size={7} />
                 <span style={{ color: '#93C5FD', fontSize: 9, fontWeight: 800, letterSpacing: '1px', textTransform: 'uppercase', marginLeft: 6 }}>Sincronización Activa</span>
               </div>

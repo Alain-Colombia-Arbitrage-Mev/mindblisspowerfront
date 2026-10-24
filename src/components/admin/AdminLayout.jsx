@@ -2,13 +2,11 @@ import { useState, useRef, useEffect } from 'react';
 import useAdminSession from '@/hooks/useAdminSession';
 import ActiveAdminsPanel from '@/components/admin/ActiveAdminsPanel';
 import { Link, useLocation, Outlet, useNavigate, Navigate } from 'react-router-dom';
-import { validateAdminAccess } from '@/lib/AdminRouteGuard';
 import { useSimulation } from '@/lib/SimulationEngine';
 import {
-  LogOut, Menu, X, BarChart3, Users, Briefcase, CreditCard, Shield,
+  LogOut, Menu, BarChart3, Users, Briefcase, CreditCard, Shield,
   Headphones, Zap, Settings, ClipboardList, Activity, Bell, Search,
-  ChevronRight, Plus, CheckSquare, MessageSquare, FileText, UserCheck,
-  AlertTriangle, Globe, Lock, TrendingUp, Brain, Radar
+  ChevronRight, Plus, CheckSquare, MessageSquare, FileText, UserCheck, Lock, TrendingUp, Brain, Radar
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 

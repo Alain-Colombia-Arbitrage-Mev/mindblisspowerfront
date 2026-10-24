@@ -3,7 +3,7 @@
  * One hero. Communicates: safe · BMP channel · simple process
  */
 import { motion } from 'framer-motion';
-import { Shield, ArrowRight } from 'lucide-react';
+import { Shield } from 'lucide-react';
 
 export default function WithdrawalHero() {
   return (

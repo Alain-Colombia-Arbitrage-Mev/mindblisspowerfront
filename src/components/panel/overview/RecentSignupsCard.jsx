@@ -14,11 +14,12 @@ export default function RecentSignupsCard({ signups, pendingCount = 0, onRefresh
         style={{ borderColor: "var(--vp-border)" }}
       >
         <h2 className="m-0 text-base font-semibold" style={{ color: "var(--vp-text)" }}>
-          Últimos Registros
+          Miembros de tu red
         </h2>
         <button
           aria-label="Actualizar registros"
-          style={{ background: "transparent", border: 0, cursor: "pointer", padding: 0 }}
+          className="vp-shell-icon"
+          title="Actualizar registros"
           type="button"
           onClick={onRefresh}
         >
@@ -27,6 +28,7 @@ export default function RecentSignupsCard({ signups, pendingCount = 0, onRefresh
       </div>
 
       <div className="flex flex-1 flex-col gap-4 px-6 py-4">
+        {!signups.length ? <p className="text-sm" style={{ color: "var(--vp-muted)" }}>Aún no hay miembros en la rama visible.</p> : null}
         {signups.map((signup) => (
           <SignupItem key={signup.name} signup={signup} />
         ))}
@@ -41,12 +43,12 @@ export default function RecentSignupsCard({ signups, pendingCount = 0, onRefresh
             borderTop: "1px solid var(--vp-border)",
             color: "var(--vp-accent)",
             cursor: "pointer",
-            letterSpacing: "0.08em",
+            letterSpacing: 0,
           }}
           type="button"
           onClick={onSeeAll}
         >
-          Ver +{pendingCount} en espera
+          Ver {pendingCount} miembros más
           <ArrowRight size={12} />
         </button>
       ) : null}

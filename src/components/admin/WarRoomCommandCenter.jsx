@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
 import { useSimulation } from '@/lib/SimulationEngine';
 import { createWarRoomNavigation } from '@/lib/warRoomNavigationContext';
 import { getRootLeader } from '@/lib/warRoomDataAdapter';
@@ -23,7 +22,6 @@ import WarRoomBottomBar from './WarRoom/WarRoomBottomBar';
 export default function WarRoomCommandCenter() {
   const sim = useSimulation();
   const [selectedNode, setSelectedNode] = useState(null);
-  const [expandedPanel, setExpandedPanel] = useState(null);
   const [navigation, setNavigation] = useState(null);
 
   // Initialize navigation with root leader
@@ -47,7 +45,7 @@ export default function WarRoomCommandCenter() {
       {/* ZONES 2-4: MAIN GRID (Left | Center | Right) */}
       <div className="flex-1 flex overflow-hidden gap-2 p-2">
         {/* ZONE 2: LEFT INTELLIGENCE COLUMN */}
-        <WarRoomLeftPanel sim={sim} expandedPanel={expandedPanel} />
+        <WarRoomLeftPanel sim={sim} />
 
         {/* ZONE 3: CENTER STRATEGIC CANVAS */}
         <WarRoomNetworkViz

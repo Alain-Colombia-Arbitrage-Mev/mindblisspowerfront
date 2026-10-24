@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { AlertTriangle, CheckCircle, Clock, TrendingUp, Users, DollarSign, FileText, ChevronRight } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Clock, TrendingUp, FileText } from 'lucide-react';
 import ComplianceFramework from '@/lib/ComplianceFramework';
 import { motion } from 'framer-motion';
 

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Edit2, Trash2, Eye } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import ContentVariationBuilder from './ContentVariationBuilder';
 import ContentPerformance from './ContentPerformance';
 

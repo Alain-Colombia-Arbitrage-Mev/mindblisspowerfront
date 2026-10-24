@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { AlertTriangle, CheckCircle, X, TrendingUp, Zap } from 'lucide-react';
+import { AlertTriangle, CheckCircle, X, TrendingUp } from 'lucide-react';
 import AIBrainEngine from '@/lib/AIBrainEngine';
 
 export default function AIBrainAlerts({ alerts, onActionExecute }) {

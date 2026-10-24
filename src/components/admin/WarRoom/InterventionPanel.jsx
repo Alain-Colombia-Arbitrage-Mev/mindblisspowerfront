@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, Shield, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
-import dataConsistency from '@/lib/DataConsistencyHelper';
+import { X, CheckCircle, Loader2 } from 'lucide-react';
 
 export default function InterventionPanel({ node, onClose, onApply }) {
   const [advisor, setAdvisor] = useState('');
@@ -10,13 +9,11 @@ export default function InterventionPanel({ node, onClose, onApply }) {
 
   const handleApply = async () => {
     setIsExecuting(true);
-    await new Promise(r => setTimeout(r, 1200));
-    // Update unified data
-    if (node?.id) {
-      dataConsistency.applyIntervention(node.id, advisor, priority);
+    try {
+      await onApply({ advisor, priority });
+    } finally {
+      setIsExecuting(false);
     }
-    onApply({ advisor, priority });
-    setIsExecuting(false);
   };
 
   return (

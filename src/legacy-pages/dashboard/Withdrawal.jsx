@@ -1,4 +1,4 @@
-import { useState } from "framer-motion";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { Shield, CheckCircle, Lock, ChevronRight, Mail, ExternalLink, AlertCircle } from "lucide-react";
 

@@ -4,7 +4,7 @@
  * Never executes automatically. All actions require admin confirmation.
  */
 
-import { PARTICIPANTS_DATA, LEADERS_DATA, SUPPORT_CASES_DATA } from './SimulatedData';
+import { PARTICIPANTS_DATA, LEADERS_DATA, SUPPORT_CASES_DATA } from "./simulatedData";
 import { generateActionQueue, generateRisks } from './aiBrain';
 
 const ADVISORS = ['Carlos López', 'María García', 'Roberto Díaz', 'Ana Torres', 'Luis Fernández'];

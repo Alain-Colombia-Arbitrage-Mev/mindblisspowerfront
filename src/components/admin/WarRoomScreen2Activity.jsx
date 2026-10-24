@@ -1,5 +1,4 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Activity } from 'lucide-react';
 
 export default function WarRoomScreen2Activity({ sim, presentationMode }) {
   return (

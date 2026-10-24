@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { AlertTriangle, CheckCircle, Key, Lock, Users, Shield, LogOut } from 'lucide-react';
+import { AlertTriangle, Key, Lock, Users, Shield, LogOut } from 'lucide-react';
 
 const fadeUp = { hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0 } };
 

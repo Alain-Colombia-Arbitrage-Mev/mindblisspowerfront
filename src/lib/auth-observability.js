@@ -1,5 +1,8 @@
 import { createHash } from "node:crypto";
 
+/**
+ * @param {{ email?: string, channel?: string, delivery?: { DeliveryMedium?: string, deliveryMedium?: string, Destination?: string, destination?: string }, status?: string | number, reason?: string, errorCode?: string, extra?: Record<string, unknown> }} [fields]
+ */
 export function authLogFields({ email, channel, delivery, status, reason, errorCode, extra = {} } = {}) {
   return pruneEmpty({
     email_hash: hashEmail(email),

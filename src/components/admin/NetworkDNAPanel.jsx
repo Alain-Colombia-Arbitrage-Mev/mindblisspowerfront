@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { User, Award, DollarSign, Users, Zap, AlertCircle, CheckCircle } from 'lucide-react';
+import { Award, Zap, AlertCircle, CheckCircle } from 'lucide-react';
 
 export default function NetworkDNAPanel({ person = {} }) {
   const {

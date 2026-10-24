@@ -5,7 +5,7 @@ import {
   getConversionBySource, getTopReferrers, getAttribution, getCampaign,
   getInvestmentBySource, getLeaderPerformance
 } from '@/lib/acquisitionData';
-import { PARTICIPANTS_DATA } from '@/lib/simulatedData';
+import { PARTICIPANTS_DATA } from "@/lib/simulatedData";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line, CartesianGrid, Legend

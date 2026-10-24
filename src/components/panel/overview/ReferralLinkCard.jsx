@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ArrowDownLeft, ArrowDownRight, Check, Copy, Share2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { ArrowDownLeft, ArrowDownRight, Check, Copy, RefreshCw, Share2 } from "lucide-react";
+import { readMemberJson, validMemberReferral } from "@/lib/member-read.mjs";
 
 const EMPTY_LINKS = { left: "", right: "" };
 
@@ -12,17 +14,17 @@ export default function ReferralLinkCard() {
   const [code, setCode] = useState("");
   const [copied, setCopied] = useState("");
   const [status, setStatus] = useState("loading");
+  const [error, setError] = useState(null);
+  const request = useRef(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/member/referral", { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : null))
+  const load = useCallback(() => {
+    request.current?.abort();
+    const controller = new AbortController();
+    request.current = controller;
+    setStatus("loading"); setError(null); setLinks(EMPTY_LINKS); setCode("");
+    return readMemberJson("/api/member/referral", { signal: controller.signal, validate: validMemberReferral })
       .then((data) => {
-        if (cancelled) return;
-        if (!data || data.error) {
-          setStatus("error");
-          return;
-        }
+        if (controller.signal.aborted) return;
         if (!data.positioned) {
           setStatus("pending");
           setLinks(EMPTY_LINKS);
@@ -34,13 +36,11 @@ export default function ReferralLinkCard() {
         setCode(data.code || "");
         setStatus(nextLinks.left && nextLinks.right ? "ready" : "pending");
       })
-      .catch(() => {
-        if (!cancelled) setStatus("error");
+      .catch((failure) => {
+        if (!controller.signal.aborted) { setStatus("error"); setError(failure); }
       });
-    return () => {
-      cancelled = true;
-    };
   }, []);
+  useEffect(() => { load(); return () => request.current?.abort(); }, [load]);
 
   async function copy(side) {
     const link = links[side];
@@ -55,17 +55,20 @@ export default function ReferralLinkCard() {
   }
 
   return (
-    <div className="rounded-2xl p-5" style={{ background: "var(--vp-surface-raised)", border: "1px solid var(--vp-border)" }}>
+    <div className="vp-overview-referral">
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <Share2 size={18} style={{ color: "var(--vp-accent)" }} />
-        <h3 className="text-sm font-bold" style={{ color: "var(--vp-text)" }}>Tus enlaces de red</h3>
+        <h2 className="text-sm font-bold" style={{ color: "var(--vp-text)" }}>Tus enlaces de red</h2>
         {code ? <span className="ml-auto text-xs font-semibold" style={{ color: "var(--vp-muted)" }}>Código: {code}</span> : null}
       </div>
       <p className="mb-4 text-xs leading-5" style={{ color: "var(--vp-muted)" }}>
-        {status === "ready"
+        {status === "error" ? error?.message : status === "loading" ? "Consultando enlaces de red..." : status === "ready"
           ? "Elige la rama antes de compartir. Si el puesto está ocupado, el nuevo usuario continúa debajo por ese mismo lado."
           : "Tus enlaces se activan cuando tu membresía queda pagada y tu posición existe en el árbol."}
       </p>
+      {status === "error" ? <div role="alert" className="mb-3">{error?.status === 401
+        ? <Link href="/login" className="executive-button">Iniciar sesion</Link>
+        : <button type="button" onClick={load} className="executive-button"><RefreshCw size={15} />Reintentar enlaces</button>}</div> : null}
 
       <div className="grid gap-3 lg:grid-cols-2">
         <SideLink label="Rama izquierda" hint="Colocación L → L" Icon={ArrowDownLeft} link={links.left} status={status} copied={copied === "left"} onCopy={() => copy("left")} />

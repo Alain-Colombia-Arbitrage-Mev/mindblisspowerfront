@@ -1,5 +1,4 @@
 import { motion } from 'framer-motion';
-import { TrendingUp, Users, AlertCircle, Star } from 'lucide-react';
 
 export default function AIBrainInsights({ insights }) {
   if (!insights) return null;

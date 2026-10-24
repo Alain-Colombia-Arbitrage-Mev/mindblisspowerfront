@@ -178,6 +178,7 @@ export function buildCognitoChallengeResponsePayload({
   responses = {},
 }) {
   const normalizedUsername = normalizeUsername(username);
+  /** @type {Record<string, string>} */
   const challengeResponses = {
     ...responses,
     USERNAME: normalizedUsername,

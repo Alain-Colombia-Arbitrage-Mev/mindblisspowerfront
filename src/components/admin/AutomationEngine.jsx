@@ -1,9 +1,5 @@
 import { useState } from 'react';
 import { Zap, Plus, Play, Pause, Trash2, Settings } from 'lucide-react';
-import TriggerBuilder from './TriggerBuilder';
-import ConditionBuilder from './ConditionBuilder';
-import ActionBuilder from './ActionBuilder';
-import FlowChain from './FlowChain';
 import AutomationLogs from './AutomationLogs';
 
 export default function AutomationEngine() {
@@ -30,6 +26,8 @@ export default function AutomationEngine() {
       setFlows([...flows, { 
         id: Date.now(), 
         ...newFlow, 
+        conditions: newFlow.conditions.length,
+        actions: newFlow.actions.length,
         status: 'active', 
         executions: 0 
       }]);

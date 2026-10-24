@@ -71,7 +71,7 @@ function Input({ label, value, onChange, placeholder, type = 'text' }) {
   );
 }
 
-function Btn({ children, onClick, loading, success, disabled, color = '#3b82f6' }) {
+function Btn({ children, onClick, loading, success, disabled = false, color = '#3b82f6' }) {
   return (
     <button onClick={onClick} disabled={disabled || loading || success}
       style={{ width: '100%', padding: '14px 0', borderRadius: 12, background: success ? 'rgba(52,211,153,0.2)' : `linear-gradient(135deg,${color === '#3b82f6' ? '#1d6ef5' : color},${color})`, border: success ? '1px solid rgba(52,211,153,0.4)' : 'none', color: success ? '#34d399' : 'white', fontFamily: 'Montserrat,sans-serif', fontWeight: 800, fontSize: 14, cursor: disabled || loading ? 'not-allowed' : 'pointer', opacity: disabled ? 0.45 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'all 0.2s' }}>
@@ -105,8 +105,8 @@ function StepRegister({ onNext }) {
          <button
            onClick={() => navigate('/login')}
            style={{ background: 'none', border: 'none', color: '#3b82f6', fontSize: 11, fontWeight: 600, cursor: 'pointer', transition: 'color 200ms' }}
-           onMouseEnter={e => e.target.style.color = '#60a5fa'}
-           onMouseLeave={e => e.target.style.color = '#3b82f6'}
+           onMouseEnter={e => e.currentTarget.style.color = '#60a5fa'}
+           onMouseLeave={e => e.currentTarget.style.color = '#3b82f6'}
          >
            Inicia sesión aquí
          </button>
@@ -324,7 +324,7 @@ function StepContractReview({ onNext }) {
 function StepPaymentSuccess({ onNext }) {
   const { loading, success, run } = useSimulatedCall(onNext);
   return (
-    <StepShell title="Tu acceso ha sido activado" subtitle="Ahora formas parte de una estructura diseñada para avanzar con claridad." api="POST /payment/success" showContent={false}>
+    <StepShell title="Tu acceso ha sido activado" subtitle="Ahora formas parte de una estructura diseñada para avanzar con claridad." api="POST /payment/success">
       <div style={{ padding: '40px 20px', textAlign: 'center' }}>
         <motion.div
           initial={{ scale: 0, opacity: 0 }}
@@ -474,7 +474,7 @@ function StepStateAssign({ onNext }) {
 function StepDashboardWelcome({ onNext }) {
   const { loading, success, run } = useSimulatedCall(onNext);
   return (
-    <StepShell title="Bienvenido a tu espacio" subtitle="" api="POST /dashboard/welcome" showContent={false}>
+    <StepShell title="Bienvenido a tu espacio" subtitle="" api="POST /dashboard/welcome">
       <div style={{ padding: '40px 20px', textAlign: 'center' }}>
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -632,8 +632,8 @@ export default function Onboarding() {
             fontFamily: 'Inter,sans-serif',
             fontWeight: 500
           }}
-          onMouseEnter={e => step > 0 && (e.target.style.opacity = '0.6')}
-          onMouseLeave={e => step > 0 && (e.target.style.opacity = '1')}
+          onMouseEnter={e => step > 0 && (e.currentTarget.style.opacity = '0.6')}
+          onMouseLeave={e => step > 0 && (e.currentTarget.style.opacity = '1')}
         >
           ← Volver
         </button>
@@ -663,8 +663,8 @@ export default function Onboarding() {
               fontFamily: 'Inter,sans-serif',
               fontWeight: 500
             }}
-            onMouseEnter={e => (e.target.style.opacity = '0.6')}
-            onMouseLeave={e => (e.target.style.opacity = '1')}
+            onMouseEnter={e => (e.currentTarget.style.opacity = '0.6')}
+            onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
           >
             Salir
           </button>

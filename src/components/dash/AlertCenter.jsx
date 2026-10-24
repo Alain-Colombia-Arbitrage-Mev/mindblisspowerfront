@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, AlertTriangle, CheckCircle, Clock, Mail } from 'lucide-react';
+import { X, AlertTriangle, CheckCircle, Mail } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 
 export default function AlertCenter() {
@@ -164,12 +164,12 @@ export default function AlertCenter() {
                       cursor: 'pointer'
                     }}
                     onMouseEnter={e => {
-                      e.target.style.background = 'rgba(255,255,255,0.15)';
-                      e.target.style.color = 'rgba(255,255,255,0.7)';
+                      e.currentTarget.style.background = 'rgba(255,255,255,0.15)';
+                      e.currentTarget.style.color = 'rgba(255,255,255,0.7)';
                     }}
                     onMouseLeave={e => {
-                      e.target.style.background = 'rgba(255,255,255,0.1)';
-                      e.target.style.color = 'rgba(255,255,255,0.5)';
+                      e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
+                      e.currentTarget.style.color = 'rgba(255,255,255,0.5)';
                     }}
                   >
                     <X size={14} />

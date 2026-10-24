@@ -65,7 +65,7 @@ const sideKpis = [
 export default function RegisterPage() {
   const router = useRouter();
   const [form, setForm] = useState(initialForm);
-  const [errors, setErrors] = useState({});
+  const [errors, setErrors] = useState(/** @type {Record<string, string>} */ ({}));
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -192,6 +192,7 @@ export default function RegisterPage() {
   }
 
   function validateForm() {
+    /** @type {Record<string, string>} */
     const nextErrors = {};
 
     if (!form.fullName.trim()) nextErrors.fullName = "El nombre es requerido.";
@@ -865,7 +866,7 @@ function PasswordChecklist({ password }) {
   );
 }
 
-function Field({ id, label, error, helper, icon, ...props }) {
+function Field({ id, label, error = "", helper = "", icon = null, ...props }) {
   const describedBy = error ? `${id}-error` : helper ? `${id}-helper` : undefined;
   return (
     <div className="min-w-0">

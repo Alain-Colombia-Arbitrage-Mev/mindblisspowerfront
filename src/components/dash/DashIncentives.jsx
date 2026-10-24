@@ -1,4 +1,4 @@
-import { AlertCircle, Gift, ChevronDown } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { useState } from 'react';
 
 const C = ({ children, style }) => (

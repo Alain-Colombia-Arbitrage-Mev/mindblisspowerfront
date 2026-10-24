@@ -8,13 +8,11 @@ import { useSimulation } from '@/lib/SimulationEngine';
 import {
   DEFAULT_RULES, RISK_TIER, MODULE_COLORS,
   generateExecutionQueue, generateApprovalQueue,
-  generateEscalationQueue, generateExecutionLog,
-  safetyGuardCheck
+  generateEscalationQueue, generateExecutionLog
 } from '@/lib/AutoModeEngine';
 import {
   Zap, Shield, AlertTriangle, CheckCircle2, Clock, Play, Pause,
-  XCircle, ChevronRight, Activity, Settings, ListChecks, BarChart3,
-  Eye, RefreshCw, Lock, Unlock, ChevronDown, ChevronUp, Info
+  XCircle, Activity, ListChecks, BarChart3, Lock, ChevronDown, ChevronUp
 } from 'lucide-react';
 
 // ── MICRO COMPONENTS ──────────────────────────────────────────────────────────

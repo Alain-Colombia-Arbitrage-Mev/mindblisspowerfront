@@ -4,7 +4,7 @@
  * Progressive: shows maxDepth levels only, expandable.
  */
 import { useState, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 
 const COLORS = {
   root:  { primary: '#fbbf24', glow: 'rgba(251,191,36,0.45)', bg: 'rgba(251,191,36,0.1)',  line: 'rgba(251,191,36,0.4)' },

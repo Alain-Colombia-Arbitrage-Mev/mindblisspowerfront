@@ -57,7 +57,7 @@ export default function AutoModeRules() {
               key={i}
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.05, delay: 0.25 }}
+              transition={{ delay: 0.25 }}
               className="p-3 rounded-lg"
               style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}
             >

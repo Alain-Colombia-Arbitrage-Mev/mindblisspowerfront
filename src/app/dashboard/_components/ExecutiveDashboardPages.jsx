@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNetworkHealth } from "@/lib/useNetworkHealth";
 import { useSustainability } from "@/lib/useSustainability";
+import { useMemberSession } from "@/lib/member-session-context";
+import { readRankCatalog } from "@/lib/rank-catalog.mjs";
 import ReferralModule from "@/components/member/ReferralModule";
 import SupportTicketForm from "./SupportTicketForm";
 import {
@@ -132,7 +134,7 @@ const PAYMENT_STATUS = {
 // Sin solicitudes simuladas: la lista real vendrá del backend KYC.
 const kycRequests = [];
 
-function PageHeader({ eyebrow, title, subtitle, action }) {
+function PageHeader({ eyebrow, title, subtitle, action = null }) {
   return (
     <div className="executive-page-header">
       <div>
@@ -197,16 +199,8 @@ function Field({ label, children }) {
 }
 
 export function DashboardOverviewPage() {
-  const [referral, setReferral] = useState("");
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/auth/session", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d) => { if (!cancelled && d?.referralCode) setReferral(d.referralCode); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, []);
-  const displayReferral = referral || member.referralCode;
+  const session = useMemberSession();
+  const displayReferral = session?.referralCode || member.referralCode;
   return (
     <section className="executive-page">
       <div className="executive-container">
@@ -327,11 +321,11 @@ export function CommunicationsDashboardPage() {
         <div className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
           <div className="executive-tabs" role="tablist" aria-label="Vistas de comunicacion">
             {[
-              ["messages", "Mensajes", Mail],
-              ["news", "Noticias", Bell],
-              ["tickets", "Tickets", Archive],
-              ["campaigns", "Campanas", Zap],
-            ].map(([id, label, Icon]) => (
+              { id: "messages", label: "Mensajes", Icon: Mail },
+              { id: "news", label: "Noticias", Icon: Bell },
+              { id: "tickets", label: "Tickets", Icon: Archive },
+              { id: "campaigns", label: "Campanas", Icon: Zap },
+            ].map(({ id, label, Icon }) => (
               <button key={id} className="executive-tab" aria-selected={tab === id} type="button" onClick={() => setTab(id)}>
                 <Icon size={15} />
                 {label}
@@ -568,7 +562,7 @@ function FinanceContent({ data, onDone }) {
       amount: p.total_usd,
       status: PAYMENT_STATUS[p.status] || PAYMENT_STATUS.created,
     })),
-  ].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+  ].sort((a, b) => (new Date(b.date || 0)).getTime() - (new Date(a.date || 0)).getTime());
 
   return (
     <>
@@ -851,7 +845,8 @@ function normalizeProfilePhone(value) {
 export function ProfileDashboardPage() {
   const [twoFactor, setTwoFactor] = useState(false);
   const [digest, setDigest] = useState(true);
-  const [me, setMe] = useState({ name: "", email: "", referralCode: "" });
+  const session = useMemberSession();
+  const me = { name: session?.name || "", email: session?.email || "", referralCode: session?.referralCode || "" };
   const [summary, setSummary] = useState(null);
   const [form, setForm] = useState({ name: "", phone: "", country: "", payout_wallet_usdc: "" });
   const [phoneVerify, setPhoneVerify] = useState({ sending: false, confirming: false, pending: false, code: "", type: "", text: "" });
@@ -861,12 +856,6 @@ export function ProfileDashboardPage() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/auth/session", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d) => {
-        if (!cancelled && d) setMe({ name: d.name || "", email: d.email || "", referralCode: d.referralCode || "" });
-      })
-      .catch(() => {});
     fetch("/api/payments/me", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => { if (!cancelled && d && !d.error) setSummary(d); })
@@ -1459,7 +1448,7 @@ function CalendarLikeIcon(props) {
   return <Activity {...props} />;
 }
 
-function ExecutiveModulePage({ config, extra }) {
+function ExecutiveModulePage({ config, extra = null }) {
   return (
     <section className="executive-page">
       <div className="executive-container">
@@ -1791,7 +1780,7 @@ export function RankDashboardPage() {
   useEffect(() => {
     let cancelled = false;
     Promise.all([
-      fetch("/api/member/ranks", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
+      readRankCatalog(),
       fetch("/api/member/tree?view=position", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
     ])
       .then(([rk, tree]) => {
@@ -2002,9 +1991,9 @@ export function KycDashboardPage() {
 
         <div className="mb-6 executive-tabs" role="tablist" aria-label="Vistas KYC">
           {[
-            ["personal", "Mi verificacion", IdCard],
-            ["manage", "Solicitudes", Filter],
-          ].map(([id, label, Icon]) => (
+            { id: "personal", label: "Mi verificacion", Icon: IdCard },
+            { id: "manage", label: "Solicitudes", Icon: Filter },
+          ].map(({ id, label, Icon }) => (
             <button key={id} className="executive-tab" aria-selected={view === id} type="button" onClick={() => setView(id)}>
               <Icon size={15} />
               {label}

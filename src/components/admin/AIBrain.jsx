@@ -14,7 +14,7 @@ import {
 import {
   Brain, ShieldAlert, TrendingUp, Users, BarChart3, CreditCard,
   BookOpen, Headphones, Zap, ListChecks, ChevronRight, Info,
-  Lightbulb, AlertTriangle, Activity, ArrowUpRight
+  Lightbulb, AlertTriangle
 } from 'lucide-react';
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
@@ -66,7 +66,7 @@ function Divider() {
 
 function InsightsPanel({ data }) {
   return (
-    <div className="divide-y" style={{ borderRadius:12, overflow:'hidden', border:'1px solid rgba(255,255,255,0.07)', background:'rgba(8,16,36,0.6)', divideColor:'rgba(255,255,255,0.05)' }}>
+    <div className="divide-y" style={{ borderRadius:12, overflow:'hidden', border:'1px solid rgba(255,255,255,0.07)', background:'rgba(8,16,36,0.6)' }}>
       {data.map((ins, i) => {
         const Icon = TYPE_ICON[ins.type] || Info;
         const color = TYPE_COLOR[ins.type] || '#3b82f6';

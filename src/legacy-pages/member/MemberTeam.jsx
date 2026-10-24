@@ -174,7 +174,7 @@ export default function MemberTeam() {
   // Activity detection
   const isRecentlyActive = (lastActivity) => {
     if (!lastActivity) return false;
-    const days = (new Date() - new Date(lastActivity)) / (1000 * 60 * 60 * 24);
+    const days = ((new Date()).getTime() - (new Date(lastActivity)).getTime()) / (1000 * 60 * 60 * 24);
     return days < 7;
   };
 
@@ -529,7 +529,7 @@ export default function MemberTeam() {
                 onChange={(e) => setMessageContent(e.target.value)}
                 placeholder="Escribe tu mensaje..."
                 className="w-full p-3 rounded-lg text-sm resize-none"
-                rows="6"
+                rows={6}
                 style={{ background: 'var(--vp-surface)', border: '1px solid var(--vp-border)', color: 'var(--vp-text)' }}
               />
             </div>

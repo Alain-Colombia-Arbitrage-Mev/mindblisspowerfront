@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Globe, Code2, TrendingUp, Users, Network, Server, CheckCircle2, Zap } from 'lucide-react';
+import { Globe, Server, CheckCircle2 } from 'lucide-react';
 
 const fadeUp = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } };
 

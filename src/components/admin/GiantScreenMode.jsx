@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useSimulation } from '@/lib/SimulationEngine';
 import { motion, AnimatePresence } from 'framer-motion';
-import AnimatedNumber from './AnimatedNumber';
 import { AlertTriangle, TrendingUp, Users, Shield, Activity, Clock, CreditCard, Zap, X, Maximize2 } from 'lucide-react';
 
 const GiantScreenMode = () => {

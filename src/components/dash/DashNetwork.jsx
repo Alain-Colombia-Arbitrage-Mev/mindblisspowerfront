@@ -1,4 +1,3 @@
-import { Users, ArrowDown } from 'lucide-react';
 
 const NodeCircle = ({ name, level, active, size = 'md' }) => {
   const sizes = { sm: 'w-14 h-14 text-xs', md: 'w-20 h-20 text-sm', lg: 'w-24 h-24 text-base' };

@@ -48,7 +48,11 @@ export function paymentsConfig() {
   return { base: process.env.VP_PAYMENTS_URL, token: process.env.PAYMENTS_SERVICE_TOKEN };
 }
 
-/** Llama al servicio Go con el token de servicio. */
+/**
+ * Llama al servicio Go con el token de servicio.
+ * @param {string} path
+ * @param {{method?: string, body?: unknown}} [options]
+ */
 export async function callPayments(path, { method = "GET", body } = {}) {
   const { base, token } = paymentsConfig();
   if (!base || !token) return { ok: false, status: 503, data: { error: "payments-unconfigured" } };
@@ -72,7 +76,11 @@ export function withdrawalsConfig() {
   return { base: process.env.VP_WITHDRAWALS_URL, token: process.env.PAYMENTS_SERVICE_TOKEN };
 }
 
-/** Llama a vp-withdrawals con el token de servicio (retiros + BMP). */
+/**
+ * Llama a vp-withdrawals con el token de servicio (retiros + BMP).
+ * @param {string} path
+ * @param {{method?: string, body?: unknown}} [options]
+ */
 export async function callWithdrawals(path, { method = "GET", body } = {}) {
   const { base, token } = withdrawalsConfig();
   if (!base || !token) return { ok: false, status: 503, data: { error: "withdrawals-unconfigured" } };

@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 
 import { memberDb } from "@/lib/member-db";
 import { verifiedEmailFromIdToken } from "@/lib/verify-id-token";
+import { memberReadLimit, withMemberTreeCapacity } from "@/lib/member-read-policy.mjs";
+import { childCoverage, loadedChildCounts } from "@/lib/tree-read-model.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,13 +25,20 @@ export async function GET(request) {
   const idToken = cookieStore.get("vp_id_token")?.value;
 
   if (!idToken) {
-    return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+    return NextResponse.json({ error: "unauthenticated" }, { status: 401, headers: { "Cache-Control": "private, no-store" } });
   }
 
   const email = await verifiedEmailFromIdToken(idToken);
   if (!email) {
-    return NextResponse.json({ error: "session-invalid" }, { status: 401 });
+    return NextResponse.json({ error: "session-invalid" }, { status: 401, headers: { "Cache-Control": "private, no-store" } });
   }
+
+  const limited = memberReadLimit(email, positionOnly ? "position" : "tree");
+  if (limited) return limited;
+  return withMemberTreeCapacity(() => readTree(email, { positionOnly, depthLimit, rowLimit, queryLimit }));
+}
+
+async function readTree(email, { positionOnly, depthLimit, rowLimit, queryLimit }) {
 
   let sql;
   try {
@@ -62,6 +71,7 @@ export async function GET(request) {
              a.depth,
              a.position,
              a.status,
+             (SELECT count(*) FROM mlm.affiliate c WHERE c.parent_id = a.id)::int AS child_count,
              p.first_name || ' ' || p.last_name AS full_name,
              r.code        AS rank_code,
              r.name_es     AS rank_name,
@@ -182,10 +192,11 @@ export async function GET(request) {
                            AND (b.birthdate IS NULL OR (p.birthday IS NOT NULL AND b.birthdate = p.birthday)))
                  )) AS unavailable,
                1 AS level,
-               ARRAY[a.id]::bigint[] AS path_ids
+               ARRAY[${root.id}::bigint, a.id]::bigint[] AS path_ids
           FROM mlm.affiliate a
           JOIN mlm.person p ON p.id = a.person_id
          WHERE a.parent_id = ${root.id}
+           AND a.id <> ${root.id}
         UNION ALL
         SELECT a.id,
                a.parent_id,
@@ -236,7 +247,8 @@ export async function GET(request) {
              CASE WHEN d.unavailable THEN NULL
                   ELSE sp.first_name || ' ' || split_part(sp.last_name, ' ', 1)
               END AS sponsor_name,
-             d.unavailable
+             d.unavailable,
+             (SELECT count(*) FROM mlm.affiliate c WHERE c.parent_id = d.id)::int AS child_count
         FROM sub d
         JOIN mlm.person dp    ON dp.id = d.person_id
         LEFT JOIN mlm.rank dr ON dr.id = d.current_rank_id
@@ -265,14 +277,17 @@ export async function GET(request) {
     }
 
     const visibleDescendants = descendants.slice(0, rowLimit);
+    const childCounts = loadedChildCounts(visibleDescendants);
 
     return NextResponse.json({
       positioned: true,
       me: {
         ...member,
+        ...childCoverage(root.id, root.child_count, childCounts),
         rankProgress,
       },
       tree: visibleDescendants.map((d) => ({
+        ...childCoverage(d.id, d.child_count, childCounts),
         id: String(d.id),
         parentId: d.parent_id == null ? null : String(d.parent_id),
         side: d.position,

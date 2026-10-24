@@ -1,10 +1,14 @@
 /**
- * Presets de rate limit por endpoint de auth + guardia que responde 429.
- * Per-endpoint rate-limit presets for auth + a guard that returns a 429.
+ * Guardia de rate limit por endpoint que responde 429.
+ * Per-endpoint rate-limit guard that returns a 429.
  *
  * Nivel "balanceado" para tráfico intenso: holgado para usuarios reales,
  * restrictivo para scripts/abuso. Los envíos de correo/OTP se limitan por email
  * (evita spamear la bandeja de una persona y quemar cuota SES) y por IP.
+ *
+ * Los presets y la construcción de reglas viven en `rate-limit-presets.mjs`
+ * (módulo puro, testeable con `node --test`); aquí queda solo el envoltorio
+ * HTTP, que depende de `next/server`.
  *
  * "Balanced" level for heavy traffic: generous for real users, tight for
  * scripts/abuse. Email/OTP sends are limited per email (avoids spamming one
@@ -14,22 +18,10 @@
 import { NextResponse } from "next/server";
 
 import { clientIp, rateLimit } from "@/lib/rate-limit";
-import { otpSendRules } from "@/lib/otp-send-policy";
+import { presetRules, PRESETS } from "./rate-limit-presets.mjs";
 
-const MIN = 60_000;
-
-// Cada preset define reglas por IP y/o por email (por minuto salvo indicación).
-// Each preset defines per-IP and/or per-email rules (per minute unless noted).
-const PRESETS = {
-  // Endpoints que ENVÍAN correo/OTP (los más caros: SES + Cognito).
-  send: { ip: { limit: 20, windowMs: MIN }, email: { limit: 5, windowMs: MIN } },
-  // Intentos de inicio de sesión (password / código).
-  login: { ip: { limit: 10, windowMs: MIN }, email: { limit: 10, windowMs: MIN } },
-  // Verificación de un código ya recibido (anti fuerza-bruta del OTP).
-  verify: { ip: { limit: 10, windowMs: MIN }, email: { limit: 10, windowMs: MIN } },
-  // Alta de cuenta.
-  register: { ip: { limit: 15, windowMs: MIN } },
-};
+// Re-exportado para quien necesite inspeccionar los límites sin duplicarlos.
+export { PRESETS };
 
 function tooManyMessage(retryAfterSec) {
   return (
@@ -50,22 +42,23 @@ function tooManyMessage(retryAfterSec) {
  * @returns {NextResponse|null}
  */
 export function authRateLimit(request, { name, preset, email }) {
-  const conf = PRESETS[preset];
-  if (!conf) return null;
+  const rules = presetRules({ name, preset, ip: clientIp(request), email });
+  if (!rules) return null;
 
-  const ip = clientIp(request);
-  const rules = [];
-  if (conf.ip) rules.push({ key: `${name}:ip:${ip}`, limit: conf.ip.limit, windowMs: conf.ip.windowMs });
-  if (conf.email && email) {
-    rules.push({ key: `${name}:email:${email}`, limit: conf.email.limit, windowMs: conf.email.windowMs });
-  }
-
-  if (preset === "send") rules.push(...otpSendRules(email));
   const result = rateLimit(rules);
   if (result.allowed) return null;
 
   return NextResponse.json(
-    { error: tooManyMessage(result.retryAfterSec), retryAfterSec: result.retryAfterSec },
-    { status: 429, headers: { "Retry-After": String(result.retryAfterSec) } }
+    {
+      error: tooManyMessage(result.retryAfterSec),
+      retryAfterSec: result.retryAfterSec,
+    },
+    {
+      status: 429,
+      headers: {
+        "Retry-After": String(result.retryAfterSec),
+        "Cache-Control": "private, no-store",
+      },
+    },
   );
 }

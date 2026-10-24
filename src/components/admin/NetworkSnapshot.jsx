@@ -1,5 +1,4 @@
 import { motion } from 'framer-motion';
-import { TrendingUp, AlertTriangle, CheckCircle } from 'lucide-react';
 
 export default function NetworkSnapshot({ network }) {
   if (!network) return null;

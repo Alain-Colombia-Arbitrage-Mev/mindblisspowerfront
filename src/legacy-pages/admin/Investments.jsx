@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, CheckCircle, XCircle, Eye, X, MessageSquare, RefreshCw } from 'lucide-react';
-import { INVESTMENTS_DATA } from '@/lib/simulatedData';
+import { INVESTMENTS_DATA } from "@/lib/simulatedData";
 
 const STATUS_CFG = {
   approved: { color: '#10b981', label: 'Approved' },

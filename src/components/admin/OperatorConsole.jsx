@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Settings, Eye, AlertCircle } from 'lucide-react';
+import { Settings, Eye } from 'lucide-react';
 
 export default function OperatorConsole() {
   const [activeFilter, setActiveFilter] = useState('all');
@@ -137,7 +137,7 @@ export default function OperatorConsole() {
   const formatTime = (timestamp) => {
     const date = new Date(timestamp);
     const now = new Date();
-    const diff = now - date;
+    const diff = (now).getTime() - (date).getTime();
     const minutes = Math.floor(diff / 60000);
     const hours = Math.floor(diff / 3600000);
 

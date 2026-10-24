@@ -1,4 +1,4 @@
-import { AlertCircle, ExternalLink, Wallet, Clock, CheckCircle, ArrowRight, Shield } from 'lucide-react';
+import { ExternalLink, Wallet, Clock, CheckCircle, Shield } from 'lucide-react';
 
 const C = ({ children, style }) => (
   <div style={{ background: 'linear-gradient(135deg, #0d1f3c, #0a1628)', border: '1px solid rgba(59,130,246,0.18)', borderRadius: 16, padding: 20, ...style }}>

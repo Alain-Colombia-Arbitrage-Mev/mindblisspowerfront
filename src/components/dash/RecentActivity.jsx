@@ -1,4 +1,4 @@
-import { Check, Lock } from 'lucide-react';
+import { Check } from 'lucide-react';
 
 const timeline = [
   { event: 'Activación confirmada', date: 'Hace 2 meses', status: 'completed' },

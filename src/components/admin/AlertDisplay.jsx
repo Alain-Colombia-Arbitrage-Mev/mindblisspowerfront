@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { AlertTriangle, AlertCircle, Info, CheckCircle, ChevronDown } from 'lucide-react';
+import { AlertTriangle, AlertCircle, Info, CheckCircle } from 'lucide-react';
 import SecurityAlertSystem from '@/lib/SecurityAlertSystem';
 import { motion, AnimatePresence } from 'framer-motion';
 

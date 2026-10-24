@@ -1,4 +1,4 @@
-import { Shield, Lock, Unlock, TrendingUp, Users, BookOpen, Network } from 'lucide-react';
+import { Shield, Unlock, TrendingUp, Users } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const fadeUp = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } };

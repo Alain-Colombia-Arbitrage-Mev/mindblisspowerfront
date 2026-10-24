@@ -1,7 +1,7 @@
 /**
  * require-admin.js — Server-side admin gate for the /dashboard routes.
  *
- * next/navigation and @/lib/admin-bff are imported LAZILY inside
+ * next/navigation and the admin-bff module are imported LAZILY inside
  * assertAdminOrRedirect() so that `import { evaluateAccess }` works
  * under `node --test` without pulling in Next.js runtime modules or
  * unresolved path aliases.

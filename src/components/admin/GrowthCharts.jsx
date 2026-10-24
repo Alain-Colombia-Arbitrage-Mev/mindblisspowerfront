@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import { LineChart, Line, BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
-export default function GrowthCharts({ timeframe, metric }) {
+export default function GrowthCharts({ timeframe, metric = 'acquisition' }) {
   // Sample data for different timeframes
   const chartData = {
     '7d': [

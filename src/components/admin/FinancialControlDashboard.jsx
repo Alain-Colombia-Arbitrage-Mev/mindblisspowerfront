@@ -4,8 +4,7 @@
  */
 import { useSimulation } from '@/lib/SimulationEngine';
 import { useMemo } from 'react';
-import { AlertTriangle, TrendingUp, Users, Zap, Eye, Link as LinkIcon } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { AlertTriangle } from 'lucide-react';
 import platformDataCore from '@/lib/platformDataCore';
 
 const RISK_LEVEL = { low: { label: 'Bajo', color: '#10b981', bg: 'rgba(16,185,129,0.08)' }, medium: { label: 'Medio', color: '#fbbf24', bg: 'rgba(251,191,36,0.08)' }, high: { label: 'Alto', color: '#ef4444', bg: 'rgba(239,68,68,0.08)' } };
@@ -64,6 +63,7 @@ export default function FinancialControlDashboard() {
       });
     
     // Anomalies
+    /** @type {Array<{type: 'inactive_high_value', name: string, investment: number, status: string} | {type: 'network_imbalance', detail: string, status: string}>} */
     const anomalies = [];
     const medianInvestment = activeMemberships.length > 0 
       ? [...activeMemberships].sort((a, b) => (a.plan_value || 0) - (b.plan_value || 0))[Math.floor(activeMemberships.length / 2)].plan_value || 0

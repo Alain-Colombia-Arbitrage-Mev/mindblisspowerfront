@@ -2,10 +2,12 @@ import { useState } from "react";
 import { Check, Copy, MapPin, Network, ShieldCheck, Trophy } from "lucide-react";
 
 function money(value) {
+  if (value == null || String(value).trim() === "" || !Number.isFinite(Number(value))) return "No disponible";
   return `$${Number(value ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function number(value) {
+  if (value == null || !Number.isFinite(Number(value))) return "—";
   return Number(value ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 });
 }
 
@@ -32,7 +34,7 @@ function StatBox({ label, value, tone = "accent" }) {
   );
 }
 
-function LegRow({ label, occupant }) {
+function LegRow({ label, occupant, known }) {
   return (
     <div
       className="flex min-w-0 items-center justify-between gap-3 rounded-xl border p-3"
@@ -48,9 +50,9 @@ function LegRow({ label, occupant }) {
           background: occupant ? "var(--vp-accent-muted)" : "var(--vp-surface-raised)",
           borderColor: occupant ? "var(--vp-accent-border)" : "var(--vp-border)",
         }}
-        title={occupant || "Disponible"}
+        title={occupant || (known ? "Disponible" : "Sin cargar")}
       >
-        {occupant || "Disponible"}
+        {occupant || (known ? "Disponible" : "Sin cargar")}
       </span>
     </div>
   );
@@ -78,6 +80,7 @@ export default function PositionCard({
   referral,
   leftLeg,
   rightLeg,
+  childSlotsKnown = false,
 }) {
   const [copied, setCopied] = useState(false);
   const hasRankProgress = Boolean(rankProgress);
@@ -163,8 +166,8 @@ export default function PositionCard({
       </div>
 
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <LegRow label="Pierna izquierda" occupant={leftLeg} />
-        <LegRow label="Pierna derecha" occupant={rightLeg} />
+        <LegRow label="Pierna izquierda" occupant={leftLeg} known={childSlotsKnown} />
+        <LegRow label="Pierna derecha" occupant={rightLeg} known={childSlotsKnown} />
       </div>
 
       <div
@@ -177,7 +180,7 @@ export default function PositionCard({
             Link de referido {referralCode ? `(${referralCode})` : ""}
           </p>
           <p className="m-0 truncate text-xs font-bold" style={{ color: referralLink ? "var(--vp-text)" : "var(--vp-muted)" }} title={referralLink || "Pendiente"}>
-            {referralLink || "Pendiente de activación y ubicación en el árbol"}
+            {referralLink || (referral?.positioned === false ? "Pendiente de activación y ubicación en el árbol" : "Enlace no disponible")}
           </p>
         </div>
         <button

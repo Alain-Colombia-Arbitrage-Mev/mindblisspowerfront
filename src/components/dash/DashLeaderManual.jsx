@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronUp, Shield, Users, BookOpen, Calendar, TrendingUp, Award, AlertTriangle, CheckCircle, XCircle, Repeat, Target, Clock } from 'lucide-react';
+import { ChevronDown, ChevronUp, Shield, Users, BookOpen, Calendar, TrendingUp, Award, CheckCircle, XCircle, Repeat, Target, Clock } from 'lucide-react';
 
 const C = ({ children, style }) => (
   <div style={{ background: 'linear-gradient(135deg, #0d1f3c, #0a1628)', border: '1px solid rgba(59,130,246,0.18)', borderRadius: 16, padding: 20, ...style }}>

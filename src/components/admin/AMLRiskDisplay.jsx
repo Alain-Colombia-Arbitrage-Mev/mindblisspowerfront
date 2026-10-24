@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { AlertTriangle, TrendingUp, CheckCircle, AlertCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle, AlertCircle } from 'lucide-react';
 import AMLRiskManager from '@/lib/AMLRiskManager';
 
 export default function AMLRiskDisplay({ paymentId, userId = null, compact = false }) {

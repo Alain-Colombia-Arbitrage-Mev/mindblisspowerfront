@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Trophy, TrendingUp, Globe, Users, Crown, Star } from 'lucide-react';
+import { TrendingUp, Globe, Users, Crown, Star } from 'lucide-react';
 import { useStatus } from '@/hooks/useStatus';
 
 const mockGlobal = [

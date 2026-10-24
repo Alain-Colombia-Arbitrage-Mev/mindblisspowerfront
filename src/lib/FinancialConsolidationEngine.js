@@ -80,7 +80,7 @@ class FinancialConsolidationEngine {
 
   needsRenewal(dueDate) {
     const now = new Date();
-    const daysUntilDue = (dueDate - now) / (1000 * 60 * 60 * 24);
+    const daysUntilDue = (dueDate - (now).getTime()) / (1000 * 60 * 60 * 24);
     return daysUntilDue <= 14 && daysUntilDue > 0;
   }
 

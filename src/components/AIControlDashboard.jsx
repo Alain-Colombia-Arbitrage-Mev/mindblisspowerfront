@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { AlertTriangle, CheckCircle2, TrendingUp, Zap, Copy, MousePointer, RefreshCw } from 'lucide-react';
+import { AlertTriangle, TrendingUp, Zap, Copy, MousePointer, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function AIControlDashboard() {
@@ -383,10 +383,10 @@ export default function AIControlDashboard() {
                       transition: 'all 0.2s'
                     }}
                     onMouseEnter={e => {
-                      e.target.style.background = 'rgba(59,130,246,0.15)';
+                      e.currentTarget.style.background = 'rgba(59,130,246,0.15)';
                     }}
                     onMouseLeave={e => {
-                      e.target.style.background = 'rgba(255,255,255,0.05)';
+                      e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
                     }}
                   >
                     Implementar →

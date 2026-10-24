@@ -3,7 +3,7 @@
  * Renders an admin control bar ABOVE the live component without modifying it.
  */
 import { useState } from 'react';
-import { Eye, EyeOff, Lock, Unlock, AlertTriangle, ChevronDown, ChevronUp, Settings, Shield } from 'lucide-react';
+import { Eye, Lock, AlertTriangle, ChevronDown, ChevronUp, Settings, Shield } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function ServiceSupervisor({
