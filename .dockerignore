@@ -1,0 +1,15 @@
+**/node_modules
+.next
+.git
+.env*
+**/.env*
+.claude-flow
+.superdesign
+reportes
+coverage
+*.log
+*.db
+*.bak
+*.rvf*
+$OUT
+$P
