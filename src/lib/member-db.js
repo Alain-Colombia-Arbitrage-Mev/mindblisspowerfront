@@ -4,6 +4,7 @@
  * volumen (left/right_pv_*, *_carry) hacia el cliente — directiva árbol 2.0.
  */
 import postgres from "postgres";
+import { memberDbOptions } from "./member-db-config.js";
 
 const globalRef = globalThis;
 
@@ -12,18 +13,7 @@ export function memberDb() {
   if (!url) throw new Error("MEMBER_DATABASE_URL not set");
 
   if (!globalRef.__vpMemberDb) {
-    globalRef.__vpMemberDb = postgres(url, {
-      max: 4,
-      connect_timeout: 5,
-      idle_timeout: 30,
-      max_lifetime: 60 * 15,
-      // Prod (RDS) siempre exige SSL; la DB dev local no lo tiene:
-      // MEMBER_DB_SSL=disable solo para desarrollo.
-      ssl: process.env.MEMBER_DB_SSL === "disable" ? false : "require",
-      // Falla rápido si una tabla está bloqueada (p.ej. durante migraciones con
-      // ALTER TABLE) en vez de colgar la petición y agotar el pool.
-      connection: { statement_timeout: 8000 },
-    });
+    globalRef.__vpMemberDb = postgres(url, memberDbOptions(process.env));
   }
   return globalRef.__vpMemberDb;
 }

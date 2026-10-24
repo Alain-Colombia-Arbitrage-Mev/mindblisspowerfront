@@ -1,22 +1,30 @@
 name: Dependency security
 on:
+  workflow_call:
   pull_request:
   push:
     branches: [main, staging, feature/security-dependencies-20261024]
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: client-checks-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   audit:
+    name: client-checks
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24.16.0
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm audit --audit-level=low
+      - run: npm run lint
       - run: npm run typecheck
       - run: npm test
       - run: npm run build

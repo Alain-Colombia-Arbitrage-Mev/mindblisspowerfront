@@ -1,4 +1,4 @@
-FROM node:24.16.0-bookworm-slim AS dependencies
+FROM node:24.16.0-bookworm-slim@sha256:2c87ef9bd3c6a3bd4b472b4bec2ce9d16354b0c574f736c476489d09f560a203 AS dependencies
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY package.json package-lock.json ./
@@ -16,7 +16,7 @@ CMD ["sh", "-c", "npm run typecheck && npm test"]
 FROM source AS builder
 RUN npm run typecheck && npm run build
 
-FROM node:24.16.0-bookworm-slim AS runtime
+FROM node:24.16.0-bookworm-slim@sha256:2c87ef9bd3c6a3bd4b472b4bec2ce9d16354b0c574f736c476489d09f560a203 AS runtime
 WORKDIR /app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 HOSTNAME=0.0.0.0 PORT=3000
 COPY --from=builder --chown=node:node /app/.next/standalone ./
