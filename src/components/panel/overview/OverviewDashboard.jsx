@@ -11,6 +11,7 @@ import PositionSnapshotCard from "./PositionSnapshotCard";
 import RecentSignupsCard from "./RecentSignupsCard";
 import ShortcutPill from "./ShortcutPill";
 import TopRanksCard from "./TopRanksCard";
+import { readMemberParts, validMemberTree, validMemberSummary } from "@/lib/member-read.mjs";
 
 const SHORTCUTS = [
   { icon: HandCoins, label: "Solicitar retiro", href: "/dashboard/withdrawals" },
@@ -34,6 +35,7 @@ export default function OverviewDashboard() {
   const [network, setNetwork] = useState(null);
   const [summaryStatus, setSummaryStatus] = useState("loading");
   const [networkStatus, setNetworkStatus] = useState("loading");
+  const [errors, setErrors] = useState({ summary: null, network: null });
   const request = useRef(null);
 
   const load = useCallback(() => {
@@ -42,24 +44,22 @@ export default function OverviewDashboard() {
     request.current = controller;
     setSummaryStatus("loading");
     setNetworkStatus("loading");
-    const loadPart = async (url, setData, setStatus) => {
-      try {
-        const response = await fetch(url, { cache: "no-store", signal: controller.signal });
-        if (!response.ok) throw new Error("unavailable");
-        const data = await response.json();
-        if (!data || data.error) throw new Error("unavailable");
-        if (!controller.signal.aborted) {
-          setData(data);
-          setStatus("ready");
-        }
-      } catch {
-        if (!controller.signal.aborted) setStatus("error");
+    setErrors({ summary: null, network: null });
+    return readMemberParts({
+      summary: { url: "/api/payments/me", validate: validMemberSummary },
+      network: { url: "/api/member/tree?depth=4&limit=64", validate: validMemberTree },
+    }, { signal: controller.signal, onPart: (key, result) => {
+      if ([401, 403].includes(result.error?.status)) {
+        setSummary(null); setNetwork(null); setSummaryStatus("error"); setNetworkStatus("error");
+        setErrors({ summary: result.error, network: result.error });
+        return;
       }
-    };
-    return Promise.all([
-      loadPart("/api/payments/me", setSummary, setSummaryStatus),
-      loadPart("/api/member/tree?depth=4&limit=64", setNetwork, setNetworkStatus),
-    ]);
+      const setData = key === "summary" ? setSummary : setNetwork;
+      const setStatus = key === "summary" ? setSummaryStatus : setNetworkStatus;
+      setData(result.data || null);
+      setStatus(result.error ? "error" : "ready");
+      setErrors(previous => ({ ...previous, [key]: result.error }));
+    } });
   }, []);
 
   useEffect(() => {
@@ -98,13 +98,13 @@ export default function OverviewDashboard() {
       </div>
 
       <div className="vp-overview-grid">
-        {summaryStatus === "loading" ? <LoadingPanel label="Cargando billetera" /> : summaryStatus === "error" ? <ErrorPanel title="Billetera no disponible" onRetry={load} /> : <EarningsCard
+        {summaryStatus === "loading" ? <LoadingPanel label="Cargando billetera" /> : summaryStatus === "error" ? <ErrorPanel title="Billetera no disponible" error={errors.summary} onRetry={load} /> : <EarningsCard
           total={usd(summary?.wallet_balance_usd)}
           wallet={usd(summary?.available_for_withdrawal_usd)}
           directNetwork={directs.length}
           networkReady={networkStatus === "ready"}
         />}
-        {networkStatus === "loading" ? <><LoadingPanel label="Cargando posición" /><LoadingPanel label="Cargando red" /></> : networkStatus === "error" ? <ErrorPanel title="Red no disponible" onRetry={load} /> : <>
+        {networkStatus === "loading" ? <><LoadingPanel label="Cargando posición" /><LoadingPanel label="Cargando red" /></> : networkStatus === "error" ? <ErrorPanel title="Red no disponible" error={errors.network} onRetry={load} /> : <>
           <PositionSnapshotCard network={network} />
         <RecentSignupsCard
           signups={recentSignups}
@@ -138,6 +138,8 @@ function LoadingPanel({ label }) {
   return <section className="vp-overview-loading" role="status" aria-label={label}><span className="sr-only">{label}</span><span aria-hidden="true" /><span aria-hidden="true" /><span aria-hidden="true" /><span aria-hidden="true" /></section>;
 }
 
-function ErrorPanel({ title, onRetry }) {
-  return <section className="vp-overview-error" role="alert"><AlertCircle size={22} style={{ color: "var(--vp-danger)" }} /><h2>{title}</h2><p>No se pudieron consultar los datos. Intenta nuevamente.</p><button type="button" className="executive-button" onClick={onRetry}><RefreshCw size={15} />Reintentar</button></section>;
+function ErrorPanel({ title, error, onRetry }) {
+  return <section className="vp-overview-error" role="alert"><AlertCircle size={22} style={{ color: "var(--vp-danger)" }} /><h2>{title}</h2><p>{error?.message || "No se pudieron consultar los datos. Intenta nuevamente."}</p>{error?.status === 401
+    ? <Link href="/login" className="executive-button">Iniciar sesion</Link>
+    : <button type="button" className="executive-button" onClick={onRetry}><RefreshCw size={15} />Reintentar</button>}</section>;
 }

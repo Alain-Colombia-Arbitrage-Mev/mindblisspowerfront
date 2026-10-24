@@ -68,7 +68,7 @@ export function treeRefreshFailure(previous, status, message) {
   const accessDenied = status === 401 || status === 403;
   if (accessDenied || !previous.data) {
     return { ...previous, loading: false, refreshing: false, syncing: false,
-      error: message, refreshError: "", data: null, summary: null, referral: null };
+      error: message, errorStatus: status, refreshError: "", data: null, summary: null, referral: null, summaryError: null, referralError: null };
   }
   return { ...previous, loading: false, refreshing: false, syncing: false,
     error: "", refreshError: "No se pudo actualizar la red. Se conserva la última lectura." };

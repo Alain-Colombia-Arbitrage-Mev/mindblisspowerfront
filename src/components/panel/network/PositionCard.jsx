@@ -2,10 +2,12 @@ import { useState } from "react";
 import { Check, Copy, MapPin, Network, ShieldCheck, Trophy } from "lucide-react";
 
 function money(value) {
+  if (value == null || String(value).trim() === "" || !Number.isFinite(Number(value))) return "No disponible";
   return `$${Number(value ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function number(value) {
+  if (value == null || !Number.isFinite(Number(value))) return "—";
   return Number(value ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 });
 }
 
@@ -178,7 +180,7 @@ export default function PositionCard({
             Link de referido {referralCode ? `(${referralCode})` : ""}
           </p>
           <p className="m-0 truncate text-xs font-bold" style={{ color: referralLink ? "var(--vp-text)" : "var(--vp-muted)" }} title={referralLink || "Pendiente"}>
-            {referralLink || "Pendiente de activación y ubicación en el árbol"}
+            {referralLink || (referral?.positioned === false ? "Pendiente de activación y ubicación en el árbol" : "Enlace no disponible")}
           </p>
         </div>
         <button

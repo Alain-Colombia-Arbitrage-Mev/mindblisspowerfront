@@ -14,6 +14,7 @@ export function memberDb() {
   if (!globalRef.__vpMemberDb) {
     globalRef.__vpMemberDb = postgres(url, {
       max: 4,
+      connect_timeout: 5,
       idle_timeout: 30,
       max_lifetime: 60 * 15,
       // Prod (RDS) siempre exige SSL; la DB dev local no lo tiene:
