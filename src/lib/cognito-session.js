@@ -75,7 +75,7 @@ export function buildDemoUser(email) {
  * respuesta del login (InitiateAuth / RespondToAuthChallenge), no de una cookie
  * enviada por el cliente: no es una frontera de confianza, sólo se usa para
  * pintar el perfil en la UI. NO usar esta función para autorizar nada — para eso
- * está @/lib/verify-id-token.
+ * esta en el modulo verify-id-token.
  *
  * Aun así, exigimos `exp`: un token sin caducidad se considera inválido.
  */

@@ -16,7 +16,7 @@ export default function TreeGenerationView({ dataset, onSelect }) {
     byGen[g].push(m);
   });
 
-  const gens = Object.keys(byGen).sort((a, b) => a - b);
+  const gens = Object.keys(byGen).sort((a, b) => Number(a) - Number(b));
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>

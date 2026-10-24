@@ -39,7 +39,7 @@ function useSimulatedCall(delay = 1400) {
 
 // ── Shared UI ──────────────────────────────────────────────────────────────
 
-function Field({ label, value, onChange, placeholder, type = 'text', options }) {
+function Field({ label, value, onChange, placeholder = '', type = 'text', options = null }) {
   if (options) {
     return (
       <div style={{ marginBottom: 16 }}>
@@ -61,7 +61,7 @@ function Field({ label, value, onChange, placeholder, type = 'text', options }) 
   );
 }
 
-function PrimaryBtn({ children, onClick, loading, success, disabled, color = '#3b82f6' }) {
+function PrimaryBtn({ children, onClick, loading = false, success = false, disabled = false, color = '#3b82f6' }) {
   return (
     <button onClick={onClick} disabled={disabled || loading || success}
       style={{ width: '100%', padding: '14px 0', borderRadius: 12, background: success ? 'rgba(52,211,153,0.2)' : `linear-gradient(135deg,#1d6ef5,${color})`, border: success ? '1px solid rgba(52,211,153,0.4)' : 'none', color: success ? '#34d399' : 'white', fontFamily: 'Montserrat,sans-serif', fontWeight: 800, fontSize: 14, cursor: disabled || loading ? 'not-allowed' : 'pointer', opacity: disabled ? 0.45 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'all 0.2s', marginTop: 8 }}>
@@ -73,7 +73,7 @@ function PrimaryBtn({ children, onClick, loading, success, disabled, color = '#3
   );
 }
 
-function Card({ children, highlight }) {
+function Card({ children, highlight = false }) {
   return (
     <div style={{ background: highlight ? 'rgba(59,130,246,0.12)' : 'rgba(255,255,255,0.04)', border: `1px solid ${highlight ? 'rgba(59,130,246,0.4)' : 'rgba(255,255,255,0.1)'}`, borderRadius: 16, padding: 20, marginBottom: 12 }}>
       {children}

@@ -10,7 +10,7 @@ const CHANNEL_COLORS = {
   'Community Referral': '#10b981', 'Influencer Campaign': '#a855f7', 'Email Campaign': '#06b6d4',
 };
 
-function HealthBar({ health, color }) {
+function HealthBar({ health, color = '#3b82f6' }) {
   return (
     <div className="flex items-center gap-2">
       <div className="flex-1 h-2 rounded-full" style={{ background: 'rgba(255,255,255,0.08)' }}>

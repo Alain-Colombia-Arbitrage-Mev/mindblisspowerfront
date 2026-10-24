@@ -141,7 +141,6 @@ class PlatformDataCore {
         depth: 1,
         status: 'activo',
         investment: leaderData.investment,
-        binary_side: binarySide,
         created_at: new Date().toISOString(),
       };
       this.network_nodes.push(networkNode);

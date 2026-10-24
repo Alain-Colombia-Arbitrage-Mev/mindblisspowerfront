@@ -4,7 +4,7 @@ import { Inbox, Pen, Send, Star } from "lucide-react";
 
 const FOLDER_ICONS = { inbox: Inbox, starred: Star, sent: Send };
 
-export default function MessageFolders({ folders, activeFolder, onSelectFolder, onCompose }) {
+export default function MessageFolders({ folders, activeFolder, onSelectFolder, onCompose = null }) {
   return (
     <div
       className="hidden w-64 shrink-0 flex-col gap-6 border-r p-4 lg:flex"
@@ -14,6 +14,7 @@ export default function MessageFolders({ folders, activeFolder, onSelectFolder, 
         className="flex h-[42px] w-full items-center justify-center gap-2 rounded-lg text-sm font-semibold"
         style={{ background: "var(--vp-accent)", color: "#000000", border: 0, cursor: "pointer" }}
         type="button"
+        disabled={!onCompose}
         onClick={onCompose}
       >
         <Pen size={14} />

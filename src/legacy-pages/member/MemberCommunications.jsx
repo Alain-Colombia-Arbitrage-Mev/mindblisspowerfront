@@ -478,7 +478,7 @@ export default function MemberCommunications() {
                   value={messageBody}
                   onChange={(e) => setMessageBody(e.target.value)}
                   placeholder="Escribe tu mensaje..."
-                  rows="6"
+                  rows={6}
                   className="w-full px-3 py-2 rounded-lg text-white placeholder-white/30 text-sm resize-none"
                   style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
                 />
@@ -590,7 +590,7 @@ export default function MemberCommunications() {
                   value={messageBody}
                   onChange={(e) => setMessageBody(e.target.value)}
                   placeholder="Contenido de la campaña..."
-                  rows="6"
+                  rows={6}
                   className="w-full px-3 py-2 rounded-lg text-white placeholder-white/30 text-sm resize-none"
                   style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
                 />

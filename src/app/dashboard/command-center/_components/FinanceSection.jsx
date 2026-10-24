@@ -20,7 +20,7 @@ export default function FinanceSection({ summary }) {
   );
 }
 
-function Kpi({ label, value, tone }) {
+function Kpi({ label, value, tone = "" }) {
   const color = tone === 'critical' ? 'var(--vp-danger)' : tone === 'warning' ? 'var(--vp-accent)' : 'var(--vp-text)';
 
   return (

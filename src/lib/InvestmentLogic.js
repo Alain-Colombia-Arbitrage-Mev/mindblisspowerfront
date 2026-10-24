@@ -15,10 +15,10 @@ class InvestmentLogic {
   validateInvestment(amount) {
     for (const [planName, planData] of Object.entries(INVESTMENT_PLANS)) {
       if (amount >= planData.min && amount <= planData.max) {
-        return { valid: true, plan: planName, ...planData };
+        return { valid: /** @type {const} */ (true), plan: planName, ...planData };
       }
     }
-    return { valid: false, error: 'Monto no válido' };
+    return { valid: /** @type {const} */ (false), error: 'Monto no válido' };
   }
 
   createInvestment(userId, amount, isReinvestment = false) {
@@ -77,7 +77,7 @@ class InvestmentLogic {
     return {
       active: investments.filter(inv => inv.status === 'activo').length,
       expiring: investments.filter(inv => {
-        const daysUntilEnd = (new Date(inv.endDate) - now) / (1000 * 60 * 60 * 24);
+        const daysUntilEnd = ((new Date(inv.endDate)).getTime() - (now).getTime()) / (1000 * 60 * 60 * 24);
         return daysUntilEnd < 7 && daysUntilEnd > 0 && inv.status === 'activo';
       }).length,
       expired: investments.filter(inv => inv.status === 'vencido').length,

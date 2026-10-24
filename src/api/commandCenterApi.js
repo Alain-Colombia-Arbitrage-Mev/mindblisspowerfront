@@ -1,6 +1,6 @@
 import { shapeSummary, sortAlerts } from './commandCenter.transform.mjs';
 
-const BASE = import.meta.env?.VITE_API_BASE ?? '';
+const BASE = '';
 
 async function getJson(path) {
   const res = await fetch(`${BASE}${path}`, { credentials: 'include' });
@@ -10,6 +10,7 @@ async function getJson(path) {
   return res.json();
 }
 
+/** @param {{from?: string, to?: string}} [period] */
 export async function fetchSummary({ from, to } = {}) {
   const qs = new URLSearchParams();
   if (from) qs.set('from', from);

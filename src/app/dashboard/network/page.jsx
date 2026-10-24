@@ -94,7 +94,7 @@ function paymentStatusCopy(status, active) {
   };
 }
 
-function DetailTile({ icon: Icon, label, value, accent }) {
+function DetailTile({ icon: Icon, label, value, accent = false }) {
   return (
     <div
       className="flex min-w-0 items-start gap-3 rounded-xl border p-4"

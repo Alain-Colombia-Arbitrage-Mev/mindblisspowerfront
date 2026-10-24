@@ -113,7 +113,7 @@ export default function InternalGrowthHub({ user }) {
         transition={{ duration: 0.3 }}
       >
         {expandedSection === 'link' && (
-          <ReferralLink userId={user?.id || 'user123'} userName={user?.full_name || 'Usuario'} />
+          <ReferralLink />
         )}
         {expandedSection === 'scripts' && (
           <ReferralScripts />

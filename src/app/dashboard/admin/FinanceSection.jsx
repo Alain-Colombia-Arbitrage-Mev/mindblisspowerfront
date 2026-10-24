@@ -154,7 +154,7 @@ export default function FinanceSection() {
   );
 }
 
-function Kpi({ Icon, label, value, accent, danger }) {
+function Kpi({ Icon, label, value, accent = false, danger = false }) {
   return (
     <div className="executive-card p-3 vp-glass">
       <div className="mb-1 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider" style={{ color: "var(--vp-subtle)" }}><Icon size={12} /> {label}</div>
@@ -163,7 +163,7 @@ function Kpi({ Icon, label, value, accent, danger }) {
   );
 }
 
-function Mini({ label, value, tone }) {
+function Mini({ label, value, tone = "" }) {
   return (
     <div className="executive-card p-2.5 vp-glass">
       <div className="text-[10px] font-black uppercase tracking-wider" style={{ color: "var(--vp-subtle)" }}>{label}</div>

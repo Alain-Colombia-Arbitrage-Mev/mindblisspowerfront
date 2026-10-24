@@ -211,7 +211,6 @@ export default function ReferralModule() {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 12 }}>
           <SideShareCard
-            side="left"
             title="Enlace izquierdo"
             direction="L → L"
             Icon={ArrowDownLeft}
@@ -222,7 +221,6 @@ export default function ReferralModule() {
             onShare={() => hasReferral && setShareSide('left')}
           />
           <SideShareCard
-            side="right"
             title="Enlace derecho"
             direction="R → R"
             Icon={ArrowDownRight}

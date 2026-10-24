@@ -80,7 +80,7 @@ export default function EnhancedTeamRow({ member, onContact = null, onMessage = 
       </div>
 
       {/* ACTIONS — enterprise-clean */}
-      <div style={{ display: 'flex', items: 'center', gap: 6, marginLeft: 14, display: 'flex', alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 6, marginLeft: 14, alignItems: 'center' }}>
         {member.email && (
           <motion.button
             whileTap={{ scale: 0.94 }}

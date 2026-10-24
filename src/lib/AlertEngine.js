@@ -22,7 +22,7 @@ class AlertEngine {
     // Investment expiring alert
     const expiringInvestments = investments.filter(inv => {
       if (inv.userId !== userId || inv.status !== 'activo') return false;
-      const daysLeft = (new Date(inv.endDate) - Date.now()) / (1000 * 60 * 60 * 24);
+      const daysLeft = ((new Date(inv.endDate)).getTime() - Date.now()) / (1000 * 60 * 60 * 24);
       return daysLeft < 7 && daysLeft > 0;
     });
     if (expiringInvestments.length > 0) {
@@ -36,7 +36,7 @@ class AlertEngine {
     }
 
     // Inactivity alert
-    const daysInactive = (Date.now() - new Date(user.lastActivity)) / (1000 * 60 * 60 * 24);
+    const daysInactive = (Date.now() - (new Date(user.lastActivity)).getTime()) / (1000 * 60 * 60 * 24);
     if (daysInactive > 30) {
       alerts.push({
         id: `alert-${userId}-inactivity`,

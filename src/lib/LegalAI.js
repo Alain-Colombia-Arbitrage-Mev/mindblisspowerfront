@@ -135,7 +135,7 @@ class LegalAI {
     // Check for old documents needing review
     const old = allDocs.filter(d => {
       const createdDate = new Date(d.created_date);
-      const monthsOld = (Date.now() - createdDate) / (1000 * 60 * 60 * 24 * 30);
+      const monthsOld = (Date.now() - (createdDate).getTime()) / (1000 * 60 * 60 * 24 * 30);
       return monthsOld > 12;
     });
     if (old.length > 0) {
@@ -223,7 +223,7 @@ class LegalAI {
     // Check for pending signatures older than 7 days
     const oldPending = sigSystem.getPendingSignatures().filter(sig => {
       const createdDate = new Date(sig.created_date);
-      const daysOld = (Date.now() - createdDate) / (1000 * 60 * 60 * 24);
+      const daysOld = (Date.now() - (createdDate).getTime()) / (1000 * 60 * 60 * 24);
       return daysOld > 7;
     });
     if (oldPending.length > 0) {

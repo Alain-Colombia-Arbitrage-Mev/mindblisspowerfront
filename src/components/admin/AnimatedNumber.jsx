@@ -11,7 +11,8 @@ function parseNumeric(val) {
   return parseFloat(str) || 0;
 }
 
-export default function AnimatedNumber({ value, duration = 600, style, className }) {
+/** @param {{value: number | string, duration?: number, style?: import('react').CSSProperties, className?: string}} props */
+export default function AnimatedNumber({ value, duration = 600, style = {}, className = "" }) {
   const raw = String(value);
   const prefix = raw.match(/^[$+]/)?.[0] || '';
   const suffix = raw.match(/[%K]$/)?.[0] || '';

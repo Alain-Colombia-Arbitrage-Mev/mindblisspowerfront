@@ -10,7 +10,7 @@ import { getWarRoomFinancialSummary } from '@/lib/warRoomDataAdapter';
  * Confirmed income, pending payments, overdue, urgent cases, AI actions, manual queue
  */
 
-const PaymentCard = ({ icon: Icon, label, value, subtext, state = 'neutral' }) => {
+const PaymentCard = ({ icon: Icon, label, value, subtext = '', state = 'neutral' }) => {
   const stateStyles = {
     neutral: { bg: 'rgba(255,255,255,0.04)', border: 'rgba(255,255,255,0.08)', text: 'rgba(255,255,255,0.7)' },
     warning: { bg: 'rgba(251,146,60,0.08)', border: 'rgba(251,146,60,0.25)', text: '#fb923c' },

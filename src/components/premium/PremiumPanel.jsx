@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 
-export default function PremiumPanel({ title, children, icon, live = false }) {
+export default function PremiumPanel({ title, children, icon = null, live = false }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}

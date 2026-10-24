@@ -5,7 +5,7 @@
  * Reads from all admin data sources and produces structured operational output.
  */
 
-import { PARTICIPANTS_DATA, LEADERS_DATA, SUPPORT_CASES_DATA } from './SimulatedData';
+import { PARTICIPANTS_DATA, LEADERS_DATA, SUPPORT_CASES_DATA } from "./simulatedData";
 import { CAMPAIGNS, REFERRAL_CHAINS, getConversionBySource, getTopReferrers } from './acquisitionData';
 import { CAMPAIGN_LIFECYCLE } from './campaignIntelligence';
 

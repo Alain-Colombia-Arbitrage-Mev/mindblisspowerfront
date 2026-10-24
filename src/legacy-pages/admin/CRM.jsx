@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Edit2, X, Mail, Phone, Calendar, Tag, MessageSquare, Ban, RefreshCw, Download } from 'lucide-react';
-import { CRM_DATA } from '@/lib/simulatedData';
+import { CRM_DATA } from "@/lib/simulatedData";
 
 const STATUS_COLORS = {
   active: '#10b981', pending_verification: '#fb923c', paused: '#a855f7',

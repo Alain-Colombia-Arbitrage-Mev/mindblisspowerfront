@@ -54,6 +54,7 @@ const eyebrow = {
   textTransform: 'uppercase',
 };
 
+/** @type {import('react').CSSProperties} */
 const inputStyle = {
   width: '100%',
   padding: '10px 12px',

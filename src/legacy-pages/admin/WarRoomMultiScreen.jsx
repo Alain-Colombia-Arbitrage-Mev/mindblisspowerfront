@@ -141,7 +141,7 @@ export default function WarRoomMultiScreen() {
             transition={{ duration: 0.3 }}
             className="h-full w-full"
           >
-            <CurrentComponent sim={sim} presentationMode={presentationMode} navigation={navigation} onNavigate={setNavigation} />
+            {activeScreen === 0 ? <WarRoomCommandCenter /> : <CurrentComponent sim={sim} presentationMode={presentationMode} />}
           </motion.div>
           </AnimatePresence>
           </div>

@@ -48,7 +48,7 @@ function Cell({ column, value }) {
   }
 }
 
-export default function DataTable({ title, columns, rows, minWidth = 800, onEdit, onDelete }) {
+export default function DataTable({ title, columns, rows, minWidth = 800, onEdit = null, onDelete = null }) {
   return (
     <section
       className="overflow-hidden rounded-2xl border"

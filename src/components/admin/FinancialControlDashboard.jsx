@@ -63,6 +63,7 @@ export default function FinancialControlDashboard() {
       });
     
     // Anomalies
+    /** @type {Array<{type: 'inactive_high_value', name: string, investment: number, status: string} | {type: 'network_imbalance', detail: string, status: string}>} */
     const anomalies = [];
     const medianInvestment = activeMemberships.length > 0 
       ? [...activeMemberships].sort((a, b) => (a.plan_value || 0) - (b.plan_value || 0))[Math.floor(activeMemberships.length / 2)].plan_value || 0

@@ -224,7 +224,7 @@ export default function UserCreationForm({ isOpen, onClose, onUserCreated }) {
                 value={formData.notes}
                 onChange={handleChange}
                 placeholder="Agregar notas internas..."
-                rows="3"
+                rows={3}
                 className="w-full px-3 py-2 rounded-lg text-sm text-white placeholder-white/20 focus:outline-none resize-none"
                 style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}
               />

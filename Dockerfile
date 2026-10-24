@@ -11,10 +11,10 @@ COPY infra ./infra
 COPY next.config.mjs postcss.config.js tailwind.config.js jsconfig.json eslint.config.js ./
 
 FROM source AS test
-CMD ["npm", "test"]
+CMD ["sh", "-c", "npm run typecheck && npm test"]
 
 FROM source AS builder
-RUN npm run build
+RUN npm run typecheck && npm run build
 
 FROM node:24.16.0-bookworm-slim AS runtime
 WORKDIR /app

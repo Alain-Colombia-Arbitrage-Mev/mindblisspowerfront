@@ -117,7 +117,7 @@ export default function GrowthGuide() {
                 opacity: expanded === section.id ? 1 : 0,
               }}
               transition={{ duration: 0.2 }}
-              overflow="hidden"
+              style={{ overflow: 'hidden' }}
             >
               <div className="px-4 pb-4 border-t border-white/10">
                 <ul style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, lineHeight: 1.8, margin: 0, paddingLeft: 20 }}>

@@ -1,5 +1,9 @@
 const isNode = typeof window === 'undefined';
-const legacyEnv = import.meta.env ?? {};
+const legacyEnv = {
+	VITE_BASE44_APP_ID: process.env.NEXT_PUBLIC_BASE44_APP_ID,
+	VITE_BASE44_FUNCTIONS_VERSION: process.env.NEXT_PUBLIC_BASE44_FUNCTIONS_VERSION,
+	VITE_BASE44_APP_BASE_URL: process.env.NEXT_PUBLIC_BASE44_APP_BASE_URL,
+};
 
 const toSnakeCase = (str) => {
 	return str.replace(/([A-Z])/g, '_$1').toLowerCase();

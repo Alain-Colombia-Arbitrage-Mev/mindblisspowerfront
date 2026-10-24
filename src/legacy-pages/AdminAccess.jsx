@@ -15,7 +15,7 @@ const fadeUp = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } };
 const staggerContainer = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.1 } } };
 const containerFade = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { duration: 0.3 } } };
 const cardSlideUp = { hidden: { opacity: 0, y: 30 }, visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: 'easeOut' } } };
-const shake = { animate: { x: [0, -8, 8, -8, 0], transition: { duration: 0.5 } } };
+const shake = { animate: { opacity: 1, y: 0, x: [0, -8, 8, -8, 0], transition: { duration: 0.5 } } };
 const cardExit = { exit: { opacity: 0, scale: 0.98, transition: { duration: 0.2 } } };
 
 export default function AdminAccess() {
@@ -352,7 +352,6 @@ export default function AdminAccess() {
                   {error && (
                     <motion.div 
                       initial={{ opacity: 0, y: -10 }} 
-                      animate={{ opacity: 1, y: 0 }} 
                       transition={{ duration: 0.3 }}
                       animate={error ? 'animate' : {}}
                       variants={shake}
@@ -406,7 +405,7 @@ export default function AdminAccess() {
                           onChange={(e) => handleDigitChange(idx, e.target.value)}
                           onKeyDown={(e) => handleDigitKeyDown(idx, e)}
                           disabled={loading}
-                          maxLength="1"
+                          maxLength={1}
                           initial={{ scale: 0.8, opacity: 0 }}
                           animate={{ scale: 1, opacity: 1 }}
                           whileFocus={{ scale: 1.1, boxShadow: '0 0 16px rgba(59,130,246,0.5)' }}

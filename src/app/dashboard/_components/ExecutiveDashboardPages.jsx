@@ -134,7 +134,7 @@ const PAYMENT_STATUS = {
 // Sin solicitudes simuladas: la lista real vendrá del backend KYC.
 const kycRequests = [];
 
-function PageHeader({ eyebrow, title, subtitle, action }) {
+function PageHeader({ eyebrow, title, subtitle, action = null }) {
   return (
     <div className="executive-page-header">
       <div>
@@ -321,11 +321,11 @@ export function CommunicationsDashboardPage() {
         <div className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
           <div className="executive-tabs" role="tablist" aria-label="Vistas de comunicacion">
             {[
-              ["messages", "Mensajes", Mail],
-              ["news", "Noticias", Bell],
-              ["tickets", "Tickets", Archive],
-              ["campaigns", "Campanas", Zap],
-            ].map(([id, label, Icon]) => (
+              { id: "messages", label: "Mensajes", Icon: Mail },
+              { id: "news", label: "Noticias", Icon: Bell },
+              { id: "tickets", label: "Tickets", Icon: Archive },
+              { id: "campaigns", label: "Campanas", Icon: Zap },
+            ].map(({ id, label, Icon }) => (
               <button key={id} className="executive-tab" aria-selected={tab === id} type="button" onClick={() => setTab(id)}>
                 <Icon size={15} />
                 {label}
@@ -562,7 +562,7 @@ function FinanceContent({ data, onDone }) {
       amount: p.total_usd,
       status: PAYMENT_STATUS[p.status] || PAYMENT_STATUS.created,
     })),
-  ].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+  ].sort((a, b) => (new Date(b.date || 0)).getTime() - (new Date(a.date || 0)).getTime());
 
   return (
     <>
@@ -1448,7 +1448,7 @@ function CalendarLikeIcon(props) {
   return <Activity {...props} />;
 }
 
-function ExecutiveModulePage({ config, extra }) {
+function ExecutiveModulePage({ config, extra = null }) {
   return (
     <section className="executive-page">
       <div className="executive-container">
@@ -1991,9 +1991,9 @@ export function KycDashboardPage() {
 
         <div className="mb-6 executive-tabs" role="tablist" aria-label="Vistas KYC">
           {[
-            ["personal", "Mi verificacion", IdCard],
-            ["manage", "Solicitudes", Filter],
-          ].map(([id, label, Icon]) => (
+            { id: "personal", label: "Mi verificacion", Icon: IdCard },
+            { id: "manage", label: "Solicitudes", Icon: Filter },
+          ].map(({ id, label, Icon }) => (
             <button key={id} className="executive-tab" aria-selected={view === id} type="button" onClick={() => setView(id)}>
               <Icon size={15} />
               {label}

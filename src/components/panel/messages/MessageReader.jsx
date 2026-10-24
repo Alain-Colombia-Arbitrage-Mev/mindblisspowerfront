@@ -12,7 +12,7 @@ function initialsOf(name) {
     .toUpperCase();
 }
 
-export default function MessageReader({ message, onSendReply }) {
+export default function MessageReader({ message, onSendReply = null }) {
   if (!message) {
     return (
       <div className="flex flex-1 items-center justify-center" style={{ background: "var(--vp-surface)" }}>

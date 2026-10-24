@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, X, AlertTriangle, MessageSquare, ChevronRight } from 'lucide-react';
-import { SUPPORT_CASES_DATA } from '@/lib/simulatedData';
+import { SUPPORT_CASES_DATA } from "@/lib/simulatedData";
 
 const PRIORITY_CFG = {
   critical: { color: '#ef4444', label: 'Critical' },

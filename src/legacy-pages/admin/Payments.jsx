@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, CheckCircle, XCircle, Eye, X, MessageSquare, RefreshCw, ShieldAlert } from 'lucide-react';
-import { PAYMENTS_DATA } from '@/lib/simulatedData';
+import { PAYMENTS_DATA } from "@/lib/simulatedData";
 import FinancialControlDashboard from '@/components/admin/FinancialControlDashboard';
 
 const STATUS_CFG = {

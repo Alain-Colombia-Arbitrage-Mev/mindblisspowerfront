@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, X, Download, Eye, FileText, CreditCard, Network, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react';
-import { LEADERS_DATA } from '@/lib/simulatedData';
+import { LEADERS_DATA } from "@/lib/simulatedData";
 
 const STATUS_CFG = {
   active: { color: '#10b981', label: 'Activo' },
@@ -74,7 +74,7 @@ export default function LeadersOptimized() {
     total: data.length,
     active: data.filter(l => l.status === 'active').length,
     imbalanced: data.filter(l => Math.abs(l.left_volume - l.right_volume) / Math.max(l.left_volume, l.right_volume) > 0.4).length,
-    highValue: data.filter(l => (l.volume.replace(/[^0-9]/g, '') || 0) >= 100000).length,
+    highValue: data.filter(l => Number(l.volume.replace(/[^0-9]/g, '') || 0) >= 100000).length,
     needsIntervention: data.filter(l => l.violations > 0).length,
   };
 

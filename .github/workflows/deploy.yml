@@ -49,6 +49,10 @@ jobs:
         with: { node-version: 22 }
       - name: Install deps
         run: npm ci --no-audit --no-fund
+      - name: Typecheck gate
+        run: npm run typecheck
+      - name: Lint gate
+        run: npm run lint
       - name: Test gate
         run: npm test
       - name: Build gate

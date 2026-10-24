@@ -152,7 +152,7 @@ function safeVisibleDepth(nodes, hasRoot) {
   return Math.max(1, deepestSafeLevel);
 }
 
-function TreeButton({ children, active, disabled, onClick, title }) {
+function TreeButton({ children, active = false, disabled, onClick, title = "" }) {
   return (
     <button
       type="button"

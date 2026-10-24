@@ -26,6 +26,8 @@ export default function AutomationEngine() {
       setFlows([...flows, { 
         id: Date.now(), 
         ...newFlow, 
+        conditions: newFlow.conditions.length,
+        actions: newFlow.actions.length,
         status: 'active', 
         executions: 0 
       }]);

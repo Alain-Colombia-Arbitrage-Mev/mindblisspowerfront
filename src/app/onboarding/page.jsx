@@ -78,7 +78,7 @@ export default function OnboardingPage() {
   const router = useRouter();
   const [activeStep, setActiveStep] = useState(0);
   const [data, setData] = useState(initialData);
-  const [errors, setErrors] = useState({});
+  const [errors, setErrors] = useState(/** @type {Record<string, string>} */ ({}));
   const [loaded, setLoaded] = useState(false);
   const [identityStatus, setIdentityStatus] = useState("loading");
   const [saving, setSaving] = useState(false);
@@ -168,6 +168,7 @@ export default function OnboardingPage() {
   }
 
   function validateStep(stepIndex) {
+    /** @type {Record<string, string>} */
     const nextErrors = {};
 
     if (stepIndex === 0) {
@@ -665,7 +666,7 @@ export default function OnboardingPage() {
   );
 }
 
-function Field({ id, label, error, ...props }) {
+function Field({ id, label, error = "", ...props }) {
   return (
     <div>
       <label className="mb-2 block text-xs font-bold" htmlFor={id} style={{ color: "var(--vp-muted)" }}>

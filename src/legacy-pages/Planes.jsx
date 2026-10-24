@@ -255,7 +255,7 @@ export default function Planes() {
 
               <div>
                 <label className="block text-sm font-semibold mb-3">Proyección (meses): {simTime}</label>
-                <input type="range" min="1" max="60" value={simTime} onChange={(e) => setSimTime(e.target.value)}
+                <input type="range" min="1" max="60" value={simTime} onChange={(e) => setSimTime(Number(e.target.value))}
                   className="w-full h-2 bg-white/20 rounded-lg appearance-none cursor-pointer" />
               </div>
             </div>

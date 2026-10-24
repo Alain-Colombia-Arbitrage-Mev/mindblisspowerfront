@@ -4,7 +4,7 @@
  * Never auto-executes. Requires admin confirmation on every action.
  */
 
-import { PARTICIPANTS_DATA, LEADERS_DATA, SUPPORT_CASES_DATA } from './SimulatedData';
+import { PARTICIPANTS_DATA, LEADERS_DATA, SUPPORT_CASES_DATA } from "./simulatedData";
 import { CAMPAIGNS } from './acquisitionData';
 import { CAMPAIGN_LIFECYCLE } from './campaignIntelligence';
 

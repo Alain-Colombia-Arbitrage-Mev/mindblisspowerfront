@@ -199,7 +199,8 @@ export default function Copilot() {
           <CopilotExecutionPanel
             action={executing}
             onClose={() => setExecuting(null)}
-            onConfirm={(id) => { handleConfirm(id); setExecuting(null); }}
+            onExecute={(id) => { handleConfirm(id); setExecuting(null); }}
+            onDismiss={() => setExecuting(null)}
           />
         )}
       </AnimatePresence>

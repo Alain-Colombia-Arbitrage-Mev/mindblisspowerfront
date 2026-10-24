@@ -10,7 +10,7 @@
  * - No random spikes or arcade behavior
  */
 
-import { PARTICIPANTS_DATA, LEADERS_DATA } from './SimulatedData';
+import { PARTICIPANTS_DATA, LEADERS_DATA } from "./simulatedData";
 import { CAMPAIGNS } from './acquisitionData';
 import unifiedDataEngine from './UnifiedDataEngine';
 
@@ -245,6 +245,7 @@ function advancePipeline() {
 // ─── STANDALONE EVENTS ─────────────────────────────────────────────────────
 // Each function is [weight, handler]. Higher weight = more frequent.
 
+/** @type {Array<[number, () => void]>} */
 const WEIGHTED_EVENTS = [
 
   // ── Campaign traffic spike / slowdown
@@ -506,7 +507,7 @@ export const simEngine = {
   subscribe(fn) {
     _state._subscribers.add(fn);
     fn({ ..._state, kpis: { ..._state.kpis } });
-    return () => _state._subscribers.delete(fn);
+    return () => { _state._subscribers.delete(fn); };
   },
 
   getState() { return _state; },
@@ -519,7 +520,7 @@ import { useState, useEffect } from 'react';
 export function useSimulation() {
   const [state, setState] = useState(() => ({ ..._state, kpis: { ..._state.kpis }, unifiedData: unifiedDataEngine }));
   useEffect(() => simEngine.subscribe(s => setState({ ...s, kpis: { ...s.kpis }, unifiedData: unifiedDataEngine })), []);
-  return state;
+  return { ...state, users: state.unifiedData.integrityModel.users, integrityModel: state.unifiedData.integrityModel };
 }
 
 // Export unified data access

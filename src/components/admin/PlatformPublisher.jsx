@@ -2,12 +2,12 @@ import { useState } from 'react';
 import { Send, CheckCircle, Clock } from 'lucide-react';
 
 export default function PlatformPublisher() {
-  const [publishQueue, setPublishQueue] = useState([
+  const [publishQueue, setPublishQueue] = useState(/** @type {Array<{id: number, platform: string, content: string, status: string, scheduled?: string, published?: string}>} */ ([
     { id: 1, platform: 'Instagram', content: 'Community Growth Announcement', status: 'pending', scheduled: '2026-04-15 10:00' },
     { id: 2, platform: 'TikTok', content: 'Member Testimonial - Ali M.', status: 'published', published: '2026-04-12 14:30' },
     { id: 3, platform: 'YouTube', content: 'Educational Series Episode 3', status: 'published', published: '2026-04-10 09:00' },
     { id: 4, platform: 'X (Twitter)', content: 'Market Analysis Thread', status: 'pending', scheduled: '2026-04-18 08:00' },
-  ]);
+  ]));
 
   const platformConfig = {
     'Instagram': { color: '#ec4899', icon: '📸' },

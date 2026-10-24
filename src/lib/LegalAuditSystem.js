@@ -137,7 +137,7 @@ class LegalAuditSystem {
       results = results.filter(log => new Date(log.timestamp) <= new Date(filters.date_to));
     }
 
-    return results.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    return results.sort((a, b) => (new Date(b.timestamp)).getTime() - (new Date(a.timestamp)).getTime());
   }
 
   // Get logs by action type

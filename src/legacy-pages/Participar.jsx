@@ -188,7 +188,6 @@ export default function Participar() {
                 exit={{ opacity: 0, y: -20 }}
                 className="text-center">
                 <button
-                  onClick={handleContinue}
                   disabled={loading}
                   className="inline-flex items-center justify-center gap-2 bg-vicion-blue hover:bg-blue-500 text-white font-bold font-montserrat px-8 py-4 rounded-xl transition-all duration-200 shadow-lg shadow-blue-600/40 disabled:opacity-60"
                   onClick={() => { if (!loading) window.location.href = '/onboarding/start'; }}>

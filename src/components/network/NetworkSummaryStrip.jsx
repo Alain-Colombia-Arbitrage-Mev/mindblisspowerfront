@@ -4,6 +4,7 @@
  */
 import { motion } from 'framer-motion';
 
+/** @param {{summary?: Partial<{total: number, leftCount: number, rightCount: number, activeCount: number, directCount: number, maxDepth: number, totalInvested: number, avgInvestment: number}>, rootName?: string}} props */
 export default function NetworkSummaryStrip({ summary = {}, rootName }) {
   const metrics = [
     { label: 'Total',          value: summary.total ?? 0,        color: 'var(--vp-accent)' },

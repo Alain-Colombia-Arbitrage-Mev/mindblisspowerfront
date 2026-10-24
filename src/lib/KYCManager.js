@@ -176,6 +176,10 @@ class KYCManager {
       .sort((a, b) => b.submittedAt - a.submittedAt);
   }
 
+  getAllRecords() {
+    return Object.values(this.kycRecords);
+  }
+
   /**
    * Get KYC summary
    */

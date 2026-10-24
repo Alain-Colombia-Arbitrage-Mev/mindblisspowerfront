@@ -100,7 +100,7 @@ export default function LegalAuditDashboard() {
         <StatCard label="This Hour" value={logs.filter(l => {
           const now = new Date();
           const logTime = new Date(l.timestamp);
-          return (now - logTime) < 3600000;
+          return ((now).getTime() - (logTime).getTime()) < 3600000;
         }).length} color="#8b5cf6" icon={Clock} />
       </div>
 

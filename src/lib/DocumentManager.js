@@ -219,7 +219,7 @@ class DocumentManager {
       byType,
       byStatus,
       byCategory,
-      recentDocuments: active.sort((a, b) => new Date(b.generated_date) - new Date(a.generated_date)).slice(0, 10),
+      recentDocuments: active.sort((a, b) => (new Date(b.generated_date)).getTime() - (new Date(a.generated_date)).getTime()).slice(0, 10),
       mostViewed: active.sort((a, b) => (b.view_count || 0) - (a.view_count || 0)).slice(0, 5),
       signedDocuments: active.filter(d => d.status === 'signed').length,
       pendingSignatures: active.filter(d => d.status === 'sent').length,

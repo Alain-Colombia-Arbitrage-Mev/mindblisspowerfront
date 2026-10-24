@@ -522,7 +522,7 @@ function Row({ k, v }) {
   );
 }
 
-function Stat({ label, value, accent }) {
+function Stat({ label, value, accent = false }) {
   return (
     <div className="rounded-lg p-2" style={{ background: "var(--vp-surface)", border: "1px solid var(--vp-border)" }}>
       <div className="text-[10px] font-black uppercase tracking-wider" style={{ color: "var(--vp-subtle)" }}>{label}</div>
