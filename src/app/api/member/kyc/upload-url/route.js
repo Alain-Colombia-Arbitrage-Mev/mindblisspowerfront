@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
 import { verifyIdToken } from "@/lib/verify-id-token";
@@ -11,8 +11,7 @@ export const dynamic = "force-dynamic";
  * El navegador sube el archivo directo a S3; el binario nunca pasa por aquí.
  */
 export async function POST(request) {
-  const cookieStore = await cookies();
-  const idToken = cookieStore.get("vp_id_token")?.value;
+  const idToken = await rawIdToken();
   if (!idToken) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
 
   const identity = await identityFromIdToken(idToken);

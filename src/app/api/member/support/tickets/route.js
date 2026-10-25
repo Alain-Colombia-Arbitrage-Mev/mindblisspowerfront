@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
 import { verifyIdToken } from "@/lib/verify-id-token";
@@ -9,8 +9,7 @@ export const dynamic = "force-dynamic";
 // Soporte del miembro: GET lista SUS tickets. El backend deriva/verifica el email
 // del id token (resolveIdentity) y filtra por él; aquí solo reenviamos la sesión.
 async function ctx() {
-  const cookieStore = await cookies();
-  const idToken = cookieStore.get("vp_id_token")?.value;
+  const idToken = await rawIdToken();
   if (!idToken) return { error: "unauthenticated", status: 401 };
   const id = await identityFromIdToken(idToken);
   if (!id.email) return { error: "session-invalid", status: 401 };

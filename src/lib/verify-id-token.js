@@ -12,6 +12,10 @@
  * cualquier fallo (incluida configuración ausente) devuelve null.
  */
 import { CognitoJwtVerifier } from "aws-jwt-verify";
+import { betterAuthEnabled } from "./better-auth-bridge.mjs";
+import { createBetterAuthVerifier, validBetterAuthClaims } from "./better-auth-token.mjs";
+
+let betterVerifier;
 
 // Singleton perezoso: se construye en la primera llamada para que un env
 // ausente en build time no rompa el build ni dispare red durante SSG.
@@ -63,6 +67,14 @@ function getVerifier() {
  *   normalizado, o null ante CUALQUIER fallo (fail-closed).
  */
 export async function verifyIdToken(token) {
+  if (betterAuthEnabled()) {
+    try {
+      betterVerifier ??= createBetterAuthVerifier();
+      const claims = await betterVerifier.verify(token);
+      return validBetterAuthClaims(claims) ? { ...claims, email: claims.email.trim().toLowerCase() } : null;
+    } catch { return null; }
+  }
+  if (process.env.AUTH_PROVIDER && process.env.AUTH_PROVIDER !== "cognito") return null;
   return verifyIdTokenWith(getVerifier(), token);
 }
 

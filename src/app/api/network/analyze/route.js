@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
 import { getNetworkDashboardModel } from "@/lib/dashboardNetworkModel";
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 // arbitrario de un cliente anónimo al motor interno si VP_ENGINE_HTTP_URL
 // estaba configurado. Fail-closed: sesión Cognito verificada o 401.
 async function requireSession() {
-  const idToken = (await cookies()).get("vp_id_token")?.value;
+  const idToken = await rawIdToken();
   if (!idToken) return null;
   return verifiedEmailFromIdToken(idToken);
 }

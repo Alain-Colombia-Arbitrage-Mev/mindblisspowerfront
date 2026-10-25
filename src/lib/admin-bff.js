@@ -1,12 +1,24 @@
 // server-only — este módulo usa next/headers y aws-jwt-verify (vía
 // ./verify-id-token). No importar desde componentes cliente.
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 
 import { verifyIdToken } from "./verify-id-token";
+import { betterAuthEnabled, betterAuthServiceToken, trustedAuthClientIp, AuthServiceUnavailable } from "./better-auth-bridge.mjs";
+
+// Next's request-local cookie object is the key; never cache across sessions.
+const requestTokens = new WeakMap();
 
 /** Id token crudo de la cookie de sesión (sin verificar), o "". */
 export async function rawIdToken() {
   const store = await cookies();
+  if (betterAuthEnabled()) {
+    if (!requestTokens.has(store)) {
+      let clientIp;
+      try { clientIp = trustedAuthClientIp(await headers()); } catch { throw new AuthServiceUnavailable(); }
+      requestTokens.set(store, betterAuthServiceToken(store.toString(), { clientIp }));
+    }
+    return requestTokens.get(store);
+  }
   return store.get("vp_id_token")?.value || "";
 }
 

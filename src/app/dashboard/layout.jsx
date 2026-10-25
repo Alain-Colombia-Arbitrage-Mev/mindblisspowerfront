@@ -1,4 +1,5 @@
-import { cookies } from "next/headers";
+import { rawIdToken } from "@/lib/admin-bff";
+import { betterAuthEnabled } from "@/lib/better-auth-bridge.mjs";
 import { redirect } from "next/navigation";
 
 import { verifyIdToken } from "@/lib/verify-id-token";
@@ -15,12 +16,11 @@ import DashboardShell from "./_components/DashboardShell";
  * Las secciones admin tienen además su gate de admin (assertAdminOrRedirect).
  */
 export default async function DashboardLayout({ children }) {
-  const cookieStore = await cookies();
-  const claims = await verifyIdToken(cookieStore.get("vp_id_token")?.value);
+  const claims = await verifyIdToken(await rawIdToken());
 
   if (!claims) {
     redirect("/login");
   }
 
-  return <DashboardShell authMode="cognito">{children}</DashboardShell>;
+  return <DashboardShell authMode={betterAuthEnabled() ? "better-auth" : "cognito"}>{children}</DashboardShell>;
 }

@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
 import { idTokenHeader } from "@/lib/admin-bff";
@@ -13,8 +13,7 @@ export const dynamic = "force-dynamic";
  * El servicio Go crea la sesión de Stripe Checkout y devuelve la URL.
  */
 export async function POST(request) {
-  const cookieStore = await cookies();
-  const idToken = cookieStore.get("vp_id_token")?.value;
+  const idToken = await rawIdToken();
   if (!idToken) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }

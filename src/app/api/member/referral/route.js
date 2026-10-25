@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
 import { memberDb } from "@/lib/member-db";
@@ -16,8 +16,7 @@ const REF_BASE_URL = process.env.REFERRAL_BASE_URL || "https://app.mindblisspowe
  * escribir (el rol web es de solo lectura).
  */
 export async function GET() {
-  const cookieStore = await cookies();
-  const idToken = cookieStore.get("vp_id_token")?.value;
+  const idToken = await rawIdToken();
   if (!idToken) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }

@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
 import { memberOnboardingSchema, toPaymentsOnboarding } from "@/lib/member-onboarding-schema";
@@ -10,8 +10,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 async function context() {
-  const cookieStore = await cookies();
-  const idToken = cookieStore.get("vp_id_token")?.value;
+  const idToken = await rawIdToken();
   if (!idToken) return { error: "unauthenticated", status: 401 };
   const claims = await verifyIdToken(idToken);
   const email = String(claims?.email || "").trim().toLowerCase();
