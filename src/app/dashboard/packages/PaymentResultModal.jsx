@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CheckCircle2, Loader2, Network, XCircle } from "lucide-react";
+import { CheckCircle2, Clock3, Loader2, Network, XCircle } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useCheckoutActivation } from "@/hooks/useCheckoutActivation";
+import { checkoutStatusCopy } from "@/lib/checkout-status.mjs";
 
 /**
  * Popup de resultado del pago. Stripe redirige a
@@ -13,77 +16,29 @@ import { CheckCircle2, Loader2, Network, XCircle } from "lucide-react";
 export default function PaymentResultModal() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [result, setResult] = useState(null); // "paid" | "canceled" | null
-  const [activation, setActivation] = useState({
-    checking: false,
-    active: false,
-    positioned: false,
-    done: false,
+  const result = searchParams.get("paid") === "1" ? "paid" : searchParams.get("canceled") === "1" ? "canceled" : null;
+  const requestKey = `${result}:${searchParams.get("session_id") || ""}`;
+  const [dismissedKey, setDismissedKey] = useState(null);
+  const visible = result !== null && dismissedKey !== requestKey;
+  const activation = useCheckoutActivation({
+    enabled: visible && result === "paid",
+    requestKey,
   });
-
-  useEffect(() => {
-    if (searchParams.get("paid") === "1") setResult("paid");
-    else if (searchParams.get("canceled") === "1") setResult("canceled");
-  }, [searchParams]);
-
-  useEffect(() => {
-    if (result !== "paid") return undefined;
-
-    let cancelled = false;
-    let tries = 0;
-    const maxTries = 20; // ~60s
-    let timer = null;
-
-    const checkActivation = async () => {
-      tries += 1;
-      try {
-        const [summary, tree] = await Promise.all([
-          fetch("/api/payments/me?fresh=1", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
-          fetch("/api/member/tree?view=position", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
-        ]);
-        if (cancelled) return;
-        const active = Number(summary?.active_packages ?? 0) > 0;
-        const positioned = Boolean(tree?.positioned);
-        const done = positioned || tries >= maxTries;
-        setActivation({ checking: !done, active, positioned, done });
-        if (done && timer) clearInterval(timer);
-      } catch {
-        if (cancelled) return;
-        const done = tries >= maxTries;
-        setActivation((current) => ({ ...current, checking: !done, done }));
-        if (done && timer) clearInterval(timer);
-      }
-    };
-
-    setActivation({ checking: true, active: false, positioned: false, done: false });
-    checkActivation();
-    timer = setInterval(checkActivation, 3000);
-
-    return () => {
-      cancelled = true;
-      if (timer) clearInterval(timer);
-    };
-  }, [result]);
-
-  if (!result) return null;
+  if (!visible) return null;
 
   const close = () => {
-    setResult(null);
+    setDismissedKey(requestKey);
     router.replace("/dashboard/packages", { scroll: false });
     router.refresh(); // re-consulta MyPaymentsPanel para reflejar la activación
   };
 
   const goToNetwork = () => {
-    setResult(null);
+    setDismissedKey(requestKey);
     router.replace("/dashboard/network?tab=tree");
   };
 
   const paid = result === "paid";
-  const paidTitle = activation.positioned
-    ? "Membresía activa y posición lista"
-    : activation.active
-      ? "Membresía activa"
-      : "Pago recibido";
+  const copy = checkoutStatusCopy(activation);
 
   return (
     <div
@@ -110,35 +65,29 @@ export default function PaymentResultModal() {
         >
           {paid && activation.checking ? (
             <Loader2 size={30} className="animate-spin" style={{ color: "var(--vp-accent)" }} />
-          ) : paid ? (
+          ) : paid && activation.active ? (
             <CheckCircle2 size={30} style={{ color: "var(--vp-accent)" }} />
+          ) : paid ? (
+            <Clock3 size={30} style={{ color: "var(--vp-accent)" }} />
           ) : (
             <XCircle size={30} style={{ color: "#ef4444" }} />
           )}
         </span>
 
         <h2 className="m-0 text-2xl font-bold" style={{ color: "var(--vp-text)" }}>
-          {paid ? paidTitle : "Tu compra quedó pendiente"}
+          {paid ? copy.title : "Tu compra quedó pendiente"}
         </h2>
         <p className="mt-3 text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
-          {paid && activation.positioned
-            ? "Ya puedes entrar a tu red y ver tu ubicación dentro del árbol binario."
-            : paid && activation.active
-              ? "Tu pago ya activó la membresía. Estamos terminando de reflejar la posición del árbol; si no aparece de inmediato, vuelve a intentar en unos segundos."
-              : paid
-                ? "Estamos confirmando la activación con el backend. Esto suele tomar solo unos segundos."
-                : "No se realizó ningún cargo y tu cupo no se pierde. Puedes completar tu compra cuando quieras; si no lo haces ahora, te enviaremos un correo con un enlace para retomarla."}
+          {paid ? copy.description : "La compra no se completó en esta pantalla. Si observaste un cargo, revisa Mis pagos antes de volver a intentarlo."}
         </p>
 
         {paid && (
           <div className="mt-5 grid gap-2 text-left sm:grid-cols-2">
-            <ActivationStep label="Pago" ready />
             <ActivationStep label="Membresía" ready={activation.active} loading={activation.checking && !activation.active} />
             <ActivationStep
               label="Árbol binario"
               ready={activation.positioned}
               loading={activation.checking && activation.active && !activation.positioned}
-              span
             />
           </div>
         )}
@@ -150,7 +99,7 @@ export default function PaymentResultModal() {
               Ver mi red
             </button>
           )}
-          <button type="button" className={`executive-button ${paid ? "" : "primary"} w-full justify-center`} onClick={close}>
+          <button type="button" className={cn("executive-button w-full justify-center", !paid && "primary")} onClick={close}>
             {paid ? "Ver mis pagos" : "Elegir mi membresía"}
           </button>
         </div>
@@ -159,10 +108,10 @@ export default function PaymentResultModal() {
   );
 }
 
-function ActivationStep({ label, ready, loading = false, span = false }) {
+function ActivationStep({ label, ready, loading = false }) {
   return (
     <div
-      className={span ? "rounded-xl p-3 sm:col-span-2" : "rounded-xl p-3"}
+      className="rounded-xl p-3"
       style={{ background: "var(--vp-bg)", border: "1px solid var(--vp-border)" }}
     >
       <div className="flex items-center justify-between gap-3">

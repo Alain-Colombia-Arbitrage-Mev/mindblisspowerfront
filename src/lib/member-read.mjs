@@ -11,9 +11,23 @@ export function validMemberTree(data) {
     && Number.isInteger(node.level) && node.level > 0);
 }
 
-export const validMemberSummary = data => [data.wallet_balance_usd, data.available_for_withdrawal_usd,
-  data.commission_available_usd, data.commission_maturing_usd, data.active_packages].every(numeric)
-  && Array.isArray(data.payments) && data.payments.every(payment => payment && typeof payment.status === "string");
+export const isRecoverySummary = data => data?.data_source === "verified_stripe_recovery"
+  && data.financial_status === "pending_calculation_and_review" && data.payout_locked === true;
+
+export function validMemberSummary(data) {
+  const balances = [data.wallet_balance_usd, data.available_for_withdrawal_usd,
+    data.commission_available_usd, data.commission_maturing_usd];
+  const paymentsValid = Array.isArray(data.payments) && data.payments.every(payment => payment && typeof payment.status === "string");
+  if (!numeric(data.active_packages) || !paymentsValid) return false;
+  if (data.data_source === "verified_stripe_recovery" || data.financial_status === "pending_calculation_and_review") {
+    return isRecoverySummary(data) && balances.every(value => value === null) && data.payments.length === 0
+      && Array.isArray(data.stripe_sales) && data.stripe_sales.every(sale => sale && identity(sale.payment_intent_id)
+        && numeric(sale.total_usd) && Number(sale.total_usd) >= 0 && numeric(sale.refunded_usd) && Number(sale.refunded_usd) >= 0
+        && ["paid", "refunded", "disputed", "under_review"].includes(sale.status)
+        && typeof sale.source_eligible === "boolean" && typeof sale.charged_at === "string" && Number.isFinite(Date.parse(sale.charged_at)));
+  }
+  return balances.every(numeric);
+}
 
 export function validMemberReferral(data) {
   if (typeof data.positioned !== "boolean") return false;

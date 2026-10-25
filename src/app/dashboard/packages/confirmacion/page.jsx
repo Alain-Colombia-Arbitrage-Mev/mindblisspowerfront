@@ -1,84 +1,38 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowRight, CheckCircle2, Loader2, Network, Receipt, XCircle } from "lucide-react";
-
-const money = (v) =>
-  `$${Number(v ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+import { ArrowRight, CheckCircle2, Clock3, Loader2, Network, Receipt, XCircle } from "lucide-react";
+import { useCheckoutActivation } from "@/hooks/useCheckoutActivation";
+import { checkoutStatusCopy } from "@/lib/checkout-status.mjs";
+import { formatPaymentMoney as money } from "@/lib/payment-display.mjs";
 
 /**
  * Página de confirmación de pago (membresía). Stripe redirige aquí tras el
  * checkout: ?paid=1&session_id=... (éxito) o ?canceled=1 (cancelado).
  *
- * MANEJADOR DE ESTADOS: en éxito no asumimos la activación — la VERIFICAMOS
- * consultando /api/payments/me en un poll corto. Estados:
- *   - "verificando": esperando que el webhook/sweep active la membresía.
- *   - "activa": la membresía ya figura activa (active_packages > 0).
- *   - "procesando": pagado pero aún sin reflejar (async/crypto o webhook en
- *     camino); mensaje tranquilizador, se activará en breve.
- *   - "cancelado": no hubo cargo.
+ * La URL inicia una consulta, no prueba un cobro. El hook verifica membresía y
+ * posición; el detalle de un pago siempre se consulta en Mis pagos.
  */
 export default function PaymentConfirmationPage() {
   const params = useSearchParams();
   const paid = params.get("paid") === "1";
   const canceled = params.get("canceled") === "1";
 
-  const [phase, setPhase] = useState(paid ? "verificando" : canceled ? "cancelado" : "desconocido");
-  const [summary, setSummary] = useState(null);
-  const [positioned, setPositioned] = useState(false);
-  const pollRef = useRef(null);
-  const baselineRef = useRef(null);
+  const activation = useCheckoutActivation({
+    enabled: paid,
+    requestKey: `${paid}:${params.get("session_id") || ""}`,
+    maxAttempts: 12,
+    maxDurationMs: 36_000,
+  });
+  if (!paid && canceled) return <CanceledView />;
 
-  useEffect(() => {
-    if (!paid) return;
-    let tries = 0;
-    const maxTries = 12; // ~36s (3s * 12)
-
-    const check = async () => {
-      tries += 1;
-      try {
-        const [r, t] = await Promise.all([
-          fetch("/api/payments/me?fresh=1", { cache: "no-store" }),
-          fetch("/api/member/tree?view=position", { cache: "no-store" }),
-        ]);
-        const tree = t.ok ? await t.json().catch(() => null) : null;
-        if (tree?.positioned) setPositioned(true);
-        if (r.ok) {
-          const d = await r.json();
-          setSummary(d);
-          const active = Number(d?.active_packages ?? 0);
-          // Baseline en la 1ª lectura; consideramos "activa" si hay al menos una
-          // membresía activa (la recién comprada normalmente aparece en segundos).
-          if (baselineRef.current === null) baselineRef.current = active;
-          if (active > 0 && tree?.positioned) {
-            setPhase("activa");
-            clearInterval(pollRef.current);
-            return;
-          }
-        }
-      } catch {
-        /* reintenta */
-      }
-      if (tries >= maxTries) {
-        setPhase("procesando");
-        clearInterval(pollRef.current);
-      }
-    };
-
-    check();
-    pollRef.current = setInterval(check, 3000);
-    return () => clearInterval(pollRef.current);
-  }, [paid]);
-
-  if (phase === "cancelado") return <CanceledView />;
-
-  const activa = phase === "activa";
-  const verificando = phase === "verificando";
+  const { summary, positioned, checking: verificando } = activation;
+  const activa = activation.active && positioned;
+  const copy = checkoutStatusCopy(activation);
   // Sin ?paid ni ?canceled (navegación directa): no afirmamos éxito de un pago
   // que no consta — estado neutro que remite a "Mis pagos".
-  const desconocido = phase === "desconocido";
+  const desconocido = !paid && !canceled;
   const lastPayment = summary?.payments?.[0];
 
   return (
@@ -101,23 +55,21 @@ export default function PaymentConfirmationPage() {
           >
             {verificando ? (
               <Loader2 size={38} className="animate-spin" style={{ color: "var(--vp-accent)" }} />
-            ) : (
+            ) : activation.active ? (
               <CheckCircle2 size={38} style={{ color: "var(--vp-accent)" }} />
+            ) : (
+              <Clock3 size={38} style={{ color: "var(--vp-accent)" }} />
             )}
           </span>
 
           <h1 className="executive-title m-0 text-3xl font-bold" style={{ color: "var(--vp-text)" }}>
-            {desconocido ? "Estado del pago" : "¡Pago completado con éxito!"}
+            {desconocido ? "Estado del pago" : copy.title}
           </h1>
 
           <p className="mt-4 text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
             {desconocido
               ? "No encontramos información de un pago reciente en esta sesión. Si acabas de pagar, tu membresía aparecerá en \"Mis pagos\" en unos minutos."
-              : activa
-                ? "Tu membresía está activa y tu posición en la red quedó habilitada."
-                : verificando
-                  ? "Estamos activando tu membresía. Esto toma solo unos segundos…"
-                  : "Tu pago fue recibido. La activación de tu membresía se completará en breve; la verás reflejada en \"Mis pagos\"."}
+              : copy.description}
           </p>
 
           {(lastPayment || summary) && (
@@ -127,7 +79,7 @@ export default function PaymentConfirmationPage() {
             >
               <Detail
                 label="Estado"
-                value={activa ? "Membresía y árbol listos" : "Procesando activación"}
+                value={activa ? "Membresía y árbol listos" : activation.active ? "Membresía activa" : "Activación sin confirmar"}
                 accent={activa}
               />
               <Detail label="Membresías activas" value={String(summary?.active_packages ?? "…")} />
@@ -135,7 +87,7 @@ export default function PaymentConfirmationPage() {
               {lastPayment && (
                 <>
                   <Detail label="Monto" value={money(lastPayment.total_usd ?? lastPayment.amount_usd)} />
-                  <Detail label="Referencia" value={(lastPayment.id || "").slice(0, 12) || "—"} />
+                  <Detail label="Referencia" value={String(lastPayment.purchase_id || lastPayment.id || "").slice(0, 12) || "—"} />
                 </>
               )}
             </div>
@@ -192,7 +144,7 @@ function CanceledView() {
             Pago cancelado
           </h1>
           <p className="mt-4 text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
-            No se realizó ningún cargo. Puedes activar tu membresía cuando quieras.
+            La compra no se completó en esta pantalla. Si observaste un cargo, revisa Mis pagos antes de volver a intentarlo.
           </p>
           <Link href="/dashboard/packages" className="executive-button primary mt-8 w-full justify-center no-underline">
             Volver a las membresías

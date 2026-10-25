@@ -35,3 +35,11 @@ dist-ssr
 .next/
 .codex-screenshots/
 base44/
+
+# Private local agent state and command output.
+**/.claude-flow/
+**/.superdesign/
+**/ruvector.db*
+**/agentdb.rvf*
+$OUT
+$P

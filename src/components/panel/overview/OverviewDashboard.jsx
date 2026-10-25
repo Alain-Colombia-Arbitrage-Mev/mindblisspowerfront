@@ -12,6 +12,7 @@ import RecentSignupsCard from "./RecentSignupsCard";
 import ShortcutPill from "./ShortcutPill";
 import TopRanksCard from "./TopRanksCard";
 import { readMemberParts, validMemberTree, validMemberSummary } from "@/lib/member-read.mjs";
+import { formatPaymentMoney as usd } from "@/lib/payment-display.mjs";
 
 const SHORTCUTS = [
   { icon: HandCoins, label: "Solicitar retiro", href: "/dashboard/withdrawals" },
@@ -19,14 +20,9 @@ const SHORTCUTS = [
   { icon: CreditCard, label: "Mis pagos", href: "/dashboard/payments" },
 ];
 
-function usd(value) {
-  if (value == null || !Number.isFinite(Number(value))) return "—";
-  return `$${Number(value).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
 /**
  * Overview del miembro con datos REALES:
- *  - saldo/billetera desde /api/payments/me (vp-payments; migración 2.0 ⇒ $0.00)
+ *  - saldo/billetera desde /api/payments/me; recuperación sin cierre ⇒ pendiente
  *  - red directa, últimos de la red y rangos desde /api/member/tree
  * Los fallos de carga no se representan como saldos o posiciones vacios.
  */
