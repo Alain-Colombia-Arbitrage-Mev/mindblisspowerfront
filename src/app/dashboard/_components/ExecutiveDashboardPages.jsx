@@ -7,6 +7,10 @@ import { useMemberSession } from "@/lib/member-session-context";
 import { readRankCatalog } from "@/lib/rank-catalog.mjs";
 import ReferralModule from "@/components/member/ReferralModule";
 import SupportTicketForm from "./SupportTicketForm";
+import { useMemberSummary } from "@/hooks/useMemberSummary";
+import { isRecoverySummary } from "@/lib/member-read.mjs";
+import { formatPaymentMoney as money, formatPaymentDate as fmtMoneyDate, withdrawalTerms } from "@/lib/payment-display.mjs";
+import StripeSalesHistory from "../packages/StripeSalesHistory";
 import {
   Activity,
   AlertTriangle,
@@ -107,12 +111,6 @@ const campaigns = [
   { name: "Recordatorio KYC", target: "Perfiles pendientes", sent: "0", read: "0%", status: "Programable" },
 ];
 
-// Formato de dinero unificado (mismos decimales que MyPaymentsPanel).
-const money = (v) => `$${Number(v ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const fmtMoneyDate = (s) => {
-  if (!s) return "—";
-  try { return new Date(s).toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" }); } catch { return s; }
-};
 // Estados de retiro → etiqueta + tono del StatusPill.
 const WITHDRAWAL_STATUS = {
   requested: { label: "Solicitado", tone: "warning" },
@@ -453,30 +451,7 @@ export function CommunicationsDashboardPage() {
 export function FinanceDashboardPage() {
   // Distinguir "cargando" de "cargó y es 0" de "falló" es el punto central:
   // nunca pintar $0.00 mientras carga ni cuando la API falla.
-  const [state, setState] = useState({ loading: true, error: "", data: null });
-  const mountedRef = useRef(true);
-
-  const load = () => {
-    setState((prev) => ({ ...prev, loading: true, error: "" }));
-    fetch("/api/payments/me", { cache: "no-store" })
-      .then(async (r) => {
-        const p = await r.json().catch(() => ({}));
-        if (!mountedRef.current) return;
-        // buyer_not_found = miembro sin registro de pagos aún: NO es un error,
-        // es un saldo legítimamente en 0 con historial vacío.
-        if (!r.ok && p.error !== "buyer_not_found") {
-          return setState({ loading: false, error: p.error || "summary-failed", data: null });
-        }
-        setState({ loading: false, error: "", data: p.error === "buyer_not_found" ? {} : p });
-      })
-      .catch(() => { if (mountedRef.current) setState({ loading: false, error: "network", data: null }); });
-  };
-
-  useEffect(() => {
-    mountedRef.current = true;
-    load();
-    return () => { mountedRef.current = false; };
-  }, []);
+  const { state, reload: load } = useMemberSummary();
 
   return (
     <section className="executive-page">
@@ -541,6 +516,7 @@ function FinanceError({ onRetry }) {
 }
 
 function FinanceContent({ data, onDone }) {
+  const recovered = isRecoverySummary(data);
   const withdrawals = Array.isArray(data.withdrawals) ? data.withdrawals : [];
   const payments = Array.isArray(data.payments) ? data.payments : [];
   const pendingTotal = withdrawals
@@ -567,11 +543,16 @@ function FinanceContent({ data, onDone }) {
   return (
     <>
       <div className="executive-grid metrics mb-6">
-        <MetricCard label="Balance disponible" value={money(data.available_for_withdrawal_usd)} detail="saldo real para retirar" icon={Wallet} tone="success" />
+        <MetricCard label="Balance disponible" value={money(data.available_for_withdrawal_usd)} detail={recovered ? "pendiente de cálculo y revisión" : "saldo real para retirar"} icon={Wallet} tone="success" />
         <MetricCard label="Comisiones en maduración" value={money(data.commission_maturing_usd)} detail="aún no disponibles" icon={TrendingUp} tone="accent" />
         <MetricCard label="Retiros pendientes" value={money(pendingTotal)} detail="solicitudes en curso" icon={Activity} tone="muted" />
         <MetricCard label="Membresías activas" value={String(data.active_packages ?? 0)} detail="cuentas con estado activo" icon={CreditCard} tone="info" />
       </div>
+
+      {recovered && <div role="status" className="executive-panel mb-6 text-sm" style={{ color: "var(--vp-muted)" }}>
+        Las comisiones siguen pendientes de cálculo y revisión. Los retiros están bloqueados; un saldo no determinado no equivale a cero.
+        <StripeSalesHistory sales={data.stripe_sales} />
+      </div>}
 
       <div className="grid gap-6 lg:grid-cols-[390px_minmax(0,1fr)]">
         <WithdrawPanel data={data} onDone={onDone} />
@@ -685,22 +666,22 @@ function WithdrawPanel({ data, onDone }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState({ type: "", text: "" });
 
-  const min = Number(data.min_withdrawal_usd ?? 100);
-  const avail = Number(data.available_for_withdrawal_usd ?? 0);
-  const canWithdraw = avail >= min;
+  const { min, available: avail, allowed: canWithdraw } = withdrawalTerms(data);
 
   // Candado BMP: el retiro exige una cuenta BMP válida. Consultamos el estado
   // para mostrar el motivo del bloqueo y deshabilitar el form, en vez de dejar
   // que el usuario intente y reciba un error genérico del backend.
   const [bmp, setBmp] = useState(null);
   useEffect(() => {
+    if (data.payout_locked === true) return undefined;
+    const controller = new AbortController();
     let cancelled = false;
-    fetch("/api/payments/bmp-status", { cache: "no-store" })
+    fetch("/api/payments/bmp-status", { cache: "no-store", signal: controller.signal })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => { if (!cancelled && d && !d.error) setBmp(d); })
       .catch(() => {});
-    return () => { cancelled = true; };
-  }, []);
+    return () => { cancelled = true; controller.abort(); };
+  }, [data.payout_locked]);
   // El backend devuelve block_reason como CÓDIGO (not_registered, kyc_pending…).
   // available:false ⇒ BMP no respondió: el backend es fail-open al solicitar (la
   // solicitud se registra y se re-verifica al pagar), así que NO bloqueamos el
@@ -716,8 +697,9 @@ function WithdrawPanel({ data, onDone }) {
 
   async function submit() {
     setMsg({ type: "", text: "" });
+    if (!formEnabled || busy) return;
     const amt = Number(amount);
-    if (!amt || amt < min) return setMsg({ type: "err", text: `El mínimo de retiro es ${money(min)}.` });
+    if (!Number.isFinite(amt) || amt < min) return setMsg({ type: "err", text: `El mínimo de retiro es ${money(min)}.` });
     if (amt > avail) return setMsg({ type: "err", text: "El monto supera tu saldo disponible." });
     if (bank.trim().length < 6) return setMsg({ type: "err", text: "Ingresa tus datos bancarios." });
     // Guard anti-doble-clic: el backend llama a BMP y puede tardar ~10s.
@@ -814,7 +796,9 @@ function WithdrawPanel({ data, onDone }) {
           disabled={!formEnabled || busy}
         >
           {busy ? <Loader2 size={16} className="animate-spin" /> : <ArrowDownToLine size={16} />}
-          {!canWithdraw
+          {data.payout_locked === true || avail === null
+            ? "Comisiones pendientes de revisión"
+            : !canWithdraw
             ? "Saldo insuficiente para retirar"
             : bmpNotRegistered
               ? "Regístrate en BMP para retirar"
@@ -978,9 +962,7 @@ export function ProfileDashboardPage() {
   const displayRank = summary?.rank && summary.rank !== "—" ? summary.rank : member.rank;
   const displayJoined = summary?.joined_at || member.joined;
   const displayPlan = summary?.plan ? (PLAN_LABEL[summary.plan] || summary.plan) : member.plan;
-  // Siempre visible: el saldo real del ledger (migración 2.0 ⇒ $0.00 para
-  // todos). Si el summary aún no carga se muestra $0.00, nunca se oculta.
-  const displayBalance = `$${Number(summary?.wallet_balance_usd ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const displayBalance = money(summary?.wallet_balance_usd);
 
   return (
     <section className="executive-page">

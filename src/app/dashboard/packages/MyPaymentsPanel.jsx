@@ -1,7 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Wallet, ReceiptText, Loader2, CheckCircle2, Clock, AlertTriangle, ArrowDownToLine, Banknote } from "lucide-react";
+import { Wallet, ReceiptText, Loader2, CheckCircle2, Clock, AlertTriangle, ArrowDownToLine } from "lucide-react";
+import { isRecoverySummary } from "@/lib/member-read.mjs";
+import { useMemberSummary } from "@/hooks/useMemberSummary";
+import { formatPaymentMoney as money, formatPaymentDate as fmtDate } from "@/lib/payment-display.mjs";
+import { cn } from "@/lib/utils";
+import StripeSalesHistory from "./StripeSalesHistory";
+import WithdrawalRequest from "./WithdrawalRequest";
 
 const PAY_STATUS = {
   activated: { label: "Activado", color: "var(--vp-accent)", Icon: CheckCircle2 },
@@ -20,36 +25,16 @@ const WD_STATUS = {
   cancelled: { label: "Cancelado", color: "var(--vp-subtle)" },
 };
 
-const money = (v) => `$${Number(v ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const fmtDate = (s) => { if (!s) return "—"; try { return new Date(s).toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" }); } catch { return s; } };
-
 export default function MyPaymentsPanel() {
-  const [state, setState] = useState({ loading: true, error: "", data: null });
-  const mountedRef = useRef(true);
-
-  const load = () => {
-    fetch("/api/payments/me?fresh=1", { cache: "no-store" })
-      .then(async (r) => {
-        const p = await r.json().catch(() => ({}));
-        if (!mountedRef.current) return;
-        if (!r.ok) return setState({ loading: false, error: p.error || "error", data: null });
-        setState({ loading: false, error: "", data: p });
-      })
-      .catch(() => { if (mountedRef.current) setState({ loading: false, error: "Sin conexión.", data: null }); });
-  };
-  useEffect(() => {
-    mountedRef.current = true;
-    load();
-    return () => { mountedRef.current = false; };
-  }, []);
+  const { state, reload: load } = useMemberSummary({ fresh: true });
 
   if (state.loading) {
     return <Card><div className="flex items-center gap-2 text-sm" style={{ color: "var(--vp-muted)" }}><Loader2 size={15} className="animate-spin" /> Cargando…</div></Card>;
   }
-  if (state.error === "buyer_not_found") return null;
-  if (state.error) return <Card><div className="text-sm" style={{ color: "var(--vp-muted)" }}>No se pudieron cargar tus datos.</div></Card>;
+  if (state.error) return <Card><div role="alert" className="text-sm" style={{ color: "var(--vp-muted)" }}>{state.error}</div></Card>;
 
   const d = state.data;
+  const recovered = isRecoverySummary(d);
 
   return (
     <Card>
@@ -59,9 +44,17 @@ export default function MyPaymentsPanel() {
         <Metric Icon={CheckCircle2} label="Membresías activas" value={String(d.active_packages ?? 0)} />
       </div>
 
-      <WithdrawSection data={d} onDone={load} />
+      {recovered && (
+        <p role="status" className="mt-4 text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
+          Las comisiones están pendientes de cálculo y revisión. Los saldos aún no están determinados y los retiros están bloqueados; esto no significa que tu balance sea cero.
+        </p>
+      )}
 
-      <div className="mt-5 flex items-center gap-2 text-xs font-black uppercase tracking-wider" style={{ color: "var(--vp-subtle)" }}>
+      <WithdrawalRequest data={d} onDone={load} />
+
+      {recovered && <StripeSalesHistory sales={d.stripe_sales} />}
+
+      {!recovered && <><div className="mt-5 flex items-center gap-2 text-xs font-black uppercase tracking-wider" style={{ color: "var(--vp-subtle)" }}>
         <ReceiptText size={13} /> Mis pagos
       </div>
       {(!d.payments || d.payments.length === 0) ? (
@@ -78,7 +71,7 @@ export default function MyPaymentsPanel() {
             );
           })}
         </div>
-      )}
+      )}</>}
 
       {d.withdrawals && d.withdrawals.length > 0 && (
         <>
@@ -102,85 +95,12 @@ export default function MyPaymentsPanel() {
   );
 }
 
-function WithdrawSection({ data, onDone }) {
-  const [open, setOpen] = useState(false);
-  const [amount, setAmount] = useState("");
-  const [bank, setBank] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState({ type: "", text: "" });
-
-  const min = data.min_withdrawal_usd ?? 100;
-  const avail = Number(data.available_for_withdrawal_usd ?? 0);
-
-  async function submit() {
-    setMsg({ type: "", text: "" });
-    const amt = Number(amount);
-    if (!amt || amt < min) return setMsg({ type: "err", text: `El mínimo de retiro es $${min}.` });
-    if (amt > avail) return setMsg({ type: "err", text: "Supera tu saldo disponible." });
-    if (bank.trim().length < 6) return setMsg({ type: "err", text: "Ingresa los datos bancarios." });
-    setBusy(true);
-    try {
-      const r = await fetch("/api/payments/withdraw", {
-        method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ amount: amt.toFixed(2), bank_info: bank.trim() }),
-      });
-      const p = await r.json().catch(() => ({}));
-      if (!r.ok) {
-        const m = { min_withdrawal: `El mínimo es $${min}.`, insufficient_balance: "Saldo insuficiente.", no_balance: "No tienes saldo de comisiones." }[p.error] || "No se pudo solicitar el retiro.";
-        setMsg({ type: "err", text: m });
-      } else {
-        setMsg({ type: "ok", text: "Solicitud enviada. Queda pendiente de aprobación." });
-        setAmount(""); setBank(""); setOpen(false); onDone();
-      }
-    } catch {
-      setMsg({ type: "err", text: "Sin conexión." });
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="mt-4">
-      {!open ? (
-        <button type="button" onClick={() => setOpen(true)} disabled={avail < min}
-          className="executive-button primary disabled:opacity-50">
-          <ArrowDownToLine size={15} /> Solicitar retiro
-        </button>
-      ) : (
-        <div className="rounded-2xl p-4" style={{ background: "var(--vp-bg)", border: "1px solid var(--vp-border)" }}>
-          <div className="mb-3 text-xs font-bold" style={{ color: "var(--vp-muted)" }}>
-            Disponible {money(avail)} · mínimo ${min} · transferencia bancaria
-          </div>
-          <label className="mb-1 block text-[11px] font-black uppercase" style={{ color: "var(--vp-subtle)" }}>Monto (USD)</label>
-          <input type="number" min={min} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)}
-            className="executive-input mb-3" placeholder={`${min}.00`} />
-          <label className="mb-1 block text-[11px] font-black uppercase" style={{ color: "var(--vp-subtle)" }}>Datos bancarios</label>
-          <textarea rows={3} value={bank} onChange={(e) => setBank(e.target.value)}
-            className="executive-textarea mb-3"
-            placeholder="Banco, número de cuenta/CLABE, titular, documento" />
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={submit} disabled={busy}
-              className="executive-button primary disabled:opacity-60">
-              {busy ? <Loader2 size={15} className="animate-spin" /> : <Banknote size={15} />} Enviar solicitud
-            </button>
-            <button type="button" onClick={() => { setOpen(false); setMsg({ type: "", text: "" }); }}
-              className="executive-button ghost">Cancelar</button>
-          </div>
-        </div>
-      )}
-      {msg.text && (
-        <p className="mt-2 text-xs font-semibold" style={{ color: msg.type === "ok" ? "var(--vp-accent)" : "var(--vp-danger)" }}>{msg.text}</p>
-      )}
-    </div>
-  );
-}
-
 function Card({ children }) {
   return <section className="executive-panel vp-glass">{children}</section>;
 }
 function Metric({ Icon, label, value, accent = false }) {
   return (
-    <div className={`executive-card p-3 ${accent ? "vp-glass-accent" : "vp-glass"}`}>
+    <div className={cn("executive-card p-3", accent ? "vp-glass-accent" : "vp-glass")}>
       <div className="mb-1 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider" style={{ color: "var(--vp-subtle)" }}><Icon size={12} /> {label}</div>
       <div className="text-xl font-semibold" style={{ color: accent ? "var(--vp-accent)" : "var(--vp-text)" }}>{value}</div>
     </div>

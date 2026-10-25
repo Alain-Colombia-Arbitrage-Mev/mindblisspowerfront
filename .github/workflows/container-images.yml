@@ -46,10 +46,10 @@ jobs:
         run: |
           set -euo pipefail
           image="registry.digitalocean.com/$DOCR_REGISTRY/$IMAGE_NAME:$IMAGE_TAG"
-          id=$(docker run -d --network none --read-only --tmpfs /tmp --tmpfs /app/.next/cache "$image")
+          id=$(docker run -d --network none --read-only --tmpfs /tmp --tmpfs /app/.next/cache:uid=65532,gid=65532,mode=0700,size=128m "$image")
           trap 'docker rm -f "$id" >/dev/null' EXIT
           for _attempt in $(seq 1 30); do
-            if docker exec "$id" node -e 'fetch("http://127.0.0.1:3000/login").then(r=>process.exit(r.status===200?0:1)).catch(()=>process.exit(1))'; then exit 0; fi
+            if docker exec "$id" /nodejs/bin/node -e 'fetch("http://127.0.0.1:3000/login",{signal:AbortSignal.timeout(2000)}).then(r=>process.exit(r.status===200?0:1)).catch(()=>process.exit(1))'; then exit 0; fi
             sleep 2
           done
           exit 1

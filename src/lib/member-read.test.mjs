@@ -20,6 +20,34 @@ test("real zeros are accepted but incomplete summary fields do not become zeros"
   for (const value of [null, "", "invalid", Infinity]) assert.equal(validMemberSummary({ ...summary, wallet_balance_usd: value }), false);
   assert.equal(validMemberSummary({}), false);
 });
+
+const recoveredSummary = { ...summary, data_source: "verified_stripe_recovery", financial_status: "pending_calculation_and_review", payout_locked: true,
+  wallet_balance_usd: null, available_for_withdrawal_usd: null, commission_available_usd: null, commission_maturing_usd: null,
+  stripe_sales: [{ payment_intent_id: "pi_test", total_usd: "101.00", refunded_usd: "0.00", status: "paid", charged_at: "2026-09-01T12:00:00Z", source_eligible: true }] };
+
+test("explicit recovered evidence permits unknown balances without inventing memberships", async () => {
+  const actual = await read(recoveredSummary, validMemberSummary);
+  assert.equal(actual.wallet_balance_usd, null);
+  assert.equal(actual.available_for_withdrawal_usd, null);
+  assert.equal(actual.active_packages, 0);
+  assert.deepEqual(actual.payments, []);
+  assert.equal(actual.stripe_sales.length, 1);
+});
+
+test("recovery nulls need the full locked provenance contract", () => {
+  for (const partial of [{ data_source: undefined }, { financial_status: undefined }, { payout_locked: false },
+    { wallet_balance_usd: "0" }, { stripe_sales: undefined }, { payments: [{ status: "paid" }] }]) {
+    assert.equal(validMemberSummary({ ...recoveredSummary, ...partial }), false);
+  }
+  assert.equal(validMemberSummary({ ...summary, wallet_balance_usd: null }), false);
+});
+
+test("malformed Stripe evidence is rejected rather than rendered as a verified sale", () => {
+  for (const partial of [{ total_usd: null }, { refunded_usd: "invalid" }, { payment_intent_id: "" }, { status: "activated" },
+    { source_eligible: undefined }, { charged_at: "invalid" }]) {
+    assert.equal(validMemberSummary({ ...recoveredSummary, stripe_sales: [{ ...recoveredSummary.stripe_sales[0], ...partial }] }), false);
+  }
+});
 test("referral failures cannot pretend that activation is pending", async () => {
   assert.equal(validMemberReferral({ positioned: false }), true);
   assert.equal(validMemberReferral({ positioned: true, code: "MP101", links: { left: "https://example.test/?side=L", right: "https://example.test/?side=R" } }), true);

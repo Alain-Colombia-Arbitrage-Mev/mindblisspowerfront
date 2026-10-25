@@ -1,9 +1,7 @@
 import { Coins, Users, Wallet } from "lucide-react";
 import StatRow from "./StatRow";
 
-export default function EarningsCard({ total = "$0.00", wallet = "$0.00", directNetwork = 0, networkReady = true }) {
-  const [dollars, cents = "00"] = String(total).split(".");
-
+export default function EarningsCard({ total = "Pendiente de cálculo", wallet = "Pendiente de cálculo", directNetwork = 0, networkReady = true }) {
   return (
     <section
       className="relative flex flex-col overflow-hidden rounded-3xl p-6"
@@ -18,7 +16,7 @@ export default function EarningsCard({ total = "$0.00", wallet = "$0.00", direct
             Saldo de billetera
           </p>
           <p className="vp-overview-balance m-0 mt-2">
-            {dollars}{total === "—" ? "" : `.${cents}`}
+            {total}
           </p>
         </div>
         <span
