@@ -9,20 +9,20 @@
   "assets": { "directory": ".open-next/assets", "binding": "ASSETS", "run_worker_first": true },
   "limits": { "cpu_ms": 30000 },
   "observability": { "enabled": false },
-  "vars": { "CLOUDFLARE_DEPLOYMENT_READY": "false", "MEMBER_DB_PROVIDER": "hyperdrive", "MEMBER_DB_QUERY_CACHE_DISABLED": "false", "AUTH_PROVIDER": "better-auth", "BETTER_AUTH_BACKEND_URL": "https://auth.core.internal", "VP_PAYMENTS_URL": "https://payments.core.internal", "VP_WITHDRAWALS_URL": "https://withdrawals.core.internal" },
+  "vars": { "BETTER_AUTH_REGISTRATION_SMS_REQUIRED": "false", "CLOUDFLARE_DEPLOYMENT_READY": "false", "MEMBER_DB_PROVIDER": "hyperdrive", "MEMBER_DB_QUERY_CACHE_DISABLED": "false", "AUTH_PROVIDER": "better-auth", "BETTER_AUTH_BACKEND_URL": "https://auth.core.internal", "VP_PAYMENTS_URL": "https://payments.core.internal", "VP_WITHDRAWALS_URL": "https://withdrawals.core.internal" },
   "env": {
     "staging": {
       "name": "mindbliss-portal-staging",
       "workers_dev": false, "preview_urls": false,
       "routes": [],
-      "vars": { "CLOUDFLARE_DEPLOYMENT_READY": "false", "MEMBER_DB_PROVIDER": "hyperdrive", "MEMBER_DB_QUERY_CACHE_DISABLED": "false", "AUTH_PROVIDER": "better-auth", "BETTER_AUTH_BACKEND_URL": "https://auth.core.internal", "VP_PAYMENTS_URL": "https://payments.core.internal", "VP_WITHDRAWALS_URL": "https://withdrawals.core.internal" },
+      "vars": { "BETTER_AUTH_REGISTRATION_SMS_REQUIRED": "false", "CLOUDFLARE_DEPLOYMENT_READY": "false", "MEMBER_DB_PROVIDER": "hyperdrive", "MEMBER_DB_QUERY_CACHE_DISABLED": "false", "AUTH_PROVIDER": "better-auth", "BETTER_AUTH_BACKEND_URL": "https://auth.core.internal", "VP_PAYMENTS_URL": "https://payments.core.internal", "VP_WITHDRAWALS_URL": "https://withdrawals.core.internal" },
       "services": [{ "binding": "CORE_API", "service": "mindbliss-core-staging" }]
     },
     "production": {
       "name": "mindbliss-portal-production",
       "workers_dev": false, "preview_urls": false,
       "routes": [{ "pattern": "mindblisspower.com", "custom_domain": true }],
-      "vars": { "CLOUDFLARE_DEPLOYMENT_READY": "true", "MEMBER_DB_PROVIDER": "hyperdrive", "MEMBER_DB_QUERY_CACHE_DISABLED": "true", "AUTH_PROVIDER": "better-auth", "AUTH_PUBLIC_ORIGIN": "https://mindblisspower.com", "BETTER_AUTH_BACKEND_URL": "https://auth.core.internal", "VP_PAYMENTS_URL": "https://payments.core.internal", "VP_WITHDRAWALS_URL": "https://withdrawals.core.internal" },
+      "vars": { "BETTER_AUTH_REGISTRATION_SMS_REQUIRED": "false", "CLOUDFLARE_DEPLOYMENT_READY": "true", "MEMBER_DB_PROVIDER": "hyperdrive", "MEMBER_DB_QUERY_CACHE_DISABLED": "true", "AUTH_PROVIDER": "better-auth", "AUTH_PUBLIC_ORIGIN": "https://mindblisspower.com", "BETTER_AUTH_BACKEND_URL": "https://auth.core.internal", "VP_PAYMENTS_URL": "https://payments.core.internal", "VP_WITHDRAWALS_URL": "https://withdrawals.core.internal" },
       "hyperdrive": [{ "binding": "HYPERDRIVE_MEMBER_FRESH", "id": "fea27e02187448dd940393bc63f4eda6" }],
       "services": [{ "binding": "CORE_API", "service": "mindbliss-core-production" }]
     }

@@ -72,6 +72,36 @@ try {
     probes++;
   }
   const authHeaders = { origin: 'https://app.mindblisspower.com', 'content-type': 'application/json', 'cf-connecting-ip': '192.0.2.10' };
+  const smsInput = { email: 'signup@example.test', phoneNumber: '+12025550123', consent: true, consentVersion: 'registration-phone-v1' };
+  const smsPost = (path, body, cookie = '') => fetch(`http://127.0.0.1:8787${path}`, {
+    method: 'POST', headers: { ...authHeaders, cookie }, body: JSON.stringify(body), signal: AbortSignal.timeout(8000),
+  });
+  const dormantSms = await smsPost('/api/auth/register/phone/send', smsInput);
+  assert.equal(dormantSms.status, 404); probes++;
+  const smsPage = await fetch('http://127.0.0.1:8787/__registration_sms/register');
+  assert.equal(smsPage.status, 200);
+  const smsPageHtml = await smsPage.text();
+  assert.match(smsPageHtml, /id="phoneNumber"/); assert.match(smsPageHtml, /phoneConsent/); probes++;
+  const smsLogin = await fetch('http://127.0.0.1:8787/__registration_sms/login');
+  const smsLoginHtml = await smsLogin.text();
+  assert.equal(smsLogin.status, 200); assert.match(smsLoginHtml, /Crear cuenta y validar teléfono/);
+  assert.doesNotMatch(smsLoginHtml, /Solicitar código SMS|Enviar código SMS/); probes++;
+  const smsSent = await smsPost('/__registration_sms/api/auth/register/phone/send', smsInput);
+  assert.equal(smsSent.status, 200);
+  const smsFlow = await smsSent.json(); assert.equal(smsFlow.ok, true); assert.equal(smsFlow.expiresIn, 300); probes++;
+  const smsVerified = await smsPost('/__registration_sms/api/auth/register/phone/verify', { ...smsInput, flowId: smsFlow.flowId, code: '001234' });
+  assert.equal(smsVerified.status, 200);
+  const smsProof = await smsVerified.json(); assert.equal(smsProof.verified, true); assert.equal(smsProof.proof, undefined);
+  assert.match(smsVerified.headers.get('set-cookie'), /HttpOnly/);
+  assert.match(smsVerified.headers.get('set-cookie'), /SameSite=Strict/); probes++;
+  const registrationCookie = smsVerified.headers.get('set-cookie').split(';')[0];
+  const smsSignup = { fullName: 'Synthetic Registration', email: smsInput.email, phoneNumber: smsInput.phoneNumber,
+    password: 'Synthetic-Registration-123', acceptsPrivacy: true };
+  assert.equal((await smsPost('/__registration_sms/api/auth/register', smsSignup)).status, 400); probes++;
+  assert.equal((await smsPost('/__registration_sms/api/auth/register', { ...smsSignup, phoneNumber: '+12025550124' }, registrationCookie)).status, 400); probes++;
+  const smsRegistered = await smsPost('/__registration_sms/api/auth/register', smsSignup, registrationCookie);
+  assert.equal(smsRegistered.status, 201); assert.equal((await smsRegistered.json()).userConfirmed, false); probes++;
+  assert.equal((await smsPost('/__registration_sms/api/auth/register', smsSignup, registrationCookie)).status, 400); probes++;
   const signup = await fetch('http://127.0.0.1:8787/api/auth/register', { method: 'POST', headers: authHeaders,
     body: JSON.stringify({ fullName: 'Synthetic Registration', email: 'signup@example.test', password: 'Synthetic-Registration-123', acceptsPrivacy: true, referralCode: 'MP123' }) });
   assert.equal(signup.status, 201);
@@ -156,6 +186,7 @@ try {
   assert.ok(metrics.tokens >= 4 && metrics.jwks >= 3, 'session checks must reach the private JWT/JWKS binding');
   assert.equal(metrics.verifiedReferrals, 1, 'invalid identities must not reach a member data query');
   assert.equal(metrics.sensitiveJwksHeaders, 0, 'public-key reads must not carry browser sessions');
+  assert.equal(metrics.registrationSmsSends, 1, 'only the explicit registration fixture may request a synthetic SMS');
   console.log(JSON.stringify({ workerd: 'passed', probes, privateCalls: metrics.privateCalls, realRsaVerified: true,
     tamperedAndWrongAudienceRejected: true, externalNetwork: 'disabled', databaseQueries: 0, realMessages: 0 }));
 } finally {

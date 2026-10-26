@@ -12,7 +12,6 @@ import {
   LockKeyhole,
   Mail,
   ShieldCheck,
-  Smartphone,
   UserPlus,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -23,7 +22,7 @@ import { bindReferralToEmail, captureReferralFromUrl, normalizePlacementSide, no
 import { otpRequest, otpFailureMessage, OTP_SEND_NOTICE } from "@/lib/email-otp-client.mjs";
 import BetterAuthPasswordLogin from './BetterAuthPasswordLogin';
 import { betterAuthAccess } from './better-auth-login.mjs';
-import { registrationRetrySeconds } from '../register/registration-model.mjs';
+import { registrationRetrySeconds, registrationUrl } from '../register/registration-model.mjs';
 
 const AUTH_STATE_MESSAGES = {
   "invalid-email": {
@@ -48,7 +47,7 @@ const AUTH_STATE_MESSAGES = {
   },
 };
 
-export default function MagicLinkLoginForm({ authState, initialEmail = "", initialMode = "code", initialRef = "", initialSide = "", authMode = "cognito" }) {
+export default function MagicLinkLoginForm({ authState, initialEmail = "", initialMode = "code", initialRef = "", initialSide = "", authMode = "cognito", registrationSmsRequired = false }) {
   const emailOtpOnly = authMode === "better-auth";
   const [mode, setMode] = useState(() => emailOtpOnly ? initialMode === 'password' ? 'password' : 'code' : normalizeMode(initialMode));
   const [codeStep, setCodeStep] = useState("request");
@@ -134,13 +133,17 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     if (otpSubmittingRef.current || isLoading || codeCooldown.active) return;
     setError("");
     setNotice("");
+    if (channel !== 'email') {
+      setError('El inicio de sesión utiliza códigos por correo. El SMS sólo valida el teléfono durante el registro.');
+      return;
+    }
     const normalizedEmail = validateEmail();
     if (!normalizedEmail) return;
     rememberReferralForEmail(normalizedEmail);
     if (channel === "email" && !resend) setShowAccessFallback(false);
 
     otpSubmittingRef.current = true;
-    setLoadingAction(channel === "sms" ? "code-request-sms" : "code-request");
+    setLoadingAction('code-request');
     try {
       const contract = emailOtpOnly ? otpRequest(authMode, 'send', normalizedEmail) : {
         path: "/api/auth/cognito/code-login/request", body: { email: normalizedEmail, channel },
@@ -194,12 +197,6 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
           setError(payload.error || "Tu cuenta no puede recibir códigos de acceso en este momento.");
           return;
         }
-        if (channel === "sms" && (payload.needsPhoneLink || payload.needsPhoneVerification)) {
-          setAccessHelpReason(payload.reason || (payload.needsPhoneLink ? "phone_not_linked" : "phone_not_verified"));
-          setShowAccessFallback(true);
-          setNotice(payload.error || "Tu teléfono no está listo para recibir códigos por SMS. Solicita ayuda para validarlo.");
-          return;
-        }
         setAccessHelpReason(payload.reason || "email_code_not_received");
         setShowAccessFallback(true);
         setError(payload.error || "No se pudo enviar el código de acceso.");
@@ -220,11 +217,9 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
       codeCooldown.start();
       setNotice(
         payload.message ||
-          (channel === "sms"
-            ? `Te enviamos un código por SMS. Puede tardar 1–2 min.`
-            : resend
-              ? `Te reenviamos el código a ${normalizedEmail}. Revisa tu correo (y spam).`
-              : "Te enviamos un código por correo. Si no aparece en 1–2 min, revisa la carpeta de spam."),
+          (resend
+            ? `Te reenviamos el código a ${normalizedEmail}. Revisa tu correo (y spam).`
+            : "Te enviamos un código por correo. Si no aparece en 1–2 min, revisa la carpeta de spam."),
       );
     } catch {
       setAccessHelpReason("auth_service_unavailable");
@@ -276,15 +271,6 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     if (emailOtpOnly) return null;
     return (
       <div className="space-y-2 border-t pt-3" style={{ borderColor: "var(--vp-border)" }}>
-        <SecondaryButton
-          disabled={isLoading || codeCooldown.active}
-          onClick={(e) => requestLoginCode(e, { channel: "sms" })}
-          icon={<Smartphone size={15} />}
-          variant="accent"
-          className="mx-auto w-full min-w-0 px-5"
-        >
-          {loadingAction === "code-request-sms" ? "Enviando SMS…" : codeCooldown.active ? `SMS disponible en ${codeCooldown.remaining}s` : "¿No llega? Recíbelo por SMS"}
-        </SecondaryButton>
         <div
           className="space-y-2 rounded-lg p-3"
           style={{
@@ -555,18 +541,18 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
               {codeCooldown.active ? codeCooldown.label : "Enviar código"}
             </PrimaryButton>
 
-            {!emailOtpOnly && <><p className="text-center text-xs" style={{ color: "var(--vp-muted)" }}>
+            <p className="text-center text-xs" style={{ color: "var(--vp-muted)" }}>
               ¿Primera vez? Necesitas una cuenta para recibir el código.
             </p>
             <SecondaryButton
               disabled={isLoading}
               onClick={() =>
-                window.location.assign(email ? `/register?email=${encodeURIComponent(email)}` : "/register")
+                window.location.assign(registrationUrl(email, referralCode, preferredSide))
               }
               icon={<UserPlus size={15} />}
             >
-              Crear cuenta nueva
-            </SecondaryButton></>}
+              {registrationSmsRequired ? 'Crear cuenta y validar teléfono' : 'Crear cuenta nueva'}
+            </SecondaryButton>
             {showAccessFallback && renderAccessFallback()}
           </form>
         ) : (
@@ -604,13 +590,14 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
               </SecondaryButton>
             </div>
 
-            {/* Escalada sin dead-ends: SMS como canal alterno y, si nada llega, ayuda humana. */}
+            {/* Si el correo no llega, la ayuda no habilita acceso por SMS. */}
             {renderAccessFallback()}
           </form>
         )
       ) : mode === "password" && emailOtpOnly ? (
         <BetterAuthPasswordLogin email={email} setEmail={setEmail} onBusy={busy => setLoadingAction(busy ? 'password' : '')}
-          onError={setError} onNotice={setNotice} rememberReferral={rememberReferralForEmail} />
+          onError={setError} onNotice={setNotice} rememberReferral={rememberReferralForEmail}
+          registrationHref={registrationUrl(email, referralCode, preferredSide, true)} />
       ) : mode === "password" ? (
         <form className="space-y-4" onSubmit={handlePasswordSubmit}>
           <EmailField email={email} setEmail={setEmail} onClearError={() => setError("")} />

@@ -10,6 +10,20 @@ const modes = new Map([[sessionCookie, 'member'],
   ['__Secure-better-auth.session_token=synthetic-tampered', 'tampered'],
   ['__Secure-better-auth.session_token=synthetic-wrong-audience', 'wrong-audience']]);
 const metrics = { tokens: 0, jwks: 0, verifiedReferrals: 0, sensitiveJwksHeaders: 0 };
+const registrationPhone = '+12025550123';
+const registrationFlow = 'f'.repeat(43);
+const registrationProof = 'r'.repeat(43);
+let registrationProofAvailable = false;
+let registrationSmsSends = 0;
+function validProxySignature(target, options, headers) {
+  const timestamp = headers.get('x-vp-auth-timestamp') || '';
+  const ip = headers.get('x-vp-auth-client-ip') || '';
+  const hash = value => createHash('sha256').update(value).digest('hex');
+  const signature = createHmac('sha256', secret).update([options.method, target.pathname, timestamp, ip,
+    hash(headers.get('cookie') || ''), hash(options.body || '')].join('\n')).digest('hex');
+  return ip === '192.0.2.10' && Math.abs(Number(timestamp) - Date.now() / 1000) <= 30
+    && headers.get('x-vp-auth-signature') === signature;
+}
 const encoder = new TextEncoder();
 const encode = value => Buffer.from(JSON.stringify(value)).toString('base64url');
 let pair;
@@ -45,6 +59,20 @@ const syntheticEnv = {
     privateCalls++;
     const target = new URL(url);
     const headers = new Headers(options.headers);
+    if (target.pathname.startsWith('/api/auth/registration/phone/')) {
+      if (!validProxySignature(target, options, headers)) return Response.json({ error: 'invalid_signature' }, { status: 403 });
+      const body = JSON.parse(options.body);
+      if (body.email !== 'signup@example.test' || body.phoneNumber !== registrationPhone) return Response.json({ error: 'invalid_contact' }, { status: 400 });
+      if (target.pathname.endsWith('/send') && body.consent === true && body.consentVersion === 'registration-phone-v1') {
+        registrationSmsSends++;
+        return Response.json({ ok: true, flowId: registrationFlow, resendAfter: 60, expiresIn: 300 });
+      }
+      if (target.pathname.endsWith('/verify') && body.flowId === registrationFlow && body.code === '001234') {
+        registrationProofAvailable = true;
+        return Response.json({ ok: true, verified: true, purpose: 'registration', email: body.email, phoneNumber: registrationPhone, proof: registrationProof });
+      }
+      return Response.json({ error: 'invalid_code' }, { status: 400 });
+    }
     if (target.hostname === 'auth.core.internal' && target.pathname === '/api/auth/token') {
       metrics.tokens++;
       const cookie = headers.get('cookie') || '';
@@ -77,6 +105,13 @@ const syntheticEnv = {
       const body = JSON.parse(options.body);
       if (body.name !== 'Synthetic Registration' || body.email !== 'signup@example.test'
         || typeof body.password !== 'string' || body.password.length < 12) throw new Error('invalid_synthetic_registration');
+      if (headers.get('cookie')?.includes('vp_registration_phone')) {
+        if (!validProxySignature(target, options, headers) || !registrationProofAvailable
+          || headers.get('cookie') !== `__Secure-vp_registration_phone=${registrationProof}; vp_registration_phone_expected=${registrationPhone}`) {
+          return Response.json({ code: 'REGISTRATION_PHONE_INVALID' }, { status: 400 });
+        }
+        registrationProofAvailable = false;
+      }
       return Response.json({ token: null, user: { id: 'synthetic-signup', email: body.email, emailVerified: false } });
     }
     if (url.endsWith('/email-otp/verify-email')) {
@@ -111,11 +146,14 @@ const syntheticEnv = {
 export default {
   async fetch(request, env, ctx) {
     const incoming = new URL(request.url);
-    if (incoming.pathname === '/__synthetic_metrics') return Response.json({ privateCalls, ...metrics });
+    if (incoming.pathname === '/__synthetic_metrics') return Response.json({ privateCalls, ...metrics, registrationSmsSends });
+    const smsFixture = incoming.pathname.startsWith('/__registration_sms/');
+    const pathname = smsFixture ? incoming.pathname.slice('/__registration_sms'.length) : incoming.pathname;
     const headers = new Headers(request.headers);
     headers.delete('x-forwarded-host');
-    const input = new Request(`https://app.mindblisspower.com${incoming.pathname}${incoming.search}`, { method: request.method, headers, body: request.body });
+    const input = new Request(`https://app.mindblisspower.com${pathname}${incoming.search}`, { method: request.method, headers, body: request.body });
     return worker.fetch(input, { ...env, ...syntheticEnv,
+      BETTER_AUTH_REGISTRATION_SMS_REQUIRED: String(smsFixture),
       ...(incoming.pathname.startsWith('/__disabled/') ? { CLOUDFLARE_DEPLOYMENT_READY: 'false' } : {}),
     }, ctx);
   },

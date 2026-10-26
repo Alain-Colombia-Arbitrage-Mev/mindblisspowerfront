@@ -1,19 +1,25 @@
 'use client';
 
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { ArrowLeft, CheckCircle2, Mail, UserPlus } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import AuthShell from '../_components/AuthShell';
 import { useResendCooldown, suggestEmailFix } from '@/lib/useResendCooldown';
 import { bindReferralCodeToEmail } from '@/lib/referral-attribution';
 import { RegistrationButton, RegistrationField, RegistrationPassword } from './RegistrationFields';
-import { REGISTRATION_RESEND_SECONDS, registrationEmail, registrationErrors, registrationFailure, registrationHints, registrationLoginUrl, registrationRetrySeconds, registrationAcknowledged } from './registration-model.mjs';
+import { REGISTRATION_RESEND_SECONDS, REGISTRATION_PHONE_LIFETIME_SECONDS, registrationPhone, registrationEmail, registrationErrors, registrationFailure, registrationHints, registrationLoginUrl, registrationRetrySeconds, registrationAcknowledged } from './registration-model.mjs';
 
-const initialForm = { fullName: '', email: '', password: '', confirmPassword: '', acceptsPrivacy: false };
+// No phone component or SMS transport is loaded until the explicit phone step.
+const RegistrationPhoneVerification = dynamic(() => import('./RegistrationPhoneVerification'), {
+  loading: () => <p role="status" aria-live="polite" aria-busy="true" className="text-sm leading-6 text-[var(--vp-muted)]">Cargando validación del teléfono…</p>,
+});
 
-// A registration verifies email ownership only. It never claims a legacy balance,
+const initialForm = { fullName: '', email: '', password: '', confirmPassword: '', acceptsPrivacy: false, phoneNumber: '', phoneConsent: false };
+
+// Registration verifies contact ownership only. It never claims a legacy balance,
 // creates a placement, assigns a rank or grants administrative permissions.
-export default function BetterAuthRegisterForm({ initialSearch = '' }) {
+export default function BetterAuthRegisterForm({ initialSearch = '', registrationSmsRequired = false }) {
   const [hints] = useState(() => registrationHints(initialSearch));
   const [form, setForm] = useState(() => ({ ...initialForm, email: hints.email }));
   const [step, setStep] = useState(() => hints.resume && hints.email ? 'confirm' : 'details');
@@ -23,6 +29,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
   const [code, setCode] = useState('');
   const [visiblePassword, setVisiblePassword] = useState(false);
   const [visibleConfirmation, setVisibleConfirmation] = useState(false);
+  const [verifiedPhone, setVerifiedPhone] = useState(null);
   const submitting = useRef(false);
   const feedback = useRef(null);
   const codeInput = useRef(null);
@@ -32,6 +39,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
   const email = registrationEmail(form.email);
   const loginUrl = registrationLoginUrl(email, hints.referralCode, hints.preferredSide);
   const emailSuggestion = suggestEmailFix(form.email);
+  const phoneNumber = registrationPhone(form.phoneNumber);
 
   useEffect(() => {
     if (step === 'confirm') codeInput.current?.focus();
@@ -43,6 +51,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
   }, [errors.form]);
 
   function update(field, value) {
+    if (['email', 'phoneNumber', 'phoneConsent'].includes(field)) setVerifiedPhone(null);
     setForm(current => ({ ...current, [field]: value }));
     setErrors(current => {
       const next = { ...current };
@@ -65,19 +74,34 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
     if (submitting.current) return;
     setNotice('');
     const nextErrors = registrationErrors(form);
+    if (registrationSmsRequired && !phoneNumber) nextErrors.phoneNumber = 'Ingresa tu teléfono en formato internacional, por ejemplo +573001234567.';
+    if (registrationSmsRequired && form.phoneConsent !== true) nextErrors.phoneConsent = 'Autoriza el SMS de verificación de registro para validar tu teléfono.';
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) {
       document.getElementById(Object.keys(nextErrors)[0])?.focus();
       return;
     }
+    if (registrationSmsRequired && (!verifiedPhone || verifiedPhone.email !== email || verifiedPhone.phoneNumber !== phoneNumber
+      || Date.now() - verifiedPhone.verifiedAt >= REGISTRATION_PHONE_LIFETIME_SECONDS * 1000)) {
+      setVerifiedPhone(null); setStep('phone');
+      return;
+    }
     submitting.current = true;
     setLoading('register');
+    // Assume the proof was spent as soon as account creation is attempted.
+    // Only a new server-verified SMS can authorize a subsequent signup attempt.
+    if (registrationSmsRequired) setVerifiedPhone(null);
     try {
       const { response, payload } = await post('/api/auth/register', {
         fullName: form.fullName.trim(), email, password: form.password, acceptsPrivacy: true,
         referralCode: hints.referralCode, preferredSide: hints.preferredSide,
+        ...(registrationSmsRequired ? { phoneNumber } : {}),
       });
       if (!response.ok || !registrationAcknowledged('register', payload, email)) {
+        if (registrationSmsRequired && ['REGISTRATION_PHONE_REQUIRED', 'REGISTRATION_PHONE_INVALID'].includes(payload?.code)) {
+          setStep('phone'); setNotice('Valida de nuevo tu teléfono para continuar. No enviaremos un SMS automáticamente.');
+          return;
+        }
         if (response.status === 429 || response.status >= 500 || response.ok) cooldown.start(registrationRetrySeconds(response, payload || {}));
         setErrors({ form: registrationFailure(response.ok ? 502 : response.status, 'register', payload?.code) });
         return;
@@ -155,7 +179,8 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
 
   return (
     <AuthShell activePath="/register" eyebrow="Nuevo miembro" title="Tu cuenta, con acceso seguro."
-      description="Crea tu acceso y verifica tu correo. Si ya perteneces a la red, tus posiciones y datos anteriores se conservan y su vinculación requiere revisión."
+      description={registrationSmsRequired ? 'Crea tu acceso, valida tu teléfono y verifica tu correo. Si ya perteneces a la red, tus posiciones y datos anteriores se conservan y su vinculación requiere revisión.'
+        : 'Crea tu acceso y verifica tu correo. Si ya perteneces a la red, tus posiciones y datos anteriores se conservan y su vinculación requiere revisión.'}
       visualSrc="/mindbliss/mindbliss-01.avif" visualAlt="Equipo Mindbliss Power">
       <section className="rounded-xl border border-[var(--vp-border)] bg-[var(--vp-surface)] p-6 shadow-[var(--vp-shadow)] sm:p-8" aria-labelledby="registration-title" aria-busy={isLoading}>
         <div className="mb-6 flex items-start gap-3">
@@ -163,8 +188,8 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
             {step === 'verified' ? <CheckCircle2 size={22} /> : step === 'confirm' ? <Mail size={22} /> : <UserPlus size={22} />}
           </span>
           <div>
-            <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-[var(--vp-muted)]">{step === 'details' ? 'Paso 1 de 2' : step === 'confirm' ? 'Paso 2 de 2' : 'Correo verificado'}</p>
-            <h2 ref={title} tabIndex={-1} id="registration-title" className="auth-display text-2xl text-[var(--vp-text)]">{step === 'details' ? 'Crear cuenta' : step === 'confirm' ? 'Verifica tu correo' : 'Continúa al acceso'}</h2>
+            <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-[var(--vp-muted)]">{step === 'details' ? registrationSmsRequired ? 'Paso 1 de 3' : 'Paso 1 de 2' : step === 'phone' ? 'Paso 2 de 3' : step === 'confirm' ? registrationSmsRequired ? 'Paso 3 de 3' : 'Paso 2 de 2' : 'Correo verificado'}</p>
+            <h2 ref={title} tabIndex={-1} id="registration-title" className="auth-display text-2xl text-[var(--vp-text)]">{step === 'details' ? 'Crear cuenta' : step === 'phone' ? 'Valida tu teléfono' : step === 'confirm' ? 'Verifica tu correo' : 'Continúa al acceso'}</h2>
           </div>
         </div>
 
@@ -179,6 +204,21 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
               value={form.email} onChange={event => update('email', event.target.value)} error={errors.email} disabled={isLoading}
               helper="Usa un correo propio al que tengas acceso. Recibirás allí tu código de verificación." />
             {emailSuggestion ? <button type="button" onClick={() => update('email', emailSuggestion)} disabled={isLoading} className="min-h-10 text-left text-sm underline text-[var(--vp-text)]">¿Quisiste escribir {emailSuggestion}?</button> : null}
+            {registrationSmsRequired ? <>
+              <RegistrationField id="phoneNumber" name="tel" label="Teléfono internacional" type="tel" inputMode="tel" autoComplete="tel" required maxLength={40} placeholder="+57 300 123 4567"
+                value={form.phoneNumber} onChange={event => update('phoneNumber', event.target.value)} error={errors.phoneNumber} disabled={isLoading}
+                helper="Validarás este número por SMS antes de crear tu cuenta. El acceso seguirá siendo por correo." />
+              <div>
+                <label htmlFor="phoneConsent" className="flex cursor-pointer items-start gap-3 text-sm leading-6 text-[var(--vp-text)]">
+                  <input id="phoneConsent" name="phoneConsent" type="checkbox" checked={form.phoneConsent} disabled={isLoading} required
+                    onChange={event => update('phoneConsent', event.target.checked)} aria-invalid={Boolean(errors.phoneConsent)} aria-describedby={errors.phoneConsent ? 'phoneConsent-error' : undefined}
+                    className="mt-1 h-5 w-5 shrink-0 accent-[var(--vp-accent)]" />
+                  Autorizo el SMS que solicite exclusivamente para validar mi teléfono durante este registro. No autorizo publicidad, WhatsApp ni inicio de sesión por SMS.
+                </label>
+                {errors.phoneConsent ? <p id="phoneConsent-error" className="mt-2 text-sm text-[var(--vp-danger)]">{errors.phoneConsent}</p> : null}
+              </div>
+              {verifiedPhone && verifiedPhone.email === email && verifiedPhone.phoneNumber === phoneNumber ? <p role="status" className="text-sm leading-6 text-[var(--vp-text)]">Teléfono validado para este registro. Crea la cuenta para continuar con la verificación de tu correo.</p> : null}
+            </> : null}
             <RegistrationPassword id="password" name="new-password" label="Contraseña" autoComplete="new-password" required minLength={12} maxLength={128}
               value={form.password} onChange={event => update('password', event.target.value)} error={errors.password} helper="Entre 12 y 128 caracteres. Usa una frase larga que no utilices en otros sitios."
               visible={visiblePassword} onToggle={() => setVisiblePassword(value => !value)} disabled={isLoading} />
@@ -195,13 +235,19 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
               </label>
               {errors.acceptsPrivacy ? <p id="acceptsPrivacy-error" className="mt-2 text-sm text-[var(--vp-danger)]">{errors.acceptsPrivacy}</p> : null}
             </div>
-            <RegistrationButton type="submit" disabled={isLoading || cooldown.active} loading={loading === 'register'}>{loading === 'register' ? 'Creando cuenta…' : cooldown.active ? cooldown.label : 'Crear cuenta y verificar correo'}</RegistrationButton>
+            <RegistrationButton type="submit" disabled={isLoading || cooldown.active} loading={loading === 'register'}>{loading === 'register' ? 'Creando cuenta…' : cooldown.active ? cooldown.label : registrationSmsRequired && !verifiedPhone ? 'Continuar: validar teléfono' : 'Crear cuenta y verificar correo'}</RegistrationButton>
             <button type="button" disabled={isLoading} onClick={() => {
               if (!email) { setErrors({ email: 'Ingresa el correo con el que solicitaste el registro.' }); document.getElementById('email')?.focus(); return; }
               setErrors({}); setStep('confirm'); setNotice('Introduce el código de tu registro o solicítalo con el botón de abajo. No se enviará ningún correo automáticamente.');
             }} className="min-h-11 w-full text-sm text-[var(--vp-text)] underline">Ya solicité mi registro: verificar correo</button>
           </form>
-        ) : step === 'confirm' ? (
+        ) : step === 'phone' ? <RegistrationPhoneVerification email={email} phoneNumber={phoneNumber} consent={form.phoneConsent}
+          onBack={() => { setStep('details'); setErrors({}); setNotice('Puedes corregir tus datos. Cambiar el correo o el teléfono requiere validar de nuevo el número.'); }}
+          onVerified={acknowledgement => {
+            if (acknowledgement.email !== email || acknowledgement.phoneNumber !== phoneNumber || form.phoneConsent !== true) return;
+            setVerifiedPhone({ email, phoneNumber, verifiedAt: acknowledgement.verifiedAt }); setStep('details'); setErrors({});
+            setNotice('Teléfono validado. Continúa con «Crear cuenta y verificar correo». El inicio de sesión será por correo.');
+          }} /> : step === 'confirm' ? (
           <form onSubmit={confirm} noValidate className="space-y-5">
             <p className="break-words text-sm leading-6 text-[var(--vp-muted)]">Ingresa el código enviado a <strong className="text-[var(--vp-text)]">{email}</strong>. No compartas este código con nadie.</p>
             <RegistrationField id="code" name="one-time-code" label="Código de 6 dígitos" type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" required maxLength={6}

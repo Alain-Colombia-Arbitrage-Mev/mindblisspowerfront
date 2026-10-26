@@ -1,6 +1,7 @@
 // Signup is independent of the disabled legacy provider and financial services.
 import { betterAuthEnabled, fetchBetterAuth, readAuthBody, trustedAuthClientIp } from './better-auth-bridge.mjs';
 import { runtimeEnvironment } from './cloudflare-runtime.mjs';
+import { registrationSmsRequired, registrationPhoneProof, registrationPhoneProofCookie, validRegistrationPhone } from './registration-phone.mjs';
 
 const headers = { 'Cache-Control': 'private, no-store' };
 const emailValue = value => typeof value === 'string' ? value.trim().toLowerCase() : '';
@@ -41,6 +42,9 @@ function upstreamError(upstream, payload) {
     code: 'ACCOUNT_EXISTS', accountExists: true, needsLogin: true,
   }, 409);
   if (code === 'REGISTRATION_NOT_ALLOWED') return reply({ error: 'No es posible completar este registro. Contacta al soporte para revisar tu acceso.', code }, 403);
+  if (['REGISTRATION_PHONE_REQUIRED', 'REGISTRATION_PHONE_INVALID'].includes(code)) return reply({
+    error: 'Verifica de nuevo tu teléfono para completar el registro.', code,
+  }, 400);
   if (upstream.status >= 500 || upstream.status < 400) return reply({ error: 'El registro no está disponible temporalmente. Intenta de nuevo.', code: 'REGISTRATION_UNAVAILABLE' }, 503);
   return reply({ error: 'No se pudo completar la solicitud. Revisa los datos o solicita un código nuevo cuando termine la espera.', code: code || 'REGISTRATION_FAILED' }, upstream.status);
 }
@@ -61,17 +65,26 @@ export async function handleRegistration(request, action = 'register', dependenc
     if (action === 'register') {
       const input = registrationInput(body);
       if (input.error) return reply(input, 400);
+      const secure = new URL(origin).protocol === 'https:';
+      const phoneRequired = registrationSmsRequired(env);
+      const phoneProof = phoneRequired ? registrationPhoneProof(request.headers.get('cookie') || '', secure) : '';
+      if (phoneRequired && (!phoneProof || !validRegistrationPhone(body.phoneNumber))) return reply({
+        error: 'Verifica tu teléfono antes de crear la cuenta.', code: 'REGISTRATION_PHONE_REQUIRED',
+      }, 400);
       // The backend performs its authoritative read-only blacklist check before
       // creating auth.user. Referral hints do not grant a sponsor or tree node.
       const upstream = await fetchBetterAuth('/sign-up/email', { method: 'POST', origin, signal: request.signal,
-        body: { name: input.name, email: input.email, password: input.password } }, transport);
+        body: { name: input.name, email: input.email, password: input.password },
+        ...(phoneRequired ? { registrationPhoneProof: phoneProof, registrationPhoneNumber: body.phoneNumber } : {}),
+      }, transport);
       const data = await upstreamResult(upstream);
       if (!upstream.ok) return upstreamError(upstream, data);
       if (!data.user || typeof data.user.id !== 'string' || emailValue(data.user.email) !== input.email
           || data.user.emailVerified !== false || data.token) throw new Error('unexpected_signup_result');
       return reply({ ok: true, mode: 'better-auth', email: input.email, userConfirmed: false,
         requiresConfirmation: true, resendAfter: 300, referralReviewRequired: Boolean(input.referral),
-        delivery: { DeliveryMedium: 'EMAIL', Destination: input.email.replace(/^(.)(.*)(@.*)$/, '$1***$3') } }, 201);
+        delivery: { DeliveryMedium: 'EMAIL', Destination: input.email.replace(/^(.)(.*)(@.*)$/, '$1***$3') } }, 201,
+        phoneRequired ? { 'Set-Cookie': registrationPhoneProofCookie('', secure, true) } : {});
     }
     const email = emailValue(body.email);
     if (!validEmail(email)) return reply({ error: 'Ingresa un correo válido.', field: 'email' }, 400);

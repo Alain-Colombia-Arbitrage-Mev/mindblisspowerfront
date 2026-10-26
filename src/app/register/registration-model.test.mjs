@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { registrationEmail, registrationErrors, registrationHints, registrationRetrySeconds, registrationFailure, registrationLoginUrl, registrationAcknowledged } from './registration-model.mjs';
+import { registrationEmail, registrationErrors, registrationHints, registrationRetrySeconds, registrationFailure, registrationLoginUrl, registrationAcknowledged, registrationUrl } from './registration-model.mjs';
 
 const valid = { fullName: 'Persona Prueba', email: ' test@example.test ', password: 'Synthetic Example 12', confirmPassword: 'Synthetic Example 12', acceptsPrivacy: true };
 
@@ -53,4 +53,15 @@ test('verification never implies network onboarding or session, and safe errors 
   assert.ok(registrationFailure(503).includes('no está disponible'));
   assert.ok(registrationFailure(400, 'confirm', 'internal_secret').includes('código'));
   assert.ok(!registrationFailure(400, 'register', 'internal_secret').includes('internal_secret'));
+});
+
+test('registration links preserve bounded email, referral and binary-side hints without accepting redirects or privileges', () => {
+  const href = registrationUrl(' MEMBER@EXAMPLE.TEST ', 'MP-REFERRED', 'R', true);
+  assert.equal(href, '/register?email=member%40example.test&ref=MP-REFERRED&side=R&resume=1');
+  assert.equal(registrationUrl('bad', '', 'L'), '/register');
+  assert.equal(registrationUrl('', 'bad ref', 'R'), '/register');
+  const malicious = new URL(registrationUrl('', 'ref?role=admin', 'L'), 'https://example.test');
+  assert.equal(malicious.pathname, '/register');
+  assert.equal(malicious.searchParams.get('role'), null);
+  assert.equal(malicious.searchParams.get('ref'), 'ref?role=admin');
 });
