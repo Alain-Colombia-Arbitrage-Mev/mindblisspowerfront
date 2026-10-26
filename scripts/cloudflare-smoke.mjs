@@ -33,13 +33,19 @@ try {
     const body = await response.text();
     assert.equal(response.status, expected, `${path}: ${body.slice(0, 200)}\n${logs}`);
     if (path === '/login') {
-      assert.match(body, /No necesitas contraseña/);
+      assert.match(body, /Código al correo/);
+      assert.match(body, /Usar mi contraseña/);
+      assert.match(body, /Crear cuenta/);
       assert.doesNotMatch(body, /Recuperar contraseña/);
       assert.match(response.headers.get('cache-control'), /no-store/);
     }
     probes++;
   }
-  for (const path of ['/register?email=fixture%40example.test&ref=MP123', '/forgot-password?email=fixture%40example.test']) {
+  const registrationPage = await fetch('http://127.0.0.1:8787/register?email=signup%40example.test&ref=MP123', { redirect: 'manual', signal: AbortSignal.timeout(8000) });
+  assert.equal(registrationPage.status, 200);
+  assert.match(await registrationPage.text(), /Crear cuenta y verificar correo/);
+  probes++;
+  for (const path of ['/forgot-password?email=fixture%40example.test']) {
     const response = await fetch(`http://127.0.0.1:8787${path}`, { redirect: 'manual', signal: AbortSignal.timeout(8000) });
     assert.equal(response.status, 307);
     assert.match(response.headers.get('location'), /^\/login\?/);
@@ -52,6 +58,29 @@ try {
     probes++;
   }
   const authHeaders = { origin: 'https://app.mindblisspower.com', 'content-type': 'application/json', 'cf-connecting-ip': '192.0.2.10' };
+  const signup = await fetch('http://127.0.0.1:8787/api/auth/register', { method: 'POST', headers: authHeaders,
+    body: JSON.stringify({ fullName: 'Synthetic Registration', email: 'signup@example.test', password: 'Synthetic-Registration-123', acceptsPrivacy: true, referralCode: 'MP123' }) });
+  assert.equal(signup.status, 201);
+  assert.equal((await signup.json()).userConfirmed, false);
+  assert.equal(signup.headers.get('set-cookie'), null);
+  probes++;
+  for (const body of [{ email: 'signup@example.test', resend: true }, { email: 'signup@example.test', code: '001234' }]) {
+    const confirmation = await fetch('http://127.0.0.1:8787/api/auth/register/confirm', { method: 'POST', headers: authHeaders, body: JSON.stringify(body) });
+    assert.equal(confirmation.status, 200);
+    const payload = await confirmation.json();
+    assert.equal(payload.ok, true);
+    assert.equal(confirmation.headers.get('set-cookie'), null);
+    assert.equal(payload.authenticated, undefined);
+    if (body.code) assert.equal(payload.needsLogin, true);
+    probes++;
+  }
+  const passwordLogin = await fetch('http://127.0.0.1:8787/api/auth/sign-in/email', { method: 'POST', headers: authHeaders,
+    body: JSON.stringify({ email: 'fixture@example.test', password: 'Synthetic-Password-123' }) });
+  assert.equal(passwordLogin.status, 200);
+  assert.match(passwordLogin.headers.get('set-cookie'), /HttpOnly/);
+  assert.match(passwordLogin.headers.get('set-cookie'), /Secure/);
+  assert.doesNotMatch(await passwordLogin.text(), /must-not-leak/);
+  probes++;
   const denied = await fetch('http://127.0.0.1:8787/api/auth/email-otp/send-verification-otp', { method: 'POST', headers: { ...authHeaders, origin: 'https://evil.example.test' }, body: '{}' });
   assert.equal(denied.status, 403);
   probes++;

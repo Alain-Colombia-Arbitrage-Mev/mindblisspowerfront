@@ -21,6 +21,9 @@ import { isMicrosoftEmail, suggestEmailFix, useResendCooldown } from "@/lib/useR
 import { checkPassword, isValidPassword } from "@/lib/password";
 import { bindReferralToEmail, captureReferralFromUrl, normalizePlacementSide, normalizeReferralCode } from "@/lib/referral-attribution";
 import { otpRequest, otpFailureMessage, OTP_SEND_NOTICE } from "@/lib/email-otp-client.mjs";
+import BetterAuthPasswordLogin from './BetterAuthPasswordLogin';
+import { betterAuthAccess } from './better-auth-login.mjs';
+import { registrationRetrySeconds } from '../register/registration-model.mjs';
 
 const AUTH_STATE_MESSAGES = {
   "invalid-email": {
@@ -47,7 +50,7 @@ const AUTH_STATE_MESSAGES = {
 
 export default function MagicLinkLoginForm({ authState, initialEmail = "", initialMode = "code", initialRef = "", initialSide = "", authMode = "cognito" }) {
   const emailOtpOnly = authMode === "better-auth";
-  const [mode, setMode] = useState(() => emailOtpOnly ? "code" : normalizeMode(initialMode));
+  const [mode, setMode] = useState(() => emailOtpOnly ? initialMode === 'password' ? 'password' : 'code' : normalizeMode(initialMode));
   const [codeStep, setCodeStep] = useState("request");
   const [email, setEmail] = useState(initialEmail);
   const [referralCode, setReferralCode] = useState(() => normalizeReferralCode(initialRef));
@@ -66,7 +69,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
   const [loadingAction, setLoadingAction] = useState("");
   const [resetStep, setResetStep] = useState("request");
   const [resetCode, setResetCode] = useState("");
-  const codeCooldown = useResendCooldown(45);
+  const codeCooldown = useResendCooldown(emailOtpOnly ? 300 : 45);
   const resetCooldown = useResendCooldown(45);
 
   const authMessage = getAuthStateMessage(authState);
@@ -108,7 +111,9 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
   }
 
   function switchMode(nextMode) {
+    if (isLoading || (emailOtpOnly && !['code', 'password'].includes(nextMode))) return;
     setMode(nextMode);
+    setPassword('');
     setError("");
     setNotice("");
 
@@ -151,7 +156,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
 
       if (emailOtpOnly) {
         if (!response.ok || payload.ok !== true) {
-          if (response.status === 429) codeCooldown.start(60);
+          if (response.status === 429) codeCooldown.start(registrationRetrySeconds(response, payload));
           setError(otpFailureMessage(response.status, 'send'));
           return;
         }
@@ -159,7 +164,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
         setCodeChannel("email");
         setCodeRecipient(normalizedEmail);
         setLoginCode("");
-        codeCooldown.start();
+        codeCooldown.start(registrationRetrySeconds(response, payload));
         setNotice(OTP_SEND_NOTICE);
         return;
       }
@@ -361,11 +366,10 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
         }
         // A verified mailbox is not an approved network identity. Never assign
         // a person, rank, placement or role from the sign-in response.
-        const session = await fetch('/api/auth/session', { cache: 'no-store', credentials: 'same-origin', signal: AbortSignal.timeout(12000) });
-        const identity = await session.json().catch(() => ({}));
-        if (!session.ok) setError('El servicio de autorización no está disponible. Intenta más tarde.');
-        else if (identity.authenticated) window.location.assign('/dashboard');
-        else setNotice('Correo verificado. Tu acceso a la red requiere revisión de identidad antes de continuar.');
+        const access = await betterAuthAccess();
+        if (access.ready) window.location.assign('/dashboard');
+        else if (access.error) setError(access.error);
+        else setNotice(access.notice);
         return;
       }
 
@@ -525,16 +529,16 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
 
       {notice && !error && <Message tone="info">{notice}</Message>}
 
-      {!emailOtpOnly && mode !== "reset" && (
+      {mode !== "reset" && (
         <div
           className="grid grid-cols-2 gap-1 rounded-lg p-1"
           style={{ background: "var(--vp-surface-raised)", border: "1px solid var(--vp-border)" }}
         >
-          <ModeButton active={mode === "code"} onClick={() => switchMode("code")}>
+          <ModeButton disabled={isLoading} active={mode === "code"} onClick={() => switchMode("code")}>
             {codeStep === "confirm" && codeChannel === "sms" ? "Código por SMS" : "Código al correo"}
           </ModeButton>
-          <ModeButton active={mode === "password"} onClick={() => switchMode("password")}>
-            Contraseña
+          <ModeButton disabled={isLoading} active={mode === "password"} onClick={() => switchMode("password")}>
+            {emailOtpOnly ? 'Usar mi contraseña' : 'Contraseña'}
           </ModeButton>
         </div>
       )}
@@ -604,6 +608,9 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
             {renderAccessFallback()}
           </form>
         )
+      ) : mode === "password" && emailOtpOnly ? (
+        <BetterAuthPasswordLogin email={email} setEmail={setEmail} onBusy={busy => setLoadingAction(busy ? 'password' : '')}
+          onError={setError} onNotice={setNotice} rememberReferral={rememberReferralForEmail} />
       ) : mode === "password" ? (
         <form className="space-y-4" onSubmit={handlePasswordSubmit}>
           <EmailField email={email} setEmail={setEmail} onClearError={() => setError("")} />
@@ -730,6 +737,7 @@ function Message({ tone, children }) {
 
   return (
     <div
+      role={isDanger ? 'alert' : 'status'}
       className="rounded-lg px-4 py-3 text-sm font-semibold"
       style={{
         color: isDanger ? "var(--vp-danger)" : "var(--vp-accent)",
@@ -912,10 +920,11 @@ function SecondaryButton({ disabled, onClick, icon, children, variant = "default
   );
 }
 
-function ModeButton({ active, onClick, children }) {
+function ModeButton({ active, onClick, children, disabled = false }) {
   return (
     <button
       type="button"
+      disabled={disabled}
       aria-pressed={active}
       onClick={onClick}
       className="min-h-10 rounded-md px-3 text-xs font-black transition"

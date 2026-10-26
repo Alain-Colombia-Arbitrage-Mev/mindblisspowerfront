@@ -18,13 +18,14 @@ export default async function LoginPage({ searchParams }) {
   const initialRef = typeof sp.ref === "string" ? sp.ref : "";
   const initialSide = sp.side === "L" || sp.side === "R" ? sp.side : "";
   const emailOtpOnly = betterAuthEnabled();
+  const initialMode = sp.mode === 'password' ? 'password' : 'code';
 
   return (
     <AuthShell
       activePath="/login"
       eyebrow="Acceso"
       title="Tu equipo ya está adentro."
-      description={emailOtpOnly ? "Entra con un código enviado a tu correo y retoma tu actividad." : "Entra con código al correo o contraseña y retoma tu actividad donde la dejaste."}
+      description="Entra con código al correo o contraseña y retoma tu actividad donde la dejaste."
       sideKpis={sideKpis}
       visualSrc="/mindbliss/mindbliss-02.avif"
       visualAlt="Equipo Mindbliss celebrando"
@@ -34,7 +35,7 @@ export default async function LoginPage({ searchParams }) {
           Iniciar sesión
         </h2>
         <p className="mt-2 text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
-          {emailOtpOnly ? "Usa tu email para recibir un código de acceso. No necesitas contraseña." : "Usa tu email para recibir un código de acceso o entra con contraseña."}
+          Usa tu correo para recibir un código de acceso o entra con tu contraseña.
         </p>
       </div>
 
@@ -46,17 +47,17 @@ export default async function LoginPage({ searchParams }) {
           boxShadow: "var(--vp-shadow)",
         }}
       >
-        <MagicLinkLoginForm authMode={emailOtpOnly ? "better-auth" : "cognito"} authState={authState} initialEmail={initialEmail} initialRef={initialRef} initialSide={initialSide} />
+        <MagicLinkLoginForm authMode={emailOtpOnly ? "better-auth" : "cognito"} authState={authState} initialEmail={initialEmail} initialRef={initialRef} initialSide={initialSide} initialMode={initialMode} />
 
-        {!emailOtpOnly && <div className="mt-6 flex items-center justify-center gap-3 border-t pt-5 text-sm" style={{ borderColor: "var(--vp-border)" }}>
+        <div className="mt-6 flex items-center justify-center gap-3 border-t pt-5 text-sm" style={{ borderColor: "var(--vp-border)" }}>
           <Link href={initialRef ? `/register?ref=${encodeURIComponent(initialRef)}${initialSide ? `&side=${initialSide}` : ""}` : "/register"} className="font-bold transition hover:opacity-80" style={{ color: "var(--vp-text-soft)" }}>
             Crear cuenta
           </Link>
-          <span style={{ color: "var(--vp-border-strong)" }}>·</span>
+          {!emailOtpOnly && <><span style={{ color: "var(--vp-border-strong)" }}>·</span>
           <Link href="/forgot-password" className="font-bold transition hover:opacity-80" style={{ color: "var(--vp-text-soft)" }}>
             Recuperar contraseña
-          </Link>
-        </div>}
+          </Link></>}
+        </div>
       </div>
     </AuthShell>
   );

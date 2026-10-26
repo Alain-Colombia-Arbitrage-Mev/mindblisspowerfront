@@ -69,14 +69,28 @@ const syntheticEnv = {
       metrics.verifiedReferrals++;
       return Response.json({ referral_code: 'SYNTHETIC-MEMBER', name: 'Synthetic Member' });
     }
+    if (url.endsWith('/sign-up/email')) {
+      const body = JSON.parse(options.body);
+      if (body.name !== 'Synthetic Registration' || body.email !== 'signup@example.test'
+        || typeof body.password !== 'string' || body.password.length < 12) throw new Error('invalid_synthetic_registration');
+      return Response.json({ token: null, user: { id: 'synthetic-signup', email: body.email, emailVerified: false } });
+    }
+    if (url.endsWith('/email-otp/verify-email')) {
+      const body = JSON.parse(options.body);
+      if (body.email !== 'signup@example.test' || body.otp !== '001234') return Response.json({ code: 'INVALID_OTP' }, { status: 400 });
+      return Response.json({ status: true, token: null, user: { id: 'synthetic-signup', email: body.email, emailVerified: true } });
+    }
     if (url.endsWith('/email-otp/send-verification-otp')) {
       const body = JSON.parse(options.body);
-      if (body.type !== 'sign-in' || body.email !== 'fixture@example.test') throw new Error('invalid_synthetic_contract');
+      if (!((body.type === 'sign-in' && body.email === 'fixture@example.test')
+        || (body.type === 'email-verification' && body.email === 'signup@example.test'))) throw new Error('invalid_synthetic_contract');
       return Response.json({ success: true });
     }
-    if (url.endsWith('/sign-in/email-otp')) {
+    if (url.endsWith('/sign-in/email-otp') || url.endsWith('/sign-in/email')) {
       const body = JSON.parse(options.body);
-      if (body.otp !== '001234') throw new Error('invalid_synthetic_contract');
+      const valid = url.endsWith('/sign-in/email-otp') ? body.otp === '001234'
+        : body.email === 'fixture@example.test' && body.password === 'Synthetic-Password-123';
+      if (!valid) throw new Error('invalid_synthetic_contract');
       return Response.json({ token: 'must-not-leak', user: { id: 'synthetic', email: body.email } }, {
         headers: { 'set-cookie': `${sessionCookie}; Secure; HttpOnly; Path=/` },
       });

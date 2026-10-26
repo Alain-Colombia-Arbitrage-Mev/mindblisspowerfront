@@ -44,7 +44,7 @@ export function browserAuthCookie(value) {
   return `${parts.join(";")}; Path=/; HttpOnly; SameSite=Lax`;
 }
 
-async function readAuthBody(request) {
+export async function readAuthBody(request) {
   const reader = request.body?.getReader();
   if (!reader) return {};
   const signal = AbortSignal.any([request.signal, AbortSignal.timeout(8000)]);
