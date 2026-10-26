@@ -34,3 +34,16 @@ No publicar primero el portal: un backend anterior podría ignorar los contactos
 No publicar primero el runtime sin las columnas: rompería consultas del usuario.
 La comprobación de Worker aislada usa sólo identidades y códigos sintéticos,
 sin red externa, consultas reales o mensajes enviados.
+
+## Publicación verificada — 2026-10-26
+
+- Código del portal: `5e010c2`; Worker productivo:
+  `e6bea468-302c-4d2b-8452-b67b30cb4c75`.
+- Backend compatible: `e6df13d`; migración 76 aplicada antes del runtime y API
+  publicada antes del portal. No cambios en clientes existentes ni Chatwoot.
+- 381 pruebas, typecheck, build y 50 comprobaciones del Worker aislado aprobadas.
+  Los recursos exportados se comprobaron también montados de sólo lectura.
+- 19 comprobaciones públicas aprobadas: contactos con país, verificación de email,
+  rutas SMS 404, acceso anónimo restringido, protección de origen, no-store de
+  datos privados y caché/ETag de estáticos conservados. No registros ni mensajes
+  reales durante estas comprobaciones.
