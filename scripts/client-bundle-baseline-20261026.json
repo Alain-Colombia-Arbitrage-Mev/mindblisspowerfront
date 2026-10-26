@@ -1,0 +1,26 @@
+{
+  "metric": "unique route client-reference JS (framework bootstrap excluded)",
+  "compression": "gzip level 9 per unique chunk, summed",
+  "notes": "Build-artifact sizes, not browser load time, LCP or guaranteed wire compression. Baseline captured before performance edits; admin baseline from existing build. Re-run measure-client-bundles.mjs after npm run build.",
+  "portal": {
+    "commit": "0890064",
+    "routes": [
+      { "route": "/login", "bytes": 90831, "gzipBytes": 28117 },
+      { "route": "/register", "bytes": 101088, "gzipBytes": 30381 },
+      { "route": "/dashboard", "bytes": 64920, "gzipBytes": 20747 },
+      { "route": "/dashboard/profile", "bytes": 242709, "gzipBytes": 75887 },
+      { "route": "/dashboard/payments", "bytes": 81280, "gzipBytes": 26545 },
+      { "route": "/dashboard/support", "bytes": 242709, "gzipBytes": 75887 },
+      { "route": "/dashboard/network", "bytes": 93809, "gzipBytes": 28431 }
+    ]
+  },
+  "admin": {
+    "commit": "233b8db",
+    "routes": [
+      { "route": "/login", "bytes": 25870, "gzipBytes": 8132 },
+      { "route": "/dashboard", "bytes": 72693, "gzipBytes": 24101 },
+      { "route": "/dashboard/usuarios", "bytes": 96268, "gzipBytes": 29881 },
+      { "route": "/dashboard/red", "bytes": 124820, "gzipBytes": 36011 }
+    ]
+  }
+}

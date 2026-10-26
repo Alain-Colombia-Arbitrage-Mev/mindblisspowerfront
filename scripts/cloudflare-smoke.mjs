@@ -39,6 +39,8 @@ try {
       assert.match(body, /Crear cuenta/);
       assert.doesNotMatch(body, /Recuperar contraseña/);
       assert.doesNotMatch(body, /SMS|WhatsApp|account\/security/);
+      assert.doesNotMatch(body, /fonts\.googleapis|fonts\.gstatic|chatwoot|soporte\.mindbliss/i);
+      assert.match(body, /rel="preload"[^>]*href="\/fonts\/montserrat-latin-wght\.woff2"/);
       assert.match(response.headers.get('cache-control'), /no-store/);
     }
     if (path === '/account/security') assert.equal(response.headers.get('location'), '/login');
@@ -50,6 +52,13 @@ try {
   assert.match(registrationHtml, /Crear cuenta y verificar correo/);
   assert.doesNotMatch(registrationHtml, /SMS|WhatsApp|account\/security/);
   probes++;
+  for (const filename of ['montserrat-latin-wght.woff2', 'montserrat-latin-ext-wght.woff2']) {
+    const response = await fetch(`http://127.0.0.1:8787/fonts/${filename}`, { signal: AbortSignal.timeout(8000) });
+    assert.equal(response.status, 200);
+    const bytes = Buffer.from(await response.arrayBuffer());
+    assert.equal(bytes.subarray(0, 4).toString('ascii'), 'wOF2');
+    probes++;
+  }
   for (const path of ['/forgot-password?email=fixture%40example.test']) {
     const response = await fetch(`http://127.0.0.1:8787${path}`, { redirect: 'manual', signal: AbortSignal.timeout(8000) });
     assert.equal(response.status, 307);
@@ -109,7 +118,11 @@ try {
   const smsStatus = await fetch('http://127.0.0.1:8787/api/auth/phone-number/opt-in', { headers: sessionHeaders });
   assert.equal(smsStatus.status, 404);
   assert.deepEqual(await smsStatus.json(), { error: 'not_found' });
-  assert.equal(smsStatus.headers.get('cache-control'), 'private, no-store');
+  // Next may add stricter no-cache/max-age=0 directives to a disabled 404 route.
+  const disabledPolicy = smsStatus.headers.get('cache-control');
+  assert.match(disabledPolicy, /(?:^|,\s*)private(?:,|$)/);
+  assert.match(disabledPolicy, /(?:^|,\s*)no-store(?:,|$)/);
+  assert.doesNotMatch(disabledPolicy, /(?:^|,\s*)(?:public|s-maxage=)/);
   probes++;
   for (const [path, body, expected] of [
     ['/api/auth/sign-up/email', {}, 404],

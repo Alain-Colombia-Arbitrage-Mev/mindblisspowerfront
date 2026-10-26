@@ -1,5 +1,3 @@
-"use client";
-
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 
@@ -34,6 +32,7 @@ export default function AuthShell({
           src={visualSrc}
           alt={visualAlt}
           loading="eager"
+          decoding="async"
           className="auth-photo absolute inset-0 h-full w-full object-cover"
           style={{ objectPosition: visualPosition }}
         />

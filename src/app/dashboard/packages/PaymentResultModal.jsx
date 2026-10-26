@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CheckCircle2, Clock3, Loader2, Network, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCheckoutActivation } from "@/hooks/useCheckoutActivation";
 import { checkoutStatusCopy } from "@/lib/checkout-status.mjs";
+import { useMemberSummary } from "@/hooks/useMemberSummary";
 
 /**
  * Popup de resultado del pago. Stripe redirige a
@@ -24,12 +25,21 @@ export default function PaymentResultModal() {
     enabled: visible && result === "paid",
     requestKey,
   });
+  const { reload } = useMemberSummary({ fresh: true });
+  const refreshedKey = useRef(null);
+  useEffect(() => {
+    // Only confirmed membership activation invalidates the shared read. A
+    // redirect query string or a pending/cancelled checkout is not payment proof.
+    if (!visible || result !== "paid" || !activation.active || refreshedKey.current === requestKey) return;
+    refreshedKey.current = requestKey;
+    void reload();
+  }, [visible, result, activation.active, requestKey, reload]);
   if (!visible) return null;
 
   const close = () => {
     setDismissedKey(requestKey);
     router.replace("/dashboard/packages", { scroll: false });
-    router.refresh(); // re-consulta MyPaymentsPanel para reflejar la activación
+    router.refresh(); // refreshes server-rendered catalog; the provider refreshes confirmed membership above
   };
 
   const goToNetwork = () => {

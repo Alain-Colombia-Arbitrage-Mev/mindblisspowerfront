@@ -7,6 +7,7 @@ import ActivatePackageButton from "./ActivatePackageButton";
 import MyPaymentsPanel from "./MyPaymentsPanel";
 import PaymentResultModal from "./PaymentResultModal";
 import PaywallGate from "./PaywallGate";
+import { MemberSummaryProvider } from "@/hooks/useMemberSummary";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,7 @@ export default async function PackagesPage() {
 
   return (
     <section className="executive-page">
+      <MemberSummaryProvider fresh>
       <Suspense fallback={null}>
         <PaymentResultModal />
       </Suspense>
@@ -133,6 +135,7 @@ export default async function PackagesPage() {
           </div>
         )}
       </div>
+      </MemberSummaryProvider>
     </section>
   );
 }

@@ -1,4 +1,4 @@
-import { AutoModeDashboardPage } from "../_components/ExecutiveDashboardPages";
+import { AutoModeDashboardPage } from "../_components/executive-pages/AutoModeDashboardPage";
 
 export default function AutoPage() {
   return <AutoModeDashboardPage />;

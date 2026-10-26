@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { CreditCard, Loader2, MapPin, Network, RefreshCw, ShieldAlert, UserCheck } from "lucide-react";
 import { useSearchParams } from "next/navigation";
@@ -13,7 +13,7 @@ import OperativeListView from "@/components/panel/network/OperativeListView";
 import PositionCard from "@/components/panel/network/PositionCard";
 import RankView from "@/components/panel/network/RankView";
 import { treeRefreshFailure } from "@/lib/tree-read-model.mjs";
-import { readMemberParts, validMemberTree, validMemberSummary, validMemberReferral } from "@/lib/member-read.mjs";
+import { createMemberNetworkReader } from "@/lib/member-network-reader.mjs";
 
 function StatusCard({ children }) {
   return (
@@ -28,13 +28,6 @@ function StatusCard({ children }) {
 
 function money(value) {
   return `$${Number(value ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
-function treeRowLimit(depth) {
-  if (depth === "all") return "5000";
-  const parsed = Number(depth);
-  if (!Number.isFinite(parsed)) return "64";
-  return String(Math.min(5000, Math.max(64, (2 ** (parsed + 1)) - 2)));
 }
 
 function paymentStatusCopy(status, active) {
@@ -136,6 +129,7 @@ export default function NetworkPage() {
   const [tab, setTab] = useState("tree");
   const [treeDepth, setTreeDepth] = useState("4");
   const [refreshTick, setRefreshTick] = useState(0);
+  const reader = useRef(null);
   const [state, setState] = useState({ loading: true, refreshing: false, error: "", errorStatus: 0, refreshError: "", data: null, summary: null, referral: null, summaryError: null, referralError: null, syncing: false });
 
   useEffect(() => {
@@ -145,61 +139,32 @@ export default function NetworkPage() {
   }, [requestedTab, validTabs]);
 
   useEffect(() => {
-    let cancelled = false;
-    let timer = null;
-    let tries = 0;
-    const controller = new AbortController();
-    const maxTries = 20; // ~60s para cubrir webhook + lag de RDS
-
-    const load = async () => {
-      const firstTry = tries === 0;
-      tries += 1;
-      if (firstTry) setState((prev) => ({ ...prev, loading: !prev.data, refreshing: Boolean(prev.data), error: "", refreshError: "", summary: null, referral: null, summaryError: null, referralError: null, syncing: false }));
-      try {
-        const treeQuery = new URLSearchParams({
-          depth: treeDepth,
-          limit: treeRowLimit(treeDepth),
-        });
-        const results = await readMemberParts({
-          tree: { url: `/api/member/tree?${treeQuery}`, validate: validMemberTree },
-          summary: { url: `/api/payments/me${tries > 1 ? "?fresh=1" : ""}`, validate: validMemberSummary },
-          referral: { url: "/api/member/referral", validate: validMemberReferral },
-        }, { signal: controller.signal, onPart: (key, result) => {
-          if (cancelled) return;
-          if ([401, 403].includes(result.error?.status)) {
-            setState(prev => treeRefreshFailure(prev, result.error.status, result.error.message));
-          } else if (key === "tree") {
-            setState(prev => result.error ? treeRefreshFailure(prev, result.error.status, result.error.message)
-              : { ...prev, loading: false, refreshing: false, error: "", refreshError: "", data: result.data });
-          } else {
-            setState(prev => ({ ...prev, [key]: result.data || null, [`${key}Error`]: result.error || null }));
-          }
-        } });
-        if (cancelled || Object.values(results).some(result => [401, 403].includes(result.error?.status)) || !results.tree.data) return;
-        const payload = results.tree.data;
-        const summary = results.summary.data;
-        const active = Number(summary?.active_packages ?? 0) > 0;
-        const latestStatus = summary?.payments?.[0]?.status;
-        const paymentReceived = active || ["paid", "activated", "needs_placement"].includes(latestStatus);
-        const shouldPoll = paymentReceived && !payload?.positioned && latestStatus !== "needs_placement" && tries < maxTries;
-        setState(prev => ({ ...prev, syncing: shouldPoll }));
-
-        if (shouldPoll) {
-          timer = setTimeout(load, 3000);
-        }
-      } catch (error) {
-        if (!cancelled && error?.name !== "AbortError") {
-          setState((prev) => treeRefreshFailure(prev, 0, "Sin conexión con el árbol."));
-        }
-      }
-    };
-
-    load();
+    const current = createMemberNetworkReader({
+      onStart: full => setState(prev => ({ ...prev, loading: !prev.data, refreshing: Boolean(prev.data), error: "", refreshError: "",
+        ...(full ? { summary: null, referral: null, summaryError: null, referralError: null } : {}), syncing: false })),
+      onPart: (key, result) => setState(prev => key === "tree"
+        ? result.error ? treeRefreshFailure(prev, result.error.status, result.error.message)
+          : { ...prev, loading: false, refreshing: false, error: "", refreshError: "", data: result.data }
+        : { ...prev, [key]: result.data || null, [`${key}Error`]: result.error || null }),
+      onDenied: error => setState(prev => treeRefreshFailure(prev, error.status, error.message)),
+      onSync: syncing => setState(prev => ({ ...prev, syncing })),
+    });
+    reader.current = current;
+    void current.refresh();
     return () => {
-      cancelled = true;
-      controller.abort();
-      if (timer) clearTimeout(timer);
+      current.dispose();
+      if (reader.current === current) reader.current = null;
     };
+  }, []);
+
+  const previousRefresh = useRef(refreshTick);
+  useEffect(() => {
+    if (previousRefresh.current !== refreshTick) {
+      previousRefresh.current = refreshTick;
+      void reader.current?.refresh(treeDepth);
+    } else {
+      void reader.current?.changeDepth(treeDepth);
+    }
   }, [treeDepth, refreshTick]);
 
   if (state.loading) {

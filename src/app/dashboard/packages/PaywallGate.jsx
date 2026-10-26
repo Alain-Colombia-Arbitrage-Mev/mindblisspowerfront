@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { CheckCircle2, ChevronDown, ChevronUp, Network, ReceiptText } from "lucide-react";
 import Link from "next/link";
+import { useMemberSummary } from "@/hooks/useMemberSummary";
 
 const PLAN_LABEL = {
   starter: "Starter",
@@ -19,28 +20,11 @@ const PLAN_LABEL = {
  * activo (o aún carga), muestra el paywall normal (children).
  */
 export default function PaywallGate({ children }) {
-  const [state, setState] = useState({ loading: true, active: false, data: null });
+  const { state } = useMemberSummary({ fresh: true });
   const [showPlans, setShowPlans] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/payments/me?fresh=1", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (!cancelled) {
-          setState({ loading: false, active: Number(d?.active_packages ?? 0) > 0, data: d });
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setState({ loading: false, active: false, data: null });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   // Mientras carga o si no está activo → paywall normal (evita parpadeo).
-  if (state.loading || !state.active) return children;
+  if (state.loading || state.error || !(Number(state.data?.active_packages) > 0)) return children;
 
   const d = state.data;
   const plan = d?.plan ? PLAN_LABEL[d.plan] || d.plan : null;
