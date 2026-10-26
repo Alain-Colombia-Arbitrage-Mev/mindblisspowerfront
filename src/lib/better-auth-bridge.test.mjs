@@ -53,7 +53,7 @@ test("proxy keeps HttpOnly cookies but never exposes JWT/session tokens or inter
   let forwarded;
   const response = await proxyBetterAuth(request(), "sign-in/email", { env, fetchImpl: async (url, options) => {
     forwarded = { url, options };
-    return Response.json({ token: "private-session", user: { id: "synthetic-user", email: "user@example.test", name: "Test", secret: "hidden" } }, {
+    return Response.json({ token: "private-session", user: { id: "synthetic-user", email: "user@example.test", emailVerified: true, name: "Test", secret: "hidden" } }, {
       headers: { "set-cookie": `${cookie}; Secure; HttpOnly; Domain=.example.test`, "set-auth-jwt": "private-jwt" },
     });
   } });

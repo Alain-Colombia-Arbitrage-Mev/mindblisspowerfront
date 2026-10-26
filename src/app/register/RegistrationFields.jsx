@@ -19,8 +19,8 @@ export function RegistrationPassword({ id, label, error = '', helper = '', visib
   return (
     <div className="relative">
       <RegistrationField id={id} label={label} error={error} helper={helper} type={visible ? 'text' : 'password'} {...props} />
-      <button type="button" onClick={onToggle} aria-label={visible ? `Ocultar ${label.toLowerCase()}` : `Mostrar ${label.toLowerCase()}`}
-        aria-pressed={visible} className="mt-2 inline-flex min-h-10 items-center gap-2 rounded-md px-2 text-sm text-[var(--vp-muted)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--vp-accent)]">
+      <button type="button" onClick={onToggle} disabled={props.disabled} aria-label={visible ? `Ocultar ${label.toLowerCase()}` : `Mostrar ${label.toLowerCase()}`}
+        aria-pressed={visible} className="mt-2 inline-flex min-h-11 items-center gap-2 rounded-md px-2 text-sm text-[var(--vp-muted)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--vp-accent)] disabled:cursor-not-allowed disabled:opacity-60">
         {visible ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
         {visible ? 'Ocultar' : 'Mostrar'} contraseña
       </button>

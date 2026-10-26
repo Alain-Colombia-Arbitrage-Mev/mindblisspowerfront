@@ -11,6 +11,9 @@ import { useMemberSummary } from "@/hooks/useMemberSummary";
 import { isRecoverySummary } from "@/lib/member-read.mjs";
 import { formatPaymentMoney as money, formatPaymentDate as fmtMoneyDate, withdrawalTerms } from "@/lib/payment-display.mjs";
 import StripeSalesHistory from "../packages/StripeSalesHistory";
+import { requestProfile } from '../profile/profile-model.mjs';
+import { optInPhone } from '../../account/security/phone-opt-in-model.mjs';
+import Link from 'next/link';
 import {
   Activity,
   AlertTriangle,
@@ -819,16 +822,11 @@ function WithdrawPanel({ data, onDone }) {
 const PLAN_LABEL = { passive_investor: "Inversionista pasivo", network: "Red" };
 
 function normalizeProfilePhone(value) {
-  const raw = String(value || "").trim();
-  if (!raw) return "";
-  if (!raw.startsWith("+")) return "";
-  const phone = `+${raw.slice(1).replace(/\D/g, "")}`;
-  return /^\+[1-9]\d{7,14}$/.test(phone) ? phone : "";
+  return optInPhone(value);
 }
 
-export function ProfileDashboardPage() {
-  const [twoFactor, setTwoFactor] = useState(false);
-  const [digest, setDigest] = useState(true);
+export function ProfileDashboardPage({ authMode = 'cognito' }) {
+  const modernAuth = authMode === 'better-auth';
   const session = useMemberSession();
   const me = { name: session?.name || "", email: session?.email || "", referralCode: session?.referralCode || "" };
   const [summary, setSummary] = useState(null);
@@ -836,77 +834,86 @@ export function ProfileDashboardPage() {
   const [phoneVerify, setPhoneVerify] = useState({ sending: false, confirming: false, pending: false, code: "", type: "", text: "" });
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState({ type: "", text: "" });
+  const [profileState, setProfileState] = useState('loading');
   const editedRef = useRef(false);
+  const savingRef = useRef(false);
+  const profileController = useRef(null);
+  const savingController = useRef(null);
+  const profileMounted = useRef(false);
+
+  const loadProfile = useCallback(async () => {
+    profileController.current?.abort();
+    const controller = new AbortController();
+    profileController.current = controller;
+    setProfileState('loading');
+    try {
+      const current = await requestProfile('GET', undefined, { signal: controller.signal });
+      if (controller.signal.aborted || !profileMounted.current) return;
+      setForm(current);
+      editedRef.current = false;
+      setProfileState('ready');
+    } catch {
+      if (!controller.signal.aborted && profileMounted.current) setProfileState('error');
+    }
+  }, []);
 
   useEffect(() => {
+    profileMounted.current = true;
     let cancelled = false;
-    fetch("/api/payments/me", { cache: "no-store" })
+    const controller = new AbortController();
+    fetch("/api/payments/me", { cache: "no-store", credentials: 'same-origin', redirect: 'error', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12000)]) })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => { if (!cancelled && d && !d.error) setSummary(d); })
       .catch(() => {});
-    fetch("/api/member/profile", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        // No pisar lo que el usuario ya empezó a editar si el fetch llega tarde.
-        if (cancelled || !d || editedRef.current) return;
-        const full = [d.first_name, d.last_name].filter(Boolean).join(" ").trim();
-        setForm({
-          name: full,
-          phone: d.phone || "",
-          country: d.country || "",
-          payout_wallet_usdc: d.payout_wallet_usdc || "",
-        });
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, []);
+    void loadProfile();
+    return () => { cancelled = true; profileMounted.current = false; controller.abort(); profileController.current?.abort(); savingController.current?.abort(); };
+  }, [loadProfile]);
 
-  const setField = (k) => (e) => { editedRef.current = true; setForm((f) => ({ ...f, [k]: e.target.value })); };
+  const setField = (k) => (e) => { if (profileState !== 'ready' || savingRef.current) return; editedRef.current = true; setForm((f) => ({ ...f, [k]: e.target.value })); };
 
   async function saveProfile() {
+    if (savingRef.current || profileState !== 'ready') return;
+    savingRef.current = true;
     setSaving(true);
     setSaveMsg({ type: "", text: "" });
     const wallet = (form.payout_wallet_usdc || "").trim();
     const phone = normalizeProfilePhone(form.phone);
     if (wallet && !/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
+      savingRef.current = false;
       setSaving(false);
       setSaveMsg({ type: "err", text: "La dirección USDC debe ser una address ERC-20 válida (0x + 40 hex)." });
       return;
     }
     if ((form.phone || "").trim() && !phone) {
+      savingRef.current = false;
       setSaving(false);
       setSaveMsg({ type: "err", text: "Ingresa el teléfono en formato internacional, por ejemplo +573001234567." });
       return;
     }
+    const controller = new AbortController();
+    savingController.current = controller;
     try {
-      const r = await fetch("/api/member/profile", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
+      const current = await requestProfile('POST', {
           name: (form.name || "").trim(),
           phone,
           country: (form.country || "").trim(),
           payout_wallet_usdc: wallet,
-        }),
-      });
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok) {
-        const m = { invalid_wallet: "Dirección USDC inválida.", person_not_found: "No se pudo guardar (perfil no encontrado)." }[d.error] || "No se pudieron guardar los cambios.";
-        setSaveMsg({ type: "err", text: m });
-      } else {
-        if (phone) setForm((current) => ({ ...current, phone }));
-        setSaveMsg({ type: "ok", text: "Cambios guardados." });
-        // Refresca el sidebar con el nombre nuevo de inmediato (optimista).
-        try { window.dispatchEvent(new CustomEvent("vp:profile-updated", { detail: { name: (form.name || "").trim() } })); } catch { /* ignore */ }
-      }
+        }, { signal: controller.signal });
+      if (controller.signal.aborted || !profileMounted.current) return;
+      setForm(current);
+      editedRef.current = false;
+      setSaveMsg({ type: "ok", text: "Cambios guardados y confirmados por el servidor." });
+      try { window.dispatchEvent(new CustomEvent("vp:profile-updated", { detail: { name: current.name } })); } catch { /* ignore */ }
     } catch {
-      setSaveMsg({ type: "err", text: "Sin conexión. Intenta de nuevo." });
+      if (!controller.signal.aborted && profileMounted.current) setSaveMsg({ type: "err", text: "No pudimos confirmar el guardado. Conservamos tus datos en pantalla; no se reenviarán automáticamente." });
     } finally {
-      setSaving(false);
+      savingRef.current = false;
+      if (profileMounted.current) setSaving(false);
     }
   }
 
   async function requestPhoneVerification() {
+    if (modernAuth) return;
     const phone = normalizeProfilePhone(form.phone);
     if (!phone) {
       setPhoneVerify({ sending: false, confirming: false, pending: false, code: "", type: "err", text: "Usa formato internacional: +573001234567." });
@@ -932,6 +939,7 @@ export function ProfileDashboardPage() {
   }
 
   async function confirmPhoneVerification() {
+    if (modernAuth) return;
     const code = phoneVerify.code.replace(/[\s-]+/g, "");
     if (!/^\d{4,8}$/.test(code)) {
       setPhoneVerify((current) => ({ ...current, type: "err", text: "Ingresa el código SMS recibido." }));
@@ -973,17 +981,20 @@ export function ProfileDashboardPage() {
           subtitle="Gestiona datos personales, seguridad, billetera de retiro y preferencias de notificacion."
           action={
             <div className="flex flex-col items-end gap-1">
-              <button className="executive-button primary" type="button" onClick={saveProfile} disabled={saving}>
+              <button className="executive-button primary" type="button" onClick={saveProfile} disabled={saving || profileState !== 'ready'}>
                 {saving ? "Guardando…" : "Guardar cambios"}
               </button>
               {saveMsg.text && (
-                <span className="text-xs font-semibold" style={{ color: saveMsg.type === "ok" ? "var(--vp-accent)" : "#f87171" }}>
+                <span role={saveMsg.type === 'ok' ? 'status' : 'alert'} className="text-xs font-semibold" style={{ color: saveMsg.type === "ok" ? "var(--vp-accent)" : "#f87171" }}>
                   {saveMsg.text}
                 </span>
               )}
             </div>
           }
         />
+
+        {profileState === 'loading' ? <p role="status" className="executive-panel">Cargando los datos guardados de tu perfil…</p> : null}
+        {profileState === 'error' ? <div role="alert" className="executive-panel"><p>No pudimos cargar tu perfil. La edición y el guardado están bloqueados para proteger los datos existentes.</p><button className="executive-button mt-3" type="button" onClick={() => { void loadProfile(); }}>Volver a cargar mi perfil</button></div> : null}
 
         <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
           <div className="space-y-6">
@@ -1055,7 +1066,7 @@ export function ProfileDashboardPage() {
               </h2>
               <div className="grid gap-5 md:grid-cols-2">
                 <Field label="Nombre completo">
-                  <input className="executive-input" value={form.name} onChange={setField("name")} placeholder="Tu nombre y apellido" />
+                  <input className="executive-input" value={form.name} onChange={setField("name")} disabled={saving || profileState !== 'ready'} maxLength={240} placeholder="Tu nombre y apellido" />
                 </Field>
                 <Field label="Usuario">
                   <input className="executive-input" key={displayEmail} defaultValue={displayEmail ? displayEmail.split("@")[0] : member.username} readOnly />
@@ -1064,9 +1075,10 @@ export function ProfileDashboardPage() {
                   <input className="executive-input" key={displayEmail} defaultValue={displayEmail} readOnly type="email" />
                 </Field>
                 <Field label="Telefono">
-                  <input className="executive-input" value={form.phone} onChange={setField("phone")} type="tel" placeholder="+57 300 000 0000" />
+                  <input className="executive-input" value={form.phone} onChange={setField("phone")} disabled={saving || profileState !== 'ready'} maxLength={32} type="tel" placeholder="+57 300 000 0000" />
                 </Field>
                 <div className="md:col-span-2 border-t pt-4" style={{ borderColor: "var(--vp-border)" }}>
+                  {modernAuth ? <div className="space-y-3"><p className="text-sm leading-6" style={{ color: 'var(--vp-muted)' }}>Guardar un teléfono de contacto no verifica su propiedad ni autoriza SMS. Puedes validar un número y dar o revocar tu autorización en una pantalla separada. Es opcional y no incluye publicidad.</p><Link className="executive-button" href="/account/security">Gestionar validación SMS opcional</Link></div> : <>
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
                     <div className="min-w-0 flex-1">
                       <p className="m-0 text-sm font-bold" style={{ color: "var(--vp-text)" }}>Validación del teléfono</p>
@@ -1101,9 +1113,10 @@ export function ProfileDashboardPage() {
                       {phoneVerify.text}
                     </p>
                   )}
+                  </>}
                 </div>
                 <Field label="Pais">
-                  <input className="executive-input" value={form.country} onChange={setField("country")} placeholder="País" />
+                  <input className="executive-input" value={form.country} onChange={setField("country")} disabled={saving || profileState !== 'ready'} maxLength={120} placeholder="País" />
                 </Field>
                 <Field label="Patrocinador">
                   <input className="executive-input" defaultValue={member.sponsor} readOnly />
@@ -1121,9 +1134,9 @@ export function ProfileDashboardPage() {
                   Configura una direccion USDC (red Ethereum · ERC-20) antes de solicitar retiros.
                 </p>
                 <Field label="Direccion USDC (ERC-20)">
-                  <input className="executive-input" value={form.payout_wallet_usdc} onChange={setField("payout_wallet_usdc")} placeholder="0x..." />
+                  <input className="executive-input" value={form.payout_wallet_usdc} onChange={setField("payout_wallet_usdc")} disabled={saving || profileState !== 'ready'} maxLength={42} placeholder="0x..." />
                 </Field>
-                <button className="executive-button mt-4 w-full" type="button" onClick={saveProfile} disabled={saving}>
+                <button className="executive-button mt-4 w-full" type="button" onClick={saveProfile} disabled={saving || profileState !== 'ready'}>
                   {saving ? "Guardando…" : "Actualizar billetera"}
                 </button>
               </div>
@@ -1133,43 +1146,19 @@ export function ProfileDashboardPage() {
                   <Shield size={18} style={{ color: "var(--vp-accent)" }} />
                   Seguridad
                 </h2>
-                <ToggleRow checked={twoFactor} icon={Lock} label="Autenticacion 2FA" onChange={() => setTwoFactor((value) => !value)} />
-                <ToggleRow checked={digest} icon={Bell} label="Resumen por email" onChange={() => setDigest((value) => !value)} />
-                <button className="executive-button mt-4 w-full" type="button">
+                <p className="text-sm leading-6" style={{ color: 'var(--vp-muted)' }}>No hay un segundo factor (2FA) habilitado desde este panel. La validación opcional del teléfono no equivale a activar 2FA. Las preferencias de resumen por email y el cambio de contraseña aún no están disponibles aquí.</p>
+                <Link className="executive-button mt-4 w-full" href="/account/security">Gestionar consentimiento SMS</Link>
+                <button className="executive-button mt-4 w-full" type="button" disabled aria-describedby="profile-password-unavailable">
                   <KeyRound size={16} />
                   Cambiar contrasena
                 </button>
+                <p id="profile-password-unavailable" className="mt-2 text-sm" style={{ color: 'var(--vp-muted)' }}>Función pendiente de integración; no se ha modificado tu contraseña.</p>
               </div>
             </div>
           </div>
         </div>
       </div>
     </section>
-  );
-}
-
-function ToggleRow({ checked, icon: Icon, label, onChange }) {
-  return (
-    <div className="mb-3 flex items-center justify-between gap-4 rounded-2xl p-4" style={{ background: "var(--vp-bg)", border: "1px solid var(--vp-border)" }}>
-      <div className="flex items-center gap-3">
-        <Icon size={17} style={{ color: "var(--vp-accent)" }} />
-        <span className="text-sm font-semibold" style={{ color: "var(--vp-text)" }}>
-          {label}
-        </span>
-      </div>
-      <button
-        aria-pressed={checked}
-        className="relative h-6 w-11 rounded-full"
-        style={{ background: checked ? "var(--vp-accent)" : "var(--vp-surface-raised)", border: "1px solid var(--vp-border)" }}
-        type="button"
-        onClick={onChange}
-      >
-        <span
-          className="absolute top-1 h-4 w-4 rounded-full transition-all"
-          style={{ background: checked ? "#0a0a0a" : "var(--vp-muted)", left: checked ? 23 : 4 }}
-        />
-      </button>
-    </div>
   );
 }
 

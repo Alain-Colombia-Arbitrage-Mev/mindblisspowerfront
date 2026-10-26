@@ -1,6 +1,7 @@
 // Server transport only. No credentials, OTPs, sessions or JWTs are logged.
 import { createHash, createHmac } from 'node:crypto';
 import { isIP } from 'node:net';
+import { authSuccess } from './auth-response.mjs';
 import { coreFetch, runtimeEnvironment } from './cloudflare-runtime.mjs';
 
 export function trustedAuthClientIp(headers, env = runtimeEnvironment()) {
@@ -37,11 +38,11 @@ export function betterAuthCookies(value = "") {
   return value.split(";").map(part => part.trim()).filter(part => authCookie.test(part.split("=")[0])).join("; ");
 }
 
-export function browserAuthCookie(value) {
+export function browserAuthCookie(value, secure = false) {
   if (/[\r\n]/.test(value) || !authCookie.test(value.split("=")[0])) return null;
   const parts = value.split(";").filter((part, i) => i === 0 || !/^\s*(?:domain|path)=/i.test(part));
   // Host-only cookie: the auth service cannot grant cookies to another domain.
-  return `${parts.join(";")}; Path=/; HttpOnly; SameSite=Lax`;
+  return `${parts.join(";")}; Path=/; HttpOnly; SameSite=Lax${secure ? '; Secure' : ''}`;
 }
 
 export async function readAuthBody(request) {
@@ -51,6 +52,7 @@ export async function readAuthBody(request) {
   const aborted = () => { void reader.cancel().catch(() => {}); };
   signal.addEventListener('abort', aborted, { once: true });
   try {
+  if (signal.aborted) { aborted(); throw new DOMException('Request cancelled', 'AbortError'); }
   const chunks = [];
   let total = 0;
   while (true) {
@@ -97,16 +99,17 @@ export async function betterAuthServiceToken(cookie, dependencies = {}) {
     const response = await fetchBetterAuth("/token", { cookie }, dependencies);
     if ([401, 403].includes(response.status)) return "";
     if (!response.ok) throw new AuthServiceUnavailable();
-    const payload = await response.json();
-    return typeof payload.token === "string" && payload.token.length <= 16000 ? payload.token : "";
+    const payload = await readAuthBody({ body: response.body, signal: AbortSignal.timeout(8000) });
+    if (!payload || typeof payload.token !== 'string' || !payload.token || payload.token.length > 16000) throw new AuthServiceUnavailable();
+    return payload.token;
   } catch { throw new AuthServiceUnavailable(); }
 }
 
 export const browserAuthPaths = new Set([
-  "sign-in/email", "sign-in/email-otp", "sign-up/email", "sign-out",
+  "sign-in/email", "sign-in/email-otp", "sign-out",
   "email-otp/send-verification-otp", "email-otp/verify-email",
   "email-otp/request-password-reset", "email-otp/reset-password",
-  "send-verification-email", "phone-number/send-otp", "phone-number/verify",
+  "send-verification-email",
 ]);
 
 export async function proxyBetterAuthKeys(request, dependencies = {}) {
@@ -114,7 +117,7 @@ export async function proxyBetterAuthKeys(request, dependencies = {}) {
   if (!betterAuthEnabled(env)) return Response.json({ error: 'not_found' }, { status: 404 });
   try {
     const upstream = await fetchBetterAuth('/jwks', {}, { ...dependencies, clientIp: trustedAuthClientIp(request.headers, env) });
-    const data = await upstream.json();
+    const data = await readAuthBody({ body: upstream.body, signal: request.signal });
     if (!upstream.ok || !Array.isArray(data.keys) || data.keys.length < 1 || data.keys.length > 32) throw new Error('invalid_keys');
     const keys = data.keys.map(key => {
       if (key.kty !== 'RSA' || key.alg !== 'RS256' || typeof key.kid !== 'string' || key.kid.length > 255
@@ -136,17 +139,19 @@ export async function proxyBetterAuth(request, path, dependencies = {}) {
     try { body = await readAuthBody(request); } catch (error) {
       return Response.json({ error: error instanceof RangeError ? "request_too_large" : "invalid_json" }, { status: error instanceof RangeError ? 413 : 400 });
     }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return Response.json({ error: 'invalid_json' }, { status: 400 });
     const upstream = await fetchBetterAuth(`/${path}`, {
       method: "POST", body, origin: expectedOrigin, cookie: request.headers.get("cookie") || "", signal: request.signal,
     }, { ...dependencies, clientIp: trustedAuthClientIp(request.headers, env) });
     // Do not relay upstream diagnostics, raw session tokens or set-auth-jwt.
-    const data = await upstream.json().catch(() => ({}));
-    const response = Response.json(upstream.ok ? { ok: true, user: data.user ? { id: data.user.id, email: data.user.email, name: data.user.name } : undefined }
+    const data = await readAuthBody({ body: upstream.body, signal: request.signal });
+    if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('invalid_auth_response');
+    const response = Response.json(upstream.ok ? authSuccess(path, data)
       : { error: "authentication_failed", code: /^[A-Z_]{1,80}$/.test(data.code) ? data.code : undefined },
       { status: upstream.ok ? 200 : upstream.status >= 400 ? upstream.status : 502,
         headers: { "Cache-Control": "private, no-store" } });
-    for (const value of upstream.headers.getSetCookie()) {
-      const cookie = browserAuthCookie(value);
+    for (const value of upstream.ok ? upstream.headers.getSetCookie() : []) {
+      const cookie = browserAuthCookie(value, env.NODE_ENV === 'production');
       if (cookie) response.headers.append("set-cookie", cookie);
     }
     if (upstream.status === 429 && /^\d{1,5}$/.test(upstream.headers.get("retry-after") || "")) {

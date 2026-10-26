@@ -6,6 +6,7 @@ import { Loader2, ShieldCheck } from "lucide-react";
 import KycDocumentCard from "@/components/panel/kyc/KycDocumentCard";
 import KycStatusBadge from "@/components/panel/kyc/KycStatusBadge";
 import { KYC_DOC_TYPES } from "@/components/panel/kyc/kycConfig";
+import { validMemberProfileUpdate } from '@/lib/member-profile.mjs';
 
 export default function KycPage() {
   const [state, setState] = useState({ loading: true, error: "", documents: [], kycStatus: "not_started" });
@@ -13,6 +14,7 @@ export default function KycPage() {
   const [nameSaving, setNameSaving] = useState(false);
   const [nameMsg, setNameMsg] = useState({ type: "", text: "" });
   const nameEditedRef = useRef(false);
+  const nameSavingRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -28,6 +30,8 @@ export default function KycPage() {
   }, []);
 
   async function saveName() {
+    if (nameSavingRef.current || !legalName.trim()) return;
+    nameSavingRef.current = true;
     setNameSaving(true);
     setNameMsg({ type: "", text: "" });
     try {
@@ -37,7 +41,7 @@ export default function KycPage() {
         body: JSON.stringify({ name: legalName.trim() }),
       });
       const d = await r.json().catch(() => ({}));
-      if (!r.ok) {
+      if (!r.ok || !validMemberProfileUpdate(d)) {
         setNameMsg({ type: "err", text: d.error === "person_not_found" ? "No se pudo guardar." : "No se pudieron guardar los cambios." });
       } else {
         setNameMsg({ type: "ok", text: "Nombre guardado." });
@@ -46,6 +50,7 @@ export default function KycPage() {
     } catch {
       setNameMsg({ type: "err", text: "Sin conexión. Intenta de nuevo." });
     } finally {
+      nameSavingRef.current = false;
       setNameSaving(false);
     }
   }
@@ -142,6 +147,7 @@ export default function KycPage() {
         <div className="mt-4 flex flex-col gap-2 sm:flex-row">
           <input
             className="executive-input flex-1"
+            aria-label="Nombre legal completo"
             value={legalName}
             onChange={(e) => { nameEditedRef.current = true; setLegalName(e.target.value); }}
             placeholder="Nombre(s) y apellido(s) como en tu documento"
@@ -156,7 +162,7 @@ export default function KycPage() {
           </button>
         </div>
         {nameMsg.text ? (
-          <p className="mt-2 text-xs font-semibold" style={{ color: nameMsg.type === "ok" ? "var(--vp-accent)" : "#f87171" }}>
+          <p role={nameMsg.type === 'ok' ? 'status' : 'alert'} className="mt-2 text-xs font-semibold" style={{ color: nameMsg.type === "ok" ? "var(--vp-accent)" : "#f87171" }}>
             {nameMsg.text}
           </p>
         ) : null}

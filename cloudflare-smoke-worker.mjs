@@ -63,6 +63,10 @@ const syntheticEnv = {
       const jwk = await crypto.subtle.exportKey('jwk', (await keys()).publicKey);
       return Response.json({ keys: [{ ...jwk, alg: 'RS256', kid: 'synthetic-real-rsa' }] });
     }
+    if (target.hostname === 'auth.core.internal' && target.pathname === '/api/auth/phone-number/opt-in') {
+      if (headers.get('cookie') !== sessionCookie) return Response.json({ error: 'unauthenticated' }, { status: 401 });
+      return Response.json({ available: false, consentVersion: 'sms-auth-v1', optedIn: false, phoneNumber: null, phoneNumberVerified: false });
+    }
     if (target.hostname === 'payments.core.internal' && target.pathname === '/api/member/referral') {
       if (headers.get('x-vp-service-token') !== 'synthetic-service-only'
         || !await validForwardedIdentity(headers.get('x-vp-id-token') || '')) return Response.json({ error: 'synthetic-identity-rejected' }, { status: 401 });
@@ -91,7 +95,7 @@ const syntheticEnv = {
       const valid = url.endsWith('/sign-in/email-otp') ? body.otp === '001234'
         : body.email === 'fixture@example.test' && body.password === 'Synthetic-Password-123';
       if (!valid) throw new Error('invalid_synthetic_contract');
-      return Response.json({ token: 'must-not-leak', user: { id: 'synthetic', email: body.email } }, {
+      return Response.json({ token: 'must-not-leak', user: { id: 'synthetic', email: body.email, emailVerified: true } }, {
         headers: { 'set-cookie': `${sessionCookie}; Secure; HttpOnly; Path=/` },
       });
     }

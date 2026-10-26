@@ -23,6 +23,7 @@ try {
   let probes = 0;
   const cases = [
     ['/health', {}, 200], ['/login', {}, 200], ['/api/member/tree', {}, 401],
+    ['/account/security', {}, 200], ['/api/auth/phone-number/opt-in', {}, 401],
     ['/api/admin/tree/roots', {}, 404], ['/dashboard/admin', {}, 308],
     ['/api/payments/checkout', { method: 'POST', body: '{}' }, 403],
     ['/api/member/profile', { method: 'POST', body: '{}', headers: { origin: 'https://evil.example', 'x-forwarded-host': 'evil.example', 'content-type': 'application/json' } }, 403],
@@ -101,6 +102,19 @@ try {
   probes++;
   const cookie = confirmed.headers.get('set-cookie').split(';')[0];
   const sessionHeaders = { cookie, 'cf-connecting-ip': '192.0.2.10' };
+  const smsStatus = await fetch('http://127.0.0.1:8787/api/auth/phone-number/opt-in', { headers: sessionHeaders });
+  assert.equal(smsStatus.status, 200);
+  assert.deepEqual(await smsStatus.json(), { available: false, consentVersion: 'sms-auth-v1', optedIn: false, phoneNumber: null, phoneNumberVerified: false });
+  assert.equal(smsStatus.headers.get('cache-control'), 'private, no-store');
+  probes++;
+  for (const [path, body, expected] of [
+    ['/api/auth/sign-up/email', {}, 404],
+    ['/api/auth/phone-number/send-otp', { phoneNumber: '+12025550123', consent: false, consentVersion: 'sms-auth-v1' }, 400],
+  ]) {
+    const deniedMutation = await fetch('http://127.0.0.1:8787' + path, { method: 'POST', headers: { ...authHeaders, ...sessionHeaders }, body: JSON.stringify(body) });
+    assert.equal(deniedMutation.status, expected);
+    probes++;
+  }
   const signedIn = await fetch('http://127.0.0.1:8787/api/auth/session', { headers: sessionHeaders, signal: AbortSignal.timeout(8000) });
   assert.equal(signedIn.status, 200);
   const identity = await signedIn.json();

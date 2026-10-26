@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { registrationEmail, registrationErrors, registrationHints, registrationRetrySeconds, registrationFailure, registrationLoginUrl } from './registration-model.mjs';
+import { registrationEmail, registrationErrors, registrationHints, registrationRetrySeconds, registrationFailure, registrationLoginUrl, registrationAcknowledged } from './registration-model.mjs';
 
 const valid = { fullName: 'Persona Prueba', email: ' test@example.test ', password: 'Synthetic Example 12', confirmPassword: 'Synthetic Example 12', acceptsPrivacy: true };
 
@@ -12,8 +12,19 @@ test('registration validates required identity, exact password and explicit cons
   for (const password of ['short123', 'a'.repeat(129)]) assert.ok(registrationErrors({ ...valid, password, confirmPassword: password }).password);
   assert.ok(registrationErrors({ ...valid, fullName: ' ' }).fullName);
   assert.ok(registrationErrors({ ...valid, fullName: 'a'.repeat(121) }).fullName);
+  assert.ok(registrationErrors({ ...valid, fullName: 'Persona\nPrueba' }).fullName);
   assert.ok(registrationErrors({ ...valid, acceptsPrivacy: 'true' }).acceptsPrivacy);
   assert.ok(registrationErrors({ ...valid, confirmPassword: `${valid.password} ` }).confirmPassword);
+});
+
+test('a successful HTTP response never verifies registration without the exact purpose-specific acknowledgement', () => {
+  const signup = { ok: true, mode: 'better-auth', email: 'test@example.test', userConfirmed: false, requiresConfirmation: true };
+  assert.equal(registrationAcknowledged('register', signup, valid.email), true);
+  assert.equal(registrationAcknowledged('register', { ...signup, email: 'other@example.test' }, valid.email), false);
+  assert.equal(registrationAcknowledged('register', { ...signup, userConfirmed: true }, valid.email), false);
+  assert.equal(registrationAcknowledged('confirm', { ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: true }), true);
+  assert.equal(registrationAcknowledged('resend', { ok: true, mode: 'better-auth', resendAfter: 300 }), true);
+  for (const action of ['register', 'confirm', 'resend']) for (const payload of [null, [], {}, { ok: true }, { ok: 'true', mode: 'better-auth' }]) assert.equal(registrationAcknowledged(action, payload, valid.email), false);
 });
 
 test('URL prefills are bounded hints only and never provide password, consent or identity binding', () => {

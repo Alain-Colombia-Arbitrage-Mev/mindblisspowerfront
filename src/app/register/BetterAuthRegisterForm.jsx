@@ -7,7 +7,7 @@ import AuthShell from '../_components/AuthShell';
 import { useResendCooldown, suggestEmailFix } from '@/lib/useResendCooldown';
 import { bindReferralCodeToEmail } from '@/lib/referral-attribution';
 import { RegistrationButton, RegistrationField, RegistrationPassword } from './RegistrationFields';
-import { REGISTRATION_RESEND_SECONDS, registrationEmail, registrationErrors, registrationFailure, registrationHints, registrationLoginUrl, registrationRetrySeconds } from './registration-model.mjs';
+import { REGISTRATION_RESEND_SECONDS, registrationEmail, registrationErrors, registrationFailure, registrationHints, registrationLoginUrl, registrationRetrySeconds, registrationAcknowledged } from './registration-model.mjs';
 
 const initialForm = { fullName: '', email: '', password: '', confirmPassword: '', acceptsPrivacy: false };
 
@@ -77,24 +77,21 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
         fullName: form.fullName.trim(), email, password: form.password, acceptsPrivacy: true,
         referralCode: hints.referralCode, preferredSide: hints.preferredSide,
       });
-      if (!response.ok || payload.ok !== true) {
-        if (response.status === 429) cooldown.start(registrationRetrySeconds(response, payload));
-        setErrors({ form: registrationFailure(response.status, 'register', payload.code) });
+      if (!response.ok || !registrationAcknowledged('register', payload, email)) {
+        if (response.status === 429 || response.status >= 500 || response.ok) cooldown.start(registrationRetrySeconds(response, payload || {}));
+        setErrors({ form: registrationFailure(response.ok ? 502 : response.status, 'register', payload?.code) });
         return;
       }
       if (hints.referralCode) bindReferralCodeToEmail(email, hints.referralCode);
       // Clear credentials from component memory after the server accepts them.
       setForm(current => ({ ...current, email, password: '', confirmPassword: '' }));
       setCode('');
-      if (payload.alreadyConfirmed === true || payload.userConfirmed === true) {
-        setStep('verified');
-      } else {
-        setStep('confirm');
-        cooldown.start(registrationRetrySeconds(response, payload));
-        setNotice('Si el registro se puede completar con este correo, recibirás un código. Revisa también spam o correo no deseado.');
-      }
+      setStep('confirm');
+      cooldown.start(registrationRetrySeconds(response, payload));
+      setNotice('Si el registro se puede completar con este correo, recibirás un código. Revisa también spam o correo no deseado.');
     } catch {
-      setErrors({ form: 'No pudimos conectar con el servicio. Revisa tu conexión e inténtalo otra vez.' });
+      cooldown.start();
+      setErrors({ form: 'No pudimos confirmar el resultado. No enviaremos otro correo automáticamente. Si recibes el código, usa «Ya solicité mi registro»; de lo contrario espera antes de reintentar.' });
     } finally {
       submitting.current = false;
       setLoading('');
@@ -115,9 +112,9 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
     setLoading('confirm');
     try {
       const { response, payload } = await post('/api/auth/register/confirm', { email, code });
-      if (!response.ok || payload.ok !== true) {
+      if (!response.ok || !registrationAcknowledged('confirm', payload)) {
         if (response.status === 429) cooldown.start(registrationRetrySeconds(response, payload));
-        setErrors({ form: registrationFailure(response.status, 'confirm', payload.code) });
+        setErrors({ form: registrationFailure(response.ok ? 502 : response.status, 'confirm', payload?.code) });
         return;
       }
       setCode('');
@@ -136,17 +133,19 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
     setLoading('resend');
     setErrors({});
     setNotice('');
+    cooldown.start();
     try {
       const { response, payload } = await post('/api/auth/register/confirm', { email, resend: true });
-      if (!response.ok || payload.ok !== true) {
+      if (!response.ok || !registrationAcknowledged('resend', payload)) {
         if (response.status === 429) cooldown.start(registrationRetrySeconds(response, payload));
-        setErrors({ form: registrationFailure(response.status, 'resend', payload.code) });
+        setErrors({ form: registrationFailure(response.ok ? 502 : response.status, 'resend', payload?.code) });
         return;
       }
       setCode('');
       cooldown.start(registrationRetrySeconds(response, payload));
       setNotice('Solicitud recibida. Si corresponde, recibirás un código en ese correo. Usa el código más reciente.');
     } catch {
+      cooldown.start();
       setErrors({ form: 'No pudimos solicitar el código. Revisa tu conexión e inténtalo otra vez.' });
     } finally {
       submitting.current = false;
@@ -221,6 +220,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
             <p className="text-sm leading-7 text-[var(--vp-text)]">El correo está verificado. Entra con la contraseña que creaste al registrarte: no necesitas otro código ni esperar para continuar.</p>
             <p className="text-sm leading-7 text-[var(--vp-muted)]">Verificar tu correo no concede acceso a saldos ni a cuentas antiguas de la red. La vinculación requiere aprobación.</p>
             <Link href={loginUrl} className="inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-[var(--vp-accent)] px-4 font-bold text-[var(--vp-shell)]">Ir al acceso</Link>
+            <p className="text-sm leading-6 text-[var(--vp-muted)]">Después de iniciar sesión puedes <Link href="/account/security" className="text-[var(--vp-text)] underline">verificar tu teléfono de forma opcional</Link>. No recibirás SMS sin autorizarlo y no es necesario para continuar.</p>
           </div>
         )}
 

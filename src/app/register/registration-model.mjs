@@ -10,7 +10,7 @@ export function registrationErrors(form) {
   /** @type {Record<string, string>} */
   const errors = {};
   const name = String(form.fullName || '').trim();
-  if (name.length < 2 || name.length > 120) errors.fullName = 'Ingresa tu nombre completo (entre 2 y 120 caracteres).';
+  if (name.length < 2 || name.length > 120 || /[\u0000-\u001f\u007f]/.test(name)) errors.fullName = 'Ingresa tu nombre completo (entre 2 y 120 caracteres, sin saltos de línea).';
   if (!registrationEmail(form.email)) errors.email = 'Ingresa un correo electrónico válido.';
   if (typeof form.password !== 'string' || form.password.length < 12 || form.password.length > 128) {
     errors.password = 'Usa una contraseña de entre 12 y 128 caracteres.';
@@ -18,6 +18,14 @@ export function registrationErrors(form) {
   if (form.confirmPassword !== form.password) errors.confirmPassword = 'Las contraseñas no coinciden.';
   if (form.acceptsPrivacy !== true) errors.acceptsPrivacy = 'Debes autorizar el tratamiento de tus datos para registrarte.';
   return errors;
+}
+
+export function registrationAcknowledged(action, payload, email = '') {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload) || payload.error || payload.ok !== true || payload.mode !== 'better-auth') return false;
+  if (action === 'register') return payload.email === registrationEmail(email) && payload.userConfirmed === false && payload.requiresConfirmation === true;
+  if (action === 'confirm') return payload.userConfirmed === true && payload.needsLogin === true;
+  if (action === 'resend') return Number.isSafeInteger(payload.resendAfter) && payload.resendAfter >= REGISTRATION_RESEND_SECONDS;
+  return false;
 }
 
 export function registrationHints(search) {
