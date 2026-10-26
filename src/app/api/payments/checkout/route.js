@@ -1,94 +1,17 @@
-import { coreFetch } from '@/lib/cloudflare-runtime.mjs';
-import { rawIdToken } from "@/lib/admin-bff";
-import { NextResponse } from "next/server";
+import { rawIdToken } from '@/lib/admin-bff';
+import { verifyIdToken } from '@/lib/verify-id-token';
+import { coreFetch, runtimeEnvironment } from '@/lib/cloudflare-runtime.mjs';
+import { handleMembershipCheckout } from '@/lib/checkout-bff.mjs';
 
-import { idTokenHeader } from "@/lib/admin-bff";
-import { verifyIdToken } from "@/lib/verify-id-token";
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
-/**
- * BFF de checkout: valida la sesión Cognito, extrae el email del id token y
- * delega al servicio Go cmd/vp-payments (autenticado por token de servicio).
- * El servicio Go crea la sesión de Stripe Checkout y devuelve la URL.
- */
 export async function POST(request) {
-  const idToken = await rawIdToken();
-  if (!idToken) {
-    return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
-  }
-
-  const claims = await claimsFromIdToken(idToken);
-  const email = claims.email;
-  if (!email) {
-    return NextResponse.json({ error: "session-invalid" }, { status: 401 });
-  }
-
-  let body;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "invalid-json" }, { status: 400 });
-  }
-  const packageId = Number(body?.package_id);
-  if (!Number.isInteger(packageId) || packageId <= 0) {
-    return NextResponse.json({ error: "invalid-package" }, { status: 400 });
-  }
-  const rawRef = String(body?.ref || "").trim().slice(0, 64);
-  const refEmail = String(body?.ref_email || "").trim().toLowerCase();
-  const ref = rawRef && refEmail === email.toLowerCase() ? rawRef : "";
-  const preferredSide = ref ? normalizePlacementSide(body?.preferred_side) : "";
-  if (rawRef && !ref) {
-    console.warn("payments/checkout ignored unbound referral", { email, refEmail });
-  }
-
-  const base = process.env.VP_PAYMENTS_URL;
-  const token = process.env.PAYMENTS_SERVICE_TOKEN;
-  if (!base || !token) {
-    return NextResponse.json({ error: "payments-unconfigured" }, { status: 503 });
-  }
-
-  try {
-    const resp = await coreFetch(`${base}/api/payments/checkout`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "X-VP-Service-Token": token,
-        ...(await idTokenHeader()),
-      },
-      body: JSON.stringify({
-        email,
-        package_id: packageId,
-        ref,
-        preferred_side: preferredSide,
-        name: claims.name,
-        phone: claims.phone,
-      }),
-      cache: "no-store",
-    });
-    const payload = await resp.json().catch(() => ({}));
-    if (!resp.ok) {
-      return NextResponse.json({ error: payload.error || "checkout-failed" }, { status: resp.status });
-    }
-    return NextResponse.json({ url: payload.url, total_usd: payload.total_usd, fee_usd: payload.fee_usd });
-  } catch (error) {
-    console.error("payments/checkout proxy failed:", error.message);
-    return NextResponse.json({ error: "payments-unreachable" }, { status: 502 });
-  }
-}
-
-function normalizePlacementSide(value) {
-  const side = String(value || "").trim().toUpperCase();
-  return side === "L" || side === "R" ? side : "";
-}
-
-async function claimsFromIdToken(token) {
-  const payload = await verifyIdToken(token);
-  if (!payload) return { email: "" };
-  return {
-    email: payload.email,
-    name: String(payload.name || "").trim(),
-    phone: String(payload.phone_number || "").trim(),
-  };
+  return handleMembershipCheckout(request, {
+    env: runtimeEnvironment(), fetchImpl: coreFetch,
+    identity: async () => {
+      const token = await rawIdToken();
+      return token ? { token, claims: await verifyIdToken(token) } : null;
+    },
+  });
 }

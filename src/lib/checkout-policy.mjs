@@ -1,0 +1,45 @@
+// Shared presentation policy only. Provider credentials never belong here.
+export function checkoutProvider(value) {
+  return value === undefined ? 'stripe' : ['stripe', 'nowpayments'].includes(value) ? value : null;
+}
+
+/** Accept hosted checkout pages, never a generic provider domain/open redirect. */
+export function hostedCheckoutURL(value, provider, environment = 'production') {
+  if (typeof value !== 'string' || value.length > 4096 || value !== value.trim()
+      || /[\u0000-\u0020\u007f\\]/.test(value)) return null;
+  let url;
+  try { url = new URL(value); } catch { return null; }
+  if (url.protocol !== 'https:' || url.username || url.password || url.port) return null;
+  if (provider === 'stripe') {
+    // Stripe puts opaque checkout state in a fragment on its hosted page.
+    if (url.hostname !== 'checkout.stripe.com' || url.search
+        || !/^\/c\/pay\/cs_(?:live|test)_[A-Za-z0-9]+$/.test(url.pathname)) return null;
+    return url.href;
+  }
+  if (provider !== 'nowpayments' || !['production', 'sandbox'].includes(environment)) return null;
+  const host = environment === 'sandbox' ? 'sandbox.nowpayments.io' : 'nowpayments.io';
+  if (url.hostname !== host || !['/payment', '/payment/'].includes(url.pathname) || url.hash) return null;
+  const keys = [...url.searchParams.keys()];
+  if (keys.some(key => !['iid', 'source'].includes(key)) || keys.filter(key => key === 'iid').length !== 1
+      || keys.filter(key => key === 'source').length > 1 || !/^[1-9]\d{0,79}$/.test(url.searchParams.get('iid') || '')
+      || (url.searchParams.has('source') && !/^[A-Za-z0-9_-]{1,80}$/.test(url.searchParams.get('source') || ''))) return null;
+  return url.href;
+}
+
+export function checkoutErrorMessage(code, provider = 'stripe') {
+  if (['unauthenticated', 'session-invalid', 'invalid_id_token'].includes(code)) return 'Tu sesión expiró. Vuelve a iniciar sesión antes de pagar.';
+  if (code === 'buyer_not_found') return 'Tu cuenta aún no está registrada en la red.';
+  if (code === 'invalid_referral_code') return 'El enlace de referido no es válido o ya no está activo. Solicita un enlace nuevo antes de pagar.';
+  if (['tree_relocation_required', 'checkout_identity_review_required'].includes(code)) return 'Tu cuenta requiere revisión de identidad, sponsor y árbol antes de comprar. Contacta al soporte.';
+  if (['nowpayments-review-required', 'nowpayments_review_required', 'checkout_pending_review', 'membership_payment_pending_review'].includes(code)) return 'Hay una compra pendiente de revisión. No vuelvas a pagar hasta que soporte confirme su estado.';
+  if (['service_read_only', 'stripe_recovery_financial_review_required', 'financial_mutations_unavailable', 'core_unavailable',
+    'payments-unconfigured', 'nowpayments-unavailable', 'nowpayments_unavailable', 'financial_services_unavailable',
+    'core_not_ready', 'financial_review_required', 'membership_eligibility_unavailable', 'stripe_unavailable'].includes(code)) {
+    return provider === 'nowpayments'
+      ? 'Los pagos con NOWPayments aún no están habilitados. No se ha iniciado un cobro desde esta solicitud.'
+      : 'Los pagos no están habilitados temporalmente. No se ha iniciado un cobro desde esta solicitud.';
+  }
+  if (code === 'account_suspended') return 'Esta cuenta tiene el acceso a compras restringido. Contacta al soporte.';
+  if (code === 'membership_already_active') return 'Ya tienes esta membresía activa. No necesitas pagarla otra vez.';
+  return 'No pudimos confirmar el inicio del pago. Revisa tu historial o contacta al soporte antes de volver a intentarlo.';
+}
