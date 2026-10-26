@@ -1,8 +1,9 @@
 // Server transport only. No credentials, OTPs, sessions or JWTs are logged.
 import { createHash, createHmac } from 'node:crypto';
 import { isIP } from 'node:net';
+import { coreFetch, runtimeEnvironment } from './cloudflare-runtime.mjs';
 
-export function trustedAuthClientIp(headers, env = process.env) {
+export function trustedAuthClientIp(headers, env = runtimeEnvironment()) {
   const header = env.AUTH_CLIENT_IP_HEADER || 'cf-connecting-ip';
   if (!['cf-connecting-ip', 'x-real-ip'].includes(header)) throw new Error('trusted_proxy_required');
   const ip = headers.get(header) || '';
@@ -10,7 +11,7 @@ export function trustedAuthClientIp(headers, env = process.env) {
   if (env.NODE_ENV !== 'production') return '127.0.0.1';
   throw new Error('trusted_proxy_required');
 }
-export function betterAuthEnabled(env = process.env) {
+export function betterAuthEnabled(env = runtimeEnvironment()) {
   return env.AUTH_PROVIDER === "better-auth";
 }
 
@@ -18,7 +19,7 @@ export class AuthServiceUnavailable extends Error {
   constructor() { super('authentication_unavailable'); this.name = 'AuthServiceUnavailable'; }
 }
 
-export function betterAuthConfig(env = process.env) {
+export function betterAuthConfig(env = runtimeEnvironment()) {
   if (!betterAuthEnabled(env)) throw new Error("better_auth_disabled");
   if ((env.AUTH_BFF_SHARED_SECRET || '').length < 32) throw new Error('auth_proxy_secret_required');
   const base = new URL(env.BETTER_AUTH_BACKEND_URL || "");
@@ -71,7 +72,7 @@ async function readAuthBody(request) {
  * @param {{cookie?: string, method?: string, body?: unknown, origin?: string, signal?: AbortSignal}} [options]
  */
 export async function fetchBetterAuth(path, { cookie = "", method = "GET", body, origin, signal } = {},
-  { env = process.env, fetchImpl = globalThis.fetch, clientIp = '' } = {}) {
+  { env = runtimeEnvironment(), fetchImpl = coreFetch, clientIp = '' } = {}) {
   const base = betterAuthConfig(env);
   if (!/^\/[a-z0-9/-]+$/.test(path)) throw new Error("invalid_auth_path");
   if (!isIP(clientIp)) throw new Error('trusted_proxy_required');
@@ -109,7 +110,7 @@ export const browserAuthPaths = new Set([
 ]);
 
 export async function proxyBetterAuthKeys(request, dependencies = {}) {
-  const env = dependencies.env || process.env;
+  const env = dependencies.env || runtimeEnvironment();
   if (!betterAuthEnabled(env)) return Response.json({ error: 'not_found' }, { status: 404 });
   try {
     const upstream = await fetchBetterAuth('/jwks', {}, { ...dependencies, clientIp: trustedAuthClientIp(request.headers, env) });
@@ -125,7 +126,7 @@ export async function proxyBetterAuthKeys(request, dependencies = {}) {
 }
 
 export async function proxyBetterAuth(request, path, dependencies = {}) {
-  const env = dependencies.env || process.env;
+  const env = dependencies.env || runtimeEnvironment();
   if (!betterAuthEnabled(env)) return Response.json({ error: "better_auth_disabled" }, { status: 404 });
   if (request.method !== "POST" || !browserAuthPaths.has(path)) return Response.json({ error: "not_found" }, { status: 404 });
   const expectedOrigin = env.AUTH_PUBLIC_ORIGIN || new URL(request.url).origin;

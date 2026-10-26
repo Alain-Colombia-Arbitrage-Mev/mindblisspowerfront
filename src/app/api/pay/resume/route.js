@@ -1,3 +1,4 @@
+import { coreFetch } from '@/lib/cloudflare-runtime.mjs';
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -19,7 +20,7 @@ export async function GET(request) {
     return NextResponse.redirect(fallback, 303);
   }
   try {
-    const resp = await fetch(`${base}/api/payments/resume?t=${encodeURIComponent(t)}`, {
+    const resp = await coreFetch(`${base}/api/payments/resume?t=${encodeURIComponent(t)}`, {
       headers: { "X-VP-Service-Token": token },
       cache: "no-store",
     });

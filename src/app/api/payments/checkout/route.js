@@ -1,3 +1,4 @@
+import { coreFetch } from '@/lib/cloudflare-runtime.mjs';
 import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
@@ -49,7 +50,7 @@ export async function POST(request) {
   }
 
   try {
-    const resp = await fetch(`${base}/api/payments/checkout`, {
+    const resp = await coreFetch(`${base}/api/payments/checkout`, {
       method: "POST",
       headers: {
         "content-type": "application/json",

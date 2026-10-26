@@ -1,3 +1,4 @@
+import { coreFetch } from '@/lib/cloudflare-runtime.mjs';
 import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
@@ -29,7 +30,7 @@ export async function POST(request) {
     return NextResponse.json({ error: "invalid_ticket" }, { status: 400 });
   }
   try {
-    const resp = await fetch(`${c.base}/api/support/ticket`, {
+    const resp = await coreFetch(`${c.base}/api/support/ticket`, {
       method: "POST",
       headers: { "content-type": "application/json", "X-VP-Service-Token": c.token, "X-VP-Id-Token": c.idToken },
       body: JSON.stringify({

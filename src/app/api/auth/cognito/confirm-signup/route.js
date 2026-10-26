@@ -1,3 +1,4 @@
+import { coreFetch } from '@/lib/cloudflare-runtime.mjs';
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 
@@ -138,7 +139,7 @@ async function notifyRegistration(email, name, referralCode) {
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 1500);
-    await fetch(`${base}/api/events/registration`, {
+    await coreFetch(`${base}/api/events/registration`, {
       method: "POST",
       headers: { "content-type": "application/json", "X-VP-Service-Token": token },
       body: JSON.stringify({ email, name, referral_code: referralCode }),

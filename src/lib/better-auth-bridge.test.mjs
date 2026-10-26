@@ -101,3 +101,22 @@ test("Better Auth signature, audience, verification and five-minute lifetime are
   }
   assert.equal(validBetterAuthClaims({ ...claims, email_verified: "true" }), false);
 });
+
+test('private JWKS fetcher validates real signatures and bounds response sizes', async () => {
+  const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const jwk = { ...publicKey.export({ format: 'jwk' }), kid: 'synthetic-private', alg: 'RS256', use: 'sig' };
+  const jwtEnv = { ...env, BETTER_AUTH_JWT_ISSUER: 'https://issuer.example.test', BETTER_AUTH_JWT_AUDIENCE: 'services', BETTER_AUTH_JWKS_URL: 'https://auth.core.internal/api/auth/jwks' };
+  let calls = 0;
+  const verifier = createBetterAuthVerifier(jwtEnv, { fetchImpl: async (url, options) => {
+    calls++; assert.equal(url, jwtEnv.BETTER_AUTH_JWKS_URL); assert.equal(options.redirect, 'manual'); assert.equal(options.cache, 'no-store');
+    return Response.json({ keys: [jwk] });
+  } });
+  const now = Math.floor(Date.now() / 1000);
+  const claims = { sub: 'synthetic', person_public_id: '00000000-0000-4000-8000-000000000001', email: 'test@example.test', email_verified: true, authVerified: true, iss: jwtEnv.BETTER_AUTH_JWT_ISSUER, aud: 'services', iat: now, exp: now + 300 };
+  const body = [{ alg: 'RS256', kid: jwk.kid }, claims].map(value => Buffer.from(JSON.stringify(value)).toString('base64url')).join('.');
+  const token = `${body}.${sign('RSA-SHA256', Buffer.from(body), privateKey).toString('base64url')}`;
+  assert.equal((await verifier.verify(token)).sub, claims.sub);
+  assert.equal(calls, 1);
+  const excessive = createBetterAuthVerifier(jwtEnv, { fetchImpl: async () => new Response('x'.repeat(65537)) });
+  await assert.rejects(excessive.verify(token), /auth_keys_too_large/);
+});

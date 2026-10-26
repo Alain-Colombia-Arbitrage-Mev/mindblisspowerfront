@@ -1,3 +1,4 @@
+import { coreFetch } from '@/lib/cloudflare-runtime.mjs';
 import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
@@ -36,7 +37,7 @@ export async function POST(request) {
   if (!base || !token) return NextResponse.json({ error: "withdrawals-unconfigured" }, { status: 503 });
 
   try {
-    const resp = await fetch(`${base}/api/payments/withdraw`, {
+    const resp = await coreFetch(`${base}/api/payments/withdraw`, {
       method: "POST",
       headers: { "content-type": "application/json", "X-VP-Service-Token": token, ...(await idTokenHeader()) },
       body: JSON.stringify({ email, amount, bank_info: bankInfo }),

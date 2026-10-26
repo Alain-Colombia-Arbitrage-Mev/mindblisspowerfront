@@ -3,6 +3,9 @@
 Aplicación Next.js. El navegador consume las rutas del mismo origen; las
 credenciales de servicios y de PostgreSQL pertenecen únicamente al servidor.
 
+La adaptación opcional a Workers se documenta en [Cloudflare](docs/cloudflare-workers.md).
+Sus configuraciones están bloqueadas por defecto; no publican ni activan pagos.
+
 ## Desarrollo
 
 Usar la versión Node fijada en Docker/CI e instalar con `npm ci`.

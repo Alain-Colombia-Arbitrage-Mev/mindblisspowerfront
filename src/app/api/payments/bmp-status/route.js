@@ -1,3 +1,4 @@
+import { coreFetch } from '@/lib/cloudflare-runtime.mjs';
 import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
@@ -24,7 +25,7 @@ export async function GET() {
   if (!base || !token) return NextResponse.json({ error: "withdrawals-unconfigured" }, { status: 503 });
 
   try {
-    const resp = await fetch(`${base}/api/payments/bmp-status?email=${encodeURIComponent(email)}`, {
+    const resp = await coreFetch(`${base}/api/payments/bmp-status?email=${encodeURIComponent(email)}`, {
       method: "GET",
       headers: { "X-VP-Service-Token": token, ...(await idTokenHeader()) },
       cache: "no-store",

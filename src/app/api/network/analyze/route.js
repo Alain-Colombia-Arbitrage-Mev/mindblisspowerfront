@@ -1,3 +1,4 @@
+import { coreFetch } from '@/lib/cloudflare-runtime.mjs';
 import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
@@ -38,7 +39,7 @@ export async function POST(request) {
 
   if (engineURL) {
     try {
-      const response = await fetch(`${engineURL.replace(/\/$/, "")}/network/analyze`, {
+      const response = await coreFetch(`${engineURL.replace(/\/$/, "")}/network/analyze`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

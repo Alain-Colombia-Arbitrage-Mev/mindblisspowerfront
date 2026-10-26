@@ -1,10 +1,11 @@
+import { coreFetch } from './cloudflare-runtime.mjs';
 export async function cognitoUserStatus(email, env = process.env) {
   const unknown = { exists: null, confirmed: true, enabled: true };
   const base = env.VP_PAYMENTS_URL;
   const token = env.PAYMENTS_SERVICE_TOKEN;
   if (!base || !token) return unknown;
   try {
-    const response = await fetch(`${base}/api/auth/user-exists?email=${encodeURIComponent(email)}`, {
+    const response = await coreFetch(`${base}/api/auth/user-exists?email=${encodeURIComponent(email)}`, {
       headers: { "X-VP-Service-Token": token },
       cache: "no-store",
       signal: AbortSignal.timeout(4000),

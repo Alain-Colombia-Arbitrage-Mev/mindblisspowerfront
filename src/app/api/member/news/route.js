@@ -1,3 +1,4 @@
+import { coreFetch } from '@/lib/cloudflare-runtime.mjs';
 import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
@@ -24,7 +25,7 @@ export async function GET() {
   const c = await ctx();
   if (c.error) return NextResponse.json({ error: c.error }, { status: c.status });
   try {
-    const resp = await fetch(`${c.base}/api/member/news`, {
+    const resp = await coreFetch(`${c.base}/api/member/news`, {
       headers: { "X-VP-Service-Token": c.token, "X-VP-Id-Token": c.idToken },
       cache: "no-store",
     });

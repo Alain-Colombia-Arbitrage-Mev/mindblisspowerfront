@@ -14,6 +14,7 @@
 import { CognitoJwtVerifier } from "aws-jwt-verify";
 import { betterAuthEnabled } from "./better-auth-bridge.mjs";
 import { createBetterAuthVerifier, validBetterAuthClaims } from "./better-auth-token.mjs";
+import { getCloudflareScope, runtimeEnvironment, coreFetch } from './cloudflare-runtime.mjs';
 
 let betterVerifier;
 
@@ -69,8 +70,13 @@ function getVerifier() {
 export async function verifyIdToken(token) {
   if (betterAuthEnabled()) {
     try {
-      betterVerifier ??= createBetterAuthVerifier();
-      const claims = await betterVerifier.verify(token);
+      const scope = getCloudflareScope();
+      let verifier;
+      if (scope) {
+        if (!scope.resources.has('auth-verifier')) scope.resources.set('auth-verifier', createBetterAuthVerifier(runtimeEnvironment(), { fetchImpl: coreFetch }));
+        verifier = scope.resources.get('auth-verifier');
+      } else { betterVerifier ??= createBetterAuthVerifier(); verifier = betterVerifier; }
+      const claims = await verifier.verify(token);
       return validBetterAuthClaims(claims) ? { ...claims, email: claims.email.trim().toLowerCase() } : null;
     } catch { return null; }
   }

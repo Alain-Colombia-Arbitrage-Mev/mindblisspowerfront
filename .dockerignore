@@ -1,5 +1,12 @@
 **
 !Dockerfile
+!Dockerfile.cloudflare
+!wrangler.jsonc
+!open-next.config.ts
+!cloudflare-worker.mjs
+!cloudflare-smoke-worker.mjs
+!scripts/
+!scripts/cloudflare-smoke.mjs
 !package.json
 !package-lock.json
 !next.config.mjs
@@ -14,6 +21,8 @@
 !infra/
 !infra/**
 **/.env*
+**/.dev.vars*
+**/.git
 **/*.db
 **/*.rvf*
 **/*.log

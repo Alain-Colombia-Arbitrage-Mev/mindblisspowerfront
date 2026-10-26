@@ -1,3 +1,4 @@
+import { coreFetch } from '@/lib/cloudflare-runtime.mjs';
 import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
@@ -25,7 +26,7 @@ export async function GET() {
   const c = await context();
   if (c.error) return noStoreJson({ error: c.error }, c.status);
   try {
-    const response = await fetch(`${c.base}/api/member/onboarding?email=${encodeURIComponent(c.email)}`, {
+    const response = await coreFetch(`${c.base}/api/member/onboarding?email=${encodeURIComponent(c.email)}`, {
       headers: { "X-VP-Service-Token": c.token, "X-VP-Id-Token": c.idToken },
       cache: "no-store",
     });
@@ -64,7 +65,7 @@ export async function POST(request) {
   if (!parsed.success) return noStoreJson({ error: "invalid_onboarding" }, 400);
 
   try {
-    const response = await fetch(`${c.base}/api/member/onboarding`, {
+    const response = await coreFetch(`${c.base}/api/member/onboarding`, {
       method: "POST",
       headers: {
         "content-type": "application/json",

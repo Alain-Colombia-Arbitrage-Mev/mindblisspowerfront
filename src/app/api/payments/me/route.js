@@ -1,3 +1,4 @@
+import { coreFetch } from '@/lib/cloudflare-runtime.mjs';
 import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
@@ -32,7 +33,7 @@ export async function GET(request) {
     const requestUrl = new URL(request.url);
     const fresh = requestUrl.searchParams.get("fresh") === "1";
     const upstreamUrl = `${base}/api/payments/me?email=${encodeURIComponent(email)}${fresh ? "&fresh=1" : ""}`;
-    const resp = await fetch(upstreamUrl, {
+    const resp = await coreFetch(upstreamUrl, {
       headers: { "X-VP-Service-Token": token, ...(await idTokenHeader()) },
       cache: "no-store",
       signal: AbortSignal.any([request.signal, AbortSignal.timeout(20_000)]),

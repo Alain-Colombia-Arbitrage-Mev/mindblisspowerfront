@@ -1,3 +1,4 @@
+import { coreFetch } from '@/lib/cloudflare-runtime.mjs';
 import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
@@ -19,7 +20,7 @@ export async function GET() {
   if (!base || !token) return NextResponse.json({ error: "payments-unconfigured" }, { status: 503 });
 
   try {
-    const resp = await fetch(`${base}/api/member/kyc/documents?email=${encodeURIComponent(email)}`, {
+    const resp = await coreFetch(`${base}/api/member/kyc/documents?email=${encodeURIComponent(email)}`, {
       headers: { "X-VP-Service-Token": token, "X-VP-Id-Token": idToken },
       cache: "no-store",
     });

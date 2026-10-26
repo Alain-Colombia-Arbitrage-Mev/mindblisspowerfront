@@ -20,6 +20,7 @@ import { useEffect, useRef, useState } from "react";
 import { isMicrosoftEmail, suggestEmailFix, useResendCooldown } from "@/lib/useResendCooldown";
 import { checkPassword, isValidPassword } from "@/lib/password";
 import { bindReferralToEmail, captureReferralFromUrl, normalizePlacementSide, normalizeReferralCode } from "@/lib/referral-attribution";
+import { otpRequest, otpFailureMessage, OTP_SEND_NOTICE } from "@/lib/email-otp-client.mjs";
 
 const AUTH_STATE_MESSAGES = {
   "invalid-email": {
@@ -28,7 +29,7 @@ const AUTH_STATE_MESSAGES = {
   },
   "use-designed-login": {
     tone: "info",
-    text: "Usa esta pantalla para entrar. Cognito queda conectado por API sin abrir ventanas externas.",
+    text: "Usa esta pantalla para entrar de manera segura, sin abrir ventanas externas.",
   },
   "password-required": {
     tone: "info",
@@ -44,8 +45,9 @@ const AUTH_STATE_MESSAGES = {
   },
 };
 
-export default function MagicLinkLoginForm({ authState, initialEmail = "", initialMode = "code", initialRef = "", initialSide = "" }) {
-  const [mode, setMode] = useState(() => normalizeMode(initialMode));
+export default function MagicLinkLoginForm({ authState, initialEmail = "", initialMode = "code", initialRef = "", initialSide = "", authMode = "cognito" }) {
+  const emailOtpOnly = authMode === "better-auth";
+  const [mode, setMode] = useState(() => emailOtpOnly ? "code" : normalizeMode(initialMode));
   const [codeStep, setCodeStep] = useState("request");
   const [email, setEmail] = useState(initialEmail);
   const [referralCode, setReferralCode] = useState(() => normalizeReferralCode(initialRef));
@@ -135,12 +137,32 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     otpSubmittingRef.current = true;
     setLoadingAction(channel === "sms" ? "code-request-sms" : "code-request");
     try {
-      const response = await fetch("/api/auth/cognito/code-login/request", {
+      const contract = emailOtpOnly ? otpRequest(authMode, 'send', normalizedEmail) : {
+        path: "/api/auth/cognito/code-login/request", body: { email: normalizedEmail, channel },
+      };
+      const response = await fetch(contract.path, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: normalizedEmail, channel }),
+        credentials: "same-origin", cache: "no-store", redirect: "error",
+        signal: AbortSignal.timeout(12000),
+        body: JSON.stringify(contract.body),
       });
       const payload = await response.json().catch(() => ({}));
+
+      if (emailOtpOnly) {
+        if (!response.ok || payload.ok !== true) {
+          if (response.status === 429) codeCooldown.start(60);
+          setError(otpFailureMessage(response.status, 'send'));
+          return;
+        }
+        setCodeStep("confirm");
+        setCodeChannel("email");
+        setCodeRecipient(normalizedEmail);
+        setLoginCode("");
+        codeCooldown.start();
+        setNotice(OTP_SEND_NOTICE);
+        return;
+      }
 
       // Usuario nuevo (no está en el pool): el OTP nunca le llegaría. Lo llevamos
       // a crear cuenta con el email precargado (el registro sí envía el código).
@@ -246,6 +268,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
   }
 
   function renderAccessFallback() {
+    if (emailOtpOnly) return null;
     return (
       <div className="space-y-2 border-t pt-3" style={{ borderColor: "var(--vp-border)" }}>
         <SecondaryButton
@@ -311,7 +334,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     rememberReferralForEmail(normalizedEmail);
 
     const code = loginCode.replace(/[\s-]+/g, "").trim();
-    if (!/^[a-zA-Z0-9]{4,12}$/.test(code)) {
+    if (!(emailOtpOnly ? /^\d{6}$/ : /^[a-zA-Z0-9]{4,12}$/).test(code)) {
       setError(codeChannel === "sms" ? "Ingresa el código que recibiste por SMS." : "Ingresa el código que recibiste por correo.");
       return;
     }
@@ -319,12 +342,32 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     otpSubmittingRef.current = true;
     setLoadingAction("code-confirm");
     try {
-      const response = await fetch("/api/auth/cognito/code-login/confirm", {
+      const contract = emailOtpOnly ? otpRequest(authMode, 'confirm', normalizedEmail, code) : {
+        path: "/api/auth/cognito/code-login/confirm", body: { email: normalizedEmail, code },
+      };
+      const response = await fetch(contract.path, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: normalizedEmail, code }),
+        credentials: "same-origin", cache: "no-store", redirect: "error",
+        signal: AbortSignal.timeout(12000),
+        body: JSON.stringify(contract.body),
       });
       const payload = await response.json().catch(() => ({}));
+
+      if (emailOtpOnly) {
+        if (!response.ok || payload.ok !== true) {
+          setError(otpFailureMessage(response.status, 'confirm'));
+          return;
+        }
+        // A verified mailbox is not an approved network identity. Never assign
+        // a person, rank, placement or role from the sign-in response.
+        const session = await fetch('/api/auth/session', { cache: 'no-store', credentials: 'same-origin', signal: AbortSignal.timeout(12000) });
+        const identity = await session.json().catch(() => ({}));
+        if (!session.ok) setError('El servicio de autorización no está disponible. Intenta más tarde.');
+        else if (identity.authenticated) window.location.assign('/dashboard');
+        else setNotice('Correo verificado. Tu acceso a la red requiere revisión de identidad antes de continuar.');
+        return;
+      }
 
       if (!response.ok || !payload.ok) {
         if (payload.needsNewCode) {
@@ -482,7 +525,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
 
       {notice && !error && <Message tone="info">{notice}</Message>}
 
-      {mode !== "reset" && (
+      {!emailOtpOnly && mode !== "reset" && (
         <div
           className="grid grid-cols-2 gap-1 rounded-lg p-1"
           style={{ background: "var(--vp-surface-raised)", border: "1px solid var(--vp-border)" }}
@@ -508,7 +551,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
               {codeCooldown.active ? codeCooldown.label : "Enviar código"}
             </PrimaryButton>
 
-            <p className="text-center text-xs" style={{ color: "var(--vp-muted)" }}>
+            {!emailOtpOnly && <><p className="text-center text-xs" style={{ color: "var(--vp-muted)" }}>
               ¿Primera vez? Necesitas una cuenta para recibir el código.
             </p>
             <SecondaryButton
@@ -519,7 +562,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
               icon={<UserPlus size={15} />}
             >
               Crear cuenta nueva
-            </SecondaryButton>
+            </SecondaryButton></>}
             {showAccessFallback && renderAccessFallback()}
           </form>
         ) : (
@@ -529,6 +572,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
               id="login-code"
               label="Código de acceso"
               value={loginCode}
+              codeLength={emailOtpOnly ? 6 : 12}
               autoFocus
               onChange={(value) => {
                 setLoginCode(value);
@@ -785,7 +829,7 @@ function PasswordField({ id, label, value, showPassword, autoComplete, onChange,
   );
 }
 
-function CodeField({ id, label, value, onChange, autoFocus = false }) {
+function CodeField({ id, label, value, onChange, autoFocus = false, codeLength = 12 }) {
   return (
     <div>
       <label className="mb-2 block text-sm font-bold" htmlFor={id} style={{ color: "var(--vp-text)" }}>
@@ -798,8 +842,8 @@ function CodeField({ id, label, value, onChange, autoFocus = false }) {
         autoFocus={autoFocus}
         maxLength={12}
         value={value}
-        onChange={(event) => onChange(event.target.value.replace(/[\s-]+/g, ""))}
-        placeholder="········"
+        onChange={(event) => onChange(event.target.value.replace(/[\s-]+/g, "").slice(0, codeLength))}
+        placeholder={codeLength === 6 ? "······" : "········"}
         className="min-h-12 w-full rounded-lg px-4 text-base font-semibold outline-none"
         style={{
           color: "var(--vp-text)",

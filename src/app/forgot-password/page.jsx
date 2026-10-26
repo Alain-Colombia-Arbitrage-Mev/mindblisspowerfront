@@ -1,6 +1,10 @@
 import Link from "next/link";
 import AuthShell from "../_components/AuthShell";
 import MagicLinkLoginForm from "../login/MagicLinkLoginForm";
+import { betterAuthEnabled } from "@/lib/better-auth-bridge.mjs";
+import { redirect } from "next/navigation";
+
+export const dynamic = "force-dynamic";
 
 const sideKpis = [
   { value: "1", label: "cuenta" },
@@ -8,9 +12,11 @@ const sideKpis = [
   { value: "100%", label: "privado" },
 ];
 
-export default function ForgotPasswordPage({ searchParams }) {
-  const authState = searchParams?.auth;
-  const initialEmail = typeof searchParams?.email === "string" ? searchParams.email : "";
+export default async function ForgotPasswordPage({ searchParams }) {
+  const params = await searchParams;
+  const authState = params?.auth;
+  const initialEmail = typeof params?.email === "string" ? params.email : "";
+  if (betterAuthEnabled()) redirect(initialEmail ? `/login?email=${encodeURIComponent(initialEmail)}` : '/login');
 
   return (
     <AuthShell

@@ -1,3 +1,4 @@
+import { coreFetch } from '@/lib/cloudflare-runtime.mjs';
 import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
@@ -22,7 +23,7 @@ export async function GET() {
   const c = await ctx();
   if (c.error) return NextResponse.json({ error: c.error }, { status: c.status });
   try {
-    const resp = await fetch(`${c.base}/api/member/profile?email=${encodeURIComponent(c.id.email)}`, {
+    const resp = await coreFetch(`${c.base}/api/member/profile?email=${encodeURIComponent(c.id.email)}`, {
       headers: { "X-VP-Service-Token": c.token, "X-VP-Id-Token": c.idToken },
       cache: "no-store",
     });
@@ -38,7 +39,7 @@ export async function POST(request) {
   if (c.error) return NextResponse.json({ error: c.error }, { status: c.status });
   const body = await request.json().catch(() => ({}));
   try {
-    const resp = await fetch(`${c.base}/api/member/profile`, {
+    const resp = await coreFetch(`${c.base}/api/member/profile`, {
       method: "POST",
       headers: { "content-type": "application/json", "X-VP-Service-Token": c.token, "X-VP-Id-Token": c.idToken },
       body: JSON.stringify({

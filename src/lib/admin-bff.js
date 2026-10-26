@@ -4,6 +4,7 @@ import { cookies, headers } from "next/headers";
 
 import { verifyIdToken } from "./verify-id-token";
 import { betterAuthEnabled, betterAuthServiceToken, trustedAuthClientIp, AuthServiceUnavailable } from "./better-auth-bridge.mjs";
+import { coreFetch, runtimeEnvironment } from './cloudflare-runtime.mjs';
 
 // Next's request-local cookie object is the key; never cache across sessions.
 const requestTokens = new WeakMap();
@@ -57,7 +58,8 @@ export async function idTokenHeader() {
 
 /** Config del servicio de pagos (Go). */
 export function paymentsConfig() {
-  return { base: process.env.VP_PAYMENTS_URL, token: process.env.PAYMENTS_SERVICE_TOKEN };
+  const env = runtimeEnvironment();
+  return { base: env.VP_PAYMENTS_URL, token: env.PAYMENTS_SERVICE_TOKEN };
 }
 
 /**
@@ -70,7 +72,7 @@ export async function callPayments(path, { method = "GET", body } = {}) {
   if (!base || !token) return { ok: false, status: 503, data: { error: "payments-unconfigured" } };
   const idHeader = await idTokenHeader();
   try {
-    const resp = await fetch(`${base}${path}`, {
+    const resp = await coreFetch(`${base}${path}`, {
       method,
       headers: { "X-VP-Service-Token": token, ...idHeader, ...(body ? { "content-type": "application/json" } : {}) },
       body: body ? JSON.stringify(body) : undefined,
@@ -85,7 +87,8 @@ export async function callPayments(path, { method = "GET", body } = {}) {
 
 /** Config del servicio de retiros (Go, vp-withdrawals). Reusa el service token. */
 export function withdrawalsConfig() {
-  return { base: process.env.VP_WITHDRAWALS_URL, token: process.env.PAYMENTS_SERVICE_TOKEN };
+  const env = runtimeEnvironment();
+  return { base: env.VP_WITHDRAWALS_URL, token: env.PAYMENTS_SERVICE_TOKEN };
 }
 
 /**
@@ -98,7 +101,7 @@ export async function callWithdrawals(path, { method = "GET", body } = {}) {
   if (!base || !token) return { ok: false, status: 503, data: { error: "withdrawals-unconfigured" } };
   const idHeader = await idTokenHeader();
   try {
-    const resp = await fetch(`${base}${path}`, {
+    const resp = await coreFetch(`${base}${path}`, {
       method,
       headers: { "X-VP-Service-Token": token, ...idHeader, ...(body ? { "content-type": "application/json" } : {}) },
       body: body ? JSON.stringify(body) : undefined,

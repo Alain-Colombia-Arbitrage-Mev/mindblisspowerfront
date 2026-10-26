@@ -1,3 +1,4 @@
+import { coreFetch } from '@/lib/cloudflare-runtime.mjs';
 import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
@@ -29,7 +30,7 @@ export async function POST(request) {
   if (!base || !token) return NextResponse.json({ error: "payments-unconfigured" }, { status: 503 });
 
   try {
-    const resp = await fetch(`${base}/api/member/kyc/confirm`, {
+    const resp = await coreFetch(`${base}/api/member/kyc/confirm`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
