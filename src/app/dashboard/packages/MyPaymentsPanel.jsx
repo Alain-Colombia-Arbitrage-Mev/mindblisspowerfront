@@ -29,9 +29,12 @@ export default function MyPaymentsPanel() {
   const { state, reload: load } = useMemberSummary({ fresh: true });
 
   if (state.loading) {
-    return <Card><div className="flex items-center gap-2 text-sm" style={{ color: "var(--vp-muted)" }}><Loader2 size={15} className="animate-spin" /> Cargando…</div></Card>;
+    return <Card><div role="status" aria-live="polite" aria-busy="true" className="flex items-center gap-2 text-sm" style={{ color: "var(--vp-muted)" }}><Loader2 size={15} className="animate-spin" aria-hidden="true" /> Cargando pagos…</div></Card>;
   }
-  if (state.error) return <Card><div role="alert" className="text-sm" style={{ color: "var(--vp-muted)" }}>{state.error}</div></Card>;
+  if (state.error || !state.data) return <Card>
+    <div role="alert" className="text-sm" style={{ color: "var(--vp-muted)" }}>{state.error || "No se pudieron cargar los pagos. Intenta de nuevo."}</div>
+    <button type="button" onClick={load} className="executive-button mt-3">Reintentar pagos</button>
+  </Card>;
 
   const d = state.data;
   const recovered = isRecoverySummary(d);

@@ -70,9 +70,32 @@ try {
   assert.equal(confirmed.headers.get('cache-control'), 'private, no-store');
   assert.doesNotMatch(await confirmed.text(), /must-not-leak/);
   probes++;
+  const cookie = confirmed.headers.get('set-cookie').split(';')[0];
+  const sessionHeaders = { cookie, 'cf-connecting-ip': '192.0.2.10' };
+  const signedIn = await fetch('http://127.0.0.1:8787/api/auth/session', { headers: sessionHeaders, signal: AbortSignal.timeout(8000) });
+  assert.equal(signedIn.status, 200);
+  const identity = await signedIn.json();
+  assert.equal(identity.authenticated, true, `real RSA verification through the built Worker failed\n${logs}`);
+  assert.equal(identity.email, 'fixture@example.test');
+  assert.equal(identity.referralCode, 'SYNTHETIC-MEMBER');
+  assert.equal(identity.isAdmin, false, 'customer portal never grants an administrative role');
+  probes++;
+  for (const cookieValue of ['', '__Secure-better-auth.session_token=synthetic-tampered', '__Secure-better-auth.session_token=synthetic-wrong-audience']) {
+    const rejected = await fetch('http://127.0.0.1:8787/api/auth/session', {
+      headers: { ...sessionHeaders, cookie: cookieValue }, signal: AbortSignal.timeout(8000),
+    });
+    assert.equal(rejected.status, 200);
+    const session = await rejected.json();
+    assert.equal(session.authenticated, false);
+    assert.equal(session.email, null);
+    probes++;
+  }
   const metrics = await (await fetch('http://127.0.0.1:8787/__synthetic_metrics')).json();
-  assert.equal(metrics.privateCalls, 3, 'OpenNext routes must see the same request-local private binding, not a global pool or public fetch');
-  console.log(JSON.stringify({ workerd: 'passed', probes, privateCalls: metrics.privateCalls, externalNetwork: 'disabled', databaseQueries: 0, realMessages: 0 }));
+  assert.ok(metrics.tokens >= 4 && metrics.jwks >= 3, 'session checks must reach the private JWT/JWKS binding');
+  assert.equal(metrics.verifiedReferrals, 1, 'invalid identities must not reach a member data query');
+  assert.equal(metrics.sensitiveJwksHeaders, 0, 'public-key reads must not carry browser sessions');
+  console.log(JSON.stringify({ workerd: 'passed', probes, privateCalls: metrics.privateCalls, realRsaVerified: true,
+    tamperedAndWrongAudienceRejected: true, externalNetwork: 'disabled', databaseQueries: 0, realMessages: 0 }));
 } finally {
   worker.kill('SIGTERM');
 }

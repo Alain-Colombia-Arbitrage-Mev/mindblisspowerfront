@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, ArrowDownLeft, ArrowDownRight, ArrowRight, Check, Clock, Copy, Loader2, RotateCw, Share2, Users } from 'lucide-react';
 import { motion } from 'framer-motion';
 import ReferralShareModal from './ReferralShareModal';
+import { readMemberJson, validMemberReferral } from '@/lib/member-read.mjs';
+import { createClipboardFeedback, createLatestViewRequest } from '@/lib/member-view-effects.mjs';
 
 const EMPTY_METRICS = { total: 0, active: 0, pending: 0 };
 
@@ -45,20 +47,35 @@ export default function ReferralModule() {
   const [metrics, setMetrics] = useState(EMPTY_METRICS);
   const [status, setStatus] = useState('loading');
   const [shareSide, setShareSide] = useState('');
-  const [codeCopied, setCodeCopied] = useState(false);
-  const [linkCopied, setLinkCopied] = useState('');
+  const [copyFeedback, setCopyFeedback] = useState({ pending: '', copied: '', error: '' });
   const [refreshing, setRefreshing] = useState(false);
+  const request = useRef(null);
+  const clipboard = useRef(null);
+  const codeCopied = copyFeedback.copied === 'code';
+  const linkCopied = copyFeedback.copied;
 
   const hasReferral = status === 'ready' && referralCode && referralLinks.left && referralLinks.right;
 
   useEffect(() => {
-    let cancelled = false;
-    loadReferral().then((next) => {
-      if (!cancelled) applyReferral(next);
+    const active = createLatestViewRequest(
+      signal => readMemberJson('/api/member/referral', { signal, validate: validMemberReferral }), {
+      onStart: () => { setRefreshing(true); setStatus('loading'); setShareSide(''); },
+      onValue: applyReferral,
+      onError: () => applyReferral(null),
+      onSettled: () => setRefreshing(false),
     });
+    request.current = active;
+    active.run();
     return () => {
-      cancelled = true;
+      active.dispose();
+      if (request.current === active) request.current = null;
     };
+  }, []);
+
+  useEffect(() => {
+    const active = createClipboardFeedback(setCopyFeedback);
+    clipboard.current = active;
+    return () => { active.dispose(); if (clipboard.current === active) clipboard.current = null; };
   }, []);
 
   function applyReferral(data) {
@@ -86,14 +103,7 @@ export default function ReferralModule() {
     setMetrics(data.metrics || EMPTY_METRICS);
   }
 
-  async function refreshReferral() {
-    setRefreshing(true);
-    try {
-      applyReferral(await loadReferral());
-    } finally {
-      setRefreshing(false);
-    }
-  }
+  const refreshReferral = () => request.current?.run();
 
   const metricCards = useMemo(() => ([
     { label: 'Total invitados', value: metrics.total, color: 'var(--vp-text)', note: 'directos', icon: Users },
@@ -103,17 +113,13 @@ export default function ReferralModule() {
 
   const copyCode = async () => {
     if (!referralCode) return;
-    await navigator.clipboard.writeText(referralCode).catch(() => {});
-    setCodeCopied(true);
-    setTimeout(() => setCodeCopied(false), 2500);
+    await clipboard.current?.copy(referralCode, 'code');
   };
 
   const copyLink = async (side) => {
     const link = referralLinks[side];
     if (!link) return;
-    await navigator.clipboard.writeText(link).catch(() => {});
-    setLinkCopied(side);
-    setTimeout(() => setLinkCopied(''), 2500);
+    await clipboard.current?.copy(link, side);
   };
 
   return (
@@ -164,7 +170,7 @@ export default function ReferralModule() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 9, minWidth: 178 }}>
             <button
               onClick={copyCode}
-              disabled={!hasReferral}
+              disabled={!hasReferral || Boolean(copyFeedback.pending)}
               style={{
                 ...buttonBase,
                 padding: '11px 18px',
@@ -175,7 +181,7 @@ export default function ReferralModule() {
                 opacity: hasReferral ? 1 : 0.55,
               }}
             >
-              {codeCopied ? <Check size={14} /> : <Copy size={14} />}
+              {codeCopied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
               {codeCopied ? 'Copiado' : 'Copiar código'}
             </button>
             <button
@@ -197,6 +203,10 @@ export default function ReferralModule() {
           </div>
         </div>
       </motion.section>
+
+      <p role="status" aria-live="polite" className="text-sm" style={{ color: 'var(--vp-muted)', margin: 0 }}>
+        {copyFeedback.error || (copyFeedback.copied ? 'Copiado al portapapeles.' : copyFeedback.pending ? 'Copiando…' : '')}
+      </p>
 
       <motion.section
         initial={{ opacity: 0, y: 8 }}
@@ -338,15 +348,6 @@ export default function ReferralModule() {
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </div>
   );
-}
-
-async function loadReferral() {
-  try {
-    const response = await fetch('/api/member/referral', { cache: 'no-store' });
-    return response.ok ? await response.json() : null;
-  } catch {
-    return null;
-  }
 }
 
 function referralLinksFrom(data) {

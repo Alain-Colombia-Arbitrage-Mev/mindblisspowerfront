@@ -1,5 +1,4 @@
-import { JwtVerifier } from "aws-jwt-verify";
-import { SimpleJwksCache } from 'aws-jwt-verify/jwk';
+import { createLocalJWKSet, jwtVerify } from 'jose';
 
 export function validBetterAuthClaims(payload, now = Math.floor(Date.now() / 1000)) {
   return Boolean(payload && typeof payload.sub === "string" && payload.sub.trim()
@@ -20,8 +19,21 @@ export function createBetterAuthVerifier(env = process.env, { fetchImpl } = {}) 
     || (uri.protocol !== "https:" && !(env.NODE_ENV !== "production" && ["127.0.0.1", "localhost", "[::1]"].includes(uri.hostname) && uri.protocol === "http:"))) {
     throw new Error("better_auth_verifier_configuration_invalid");
   }
-  const jwksCache = fetchImpl ? new SimpleJwksCache({ fetcher: { async fetch(url) {
-    const response = await fetchImpl(url, { redirect: 'manual', cache: 'no-store', signal: AbortSignal.timeout(8000) });
+  // WebCrypto avoids incompatible Node KeyObjects across Next/OpenNext's
+  // generated bundle. Workers callers keep this verifier request-scoped.
+  let keys;
+  let pending;
+  let seeded = false;
+  function cacheJwks(jwks) {
+    if (!Array.isArray(jwks?.keys) || !jwks.keys.length || jwks.keys.length > 32
+      || jwks.keys.some(key => key.kty !== 'RSA' || (key.alg && key.alg !== 'RS256')
+        || (key.use && key.use !== 'sig') || ['d', 'p', 'q', 'dp', 'dq', 'qi', 'oth', 'k'].some(field => field in key))) {
+      throw new Error('auth_keys_invalid');
+    }
+    keys = createLocalJWKSet(jwks);
+  }
+  async function fetchKeys() {
+    const response = await (fetchImpl || fetch)(uri.href, { redirect: 'manual', cache: 'no-store', signal: AbortSignal.timeout(8000) });
     if (!response.ok) throw new Error('auth_keys_unavailable');
     const reader = response.body?.getReader();
     if (!reader) throw new Error('auth_keys_unavailable');
@@ -37,11 +49,27 @@ export function createBetterAuthVerifier(env = process.env, { fetchImpl } = {}) 
     } finally { reader.releaseLock(); }
     const data = new Uint8Array(total); let offset = 0;
     for (const chunk of chunks) { data.set(chunk, offset); offset += chunk.byteLength; }
-    return data.buffer;
-  } } }) : undefined;
-  return JwtVerifier.create({ issuer, audience, jwksUri: uri.href,
-    customJwtCheck: ({ header, payload }) => {
-      if (header.alg !== "RS256" || !validBetterAuthClaims(payload)) throw new Error("invalid_auth_identity");
+    cacheJwks(JSON.parse(new TextDecoder().decode(data)));
+  }
+  async function loadKeys() {
+    if (!pending) pending = fetchKeys().finally(() => { pending = undefined; });
+    return pending;
+  }
+  return {
+    cacheJwks(jwks) { cacheJwks(jwks); seeded = true; },
+    async verify(token) {
+      if (!keys) await loadKeys();
+      const resolver = async (header, flattened) => {
+        try { return await keys(header, flattened); }
+        catch (error) {
+          if (seeded || error?.code !== 'ERR_JWKS_NO_MATCHING_KEY') throw error;
+          await loadKeys();
+          return keys(header, flattened);
+        }
+      };
+      const { payload } = await jwtVerify(token, resolver, { issuer, audience, algorithms: ['RS256'], requiredClaims: ['sub', 'iat', 'exp'] });
+      if (!validBetterAuthClaims(payload)) throw new Error('invalid_auth_identity');
+      return payload;
     },
-  }, jwksCache ? { jwksCache } : undefined);
+  };
 }
