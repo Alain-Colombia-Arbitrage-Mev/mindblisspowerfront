@@ -177,3 +177,17 @@ pipeline generates exact-file headers after OpenNext and before validation.
 If building OpenNext manually, run `node scripts/prepare-static-cache-headers.mjs`
 after `npm run cf:bundle` and before any upload; never upload the unprocessed
 `public/_headers` template as the final rule set.
+
+Production deployment: code `c44f597`, Worker version
+`da8552da-80ad-4af7-b28f-303b817d4d78` (100%). Twenty-one read-only public
+checks across both domains passed after rollout: static TTLs, conditional 304,
+missing-file 404 without long TTL, private login/session/dashboard/API headers
+and registration SMS still disabled. No authenticated production workload was
+simulated and no overall usage/billing reduction is asserted.
+
+For this dummy-cache configuration on Windows, OpenNext's deployment wrapper
+can mistakenly require a local Hyperdrive emulator DSN. After the Linux build,
+offline smoke and production dry-run, `OPEN_NEXT_DEPLOY=true` lets Wrangler
+upload those already-validated artifacts directly, without a fake/real local
+database connection. This is the same flag OpenNext uses for its final upload;
+it must not bypass cache population if persistent ISR/tag caches are introduced.
