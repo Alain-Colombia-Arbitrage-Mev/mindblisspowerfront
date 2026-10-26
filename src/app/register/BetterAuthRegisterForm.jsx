@@ -220,7 +220,6 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
             <p className="text-sm leading-7 text-[var(--vp-text)]">El correo está verificado. Entra con la contraseña que creaste al registrarte: no necesitas otro código ni esperar para continuar.</p>
             <p className="text-sm leading-7 text-[var(--vp-muted)]">Verificar tu correo no concede acceso a saldos ni a cuentas antiguas de la red. La vinculación requiere aprobación.</p>
             <Link href={loginUrl} className="inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-[var(--vp-accent)] px-4 font-bold text-[var(--vp-shell)]">Ir al acceso</Link>
-            <p className="text-sm leading-6 text-[var(--vp-muted)]">Después de iniciar sesión puedes <Link href="/account/security" className="text-[var(--vp-text)] underline">verificar tu teléfono de forma opcional</Link>. No recibirás SMS sin autorizarlo y no es necesario para continuar.</p>
           </div>
         )}
 

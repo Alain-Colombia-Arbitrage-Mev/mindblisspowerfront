@@ -58,7 +58,6 @@ export default async function LoginPage({ searchParams }) {
             Recuperar contraseña
           </Link></>}
         </div>
-        {emailOtpOnly ? <p className="mt-4 text-center text-sm leading-6 text-[var(--vp-muted)]">¿Ya entraste y tu cuenta sigue en revisión? Puedes <Link href="/account/security" className="inline-flex min-h-11 items-center text-[var(--vp-text)] underline">gestionar tu validación SMS opcional</Link> sin modificar tu vinculación con la red.</p> : null}
       </div>
     </AuthShell>
   );

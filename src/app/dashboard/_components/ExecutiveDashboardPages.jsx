@@ -12,8 +12,6 @@ import { isRecoverySummary } from "@/lib/member-read.mjs";
 import { formatPaymentMoney as money, formatPaymentDate as fmtMoneyDate, withdrawalTerms } from "@/lib/payment-display.mjs";
 import StripeSalesHistory from "../packages/StripeSalesHistory";
 import { requestProfile } from '../profile/profile-model.mjs';
-import { optInPhone } from '../../account/security/phone-opt-in-model.mjs';
-import Link from 'next/link';
 import {
   Activity,
   AlertTriangle,
@@ -822,7 +820,9 @@ function WithdrawPanel({ data, onDone }) {
 const PLAN_LABEL = { passive_investor: "Inversionista pasivo", network: "Red" };
 
 function normalizeProfilePhone(value) {
-  return optInPhone(value);
+  if (typeof value !== 'string' || value.length > 40 || !/^[+\d ()-]+$/.test(value)) return '';
+  const phone = value.trim().replace(/[ ()-]/g, '');
+  return /^\+[1-9]\d{7,14}$/.test(phone) ? phone : '';
 }
 
 export function ProfileDashboardPage({ authMode = 'cognito' }) {
@@ -1078,7 +1078,7 @@ export function ProfileDashboardPage({ authMode = 'cognito' }) {
                   <input className="executive-input" value={form.phone} onChange={setField("phone")} disabled={saving || profileState !== 'ready'} maxLength={32} type="tel" placeholder="+57 300 000 0000" />
                 </Field>
                 <div className="md:col-span-2 border-t pt-4" style={{ borderColor: "var(--vp-border)" }}>
-                  {modernAuth ? <div className="space-y-3"><p className="text-sm leading-6" style={{ color: 'var(--vp-muted)' }}>Guardar un teléfono de contacto no verifica su propiedad ni autoriza SMS. Puedes validar un número y dar o revocar tu autorización en una pantalla separada. Es opcional y no incluye publicidad.</p><Link className="executive-button" href="/account/security">Gestionar validación SMS opcional</Link></div> : <>
+                  {modernAuth ? <p className="text-sm leading-6" style={{ color: 'var(--vp-muted)' }}>El teléfono se guarda únicamente como dato de contacto. La autenticación de tu cuenta se realiza por correo electrónico.</p> : <>
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
                     <div className="min-w-0 flex-1">
                       <p className="m-0 text-sm font-bold" style={{ color: "var(--vp-text)" }}>Validación del teléfono</p>
@@ -1146,8 +1146,7 @@ export function ProfileDashboardPage({ authMode = 'cognito' }) {
                   <Shield size={18} style={{ color: "var(--vp-accent)" }} />
                   Seguridad
                 </h2>
-                <p className="text-sm leading-6" style={{ color: 'var(--vp-muted)' }}>No hay un segundo factor (2FA) habilitado desde este panel. La validación opcional del teléfono no equivale a activar 2FA. Las preferencias de resumen por email y el cambio de contraseña aún no están disponibles aquí.</p>
-                <Link className="executive-button mt-4 w-full" href="/account/security">Gestionar consentimiento SMS</Link>
+                <p className="text-sm leading-6" style={{ color: 'var(--vp-muted)' }}>La autenticación usa tu correo electrónico. No hay un segundo factor (2FA) habilitado desde este panel. Las preferencias de resumen por email y el cambio de contraseña aún no están disponibles aquí.</p>
                 <button className="executive-button mt-4 w-full" type="button" disabled aria-describedby="profile-password-unavailable">
                   <KeyRound size={16} />
                   Cambiar contrasena

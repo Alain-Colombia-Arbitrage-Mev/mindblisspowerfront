@@ -23,7 +23,7 @@ try {
   let probes = 0;
   const cases = [
     ['/health', {}, 200], ['/login', {}, 200], ['/api/member/tree', {}, 401],
-    ['/account/security', {}, 200], ['/api/auth/phone-number/opt-in', {}, 401],
+    ['/account/security', {}, 307], ['/api/auth/phone-number/opt-in', {}, 404],
     ['/api/admin/tree/roots', {}, 404], ['/dashboard/admin', {}, 308],
     ['/api/payments/checkout', { method: 'POST', body: '{}' }, 403],
     ['/api/member/profile', { method: 'POST', body: '{}', headers: { origin: 'https://evil.example', 'x-forwarded-host': 'evil.example', 'content-type': 'application/json' } }, 403],
@@ -38,13 +38,17 @@ try {
       assert.match(body, /Usar mi contraseña/);
       assert.match(body, /Crear cuenta/);
       assert.doesNotMatch(body, /Recuperar contraseña/);
+      assert.doesNotMatch(body, /SMS|WhatsApp|account\/security/);
       assert.match(response.headers.get('cache-control'), /no-store/);
     }
+    if (path === '/account/security') assert.equal(response.headers.get('location'), '/login');
     probes++;
   }
   const registrationPage = await fetch('http://127.0.0.1:8787/register?email=signup%40example.test&ref=MP123', { redirect: 'manual', signal: AbortSignal.timeout(8000) });
   assert.equal(registrationPage.status, 200);
-  assert.match(await registrationPage.text(), /Crear cuenta y verificar correo/);
+  const registrationHtml = await registrationPage.text();
+  assert.match(registrationHtml, /Crear cuenta y verificar correo/);
+  assert.doesNotMatch(registrationHtml, /SMS|WhatsApp|account\/security/);
   probes++;
   for (const path of ['/forgot-password?email=fixture%40example.test']) {
     const response = await fetch(`http://127.0.0.1:8787${path}`, { redirect: 'manual', signal: AbortSignal.timeout(8000) });
@@ -103,13 +107,15 @@ try {
   const cookie = confirmed.headers.get('set-cookie').split(';')[0];
   const sessionHeaders = { cookie, 'cf-connecting-ip': '192.0.2.10' };
   const smsStatus = await fetch('http://127.0.0.1:8787/api/auth/phone-number/opt-in', { headers: sessionHeaders });
-  assert.equal(smsStatus.status, 200);
-  assert.deepEqual(await smsStatus.json(), { available: false, consentVersion: 'sms-auth-v1', optedIn: false, phoneNumber: null, phoneNumberVerified: false });
+  assert.equal(smsStatus.status, 404);
+  assert.deepEqual(await smsStatus.json(), { error: 'not_found' });
   assert.equal(smsStatus.headers.get('cache-control'), 'private, no-store');
   probes++;
   for (const [path, body, expected] of [
     ['/api/auth/sign-up/email', {}, 404],
-    ['/api/auth/phone-number/send-otp', { phoneNumber: '+12025550123', consent: false, consentVersion: 'sms-auth-v1' }, 400],
+    ['/api/auth/phone-number/send-otp', { phoneNumber: '+12025550123', consent: true, consentVersion: 'sms-auth-v1' }, 404],
+    ['/api/auth/phone-number/verify', { phoneNumber: '+12025550123', code: '123456', updatePhoneNumber: true, disableSession: true }, 404],
+    ['/api/auth/phone-number/revoke-consent', {}, 404],
   ]) {
     const deniedMutation = await fetch('http://127.0.0.1:8787' + path, { method: 'POST', headers: { ...authHeaders, ...sessionHeaders }, body: JSON.stringify(body) });
     assert.equal(deniedMutation.status, expected);
