@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "./IntentLink";
 
 export default function SidebarLogo({ onNavigate }) {
   return (

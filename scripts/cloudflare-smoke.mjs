@@ -21,6 +21,7 @@ try {
   }
   assert.ok(ready, `workerd was not ready: ${logs}`);
   let probes = 0;
+  let staticChunk;
   const cases = [
     ['/health', {}, 200], ['/login', {}, 200], ['/api/member/tree', {}, 401],
     ['/account/security', {}, 307], ['/api/auth/phone-number/opt-in', {}, 404],
@@ -34,6 +35,7 @@ try {
     const body = await response.text();
     assert.equal(response.status, expected, `${path}: ${body.slice(0, 200)}\n${logs}`);
     if (path === '/login') {
+      staticChunk = body.match(/src="(\/_next\/static\/[^" ]+\.js(?:\?[^" ]*)?)"/)?.[1];
       assert.match(body, /Código al correo/);
       assert.match(body, /Usar mi contraseña/);
       assert.match(body, /Crear cuenta/);
@@ -46,6 +48,26 @@ try {
     if (path === '/account/security') assert.equal(response.headers.get('location'), '/login');
     probes++;
   }
+  assert.ok(staticChunk, 'the built page references a real uploaded JS chunk');
+  for (const [path, expected] of [[staticChunk, 'public, max-age=31536000, immutable'],
+    ['/mindbliss/mindbliss-symbol.png', 'public, max-age=3600, must-revalidate']]) {
+    const asset = await fetch(`http://127.0.0.1:8787${path}`, { signal: AbortSignal.timeout(8000) });
+    assert.equal(asset.status, 200, path);
+    assert.equal(asset.headers.get('cache-control'), expected, 'static assets bypass the private Worker response wrapper');
+    assert.equal(asset.headers.get('cdn-cache-control'), null);
+    assert.equal(asset.headers.get('x-content-type-options'), 'nosniff');
+    assert.ok(asset.headers.get('etag'));
+    await asset.arrayBuffer();
+    const conditional = await fetch(`http://127.0.0.1:8787${path}`, { method: 'HEAD', headers: { 'If-None-Match': asset.headers.get('etag') }, signal: AbortSignal.timeout(8000) });
+    assert.equal(conditional.status, 304, 'ETag revalidation does not download the asset again');
+    probes += 2;
+  }
+  for (const path of ['/_next/static/missing-cache-fixture.js', '/mindbliss/missing-cache-fixture.png', '/fonts/missing-cache-fixture.woff2']) {
+    const missing = await fetch(`http://127.0.0.1:8787${path}`, { signal: AbortSignal.timeout(8000) });
+    assert.equal(missing.status, 404, path);
+    assert.doesNotMatch(missing.headers.get('cache-control') || '', /immutable|max-age=[1-9]/, 'asset 404s must not inherit a long TTL');
+    probes++;
+  }
   const registrationPage = await fetch('http://127.0.0.1:8787/register?email=signup%40example.test&ref=MP123', { redirect: 'manual', signal: AbortSignal.timeout(8000) });
   assert.equal(registrationPage.status, 200);
   const registrationHtml = await registrationPage.text();
@@ -55,6 +77,7 @@ try {
   for (const filename of ['montserrat-latin-wght.woff2', 'montserrat-latin-ext-wght.woff2']) {
     const response = await fetch(`http://127.0.0.1:8787/fonts/${filename}`, { signal: AbortSignal.timeout(8000) });
     assert.equal(response.status, 200);
+    assert.equal(response.headers.get('cache-control'), 'public, max-age=3600, must-revalidate');
     const bytes = Buffer.from(await response.arrayBuffer());
     assert.equal(bytes.subarray(0, 4).toString('ascii'), 'wOF2');
     probes++;
@@ -183,7 +206,8 @@ try {
     probes++;
   }
   const metrics = await (await fetch('http://127.0.0.1:8787/__synthetic_metrics')).json();
-  assert.ok(metrics.tokens >= 4 && metrics.jwks >= 3, 'session checks must reach the private JWT/JWKS binding');
+  assert.ok(metrics.tokens >= 4, 'sessions still reach the current private token binding');
+  assert.equal(metrics.jwks, 1, 'only public JWKS JSON is reused within its bounded 60s TTL');
   assert.equal(metrics.verifiedReferrals, 1, 'invalid identities must not reach a member data query');
   assert.equal(metrics.sensitiveJwksHeaders, 0, 'public-key reads must not carry browser sessions');
   assert.equal(metrics.registrationSmsSends, 1, 'only the explicit registration fixture may request a synthetic SMS');

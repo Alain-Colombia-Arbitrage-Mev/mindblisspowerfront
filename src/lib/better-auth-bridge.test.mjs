@@ -3,6 +3,7 @@ import test from "node:test";
 import { generateKeyPairSync, sign, createHash, createHmac } from "node:crypto";
 import { betterAuthConfig, betterAuthCookies, betterAuthServiceToken, browserAuthCookie, proxyBetterAuth, proxyBetterAuthKeys, trustedAuthClientIp } from "./better-auth-bridge.mjs";
 import { createBetterAuthVerifier, validBetterAuthClaims } from "./better-auth-token.mjs";
+import { createPublicJwksCache } from "./public-jwks-cache.mjs";
 
 const env = { AUTH_PROVIDER: "better-auth", NODE_ENV: "production", BETTER_AUTH_BACKEND_URL: "https://auth.example.test", AUTH_PUBLIC_ORIGIN: "https://portal.example.test", AUTH_BFF_SHARED_SECRET: 'synthetic-auth-proxy-secret-longer-than-32' };
 const cookie = "better-auth.session_token=synthetic";
@@ -117,6 +118,6 @@ test('private JWKS fetcher validates real signatures and bounds response sizes',
   const token = `${body}.${sign('RSA-SHA256', Buffer.from(body), privateKey).toString('base64url')}`;
   assert.equal((await verifier.verify(token)).sub, claims.sub);
   assert.equal(calls, 1);
-  const excessive = createBetterAuthVerifier(jwtEnv, { fetchImpl: async () => new Response('x'.repeat(65537)) });
+  const excessive = createBetterAuthVerifier(jwtEnv, { publicKeyCache: createPublicJwksCache(), fetchImpl: async () => new Response('x'.repeat(65537)) });
   await assert.rejects(excessive.verify(token), /auth_keys_too_large/);
 });

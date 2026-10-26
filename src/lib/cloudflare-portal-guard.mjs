@@ -1,6 +1,20 @@
 import { customerDomainDecision } from './domain-routing.js';
 import { memberMutationError } from './member-mutation-policy.mjs';
 
+// Public, uploaded assets are served before this Worker. Every response which
+// reaches application code (including errors and static-looking API paths) must
+// stay out of browser/shared caches. Do not rely on an upstream default header.
+export function privateCloudflareResponse(response) {
+  const headers = new Headers(response.headers);
+  headers.set('Cache-Control', 'private, no-store');
+  headers.set('CDN-Cache-Control', 'no-store');
+  headers.set('Cloudflare-CDN-Cache-Control', 'no-store');
+  headers.delete('Surrogate-Control');
+  headers.delete('Expires');
+  headers.delete('Cache-Tag');
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
 export function cloudflarePortalRequest(request) {
   const url = new URL(request.url);
   const headers = new Headers(request.headers);

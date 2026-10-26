@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "./IntentLink";
 import { LifeBuoy, Mail, Menu, Power, UserRound } from "lucide-react";
 import ThemeToggle from "@/app/_components/ThemeToggle";
 

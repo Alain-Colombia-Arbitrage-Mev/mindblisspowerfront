@@ -1,4 +1,24 @@
 import { createLocalJWKSet, jwtVerify } from 'jose';
+import { coreFetch, runtimeEnvironment } from './cloudflare-runtime.mjs';
+import { publicJwksCache, publicJwksConfiguration, publicJwksJson, PUBLIC_JWKS_TTL_MS } from './public-jwks-cache.mjs';
+
+async function boundedJwksBody(response) {
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('auth_keys_unavailable');
+  const chunks = []; let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > 65536) { await reader.cancel(); throw new Error('auth_keys_too_large'); }
+      chunks.push(value);
+    }
+  } finally { reader.releaseLock(); }
+  const bytes = new Uint8Array(total); let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+}
 
 export function validBetterAuthClaims(payload, now = Math.floor(Date.now() / 1000)) {
   return Boolean(payload && typeof payload.sub === "string" && payload.sub.trim()
@@ -9,9 +29,7 @@ export function validBetterAuthClaims(payload, now = Math.floor(Date.now() / 100
     && payload.iat <= now + 30 && payload.exp > now && payload.exp > payload.iat && payload.exp - payload.iat <= 300);
 }
 
-/** @param {Record<string, string | undefined>} env
- * @param {{fetchImpl?: typeof fetch}} dependencies */
-export function createBetterAuthVerifier(env = process.env, { fetchImpl } = {}) {
+export function createBetterAuthVerifier(env = runtimeEnvironment(), { fetchImpl = coreFetch, publicKeyCache = publicJwksCache, now = Date.now } = {}) {
   const issuer = env.BETTER_AUTH_JWT_ISSUER;
   const audience = env.BETTER_AUTH_JWT_AUDIENCE;
   const uri = new URL(env.BETTER_AUTH_JWKS_URL || "");
@@ -19,51 +37,53 @@ export function createBetterAuthVerifier(env = process.env, { fetchImpl } = {}) 
     || (uri.protocol !== "https:" && !(env.NODE_ENV !== "production" && ["127.0.0.1", "localhost", "[::1]"].includes(uri.hostname) && uri.protocol === "http:"))) {
     throw new Error("better_auth_verifier_configuration_invalid");
   }
-  // WebCrypto avoids incompatible Node KeyObjects across Next/OpenNext's
-  // generated bundle. Workers callers keep this verifier request-scoped.
+  const configuration = publicJwksConfiguration(env, uri.href);
+  // Resolvers, imported CryptoKeys, HTTP promises and bindings stay LOCAL to
+  // this verifier/request. Only bounded public JSON crosses request boundaries.
   let keys;
+  let keysExpireAt = 0;
+  let loadedVersion;
   let pending;
   let seeded = false;
-  function cacheJwks(jwks) {
-    if (!Array.isArray(jwks?.keys) || !jwks.keys.length || jwks.keys.length > 32
-      || jwks.keys.some(key => key.kty !== 'RSA' || (key.alg && key.alg !== 'RS256')
-        || (key.use && key.use !== 'sig') || ['d', 'p', 'q', 'dp', 'dq', 'qi', 'oth', 'k'].some(field => field in key))) {
-      throw new Error('auth_keys_invalid');
-    }
-    keys = createLocalJWKSet(jwks);
+  function install(snapshot) {
+    keys = createLocalJWKSet(snapshot.jwks);
+    keysExpireAt = snapshot.expiresAt;
+    loadedVersion = snapshot.version;
   }
-  async function fetchKeys() {
-    const response = await (fetchImpl || fetch)(uri.href, { redirect: 'manual', cache: 'no-store', signal: AbortSignal.timeout(8000) });
-    if (!response.ok) throw new Error('auth_keys_unavailable');
-    const reader = response.body?.getReader();
-    if (!reader) throw new Error('auth_keys_unavailable');
-    const chunks = []; let total = 0;
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        total += value.byteLength;
-        if (total > 65536) { await reader.cancel(); throw new Error('auth_keys_too_large'); }
-        chunks.push(value);
+  async function loadKeys(forceRefresh = false) {
+    if (!pending) pending = (async () => {
+      const cached = publicKeyCache.read(configuration);
+      if (cached && (!forceRefresh || cached.version !== loadedVersion)) { install(cached); return; }
+      if (forceRefresh && !publicKeyCache.beginRefresh(configuration)) throw new Error('auth_keys_refresh_limited');
+      const ticket = publicKeyCache.beginFetch();
+      const response = await fetchImpl(uri.href, { redirect: 'manual', cache: 'no-store', signal: AbortSignal.timeout(8000) });
+      if (!response.ok) {
+        await response.body?.cancel().catch(() => {});
+        throw new Error('auth_keys_unavailable');
       }
-    } finally { reader.releaseLock(); }
-    const data = new Uint8Array(total); let offset = 0;
-    for (const chunk of chunks) { data.set(chunk, offset); offset += chunk.byteLength; }
-    cacheJwks(JSON.parse(new TextDecoder().decode(data)));
-  }
-  async function loadKeys() {
-    if (!pending) pending = fetchKeys().finally(() => { pending = undefined; });
+      install(publicKeyCache.write(configuration, await boundedJwksBody(response), ticket));
+    })().finally(() => { pending = undefined; });
     return pending;
   }
   return {
-    cacheJwks(jwks) { cacheJwks(jwks); seeded = true; },
+    // Explicit injection is for isolated signature tests; it never seeds the
+    // shared cache or disables expiry and cannot enable a network fallback.
+    cacheJwks(jwks) {
+      install({ jwks: JSON.parse(publicJwksJson(jwks)), expiresAt: now() + PUBLIC_JWKS_TTL_MS });
+      seeded = true;
+    },
     async verify(token) {
-      if (!keys) await loadKeys();
+      if (!keys || now() >= keysExpireAt) {
+        if (seeded) throw new Error('auth_keys_expired');
+        await loadKeys();
+      }
+      let refreshed = false;
       const resolver = async (header, flattened) => {
         try { return await keys(header, flattened); }
         catch (error) {
-          if (seeded || error?.code !== 'ERR_JWKS_NO_MATCHING_KEY') throw error;
-          await loadKeys();
+          if (seeded || refreshed || error?.code !== 'ERR_JWKS_NO_MATCHING_KEY') throw error;
+          refreshed = true;
+          await loadKeys(true);
           return keys(header, flattened);
         }
       };
