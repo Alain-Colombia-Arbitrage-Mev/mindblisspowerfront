@@ -72,7 +72,11 @@ try {
   assert.equal(registrationPage.status, 200);
   const registrationHtml = await registrationPage.text();
   assert.match(registrationHtml, /Crear cuenta y verificar correo/);
-  assert.doesNotMatch(registrationHtml, /SMS|WhatsApp|account\/security/);
+  assert.match(registrationHtml, /id="contactPhone-country"/);
+  assert.match(registrationHtml, /id="contactWhatsapp-country"/);
+  assert.match(registrationHtml, /WhatsApp/);
+  assert.match(registrationHtml.replace(/<!--.*?-->/g, ''), /Colombia \(CO\) \+57/);
+  assert.doesNotMatch(registrationHtml, /phoneConsent|validar teléfono|Enviar código SMS|account\/security/);
   probes++;
   for (const filename of ['montserrat-latin-wght.woff2', 'montserrat-latin-ext-wght.woff2']) {
     const response = await fetch(`http://127.0.0.1:8787/fonts/${filename}`, { signal: AbortSignal.timeout(8000) });
@@ -95,36 +99,27 @@ try {
     probes++;
   }
   const authHeaders = { origin: 'https://app.mindblisspower.com', 'content-type': 'application/json', 'cf-connecting-ip': '192.0.2.10' };
-  const smsInput = { email: 'signup@example.test', phoneNumber: '+12025550123', consent: true, consentVersion: 'registration-phone-v1' };
-  const smsPost = (path, body, cookie = '') => fetch(`http://127.0.0.1:8787${path}`, {
+  const post = (path, body, cookie = '') => fetch(`http://127.0.0.1:8787${path}`, {
     method: 'POST', headers: { ...authHeaders, cookie }, body: JSON.stringify(body), signal: AbortSignal.timeout(8000),
   });
-  const dormantSms = await smsPost('/api/auth/register/phone/send', smsInput);
-  assert.equal(dormantSms.status, 404); probes++;
-  const smsPage = await fetch('http://127.0.0.1:8787/__registration_sms/register');
-  assert.equal(smsPage.status, 200);
-  const smsPageHtml = await smsPage.text();
-  assert.match(smsPageHtml, /id="phoneNumber"/); assert.match(smsPageHtml, /phoneConsent/); probes++;
-  const smsLogin = await fetch('http://127.0.0.1:8787/__registration_sms/login');
-  const smsLoginHtml = await smsLogin.text();
-  assert.equal(smsLogin.status, 200); assert.match(smsLoginHtml, /Crear cuenta y validar teléfono/);
-  assert.doesNotMatch(smsLoginHtml, /Solicitar código SMS|Enviar código SMS/); probes++;
-  const smsSent = await smsPost('/__registration_sms/api/auth/register/phone/send', smsInput);
-  assert.equal(smsSent.status, 200);
-  const smsFlow = await smsSent.json(); assert.equal(smsFlow.ok, true); assert.equal(smsFlow.expiresIn, 300); probes++;
-  const smsVerified = await smsPost('/__registration_sms/api/auth/register/phone/verify', { ...smsInput, flowId: smsFlow.flowId, code: '001234' });
-  assert.equal(smsVerified.status, 200);
-  const smsProof = await smsVerified.json(); assert.equal(smsProof.verified, true); assert.equal(smsProof.proof, undefined);
-  assert.match(smsVerified.headers.get('set-cookie'), /HttpOnly/);
-  assert.match(smsVerified.headers.get('set-cookie'), /SameSite=Strict/); probes++;
-  const registrationCookie = smsVerified.headers.get('set-cookie').split(';')[0];
-  const smsSignup = { fullName: 'Synthetic Registration', email: smsInput.email, phoneNumber: smsInput.phoneNumber,
-    password: 'Synthetic-Registration-123', acceptsPrivacy: true };
-  assert.equal((await smsPost('/__registration_sms/api/auth/register', smsSignup)).status, 400); probes++;
-  assert.equal((await smsPost('/__registration_sms/api/auth/register', { ...smsSignup, phoneNumber: '+12025550124' }, registrationCookie)).status, 400); probes++;
-  const smsRegistered = await smsPost('/__registration_sms/api/auth/register', smsSignup, registrationCookie);
-  assert.equal(smsRegistered.status, 201); assert.equal((await smsRegistered.json()).userConfirmed, false); probes++;
-  assert.equal((await smsPost('/__registration_sms/api/auth/register', smsSignup, registrationCookie)).status, 400); probes++;
+  for (const path of ['/api/auth/register/phone/send', '/api/auth/register/phone/verify',
+    '/__stale_sms/api/auth/register/phone/send', '/__stale_sms/api/auth/register/phone/verify',
+    '/api/auth/registration/phone/send', '/api/auth/sign-in/phone-number']) {
+    const removed = await post(path, { email: 'signup@example.test', phoneNumber: '+12025550123', code: '001234' });
+    assert.equal(removed.status, 404, path); probes++;
+  }
+  const contactSignup = { fullName: 'Synthetic Registration', email: 'signup@example.test',
+    password: 'Synthetic-Registration-123', acceptsPrivacy: true,
+    contactPhone: '+573001234567', contactWhatsapp: '+390612345678',
+    phoneNumberVerified: true, emailVerified: true, person_id: 1, role: 'superadmin' };
+  for (const invalid of ['3001234567', '+573001234567 ext 1', null]) {
+    assert.equal((await post('/api/auth/register', { ...contactSignup, contactPhone: invalid })).status, 400); probes++;
+  }
+  const contactRegistered = await post('/__stale_sms/api/auth/register', contactSignup,
+    '__Secure-vp_registration_phone=obsolete-proof');
+  assert.equal(contactRegistered.status, 201);
+  assert.equal((await contactRegistered.json()).userConfirmed, false);
+  assert.equal(contactRegistered.headers.get('set-cookie'), null); probes++;
   const signup = await fetch('http://127.0.0.1:8787/api/auth/register', { method: 'POST', headers: authHeaders,
     body: JSON.stringify({ fullName: 'Synthetic Registration', email: 'signup@example.test', password: 'Synthetic-Registration-123', acceptsPrivacy: true, referralCode: 'MP123' }) });
   assert.equal(signup.status, 201);
@@ -210,7 +205,9 @@ try {
   assert.equal(metrics.jwks, 1, 'only public JWKS JSON is reused within its bounded 60s TTL');
   assert.equal(metrics.verifiedReferrals, 1, 'invalid identities must not reach a member data query');
   assert.equal(metrics.sensitiveJwksHeaders, 0, 'public-key reads must not carry browser sessions');
-  assert.equal(metrics.registrationSmsSends, 1, 'only the explicit registration fixture may request a synthetic SMS');
+  assert.equal(metrics.registrations, 2, 'email-only and optional-contact registrations both work');
+  assert.equal(metrics.contactRegistrations, 1, 'optional contacts reach the private signed signup without granting authority');
+  assert.equal(metrics.phoneCalls, 0, 'removed SMS routes never reach the private API, even with obsolete flags and credentials');
   console.log(JSON.stringify({ workerd: 'passed', probes, privateCalls: metrics.privateCalls, realRsaVerified: true,
     tamperedAndWrongAudienceRejected: true, externalNetwork: 'disabled', databaseQueries: 0, realMessages: 0 }));
 } finally {

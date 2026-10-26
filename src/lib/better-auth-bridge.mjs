@@ -3,7 +3,6 @@ import { createHash, createHmac } from 'node:crypto';
 import { isIP } from 'node:net';
 import { authSuccess } from './auth-response.mjs';
 import { coreFetch, runtimeEnvironment } from './cloudflare-runtime.mjs';
-import { registrationPhoneCookieName, validRegistrationPhone, validRegistrationProof } from './registration-phone.mjs';
 
 export function trustedAuthClientIp(headers, env = runtimeEnvironment()) {
   const header = env.AUTH_CLIENT_IP_HEADER || 'cf-connecting-ip';
@@ -72,24 +71,15 @@ export async function readAuthBody(request) {
 }
 
 /** @param {string} path
- * @param {{cookie?: string, method?: string, body?: unknown, origin?: string, signal?: AbortSignal, registrationPhoneProof?: string, registrationPhoneNumber?: string}} [options]
+ * @param {{cookie?: string, method?: string, body?: unknown, origin?: string, signal?: AbortSignal}} [options]
  */
-export async function fetchBetterAuth(path, { cookie = "", method = "GET", body, origin, signal, registrationPhoneProof, registrationPhoneNumber } = {},
+export async function fetchBetterAuth(path, { cookie = "", method = "GET", body, origin, signal } = {},
   { env = runtimeEnvironment(), fetchImpl = coreFetch, clientIp = '' } = {}) {
   const base = betterAuthConfig(env);
   if (!/^\/[a-z0-9/-]+$/.test(path)) throw new Error("invalid_auth_path");
   if (!isIP(clientIp)) throw new Error('trusted_proxy_required');
   const serialized = body ? JSON.stringify(body) : '';
-  let sessionCookie = betterAuthCookies(cookie);
-  if (registrationPhoneProof !== undefined || registrationPhoneNumber !== undefined) {
-    if (path !== '/sign-up/email' || method !== 'POST' || !validRegistrationProof(registrationPhoneProof)
-      || !validRegistrationPhone(registrationPhoneNumber)) throw new Error('invalid_registration_phone_transport');
-    const name = registrationPhoneCookieName(new URL(origin || base).protocol === 'https:');
-    // Expected phone is untrusted input, signed along with the proof and body.
-    // Auth compares it to its own proof record; it never becomes user input.
-    const proofCookies = `${name}=${registrationPhoneProof}; vp_registration_phone_expected=${registrationPhoneNumber}`;
-    sessionCookie = [sessionCookie, proofCookies].filter(Boolean).join('; ');
-  }
+  const sessionCookie = betterAuthCookies(cookie);
   const timestamp = String(Math.floor(Date.now() / 1000));
   const hash = value => createHash('sha256').update(value).digest('hex');
   const signature = createHmac('sha256', env.AUTH_BFF_SHARED_SECRET).update([method, `/api/auth${path}`, timestamp, clientIp, hash(sessionCookie), hash(serialized)].join('\n')).digest('hex');

@@ -3,7 +3,6 @@ import AuthShell from "../_components/AuthShell";
 import MagicLinkLoginForm from "./MagicLinkLoginForm";
 import { betterAuthEnabled } from "@/lib/better-auth-bridge.mjs";
 import { registrationUrl } from '../register/registration-model.mjs';
-import { registrationSmsRequired } from '@/lib/registration-phone.mjs';
 
 export const dynamic = "force-dynamic";
 
@@ -49,8 +48,7 @@ export default async function LoginPage({ searchParams }) {
           boxShadow: "var(--vp-shadow)",
         }}
       >
-        <MagicLinkLoginForm authMode={emailOtpOnly ? "better-auth" : "cognito"} authState={authState} initialEmail={initialEmail} initialRef={initialRef} initialSide={initialSide} initialMode={initialMode}
-          registrationSmsRequired={emailOtpOnly && registrationSmsRequired()} />
+        <MagicLinkLoginForm authMode={emailOtpOnly ? "better-auth" : "cognito"} authState={authState} initialEmail={initialEmail} initialRef={initialRef} initialSide={initialSide} initialMode={initialMode} />
 
         <div className="mt-6 flex items-center justify-center gap-3 border-t pt-5 text-sm" style={{ borderColor: "var(--vp-border)" }}>
           <Link href={registrationUrl(initialEmail, initialRef, initialSide)} className="font-bold transition hover:opacity-80" style={{ color: "var(--vp-text-soft)" }}>

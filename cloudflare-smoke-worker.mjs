@@ -9,12 +9,7 @@ const sessionCookie = '__Secure-better-auth.session_token=synthetic.value%2Benco
 const modes = new Map([[sessionCookie, 'member'],
   ['__Secure-better-auth.session_token=synthetic-tampered', 'tampered'],
   ['__Secure-better-auth.session_token=synthetic-wrong-audience', 'wrong-audience']]);
-const metrics = { tokens: 0, jwks: 0, verifiedReferrals: 0, sensitiveJwksHeaders: 0 };
-const registrationPhone = '+12025550123';
-const registrationFlow = 'f'.repeat(43);
-const registrationProof = 'r'.repeat(43);
-let registrationProofAvailable = false;
-let registrationSmsSends = 0;
+const metrics = { tokens: 0, jwks: 0, verifiedReferrals: 0, sensitiveJwksHeaders: 0, registrations: 0, contactRegistrations: 0, phoneCalls: 0 };
 function validProxySignature(target, options, headers) {
   const timestamp = headers.get('x-vp-auth-timestamp') || '';
   const ip = headers.get('x-vp-auth-client-ip') || '';
@@ -59,19 +54,9 @@ const syntheticEnv = {
     privateCalls++;
     const target = new URL(url);
     const headers = new Headers(options.headers);
-    if (target.pathname.startsWith('/api/auth/registration/phone/')) {
-      if (!validProxySignature(target, options, headers)) return Response.json({ error: 'invalid_signature' }, { status: 403 });
-      const body = JSON.parse(options.body);
-      if (body.email !== 'signup@example.test' || body.phoneNumber !== registrationPhone) return Response.json({ error: 'invalid_contact' }, { status: 400 });
-      if (target.pathname.endsWith('/send') && body.consent === true && body.consentVersion === 'registration-phone-v1') {
-        registrationSmsSends++;
-        return Response.json({ ok: true, flowId: registrationFlow, resendAfter: 60, expiresIn: 300 });
-      }
-      if (target.pathname.endsWith('/verify') && body.flowId === registrationFlow && body.code === '001234') {
-        registrationProofAvailable = true;
-        return Response.json({ ok: true, verified: true, purpose: 'registration', email: body.email, phoneNumber: registrationPhone, proof: registrationProof });
-      }
-      return Response.json({ error: 'invalid_code' }, { status: 400 });
+    if (/\/registration\/phone\/|\/phone-number\/|\/sign-in\/phone-number/.test(target.pathname)) {
+      metrics.phoneCalls++;
+      throw new Error('removed_phone_route_reached_upstream');
     }
     if (target.hostname === 'auth.core.internal' && target.pathname === '/api/auth/token') {
       metrics.tokens++;
@@ -91,10 +76,6 @@ const syntheticEnv = {
       const jwk = await crypto.subtle.exportKey('jwk', (await keys()).publicKey);
       return Response.json({ keys: [{ ...jwk, alg: 'RS256', kid: 'synthetic-real-rsa' }] });
     }
-    if (target.hostname === 'auth.core.internal' && target.pathname === '/api/auth/phone-number/opt-in') {
-      if (headers.get('cookie') !== sessionCookie) return Response.json({ error: 'unauthenticated' }, { status: 401 });
-      return Response.json({ available: false, consentVersion: 'sms-auth-v1', optedIn: false, phoneNumber: null, phoneNumberVerified: false });
-    }
     if (target.hostname === 'payments.core.internal' && target.pathname === '/api/member/referral') {
       if (headers.get('x-vp-service-token') !== 'synthetic-service-only'
         || !await validForwardedIdentity(headers.get('x-vp-id-token') || '')) return Response.json({ error: 'synthetic-identity-rejected' }, { status: 401 });
@@ -105,12 +86,13 @@ const syntheticEnv = {
       const body = JSON.parse(options.body);
       if (body.name !== 'Synthetic Registration' || body.email !== 'signup@example.test'
         || typeof body.password !== 'string' || body.password.length < 12) throw new Error('invalid_synthetic_registration');
-      if (headers.get('cookie')?.includes('vp_registration_phone')) {
-        if (!validProxySignature(target, options, headers) || !registrationProofAvailable
-          || headers.get('cookie') !== `__Secure-vp_registration_phone=${registrationProof}; vp_registration_phone_expected=${registrationPhone}`) {
-          return Response.json({ code: 'REGISTRATION_PHONE_INVALID' }, { status: 400 });
-        }
-        registrationProofAvailable = false;
+      if (!validProxySignature(target, options, headers) || headers.get('cookie')) throw new Error('invalid_signup_signature_or_cookie');
+      const allowed = new Set(['name', 'email', 'password', 'contactPhone', 'contactWhatsapp']);
+      if (Object.keys(body).some(key => !allowed.has(key))) throw new Error('signup_authority_field_forwarded');
+      metrics.registrations++;
+      if (body.contactPhone || body.contactWhatsapp) {
+        if (body.contactPhone !== '+573001234567' || body.contactWhatsapp !== '+390612345678') throw new Error('contact_not_preserved');
+        metrics.contactRegistrations++;
       }
       return Response.json({ token: null, user: { id: 'synthetic-signup', email: body.email, emailVerified: false } });
     }
@@ -146,14 +128,15 @@ const syntheticEnv = {
 export default {
   async fetch(request, env, ctx) {
     const incoming = new URL(request.url);
-    if (incoming.pathname === '/__synthetic_metrics') return Response.json({ privateCalls, ...metrics, registrationSmsSends });
-    const smsFixture = incoming.pathname.startsWith('/__registration_sms/');
-    const pathname = smsFixture ? incoming.pathname.slice('/__registration_sms'.length) : incoming.pathname;
+    if (incoming.pathname === '/__synthetic_metrics') return Response.json({ privateCalls, ...metrics });
+    // Obsolete flags must not re-enable registration SMS, even with credentials.
+    const staleSmsFixture = incoming.pathname.startsWith('/__stale_sms/');
+    const pathname = staleSmsFixture ? incoming.pathname.slice('/__stale_sms'.length) : incoming.pathname;
     const headers = new Headers(request.headers);
     headers.delete('x-forwarded-host');
     const input = new Request(`https://app.mindblisspower.com${pathname}${incoming.search}`, { method: request.method, headers, body: request.body });
     return worker.fetch(input, { ...env, ...syntheticEnv,
-      BETTER_AUTH_REGISTRATION_SMS_REQUIRED: String(smsFixture),
+      BETTER_AUTH_REGISTRATION_SMS_REQUIRED: 'true', SENTDM_API_KEY: 'synthetic-never-call', SENTDM_OTP_TEMPLATE_ID: 'synthetic-never-call',
       ...(incoming.pathname.startsWith('/__disabled/') ? { CLOUDFLARE_DEPLOYMENT_READY: 'false' } : {}),
     }, ctx);
   },

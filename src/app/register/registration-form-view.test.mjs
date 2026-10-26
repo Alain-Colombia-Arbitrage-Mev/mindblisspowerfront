@@ -3,133 +3,118 @@ import test from 'node:test';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import * as model from './registration-model.mjs';
+import * as contacts from './contact-phone-model.mjs';
 import { registrationViewHarness, findRegistrationNode as find, registrationFieldStub, registrationButtonStub } from './registration-view-test-harness.mjs';
 
-const phoneView = () => React.createElement('div', { 'data-registration-phone': true });
+const contactView = ({ id, label, value }) => React.createElement('div', null, label, React.createElement('input', { id, value: value.national, readOnly: true }));
 const passwordField = ({ visible, onToggle, ...props }) => registrationFieldStub(props);
-const valid = { fullName: 'Synthetic Member', email: 'member@example.test', password: 'Synthetic Long Password 123', confirmPassword: 'Synthetic Long Password 123',
-  phoneNumber: '+573001234567', acceptsPrivacy: true, phoneConsent: true };
-function view(dynamicCalls = []) {
+const valid = { fullName: 'Synthetic Member', email: 'member@example.test', password: 'Synthetic Long Password 123', confirmPassword: 'Synthetic Long Password 123', acceptsPrivacy: true };
+function view() {
   return registrationViewHarness('./BetterAuthRegisterForm.jsx', {
     'next/link': { default: ({ children, ...props }) => React.createElement('a', props, children) },
-    'next/dynamic': { default: (loader, options) => { dynamicCalls.push({ loader, options }); return phoneView; } },
     'lucide-react': { ArrowLeft: () => null, CheckCircle2: () => null, Mail: () => null, UserPlus: () => null },
     '../_components/AuthShell': { default: ({ children }) => React.createElement('main', null, children) },
     '@/lib/useResendCooldown': { useResendCooldown: () => ({ active: false, label: '', start() {} }), suggestEmailFix: () => '' },
     '@/lib/referral-attribution': { bindReferralCodeToEmail() {} },
     './RegistrationFields': { RegistrationField: registrationFieldStub, RegistrationButton: registrationButtonStub, RegistrationPassword: passwordField },
-    './RegistrationPhoneVerification': { default: phoneView },
+    './ContactPhoneField': { default: contactView },
+    './contact-phone-model.mjs': contacts,
     './registration-model.mjs': model,
   });
 }
-const props = { registrationSmsRequired: true, initialSearch: 'ref=MP-REFERRAL&side=R' };
+const props = { initialSearch: 'ref=MP-REFERRAL&side=R' };
 function enterValid(harness, values = valid) {
   let tree = harness.render(props);
   for (const [id, value] of Object.entries(values)) {
     const field = find(tree, node => node?.props?.id === id);
-    field.props.onChange({ target: { value, checked: value } });
+    field.props.onChange(id.startsWith('contact') ? value : { target: { value, checked: value } });
+    tree = harness.render(props);
   }
-  return harness.render(props);
+  return tree;
 }
-const form = tree => find(tree, node => node?.type === 'form');
-const submit = tree => form(tree).props.onSubmit({ preventDefault() {} });
+const submit = tree => find(tree, node => node?.type === 'form').props.onSubmit({ preventDefault() {} });
+const signupAck = () => Response.json({ ok: true, mode: 'better-auth', email: valid.email, userConfirmed: false, requiresConfirmation: true, resendAfter: 300 });
 
-test('SMS-disabled registration keeps the existing two-step design, with no phone controls or side effects', () => {
+test('registration remains email-only with the existing two-step design and optional contacts, never a phone challenge', t => {
+  t.mock.method(globalThis, 'fetch', () => assert.fail('render must not send messages or create an account'));
   const harness = view();
   const html = renderToStaticMarkup(harness.render());
   assert.match(html, /Paso 1 de 2/);
   assert.match(html, /Crear cuenta y verificar correo/);
-  assert.doesNotMatch(html, /phoneNumber|phoneConsent|SMS|data-registration-phone/);
+  assert.match(html, /Contacto opcional/);
+  assert.match(html, /sin validar el teléfono ni enviar mensajes/);
+  assert.doesNotMatch(html, /phoneConsent|Validar teléfono|código SMS|phoneNumberVerified/);
+  assert.doesNotMatch(html, /checked=""/);
 });
 
-test('registration phone code stays behind an on-demand component boundary with an accessible pending state', async () => {
-  const dynamicCalls = [];
-  const harness = view(dynamicCalls);
-  harness.render();
-  assert.equal(dynamicCalls.length, 1);
-  assert.equal(typeof dynamicCalls[0].loader, 'function');
-  // The real dynamic import resolves only when requested, not when the initial
-  // registration details or the email-confirmation step is rendered.
-  assert.match(String(dynamicCalls[0].loader), /RegistrationPhoneVerification/);
-  const html = renderToStaticMarkup(dynamicCalls[0].options.loading());
-  assert.match(html, /role="status"/); assert.match(html, /aria-live="polite"/);
-  assert.match(html, /Cargando validación del teléfono/);
-  const loaded = await dynamicCalls[0].loader();
-  assert.equal(loaded.default, phoneView);
-});
-
-test('SMS-required registration begins with unchecked specific consent and creates no account before phone acknowledgement', async t => {
-  t.mock.method(globalThis, 'fetch', () => assert.fail('phone step cannot create an account'));
-  const harness = view();
-  const initial = renderToStaticMarkup(harness.render(props));
-  assert.match(initial, /Paso 1 de 3/);
-  assert.match(initial, /No autorizo publicidad, WhatsApp ni inicio de sesión por SMS/);
-  assert.doesNotMatch(initial, /checked=""/);
-  await submit(enterValid(harness));
-  const tree = harness.render(props);
-  assert.equal(form(tree), undefined);
-  const phone = find(tree, node => node?.type === phoneView);
-  assert.deepEqual({ email: phone.props.email, phoneNumber: phone.props.phoneNumber, consent: phone.props.consent },
-    { email: valid.email, phoneNumber: valid.phoneNumber, consent: true });
-});
-
-test('only matching phone acknowledgement enables signup, which never forwards proof or verified flags', async t => {
+test('blank contacts do not block signup and do not add contact or verification claims to its request', async t => {
   const calls = [];
-  t.mock.method(globalThis, 'fetch', async (path, options) => {
-    calls.push({ path, body: JSON.parse(options.body) });
-    return Response.json({ ok: true, mode: 'better-auth', email: valid.email, userConfirmed: false, requiresConfirmation: true, resendAfter: 300 });
-  });
+  t.mock.method(globalThis, 'fetch', async (path, options) => { calls.push({ path, body: JSON.parse(options.body) }); return signupAck(); });
   const harness = view(); await submit(enterValid(harness));
-  let phone = find(harness.render(props), node => node?.type === phoneView);
-  phone.props.onVerified({ email: 'other@example.test', phoneNumber: valid.phoneNumber, verifiedAt: Date.now() });
-  assert.ok(find(harness.render(props), node => node?.type === phoneView));
-  phone.props.onVerified({ email: valid.email, phoneNumber: valid.phoneNumber, verifiedAt: Date.now() });
-  await submit(harness.render(props));
   assert.deepEqual(calls, [{ path: '/api/auth/register', body: { fullName: valid.fullName, email: valid.email, password: valid.password, acceptsPrivacy: true,
-    referralCode: 'MP-REFERRAL', preferredSide: 'R', phoneNumber: valid.phoneNumber } }]);
-  assert.equal(harness.state[9], null);
+    referralCode: 'MP-REFERRAL', preferredSide: 'R' } }]);
   const html = renderToStaticMarkup(harness.render(props));
-  assert.match(html, /Paso 3 de 3/); assert.match(html, /Verifica tu correo/);
+  assert.match(html, /Paso 2 de 2/); assert.match(html, /Verifica tu correo/);
   assert.equal(harness.state[1].password, ''); assert.equal(harness.state[1].confirmPassword, '');
 });
 
-test('changed email, changed phone, withdrawn consent and expired phone proof require a new explicit phone step', async t => {
-  t.mock.method(globalThis, 'fetch', () => assert.fail('stale verification cannot create an account'));
-  for (const changed of ['email', 'phoneNumber', 'phoneConsent', 'expired']) {
-    const harness = view(); await submit(enterValid(harness));
-    const phone = find(harness.render(props), node => node?.type === phoneView);
-    phone.props.onVerified({ email: valid.email, phoneNumber: valid.phoneNumber, verifiedAt: Date.now() - (changed === 'expired' ? 300001 : 0) });
-    let tree = harness.render(props);
-    if (changed !== 'expired') {
-      const value = changed === 'email' ? 'changed@example.test' : changed === 'phoneNumber' ? '+573009999999' : false;
-      find(tree, node => node?.props?.id === changed).props.onChange({ target: { value, checked: value } });
-      assert.equal(harness.state[9], null);
-      tree = harness.render(props);
-      if (changed === 'phoneConsent') {
-        find(tree, node => node?.props?.id === changed).props.onChange({ target: { checked: true } });
-        tree = harness.render(props);
-      }
-    }
-    await submit(tree);
-    assert.ok(find(harness.render(props), node => node?.type === phoneView));
+test('optional phone and WhatsApp are separate canonical contacts, with no SMS request or implicit consent', async t => {
+  const calls = [];
+  t.mock.method(globalThis, 'fetch', async (path, options) => { calls.push({ path, body: JSON.parse(options.body) }); return signupAck(); });
+  const harness = view();
+  await submit(enterValid(harness, { ...valid, contactPhone: { country: 'CO', national: '300 123 4567' }, contactWhatsapp: { country: 'ES', national: '612 345 678' } }));
+  assert.equal(calls.length, 1); assert.equal(calls[0].path, '/api/auth/register');
+  assert.equal(calls[0].body.contactPhone, '+573001234567');
+  assert.equal(calls[0].body.contactWhatsapp, '+34612345678');
+  for (const key of ['phoneNumber', 'phoneConsent', 'phoneNumberVerified', 'whatsappSameAsPhone', 'proof', 'code']) assert.equal(Object.hasOwn(calls[0].body, key), false);
+});
+
+test('using the same WhatsApp number requires the explicit checkbox and tracks the current phone', async t => {
+  let body;
+  t.mock.method(globalThis, 'fetch', async (_path, options) => { body = JSON.parse(options.body); return signupAck(); });
+  const harness = view();
+  const tree = enterValid(harness, { ...valid, contactPhone: { country: 'CO', national: '3001234567' }, contactWhatsapp: { country: 'ES', national: '612345678' }, whatsappSameAsPhone: true });
+  assert.equal(find(tree, node => node?.props?.id === 'contactWhatsapp'), undefined);
+  await submit(tree);
+  assert.equal(body.contactWhatsapp, body.contactPhone);
+  assert.equal(body.contactWhatsapp, '+573001234567');
+});
+
+test('invalid optional contacts stop signup instead of dropping or silently altering the number', async t => {
+  t.mock.method(globalThis, 'fetch', () => assert.fail('invalid optional contact must not reach the API'));
+  const previousDocument = globalThis.document;
+  globalThis.document = { getElementById: () => ({ focus() {} }) };
+  t.after(() => { if (previousDocument === undefined) delete globalThis.document; else globalThis.document = previousDocument; });
+  for (const changes of [{ contactPhone: { country: 'CO', national: '+34612345678' } }, { contactWhatsapp: { country: 'CO', national: '3001234567 ext 9' } }, { whatsappSameAsPhone: true }]) {
+    const harness = view(); await submit(enterValid(harness, { ...valid, ...changes }));
+    const tree = harness.render(props);
+    assert.ok(find(tree, node => node?.props?.error));
+    assert.match(renderToStaticMarkup(tree), /Paso 1 de 2/);
   }
 });
 
-test('spent or invalid proof responses return to phone verification without retrying signup or sending SMS', async t => {
-  let calls = 0;
-  t.mock.method(globalThis, 'fetch', async () => { calls++; return Response.json({ code: 'REGISTRATION_PHONE_REQUIRED' }, { status: 409 }); });
+test('every account must explicitly confirm email after signup, without auto-login or phone fallback', async t => {
+  const paths = [];
+  t.mock.method(globalThis, 'fetch', async (path, options) => {
+    paths.push(path);
+    if (path === '/api/auth/register') return signupAck();
+    assert.deepEqual(JSON.parse(options.body), { email: valid.email, code: '001234' });
+    return Response.json({ ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: true });
+  });
   const harness = view(); await submit(enterValid(harness));
-  find(harness.render(props), node => node?.type === phoneView).props.onVerified({ email: valid.email, phoneNumber: valid.phoneNumber, verifiedAt: Date.now() });
+  let tree = harness.render(props);
+  assert.match(renderToStaticMarkup(tree), /Verifica tu correo/);
+  find(tree, node => node?.props?.id === 'code').props.onChange({ target: { value: '001234' } });
   await submit(harness.render(props));
-  assert.equal(calls, 1); assert.equal(harness.state[9], null);
-  const tree = harness.render(props);
-  assert.ok(find(tree, node => node?.type === phoneView));
-  assert.match(renderToStaticMarkup(tree), /No enviaremos un SMS automáticamente/);
+  tree = harness.render(props);
+  assert.deepEqual(paths, ['/api/auth/register', '/api/auth/register/confirm']);
+  assert.match(renderToStaticMarkup(tree), /El correo está verificado/);
+  assert.match(renderToStaticMarkup(tree), /mode=password/);
+  assert.match(renderToStaticMarkup(tree), /vinculación requiere aprobación/);
 });
 
-test('a registration already awaiting email confirmation stays on its existing explicit confirmation flow', () => {
-  const harness = view();
-  const html = renderToStaticMarkup(harness.render({ registrationSmsRequired: true, initialSearch: 'email=member%40example.test&resume=1' }));
+test('an existing registration resumes email confirmation without collecting or verifying a phone', () => {
+  const html = renderToStaticMarkup(view().render({ initialSearch: 'email=member%40example.test&resume=1' }));
   assert.match(html, /Verifica tu correo/);
-  assert.doesNotMatch(html, /data-registration-phone/);
+  assert.doesNotMatch(html, /Contacto opcional|contactPhone|contactWhatsapp|SMS/);
 });

@@ -1,13 +1,4 @@
 export const REGISTRATION_RESEND_SECONDS = 300;
-export const REGISTRATION_PHONE_LIFETIME_SECONDS = 300;
-
-// Only the small input primitive is shared with the initial form. SMS request
-// contracts and transport remain in the on-demand phone-verification chunk.
-export function registrationPhone(value) {
-  if (typeof value !== 'string' || value.length > 40 || !/^[+\d ()-]+$/.test(value)) return '';
-  const normalized = value.trim().replace(/[ ()-]/g, '');
-  return /^\+[1-9]\d{7,14}$/.test(normalized) ? normalized : '';
-}
 
 export function registrationEmail(value) {
   if (typeof value !== 'string') return '';

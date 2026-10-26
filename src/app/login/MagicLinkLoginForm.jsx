@@ -47,7 +47,7 @@ const AUTH_STATE_MESSAGES = {
   },
 };
 
-export default function MagicLinkLoginForm({ authState, initialEmail = "", initialMode = "code", initialRef = "", initialSide = "", authMode = "cognito", registrationSmsRequired = false }) {
+export default function MagicLinkLoginForm({ authState, initialEmail = "", initialMode = "code", initialRef = "", initialSide = "", authMode = "cognito" }) {
   const emailOtpOnly = authMode === "better-auth";
   const [mode, setMode] = useState(() => emailOtpOnly ? initialMode === 'password' ? 'password' : 'code' : normalizeMode(initialMode));
   const [codeStep, setCodeStep] = useState("request");
@@ -57,7 +57,6 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loginCode, setLoginCode] = useState("");
-  const [codeChannel, setCodeChannel] = useState("email");
   const [codeRecipient, setCodeRecipient] = useState("");
   const otpSubmittingRef = useRef(false);
   const [error, setError] = useState("");
@@ -128,25 +127,21 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     }
   }
 
-  async function requestLoginCode(event, { resend = false, channel = "email" } = {}) {
+  async function requestLoginCode(event, { resend = false } = {}) {
     event?.preventDefault();
     if (otpSubmittingRef.current || isLoading || codeCooldown.active) return;
     setError("");
     setNotice("");
-    if (channel !== 'email') {
-      setError('El inicio de sesión utiliza códigos por correo. El SMS sólo valida el teléfono durante el registro.');
-      return;
-    }
     const normalizedEmail = validateEmail();
     if (!normalizedEmail) return;
     rememberReferralForEmail(normalizedEmail);
-    if (channel === "email" && !resend) setShowAccessFallback(false);
+    if (!resend) setShowAccessFallback(false);
 
     otpSubmittingRef.current = true;
     setLoadingAction('code-request');
     try {
       const contract = emailOtpOnly ? otpRequest(authMode, 'send', normalizedEmail) : {
-        path: "/api/auth/cognito/code-login/request", body: { email: normalizedEmail, channel },
+        path: "/api/auth/cognito/code-login/request", body: { email: normalizedEmail, channel: 'email' },
       };
       const response = await fetch(contract.path, {
         method: "POST",
@@ -164,7 +159,6 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
           return;
         }
         setCodeStep("confirm");
-        setCodeChannel("email");
         setCodeRecipient(normalizedEmail);
         setLoginCode("");
         codeCooldown.start(registrationRetrySeconds(response, payload));
@@ -210,7 +204,6 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
       }
 
       setCodeStep("confirm");
-      setCodeChannel(channel);
       setCodeRecipient(normalizedEmail);
       setShowAccessFallback(true);
       setLoginCode("");
@@ -326,7 +319,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
 
     const code = loginCode.replace(/[\s-]+/g, "").trim();
     if (!(emailOtpOnly ? /^\d{6}$/ : /^[a-zA-Z0-9]{4,12}$/).test(code)) {
-      setError(codeChannel === "sms" ? "Ingresa el código que recibiste por SMS." : "Ingresa el código que recibiste por correo.");
+      setError("Ingresa el código que recibiste por correo.");
       return;
     }
 
@@ -521,7 +514,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
           style={{ background: "var(--vp-surface-raised)", border: "1px solid var(--vp-border)" }}
         >
           <ModeButton disabled={isLoading} active={mode === "code"} onClick={() => switchMode("code")}>
-            {codeStep === "confirm" && codeChannel === "sms" ? "Código por SMS" : "Código al correo"}
+            Código al correo
           </ModeButton>
           <ModeButton disabled={isLoading} active={mode === "password"} onClick={() => switchMode("password")}>
             {emailOtpOnly ? 'Usar mi contraseña' : 'Contraseña'}
@@ -551,7 +544,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
               }
               icon={<UserPlus size={15} />}
             >
-              {registrationSmsRequired ? 'Crear cuenta y validar teléfono' : 'Crear cuenta nueva'}
+              Crear cuenta nueva
             </SecondaryButton>
             {showAccessFallback && renderAccessFallback()}
           </form>
@@ -569,9 +562,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
                 setError("");
               }}
             />
-            {codeChannel === "sms" ? (
-              <p className="text-xs leading-5" style={{ color: "var(--vp-subtle)" }}>Ingresa el último código recibido por SMS en tu teléfono registrado.</p>
-            ) : <DeliveryHint email={codeRecipient} />}
+            <DeliveryHint email={codeRecipient} />
 
             <PrimaryButton disabled={isLoading} loading={loadingAction === "code-confirm"} icon={<ArrowRight size={16} />}>
               Entrar con código
@@ -583,14 +574,14 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
               </SecondaryButton>
               <SecondaryButton
                 disabled={isLoading || codeCooldown.active}
-                onClick={(e) => requestLoginCode(e, { resend: true, channel: codeChannel })}
+                onClick={(e) => requestLoginCode(e, { resend: true })}
                 icon={<KeyRound size={15} />}
               >
                 {codeCooldown.active ? codeCooldown.label : "Reenviar"}
               </SecondaryButton>
             </div>
 
-            {/* Si el correo no llega, la ayuda no habilita acceso por SMS. */}
+            {/* La ayuda de acceso nunca cambia el canal de autenticación. */}
             {renderAccessFallback()}
           </form>
         )

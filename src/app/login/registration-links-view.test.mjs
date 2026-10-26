@@ -52,14 +52,14 @@ test('Better Auth password verification receives a safe registration continuatio
   harness.unmount();
 });
 
-test('SMS-enabled registration is offered from login without offering SMS sign-in', t => {
+test('login offers email registration without phone validation or SMS sign-in', t => {
   const destinations = browser(t);
   const harness = magicView();
-  const tree = harness.render({ authMode: 'better-auth', registrationSmsRequired: true, initialEmail: 'member@example.test', initialRef: 'MP-REFERRED', initialSide: 'R' });
-  const button = find(tree, node => node?.props?.children === 'Crear cuenta y validar teléfono');
+  const tree = harness.render({ authMode: 'better-auth', initialEmail: 'member@example.test', initialRef: 'MP-REFERRED', initialSide: 'R' });
+  const button = find(tree, node => node?.props?.children === 'Crear cuenta nueva');
   button.props.onClick();
   assert.equal(destinations[0], '/register?email=member%40example.test&ref=MP-REFERRED&side=R');
-  assert.doesNotMatch(renderToStaticMarkup(tree), /Recíbelo por SMS|Enviar.*SMS/);
+  assert.doesNotMatch(renderToStaticMarkup(tree), /SMS|validar teléfono/);
   harness.unmount();
 });
 
@@ -68,7 +68,7 @@ test('both login providers keep SMS sending unavailable even when their help fal
   for (const authMode of ['better-auth', 'cognito']) {
     const harness = magicView();
     harness.render({ authMode });
-    harness.state[14] = true;
+    harness.state[13] = true;
     const html = renderToStaticMarkup(harness.render({ authMode }));
     assert.doesNotMatch(html, /Recíbelo por SMS|Enviar.*SMS|SMS disponible/);
     harness.unmount();
