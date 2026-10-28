@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { otpRequest, otpFailureMessage, OTP_SEND_NOTICE } from './email-otp-client.mjs';
+import { otpRequest, otpFailureMessage, otpTimeoutMs, OTP_SEND_NOTICE } from './email-otp-client.mjs';
 
 test('Better Auth uses only the same-origin sign-in OTP contract', () => {
   assert.deepEqual(otpRequest('better-auth', 'send', ' Member+1@Example.test '), {
@@ -31,4 +31,10 @@ test('legacy Cognito contract remains separate and bounded errors do not expose 
   assert.match(otpFailureMessage(429, 'send'), /Demasiados/);
   assert.match(otpFailureMessage(503, 'confirm'), /no está disponible/);
   assert.match(otpFailureMessage(401, 'confirm'), /inválido o expirado/);
+});
+
+test('single email delivery attempt waits 30 seconds while received-code confirmation stays at 12 seconds', () => {
+  assert.equal(otpTimeoutMs('send'), 30000);
+  assert.equal(otpTimeoutMs('confirm'), 12000);
+  for (const action of ['', undefined, 'reset', 'https://evil.example.test']) assert.throws(() => otpTimeoutMs(action));
 });

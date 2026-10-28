@@ -28,6 +28,16 @@ export function registrationAcknowledged(action, payload, email = '') {
   return false;
 }
 
+// This is a recoverable failure, never an accepted send or verified account.
+// A generic 503, guessed account email or HTTP 200 cannot select this state.
+export function registrationPendingDelivery(status, payload, email) {
+  const expectedEmail = registrationEmail(email);
+  return status === 503 && Boolean(expectedEmail)
+    && payload !== null && typeof payload === 'object' && !Array.isArray(payload)
+    && payload.code === 'EMAIL_DELIVERY_UNAVAILABLE' && payload.registrationPending === true
+    && payload.requiresConfirmation === true && payload.email === expectedEmail;
+}
+
 export function registrationHints(search) {
   const params = new URLSearchParams(search);
   const referralCode = String(params.get('ref') || '').trim().slice(0, 64);

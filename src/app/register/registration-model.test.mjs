@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { registrationEmail, registrationErrors, registrationHints, registrationRetrySeconds, registrationFailure, registrationLoginUrl, registrationAcknowledged, registrationUrl } from './registration-model.mjs';
+import { registrationEmail, registrationErrors, registrationHints, registrationRetrySeconds, registrationFailure, registrationLoginUrl, registrationAcknowledged, registrationUrl, registrationPendingDelivery } from './registration-model.mjs';
 
 const valid = { fullName: 'Persona Prueba', email: ' test@example.test ', password: 'Synthetic Example 12', confirmPassword: 'Synthetic Example 12', acceptsPrivacy: true };
 
@@ -25,6 +25,19 @@ test('a successful HTTP response never verifies registration without the exact p
   assert.equal(registrationAcknowledged('confirm', { ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: true }), true);
   assert.equal(registrationAcknowledged('resend', { ok: true, mode: 'better-auth', resendAfter: 300 }), true);
   for (const action of ['register', 'confirm', 'resend']) for (const payload of [null, [], {}, { ok: true }, { ok: 'true', mode: 'better-auth' }]) assert.equal(registrationAcknowledged(action, payload, valid.email), false);
+});
+
+test('pending delivery recovery requires the exact 503 acknowledgement and the registration email, never HTTP success or a generic failure', () => {
+  const pending = { code: 'EMAIL_DELIVERY_UNAVAILABLE', registrationPending: true, email: 'test@example.test', requiresConfirmation: true };
+  assert.equal(registrationPendingDelivery(503, pending, valid.email), true);
+  for (const status of [200, 201, 400, 429, 500, 502, 504]) assert.equal(registrationPendingDelivery(status, pending, valid.email), false);
+  for (const body of [null, [], {}, { ...pending, email: 'other@example.test' }, { ...pending, email: undefined },
+    { ...pending, registrationPending: 'true' }, { ...pending, requiresConfirmation: false }, { ...pending, code: 'AUTH_EMAIL_DELIVERY_UNAVAILABLE' }]) {
+    assert.equal(registrationPendingDelivery(503, body, valid.email), false);
+  }
+  assert.equal(registrationPendingDelivery(503, pending, 'invalid'), false);
+  assert.equal(registrationAcknowledged('register', pending, valid.email), false);
+  assert.equal(registrationAcknowledged('confirm', pending), false);
 });
 
 test('URL prefills are bounded hints only and never provide password, consent or identity binding', () => {

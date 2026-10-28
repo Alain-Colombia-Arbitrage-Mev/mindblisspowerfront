@@ -39,8 +39,13 @@ async function upstreamResult(upstream) {
   return payload;
 }
 
-function upstreamError(upstream, payload) {
+function upstreamError(upstream, payload, pendingEmail = '') {
   const code = typeof payload.code === 'string' && /^[A-Z_]{1,80}$/.test(payload.code) ? payload.code : '';
+  if (upstream.status === 503 && code === 'AUTH_EMAIL_DELIVERY_UNAVAILABLE') return reply({
+    error: 'No pudimos enviar el código de verificación. Espera cinco minutos antes de solicitar otro.',
+    code: 'EMAIL_DELIVERY_UNAVAILABLE', retryAfter: 300,
+    ...(pendingEmail ? { registrationPending: true, email: pendingEmail, requiresConfirmation: true } : {}),
+  }, 503, { 'Retry-After': '300' });
   if (upstream.status === 429) {
     const raw = upstream.headers.get('retry-after');
     const retryAfter = /^\d{1,5}$/.test(raw || '') ? Math.max(1, Number(raw)) : 300;
@@ -77,7 +82,7 @@ export async function handleRegistration(request, action = 'register', dependenc
         body: { name: input.name, email: input.email, password: input.password, ...input.contacts },
       }, transport);
       const data = await upstreamResult(upstream);
-      if (!upstream.ok) return upstreamError(upstream, data);
+      if (!upstream.ok) return upstreamError(upstream, data, input.email);
       if (!data.user || typeof data.user.id !== 'string' || emailValue(data.user.email) !== input.email
           || data.user.emailVerified !== false || data.token) throw new Error('unexpected_signup_result');
       return reply({ ok: true, mode: 'better-auth', email: input.email, userConfirmed: false,

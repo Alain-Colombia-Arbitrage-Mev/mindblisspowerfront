@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { generateKeyPairSync, sign, createHash, createHmac } from "node:crypto";
-import { betterAuthConfig, betterAuthCookies, betterAuthServiceToken, browserAuthCookie, proxyBetterAuth, proxyBetterAuthKeys, trustedAuthClientIp } from "./better-auth-bridge.mjs";
+import { betterAuthConfig, betterAuthCookies, betterAuthServiceToken, betterAuthTimeoutMs, fetchBetterAuth, browserAuthCookie, proxyBetterAuth, proxyBetterAuthKeys, trustedAuthClientIp } from "./better-auth-bridge.mjs";
 import { createBetterAuthVerifier, validBetterAuthClaims } from "./better-auth-token.mjs";
 import { createPublicJwksCache } from "./public-jwks-cache.mjs";
 
@@ -9,6 +9,16 @@ const env = { AUTH_PROVIDER: "better-auth", NODE_ENV: "production", BETTER_AUTH_
 const cookie = "better-auth.session_token=synthetic";
 const request = (body = "{}", origin = env.AUTH_PUBLIC_ORIGIN) => new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/auth/sign-in/email`, {
   method: "POST", headers: { origin, 'cf-connecting-ip': '192.0.2.10', cookie: `${cookie}; vp_id_token=other; unrelated=private` }, body,
+});
+
+test('email delivery gets a bounded cold-start budget, while reads and code redemption remain short', async () => {
+  for (const path of ['/sign-up/email', '/email-otp/send-verification-otp', '/send-verification-email', '/email-otp/request-password-reset']) assert.equal(betterAuthTimeoutMs(path), 20000);
+  for (const path of ['/get-session', '/token', '/jwks', '/sign-in/email-otp', '/email-otp/verify-email', '/sign-in/email']) assert.equal(betterAuthTimeoutMs(path), 8000);
+  const cancelled = new AbortController(); cancelled.abort(); let calls = 0;
+  await fetchBetterAuth('/email-otp/send-verification-otp', { method: 'POST', body: { email: 'synthetic@example.test', type: 'sign-in' }, signal: cancelled.signal }, {
+    env, clientIp: '192.0.2.10', fetchImpl: async (_url, options) => { calls++; assert.equal(options.signal.aborted, true); return Response.json({ success: true }); },
+  });
+  assert.equal(calls, 1, 'the transport does not retry a send');
 });
 
 test("auth configuration fails closed and does not allow credentials or production plaintext", () => {

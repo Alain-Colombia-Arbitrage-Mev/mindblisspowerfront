@@ -91,3 +91,26 @@ test('the real password form preserves the supplied safe continuation after EMAI
   await find(tree, node => node?.type === 'form').props.onSubmit({ preventDefault() {} });
   assert.match(renderToStaticMarkup(harness.render(props)), /href="\/register\?email=member%40example.test&amp;ref=MP-REFERRED&amp;side=R&amp;resume=1"/);
 });
+
+test('real email-login send and explicit resend handlers get 30 seconds but verification keeps its 12-second deadline', async t => {
+  browser(t);
+  const deadlines = [], paths = [];
+  const timeout = AbortSignal.timeout.bind(AbortSignal);
+  t.mock.method(AbortSignal, 'timeout', milliseconds => { deadlines.push(milliseconds); return timeout(milliseconds); });
+  t.mock.method(globalThis, 'fetch', async path => {
+    paths.push(path);
+    return path.endsWith('/send-verification-otp') ? Response.json({ ok: true })
+      : Response.json({ error: 'authentication_failed' }, { status: 401 });
+  });
+  const harness = magicView(), props = { authMode: 'better-auth', initialEmail: 'member@example.test' };
+  let tree = harness.render(props);
+  await find(tree, node => node?.type === 'form').props.onSubmit({ preventDefault() {} });
+  tree = harness.render(props);
+  await find(tree, node => node?.props?.children === 'Reenviar').props.onClick({ preventDefault() {} });
+  tree = harness.render(props);
+  find(tree, node => node?.props?.id === 'login-code').props.onChange('001234');
+  await find(harness.render(props), node => node?.type === 'form').props.onSubmit({ preventDefault() {} });
+  assert.deepEqual(deadlines, [30000, 30000, 12000]);
+  assert.deepEqual(paths, ['/api/auth/email-otp/send-verification-otp', '/api/auth/email-otp/send-verification-otp', '/api/auth/sign-in/email-otp']);
+  harness.unmount();
+});

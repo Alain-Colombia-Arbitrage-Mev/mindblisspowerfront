@@ -82,3 +82,49 @@ test('unexpected successes and upstream diagnostics never become verified signup
     assert.doesNotMatch(await response.text(), /private-db|private-token|private-redirect/);
   }
 });
+
+test('a confirmed signup delivery failure preserves only the normalized pending registration and manual retry budget', async () => {
+  let calls = 0;
+  const response = await handleRegistration(request(), 'register', { env, fetchImpl: async () => {
+    calls++;
+    return Response.json({ code: 'AUTH_EMAIL_DELIVERY_UNAVAILABLE', message: 'private-provider-diagnostic', email: 'attacker@example.test',
+      token: 'private-session', user: { id: 'private-user', role: 'admin' } }, { status: 503, headers: {
+      'retry-after': '1', 'set-cookie': 'better-auth.session_token=private-session; HttpOnly', 'set-auth-jwt': 'private-jwt',
+    } });
+  } });
+  assert.equal(calls, 1);
+  assert.equal(response.status, 503);
+  assert.equal(response.headers.get('cache-control'), 'private, no-store');
+  assert.equal(response.headers.get('retry-after'), '300');
+  assert.equal(response.headers.get('set-cookie'), null);
+  assert.equal(response.headers.get('set-auth-jwt'), null);
+  const body = await response.json();
+  assert.equal(body.code, 'EMAIL_DELIVERY_UNAVAILABLE');
+  assert.equal(body.registrationPending, true);
+  assert.equal(body.email, 'member@example.test');
+  assert.equal(body.requiresConfirmation, true);
+  assert.equal(body.retryAfter, 300);
+  assert.equal(body.ok, undefined);
+  assert.doesNotMatch(JSON.stringify(body), /private-|attacker|token|role|userConfirmed/);
+});
+
+test('only the exact signup 503 code offers pending recovery; resend never implies account creation', async () => {
+  for (const [status, code] of [[500, 'AUTH_EMAIL_DELIVERY_UNAVAILABLE'], [400, 'AUTH_EMAIL_DELIVERY_UNAVAILABLE'],
+    [503, 'AUTH_EMAIL_DELIVERY_UNAVAILABLE_EXTRA'], [503, 'authentication_unavailable']]) {
+    const response = await handleRegistration(request(), 'register', { env, fetchImpl: async () => Response.json({ code, registrationPending: true,
+      email: 'member@example.test', requiresConfirmation: true }, { status }) });
+    const body = await response.json();
+    assert.equal(body.registrationPending, undefined);
+    assert.equal(body.email, undefined);
+    assert.notEqual(body.code, 'EMAIL_DELIVERY_UNAVAILABLE');
+  }
+  const response = await handleRegistration(request({ email: 'member@example.test', resend: true }), 'confirm', {
+    env, fetchImpl: async () => Response.json({ code: 'AUTH_EMAIL_DELIVERY_UNAVAILABLE' }, { status: 503 }),
+  });
+  assert.equal(response.status, 503);
+  assert.equal(response.headers.get('retry-after'), '300');
+  const body = await response.json();
+  assert.equal(body.code, 'EMAIL_DELIVERY_UNAVAILABLE');
+  assert.equal(body.registrationPending, undefined);
+  assert.equal(body.email, undefined);
+});

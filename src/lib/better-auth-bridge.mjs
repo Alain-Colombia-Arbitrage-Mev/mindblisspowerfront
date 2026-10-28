@@ -70,6 +70,12 @@ export async function readAuthBody(request) {
   } finally { signal.removeEventListener('abort', aborted); reader.releaseLock(); }
 }
 
+// Email delivery includes Container startup, PostgreSQL and the provider's 8s
+// deadline. Keep other auth reads/canjes short; never retry a send on timeout.
+const emailDeliveryPaths = new Set(['/sign-up/email', '/email-otp/send-verification-otp',
+  '/send-verification-email', '/email-otp/request-password-reset']);
+export const betterAuthTimeoutMs = path => emailDeliveryPaths.has(path) ? 20000 : 8000;
+
 /** @param {string} path
  * @param {{cookie?: string, method?: string, body?: unknown, origin?: string, signal?: AbortSignal}} [options]
  */
@@ -83,9 +89,10 @@ export async function fetchBetterAuth(path, { cookie = "", method = "GET", body,
   const timestamp = String(Math.floor(Date.now() / 1000));
   const hash = value => createHash('sha256').update(value).digest('hex');
   const signature = createHmac('sha256', env.AUTH_BFF_SHARED_SECRET).update([method, `/api/auth${path}`, timestamp, clientIp, hash(sessionCookie), hash(serialized)].join('\n')).digest('hex');
+  const deadline = AbortSignal.timeout(betterAuthTimeoutMs(path));
   return fetchImpl(`${base}/api/auth${path}`, {
     method, redirect: "manual", cache: "no-store",
-    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(8000)]) : AbortSignal.timeout(8000),
+    signal: signal ? AbortSignal.any([signal, deadline]) : deadline,
     headers: { cookie: sessionCookie, 'x-vp-auth-client-ip': clientIp, 'x-vp-auth-timestamp': timestamp, 'x-vp-auth-signature': signature,
       ...(origin ? { origin } : {}), ...(body ? { "content-type": "application/json" } : {}) },
     body: serialized || undefined,

@@ -19,7 +19,7 @@ import { useEffect, useRef, useState } from "react";
 import { isMicrosoftEmail, suggestEmailFix, useResendCooldown } from "@/lib/useResendCooldown";
 import { checkPassword, isValidPassword } from "@/lib/password";
 import { bindReferralToEmail, captureReferralFromUrl, normalizePlacementSide, normalizeReferralCode } from "@/lib/referral-attribution";
-import { otpRequest, otpFailureMessage, OTP_SEND_NOTICE } from "@/lib/email-otp-client.mjs";
+import { otpRequest, otpFailureMessage, otpTimeoutMs, OTP_SEND_NOTICE } from "@/lib/email-otp-client.mjs";
 import BetterAuthPasswordLogin from './BetterAuthPasswordLogin';
 import { betterAuthAccess } from './better-auth-login.mjs';
 import { registrationRetrySeconds, registrationUrl } from '../register/registration-model.mjs';
@@ -147,7 +147,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin", cache: "no-store", redirect: "error",
-        signal: AbortSignal.timeout(12000),
+        signal: AbortSignal.timeout(otpTimeoutMs('send')),
         body: JSON.stringify(contract.body),
       });
       const payload = await response.json().catch(() => ({}));
@@ -333,7 +333,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin", cache: "no-store", redirect: "error",
-        signal: AbortSignal.timeout(12000),
+        signal: AbortSignal.timeout(otpTimeoutMs('confirm')),
         body: JSON.stringify(contract.body),
       });
       const payload = await response.json().catch(() => ({}));

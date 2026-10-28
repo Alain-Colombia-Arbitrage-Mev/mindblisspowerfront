@@ -4,18 +4,20 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import * as model from './registration-model.mjs';
 import * as contacts from './contact-phone-model.mjs';
+import * as emailOtp from '../../lib/email-otp-client.mjs';
 import { registrationViewHarness, findRegistrationNode as find, registrationFieldStub, registrationButtonStub } from './registration-view-test-harness.mjs';
 
 const contactView = ({ id, label, value }) => React.createElement('div', null, label, React.createElement('input', { id, value: value.national, readOnly: true }));
 const passwordField = ({ visible, onToggle, ...props }) => registrationFieldStub(props);
 const valid = { fullName: 'Synthetic Member', email: 'member@example.test', password: 'Synthetic Long Password 123', confirmPassword: 'Synthetic Long Password 123', acceptsPrivacy: true };
-function view() {
+function view(cooldown = { active: false, label: '', start() {} }) {
   return registrationViewHarness('./BetterAuthRegisterForm.jsx', {
     'next/link': { default: ({ children, ...props }) => React.createElement('a', props, children) },
     'lucide-react': { ArrowLeft: () => null, CheckCircle2: () => null, Mail: () => null, UserPlus: () => null },
     '../_components/AuthShell': { default: ({ children }) => React.createElement('main', null, children) },
-    '@/lib/useResendCooldown': { useResendCooldown: () => ({ active: false, label: '', start() {} }), suggestEmailFix: () => '' },
+    '@/lib/useResendCooldown': { useResendCooldown: () => cooldown, suggestEmailFix: () => '' },
     '@/lib/referral-attribution': { bindReferralCodeToEmail() {} },
+    '@/lib/email-otp-client.mjs': emailOtp,
     './RegistrationFields': { RegistrationField: registrationFieldStub, RegistrationButton: registrationButtonStub, RegistrationPassword: passwordField },
     './ContactPhoneField': { default: contactView },
     './contact-phone-model.mjs': contacts,
@@ -117,4 +119,65 @@ test('an existing registration resumes email confirmation without collecting or 
   const html = renderToStaticMarkup(view().render({ initialSearch: 'email=member%40example.test&resume=1' }));
   assert.match(html, /Verifica tu correo/);
   assert.doesNotMatch(html, /Contacto opcional|contactPhone|contactWhatsapp|SMS/);
+});
+
+test('confirmed signup delivery failure resumes pending verification without another signup, automatic email or retained password', async t => {
+  const paths = [], waits = [];
+  const cooldown = { active: false, label: 'Reenviar en 5:00', start(seconds) { waits.push(seconds); this.active = true; } };
+  t.mock.method(globalThis, 'fetch', async path => {
+    paths.push(path);
+    return Response.json({ code: 'EMAIL_DELIVERY_UNAVAILABLE', registrationPending: true, email: valid.email, requiresConfirmation: true, retryAfter: 300 },
+      { status: 503, headers: { 'retry-after': '300' } });
+  });
+  const harness = view(cooldown);
+  await submit(enterValid(harness));
+  const tree = harness.render(props), html = renderToStaticMarkup(tree);
+  assert.deepEqual(paths, ['/api/auth/register']);
+  assert.deepEqual(waits, [300]);
+  assert.equal(harness.state[1].password, '');
+  assert.equal(harness.state[1].confirmPassword, '');
+  assert.match(html, /Paso 2 de 2/);
+  assert.match(html, /no pudimos enviar el código/);
+  assert.match(html, /No crees otra cuenta/);
+  assert.match(html, /El reenvío es manual/);
+  assert.doesNotMatch(html, /El correo está verificado|recibirás un código|código enviado/);
+  const resend = find(tree, node => node?.props?.children === 'Reenviar en 5:00');
+  assert.equal(resend.props.disabled, true);
+  await resend.props.onClick();
+  assert.deepEqual(paths, ['/api/auth/register']);
+});
+
+test('unconfirmed and mismatched delivery failures do not claim a pending registration or erase credentials as accepted', async t => {
+  for (const [status, body] of [[503, { code: 'REGISTRATION_UNAVAILABLE' }], [503, { code: 'EMAIL_DELIVERY_UNAVAILABLE',
+    registrationPending: true, email: 'other@example.test', requiresConfirmation: true }], [200, { code: 'EMAIL_DELIVERY_UNAVAILABLE',
+    registrationPending: true, email: valid.email, requiresConfirmation: true }]]) {
+    const paths = [];
+    t.mock.method(globalThis, 'fetch', async path => { paths.push(path); return Response.json(body, { status }); });
+    const harness = view(); await submit(enterValid(harness));
+    assert.deepEqual(paths, ['/api/auth/register']);
+    assert.equal(harness.state[1].password, valid.password);
+    assert.match(renderToStaticMarkup(harness.render(props)), /Paso 1 de 2/);
+  }
+});
+
+test('real registration and explicit resend handlers wait 30 seconds, but received-code verification remains 12 seconds', async t => {
+  const deadlines = [], paths = [];
+  const timeout = AbortSignal.timeout.bind(AbortSignal);
+  t.mock.method(AbortSignal, 'timeout', milliseconds => { deadlines.push(milliseconds); return timeout(milliseconds); });
+  t.mock.method(globalThis, 'fetch', async (path, options) => {
+    paths.push(path);
+    if (path === '/api/auth/register') return signupAck();
+    return Response.json(JSON.parse(options.body).resend === true
+      ? { ok: true, mode: 'better-auth', resendAfter: 300 }
+      : { ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: true });
+  });
+  const harness = view();
+  await submit(enterValid(harness));
+  let tree = harness.render(props);
+  await find(tree, node => node?.props?.children === 'Solicitar otro código').props.onClick();
+  tree = harness.render(props);
+  find(tree, node => node?.props?.id === 'code').props.onChange({ target: { value: '001234' } });
+  await submit(harness.render(props));
+  assert.deepEqual(deadlines, [30000, 30000, 12000]);
+  assert.deepEqual(paths, ['/api/auth/register', '/api/auth/register/confirm', '/api/auth/register/confirm']);
 });

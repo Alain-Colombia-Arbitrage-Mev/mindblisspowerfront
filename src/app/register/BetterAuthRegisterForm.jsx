@@ -6,10 +6,11 @@ import { useEffect, useRef, useState } from 'react';
 import AuthShell from '../_components/AuthShell';
 import { useResendCooldown, suggestEmailFix } from '@/lib/useResendCooldown';
 import { bindReferralCodeToEmail } from '@/lib/referral-attribution';
+import { otpTimeoutMs } from '@/lib/email-otp-client.mjs';
 import { RegistrationButton, RegistrationField, RegistrationPassword } from './RegistrationFields';
 import ContactPhoneField from './ContactPhoneField';
 import { initialContactPhone, registrationContactValues } from './contact-phone-model.mjs';
-import { REGISTRATION_RESEND_SECONDS, registrationEmail, registrationErrors, registrationFailure, registrationHints, registrationLoginUrl, registrationRetrySeconds, registrationAcknowledged } from './registration-model.mjs';
+import { REGISTRATION_RESEND_SECONDS, registrationEmail, registrationErrors, registrationFailure, registrationHints, registrationLoginUrl, registrationRetrySeconds, registrationAcknowledged, registrationPendingDelivery } from './registration-model.mjs';
 
 const initialForm = { fullName: '', email: '', password: '', confirmPassword: '', acceptsPrivacy: false,
   contactPhone: initialContactPhone(), contactWhatsapp: initialContactPhone(), whatsappSameAsPhone: false };
@@ -56,10 +57,10 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
     });
   }
 
-  async function post(path, body) {
+  async function post(path, body, action = 'confirm') {
     const response = await fetch(path, {
       method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error',
-      signal: AbortSignal.timeout(12000), headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      signal: AbortSignal.timeout(otpTimeoutMs(action)), headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     });
     return { response, payload: await response.json().catch(() => ({})) };
   }
@@ -82,7 +83,16 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
         fullName: form.fullName.trim(), email, password: form.password, acceptsPrivacy: true,
         referralCode: hints.referralCode, preferredSide: hints.preferredSide,
         ...contacts.values,
-      });
+      }, 'send');
+      if (registrationPendingDelivery(response.status, payload, email)) {
+        if (hints.referralCode) bindReferralCodeToEmail(email, hints.referralCode);
+        setForm(current => ({ ...current, email, password: '', confirmPassword: '' }));
+        setCode('');
+        setStep('confirm');
+        cooldown.start(registrationRetrySeconds(response, payload));
+        setErrors({ form: 'Tu registro quedó pendiente de verificar el correo, pero no pudimos enviar el código. No crees otra cuenta. Espera 5 minutos y usa «Solicitar otro código». El reenvío es manual.' });
+        return;
+      }
       if (!response.ok || !registrationAcknowledged('register', payload, email)) {
         if (response.status === 429 || response.status >= 500 || response.ok) cooldown.start(registrationRetrySeconds(response, payload || {}));
         setErrors({ form: registrationFailure(response.ok ? 502 : response.status, 'register', payload?.code) });
@@ -141,7 +151,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
     setNotice('');
     cooldown.start();
     try {
-      const { response, payload } = await post('/api/auth/register/confirm', { email, resend: true });
+      const { response, payload } = await post('/api/auth/register/confirm', { email, resend: true }, 'send');
       if (!response.ok || !registrationAcknowledged('resend', payload)) {
         if (response.status === 429) cooldown.start(registrationRetrySeconds(response, payload));
         setErrors({ form: registrationFailure(response.ok ? 502 : response.status, 'resend', payload?.code) });
@@ -221,7 +231,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
           </form>
         ) : step === 'confirm' ? (
           <form onSubmit={confirm} noValidate className="space-y-5">
-            <p className="break-words text-sm leading-6 text-[var(--vp-muted)]">Ingresa el código enviado a <strong className="text-[var(--vp-text)]">{email}</strong>. No compartas este código con nadie.</p>
+            <p className="break-words text-sm leading-6 text-[var(--vp-muted)]">Ingresa el código de verificación de <strong className="text-[var(--vp-text)]">{email}</strong> cuando lo recibas. No compartas este código con nadie.</p>
             <RegistrationField id="code" name="one-time-code" label="Código de 6 dígitos" type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" required maxLength={6}
               value={code} onChange={event => { setCode(event.target.value.replace(/\D/g, '').slice(0, 6)); setErrors({}); }} error={errors.code} disabled={isLoading}
               inputRef={codeInput} />

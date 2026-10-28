@@ -23,4 +23,12 @@ export function otpFailureMessage(status, action) {
   return action === 'confirm' ? 'Código inválido o expirado. Revisa el último correo recibido.' : 'No se pudo solicitar el código. Intenta de nuevo.';
 }
 
+// Give the single delivery request room to finish; never automatically resend
+// after a timeout. Exchanging a received code retains its shorter deadline.
+export function otpTimeoutMs(action) {
+  if (action === 'send') return 30000;
+  if (action === 'confirm') return 12000;
+  throw new Error('invalid_action');
+}
+
 export const OTP_SEND_NOTICE = 'Si tu cuenta está habilitada, recibirás un código por correo. Revisa también la carpeta de spam.';
