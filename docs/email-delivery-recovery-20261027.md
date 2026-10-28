@@ -18,6 +18,16 @@ Para envíos se permite una espera acotada: navegador 30 s, BFF 20 s, proveedor
 navegador y 8 s en BFF. Todos respetan cancelación; no hay reintentos ni caché de
 códigos. Las políticas de assets y no-store privados no cambian.
 
-390 pruebas, typecheck y ESLint revisado aprobados. Publicación de esta corrección
-pendiente de recuperar el motor Docker local y verificar imágenes/Worker Linux;
-no confundir estas fuentes con los artefactos anteriores ya publicados.
+390 pruebas, typecheck y ESLint revisado aprobados. Build Linux, dry-runs y 50
+sondas offline del Worker aprobados, también sobre el artefacto exportado exacto;
+sin red externa, consultas reales ni mensajes. Los artefactos anteriores se
+conservan en `.wrangler/artifacts-before-email-delivery-20261027`.
+
+Publicado en `mindblisspower.com`: Worker
+`49d6c274-825d-4421-b6c5-2b2661214f68`, fuentes `5195b4c`, después de confirmar
+la API nueva versión 4 saludable. Pasaron 13 sondas públicas sin autenticarse:
+registro/contactos, sesión, permisos, JWKS, CSRF, rutas telefónicas deshabilitadas,
+assets inmutables, ETag 304 y 404 sin caché larga. Los tres chunks nuevos responden
+200 e incluyen la recuperación de envío. No se crearon cuentas ni enviaron más
+correos reales durante el despliegue; la comprobación pública no afirma haber
+completado un registro real nuevo. Pagos, árbol, rangos y Chatwoot no cambian.
