@@ -21,6 +21,17 @@ No cambian diseño, permisos, políticas privadas de caché ni el backend financ
 La base productiva sólo tenía una cuenta Better Auth en la inspección agregada;
 la migración del árbol no implica que se hayan creado sus accesos de identidad.
 
-397 pruebas, typecheck y ESLint efectivo aprobados (sin errores). Build Linux,
-smoke offline y publicación de esta corrección pendientes de registrar.
-No se han realizado envíos masivos ni marcado correos verificados.
+397 pruebas, typecheck y ESLint efectivo aprobados (sin errores). Build Linux y
+dry-run aprobados. Smoke offline sobre imagen y exportación exacta: 50/50 sondas,
+sin red externa, DB ni mensajes. Artefactos anteriores conservados en
+`.wrangler/artifacts-before-login-recovery-20261030`.
+
+Publicado en `mindblisspower.com`: fuentes `7e2ca2c`, Worker
+`469f02c7-7d8b-40c0-ba10-5f78f57acaea`, después de confirmar la API versión 5
+saludable. Trece sondas públicas de seguridad/registro/caché aprobadas. La guía
+de nuevo acceso aparece en el HTML productivo. No se ha demostrado una nueva
+entrega real de OTP en esta publicación: la autorización de prueba sigue pendiente.
+
+No se han realizado envíos masivos, creado accesos heredados ni marcado correos
+verificados. Migrar accesos pendientes requiere una decisión independiente;
+publicar el frontend no aprovisiona las cuentas de identidad.
