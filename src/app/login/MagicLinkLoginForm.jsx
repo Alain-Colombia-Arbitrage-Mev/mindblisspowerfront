@@ -19,7 +19,7 @@ import { useEffect, useRef, useState } from "react";
 import { isMicrosoftEmail, suggestEmailFix, useResendCooldown } from "@/lib/useResendCooldown";
 import { checkPassword, isValidPassword } from "@/lib/password";
 import { bindReferralToEmail, captureReferralFromUrl, normalizePlacementSide, normalizeReferralCode } from "@/lib/referral-attribution";
-import { otpRequest, otpFailureMessage, otpTimeoutMs, OTP_SEND_NOTICE } from "@/lib/email-otp-client.mjs";
+import { otpRequest, otpFailureMessage, otpTimeoutMs, OTP_SEND_NOTICE, OTP_SEND_UNCONFIRMED_NOTICE } from "@/lib/email-otp-client.mjs";
 import BetterAuthPasswordLogin from './BetterAuthPasswordLogin';
 import { betterAuthAccess } from './better-auth-login.mjs';
 import { registrationRetrySeconds, registrationUrl } from '../register/registration-model.mjs';
@@ -59,6 +59,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
   const [loginCode, setLoginCode] = useState("");
   const [codeRecipient, setCodeRecipient] = useState("");
   const otpSubmittingRef = useRef(false);
+  const otpRequestRef = useRef(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [accessHelpPhone, setAccessHelpPhone] = useState("");
@@ -79,6 +80,11 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
       setReferralCode(attribution.code);
       setPreferredSide(normalizePlacementSide(attribution.side));
     }
+  }, []);
+
+  useEffect(() => () => {
+    otpRequestRef.current?.abort();
+    otpRequestRef.current = null;
   }, []);
 
   function normalizeEmail() {
@@ -132,12 +138,15 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     if (otpSubmittingRef.current || isLoading || codeCooldown.active) return;
     setError("");
     setNotice("");
-    const normalizedEmail = validateEmail();
+    // A resend belongs to the displayed challenge, never a hidden/edited email.
+    const normalizedEmail = resend ? codeRecipient : validateEmail();
     if (!normalizedEmail) return;
     rememberReferralForEmail(normalizedEmail);
     if (!resend) setShowAccessFallback(false);
 
     otpSubmittingRef.current = true;
+    const controller = new AbortController();
+    otpRequestRef.current = controller;
     setLoadingAction('code-request');
     try {
       const contract = emailOtpOnly ? otpRequest(authMode, 'send', normalizedEmail) : {
@@ -147,15 +156,25 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin", cache: "no-store", redirect: "error",
-        signal: AbortSignal.timeout(otpTimeoutMs('send')),
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(otpTimeoutMs('send'))]),
         body: JSON.stringify(contract.body),
       });
       const payload = await response.json().catch(() => ({}));
+      if (controller.signal.aborted || otpRequestRef.current !== controller) return;
 
       if (emailOtpOnly) {
         if (!response.ok || payload.ok !== true) {
-          if (response.status === 429) codeCooldown.start(registrationRetrySeconds(response, payload));
-          setError(otpFailureMessage(response.status, 'send'));
+          if (response.status === 429 || response.status >= 500 || response.ok) {
+            // The previous/current attempt may already have produced a code.
+            // Keep a place to enter it without retrying or claiming a delivery.
+            setCodeStep("confirm");
+            setCodeRecipient(normalizedEmail);
+            setLoginCode("");
+            codeCooldown.start(registrationRetrySeconds(response, payload));
+            setError(response.status === 429
+              ? `${otpFailureMessage(429, 'send')} ${OTP_SEND_UNCONFIRMED_NOTICE}`
+              : OTP_SEND_UNCONFIRMED_NOTICE);
+          } else setError(otpFailureMessage(response.status, 'send'));
           return;
         }
         setCodeStep("confirm");
@@ -215,12 +234,24 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
             : "Te enviamos un código por correo. Si no aparece en 1–2 min, revisa la carpeta de spam."),
       );
     } catch {
-      setAccessHelpReason("auth_service_unavailable");
-      setShowAccessFallback(true);
-      setError("No se pudo conectar con el servicio de acceso.");
+      if (controller.signal.aborted || otpRequestRef.current !== controller) return;
+      if (emailOtpOnly) {
+        setCodeStep("confirm");
+        setCodeRecipient(normalizedEmail);
+        setLoginCode("");
+        codeCooldown.start(300);
+        setError(OTP_SEND_UNCONFIRMED_NOTICE);
+      } else {
+        setAccessHelpReason("auth_service_unavailable");
+        setShowAccessFallback(true);
+        setError("No se pudo conectar con el servicio de acceso.");
+      }
     } finally {
-      otpSubmittingRef.current = false;
-      setLoadingAction("");
+      if (otpRequestRef.current === controller) {
+        otpRequestRef.current = null;
+        otpSubmittingRef.current = false;
+        if (!controller.signal.aborted) setLoadingAction("");
+      }
     }
   }
 
@@ -324,6 +355,8 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     }
 
     otpSubmittingRef.current = true;
+    const controller = new AbortController();
+    otpRequestRef.current = controller;
     setLoadingAction("code-confirm");
     try {
       const contract = emailOtpOnly ? otpRequest(authMode, 'confirm', normalizedEmail, code) : {
@@ -333,10 +366,11 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin", cache: "no-store", redirect: "error",
-        signal: AbortSignal.timeout(otpTimeoutMs('confirm')),
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(otpTimeoutMs('confirm'))]),
         body: JSON.stringify(contract.body),
       });
       const payload = await response.json().catch(() => ({}));
+      if (controller.signal.aborted || otpRequestRef.current !== controller) return;
 
       if (emailOtpOnly) {
         if (!response.ok || payload.ok !== true) {
@@ -346,6 +380,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
         // A verified mailbox is not an approved network identity. Never assign
         // a person, rank, placement or role from the sign-in response.
         const access = await betterAuthAccess();
+        if (controller.signal.aborted || otpRequestRef.current !== controller) return;
         if (access.ready) window.location.assign('/dashboard');
         else if (access.error) setError(access.error);
         else setNotice(access.notice);
@@ -366,10 +401,13 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
       persistLocalUser(payload.user);
       window.location.assign(payload.redirectTo || "/dashboard");
     } catch {
-      setError("No se pudo conectar con el servicio de acceso.");
+      if (!controller.signal.aborted && otpRequestRef.current === controller) setError("No se pudo conectar con el servicio de acceso.");
     } finally {
-      otpSubmittingRef.current = false;
-      setLoadingAction("");
+      if (otpRequestRef.current === controller) {
+        otpRequestRef.current = null;
+        otpSubmittingRef.current = false;
+        if (!controller.signal.aborted) setLoadingAction("");
+      }
     }
   }
 
@@ -528,7 +566,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
             <p className="text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
               Recibe un código en tu correo para entrar a tu cuenta.
             </p>
-            <EmailField email={email} setEmail={setEmail} onClearError={() => setError("")} />
+            <EmailField email={email} readOnly={isLoading} setEmail={setEmail} onClearError={() => setError("")} />
 
             <PrimaryButton disabled={isLoading || codeCooldown.active} loading={loadingAction === "code-request"} icon={<ShieldCheck size={16} />}>
               {codeCooldown.active ? codeCooldown.label : "Enviar código"}
@@ -678,6 +716,10 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
           </div>
         </form>
       )}
+      {emailOtpOnly ? <div className="space-y-2 border-t pt-4 text-sm leading-6" style={{ borderColor: "var(--vp-border)", color: "var(--vp-muted)" }}>
+        <p className="m-0">Si ya pertenecías a la red y aún no creaste tu nuevo acceso, créalo en Registro y verifica tu correo. Tu cuenta y posición en la red se conservan; la vinculación requiere revisión y aprobación.</p>
+        <a className="font-bold no-underline" style={{ color: "var(--vp-text-soft)" }} href={registrationUrl(codeStep === "confirm" ? codeRecipient : email, referralCode, preferredSide)}>Crear acceso en Registro</a>
+      </div> : null}
     </div>
   );
 }

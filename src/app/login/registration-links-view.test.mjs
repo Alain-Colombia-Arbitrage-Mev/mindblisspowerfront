@@ -9,10 +9,10 @@ import * as auth from './better-auth-login.mjs';
 
 const icons = new Proxy({}, { get: () => () => null });
 const passwordView = () => null;
-function magicView() {
+function magicView(cooldown = () => ({ active: false, label: '', start() {} })) {
   return registrationViewHarness('../login/MagicLinkLoginForm.jsx', {
     'lucide-react': icons,
-    '@/lib/useResendCooldown': { useResendCooldown: () => ({ active: false, label: '', start() {} }), isMicrosoftEmail: () => false, suggestEmailFix: () => '' },
+    '@/lib/useResendCooldown': { useResendCooldown: cooldown, isMicrosoftEmail: () => false, suggestEmailFix: () => '' },
     '@/lib/password': { checkPassword: () => ({ results: [] }), isValidPassword: () => true },
     '@/lib/referral-attribution': { bindReferralToEmail() {}, captureReferralFromUrl: () => null,
       normalizePlacementSide: side => ['L', 'R'].includes(side) ? side : '', normalizeReferralCode: value => value },
@@ -112,5 +112,141 @@ test('real email-login send and explicit resend handlers get 30 seconds but veri
   await find(harness.render(props), node => node?.type === 'form').props.onSubmit({ preventDefault() {} });
   assert.deepEqual(deadlines, [30000, 30000, 12000]);
   assert.deepEqual(paths, ['/api/auth/email-otp/send-verification-otp', '/api/auth/email-otp/send-verification-otp', '/api/auth/sign-in/email-otp']);
+  harness.unmount();
+});
+
+test('ambiguous send failures keep a bound code-entry step with a safe cooldown and never retry or claim delivery', async t => {
+  const destinations = browser(t);
+  for (const response of [Response.json({ error: 'authentication_unavailable', email: 'other@example.test' }, { status: 503 }),
+    Response.json({ error: 'upstream_unavailable' }, { status: 502 }), Response.json({}),
+    new Response('not-json', { status: 200 })]) {
+    let calls = 0, seconds = 0;
+    t.mock.method(globalThis, 'fetch', async () => { calls++; return response; });
+    const harness = magicView(() => ({ active: seconds > 0, label: `Reenviar en ${seconds}`, start(value) { seconds = value; } }));
+    const props = { authMode: 'better-auth', initialEmail: ' MEMBER@EXAMPLE.TEST ' };
+    await find(harness.render(props), node => node?.type === 'form').props.onSubmit({ preventDefault() {} });
+    const tree = harness.render(props), html = renderToStaticMarkup(tree);
+    assert.ok(find(tree, node => node?.props?.id === 'login-code'));
+    assert.match(html, /member@example\.test/);
+    assert.doesNotMatch(html, /other@example\.test|Si tu cuenta está habilitada|Te enviamos|Código aceptado/);
+    assert.match(html, /No pudimos confirmar el envío/);
+    assert.equal(seconds, 300);
+    assert.equal(calls, 1);
+    await find(tree, node => node?.props?.children === `Reenviar en ${seconds}`).props.onClick({ preventDefault() {} });
+    assert.equal(calls, 1, 'even a programmatic resend cannot bypass the cooldown');
+    harness.unmount();
+  }
+  assert.deepEqual(destinations, []);
+});
+
+test('timeout recovery does not lose a possibly delivered code or start an automatic second send', async t => {
+  browser(t);
+  let calls = 0, seconds = 0;
+  t.mock.method(globalThis, 'fetch', async () => { calls++; throw new DOMException('synthetic timeout', 'TimeoutError'); });
+  const harness = magicView(() => ({ active: seconds > 0, label: '', start(value) { seconds = value; } }));
+  const props = { authMode: 'better-auth', initialEmail: 'member@example.test' };
+  await find(harness.render(props), node => node?.type === 'form').props.onSubmit({ preventDefault() {} });
+  const html = renderToStaticMarkup(harness.render(props));
+  assert.match(html, /Código de acceso/);
+  assert.match(html, /Si recibes un código, introdúcelo aquí/);
+  assert.match(html, /No enviaremos otro automáticamente/);
+  assert.equal(calls, 1); assert.equal(seconds, 300);
+  harness.unmount();
+});
+
+test('HTTP 429 keeps existing code entry available without shortening its safe resend wait', async t => {
+  browser(t);
+  let seconds = 0, calls = 0;
+  t.mock.method(globalThis, 'fetch', async () => { calls++; return Response.json({ error: 'authentication_failed' }, { status: 429, headers: { 'retry-after': '83' } }); });
+  const harness = magicView(() => ({ active: seconds > 0, label: '', start(value) { seconds = value; } }));
+  const props = { authMode: 'better-auth', initialEmail: 'member@example.test' };
+  await find(harness.render(props), node => node?.type === 'form').props.onSubmit({ preventDefault() {} });
+  const tree = harness.render(props);
+  assert.ok(find(tree, node => node?.props?.id === 'login-code'));
+  assert.match(renderToStaticMarkup(tree), /Demasiados intentos/);
+  assert.equal(seconds, 300); assert.equal(calls, 1);
+  harness.unmount();
+});
+
+test('definite invalid/origin rejections never claim an accepted send or switch into ambiguous recovery', async t => {
+  browser(t);
+  for (const status of [400, 401, 403]) {
+    t.mock.method(globalThis, 'fetch', async () => Response.json({ error: 'private-details' }, { status }));
+    const harness = magicView(), props = { authMode: 'better-auth', initialEmail: 'member@example.test' };
+    await find(harness.render(props), node => node?.type === 'form').props.onSubmit({ preventDefault() {} });
+    const tree = harness.render(props);
+    assert.equal(find(tree, node => node?.props?.id === 'login-code'), undefined);
+    assert.doesNotMatch(renderToStaticMarkup(tree), /private-details|Si tu cuenta está habilitada/);
+    harness.unmount();
+  }
+});
+
+test('double Enter makes only one send and retries stay bound to the original recipient despite an edited hidden state', async t => {
+  const destinations = browser(t), calls = [];
+  let resolveFirst;
+  t.mock.method(globalThis, 'fetch', (path, init) => {
+    calls.push({ path, body: JSON.parse(init.body) });
+    return calls.length === 1 ? new Promise(resolve => { resolveFirst = resolve; })
+      : Promise.resolve(Response.json({ error: 'authentication_failed' }, { status: 401 }));
+  });
+  const harness = magicView(), props = { authMode: 'better-auth', initialEmail: 'member@example.test' };
+  const tree = harness.render(props), submit = find(tree, node => node?.type === 'form').props.onSubmit;
+  const pending = submit({ preventDefault() {} });
+  await submit({ preventDefault() {} });
+  assert.equal(calls.length, 1);
+  const busy = harness.render(props);
+  const emailField = find(busy, node => node?.props?.email === 'member@example.test' && typeof node.props.setEmail === 'function');
+  assert.equal(emailField.props.readOnly, true);
+  emailField.props.setEmail('different@example.test');
+  resolveFirst(Response.json({ error: 'authentication_unavailable', email: 'attacker@example.test' }, { status: 503 }));
+  await pending;
+  let recovered = harness.render(props);
+  assert.match(renderToStaticMarkup(recovered), /member@example\.test/);
+  await find(recovered, node => node?.props?.children === 'Reenviar').props.onClick({ preventDefault() {} });
+  recovered = harness.render(props);
+  find(recovered, node => node?.props?.id === 'login-code').props.onChange('001234');
+  await find(harness.render(props), node => node?.type === 'form').props.onSubmit({ preventDefault() {} });
+  assert.deepEqual(calls.map(call => call.body.email), ['member@example.test', 'member@example.test', 'member@example.test']);
+  assert.deepEqual(destinations, []);
+  harness.unmount();
+});
+
+test('unmount aborts a pending send and a late response cannot populate the next screen or redirect', async t => {
+  const destinations = browser(t);
+  let resolveResponse, signal;
+  t.mock.method(globalThis, 'fetch', (_path, init) => {
+    signal = init.signal;
+    return new Promise(resolve => { resolveResponse = resolve; });
+  });
+  const harness = magicView(), props = { authMode: 'better-auth', initialEmail: 'member@example.test' };
+  const pending = find(harness.render(props), node => node?.type === 'form').props.onSubmit({ preventDefault() {} });
+  harness.unmount();
+  const state = [...harness.state];
+  assert.equal(signal.aborted, true);
+  resolveResponse(Response.json({ ok: true }));
+  await pending;
+  assert.deepEqual(harness.state, state);
+  assert.deepEqual(destinations, []);
+});
+
+test('legacy-account guidance and its registration link are generic and available before and after requesting a code', async t => {
+  const destinations = browser(t);
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', async () => { calls++; return Response.json({ ok: true }); });
+  const harness = magicView(), props = { authMode: 'better-auth', initialEmail: 'member@example.test', initialRef: 'MP-REFERRED', initialSide: 'R' };
+  let tree = harness.render(props);
+  for (const stage of ['request', 'confirm', 'changed-email']) {
+    const html = renderToStaticMarkup(tree);
+    assert.match(html, /Si ya pertenecías a la red/);
+    assert.match(html, /Tu cuenta y posición en la red se conservan/);
+    assert.match(html, /la vinculación requiere revisión y aprobación/);
+    const register = find(tree, node => node?.type === 'a' && node.props.children === 'Crear acceso en Registro');
+    assert.equal(register.props.href, '/register?email=member%40example.test&ref=MP-REFERRED&side=R');
+    if (stage === 'request') await find(tree, node => node?.type === 'form').props.onSubmit({ preventDefault() {} });
+    else if (stage === 'confirm') find(tree, node => node?.props?.children === 'Cambiar email').props.onClick();
+    tree = harness.render(props);
+  }
+  assert.equal(calls, 1, 'guidance and changing email do not query account existence or resend');
+  assert.deepEqual(destinations, []);
   harness.unmount();
 });

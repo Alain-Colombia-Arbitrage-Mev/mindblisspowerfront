@@ -32,3 +32,7 @@ export function otpTimeoutMs(action) {
 }
 
 export const OTP_SEND_NOTICE = 'Si tu cuenta está habilitada, recibirás un código por correo. Revisa también la carpeta de spam.';
+
+// A lost/failed acknowledgement does not prove that no message was sent. This
+// never claims delivery, account existence or permission to enter the network.
+export const OTP_SEND_UNCONFIRMED_NOTICE = 'No pudimos confirmar el envío. Si recibes un código, introdúcelo aquí. No enviaremos otro automáticamente.';
