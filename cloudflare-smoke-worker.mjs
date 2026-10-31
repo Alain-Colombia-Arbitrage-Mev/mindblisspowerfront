@@ -184,13 +184,19 @@ export default {
     // Exercise the actual built Server Component with request-local, synthetic
     // catalog data. This file is never imported by the production Worker and
     // no fixture, credential, DB connection or override enters its bundle.
-    if (['/__overview_fixture/dashboard', '/__overview_fixture/dashboard/home'].includes(incoming.pathname)) {
+    if (['/__overview_fixture/dashboard', '/__overview_fixture/dashboard/home',
+      '/__overview_fixture/dashboard/packages', '/__overview_fixture/dashboard/packages-enabled'].includes(incoming.pathname)) {
       const headers = new Headers(request.headers);
       headers.delete('x-forwarded-host');
-      const input = new Request(`https://app.mindblisspower.com${incoming.pathname.slice('/__overview_fixture'.length)}`, {
+      const membershipFixture = incoming.pathname.includes('/packages');
+      const membershipEnabled = incoming.pathname.endsWith('/packages-enabled');
+      const pathname = membershipFixture ? '/dashboard/packages?plan=1' : incoming.pathname.slice('/__overview_fixture'.length);
+      const input = new Request(`https://app.mindblisspower.com${pathname}`, {
         method: request.method, headers,
       });
-      const fixtureEnv = { ...env, ...syntheticEnv };
+      const fixtureEnv = { ...env, ...syntheticEnv,
+        ...(membershipFixture ? { NOWPAYMENTS_MEMBERSHIPS_ENABLED: String(membershipEnabled) } : {}),
+      };
       const denied = cloudflarePortalGuard(input, fixtureEnv);
       if (denied) return privateCloudflareResponse(denied);
       return privateCloudflareResponse(await runCloudflareRequest(input, fixtureEnv, ctx, (r, e, c) => {

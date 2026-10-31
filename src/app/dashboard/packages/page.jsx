@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import { getCatalog } from "@/lib/catalog";
 import { runtimeEnvironment } from "@/lib/cloudflare-runtime.mjs";
 import { stripeCheckoutEnabled, nowpaymentsMembershipsEnabled } from "@/lib/checkout-policy.mjs";
+import { membershipPriceQuote } from "@/lib/membership-price-quote.mjs";
 import ActivatePackageButton from "./ActivatePackageButton";
 import MyPaymentsPanel from "./MyPaymentsPanel";
 import PaymentResultModal from "./PaymentResultModal";
@@ -71,6 +72,7 @@ export default async function PackagesPage({ searchParams } = {}) {
           <div className="executive-grid three">
             {packages.map((pkg, index) => {
               const featured = index === Math.min(2, packages.length - 1);
+              const quote = membershipPriceQuote(pkg.amount_usd);
               return (
                 <article
                   key={pkg.id}
@@ -88,7 +90,7 @@ export default async function PackagesPage({ searchParams } = {}) {
                   )}
                   <h2 className="executive-card-label">{pkg.name}</h2>
                   <div className="executive-card-value" style={{ color: featured ? "var(--vp-amber)" : "var(--vp-text)" }}>
-                    ${Number(pkg.amount_usd).toLocaleString("en-US")}
+                    {quote ? quote.baseUSD : "Precio no disponible"}
                   </div>
                   <div className="mt-2 text-xs font-semibold" style={{ color: "var(--vp-muted)" }}>
                     {Number(pkg.pv).toLocaleString("en-US")} PV · {pkg.type}
@@ -109,7 +111,26 @@ export default async function PackagesPage({ searchParams } = {}) {
                     </li>
                   </ul>
 
-                  <ActivatePackageButton packageId={pkg.id} featured={featured} stripeEnabled={stripeEnabled} nowpaymentsEnabled={nowpaymentsEnabled} />
+                  {quote ? <>
+                    <dl className="mt-5 space-y-2 text-sm" aria-label={`Desglose del precio de ${pkg.name}`}>
+                      <div className="flex flex-wrap justify-between gap-x-4 gap-y-1" style={{ color: "var(--vp-text-soft)" }}>
+                        <dt>Precio del plan</dt><dd className="font-semibold">{quote.baseUSD}</dd>
+                      </div>
+                      <div className="flex flex-wrap justify-between gap-x-4 gap-y-1" style={{ color: "var(--vp-text-soft)" }}>
+                        <dt>Comisión de procesamiento (1%, incluida)</dt><dd className="font-semibold">{quote.feeUSD}</dd>
+                      </div>
+                      <div className="flex flex-wrap justify-between gap-x-4 gap-y-1" style={{ color: "var(--vp-text-soft)" }}>
+                        <dt>Base para cálculo de comisiones (99%)</dt><dd className="font-semibold">{quote.commissionBaseUSD}</dd>
+                      </div>
+                      <div className="flex flex-wrap justify-between gap-x-4 gap-y-1 border-t pt-2 font-semibold" style={{ color: "var(--vp-text)", borderColor: "var(--vp-border)" }}>
+                        <dt>Total a pagar</dt><dd>{quote.totalUSD}</dd>
+                      </div>
+                    </dl>
+                    <p className="mt-2 text-xs leading-5" style={{ color: "var(--vp-muted)" }}>La comisión está incluida; no se suma al precio.</p>
+                    <ActivatePackageButton packageId={pkg.id} featured={featured} stripeEnabled={stripeEnabled} nowpaymentsEnabled={nowpaymentsEnabled} />
+                  </> : <p role="status" className="mt-5 text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
+                    No se pudo confirmar el precio de este plan. No se puede iniciar un cobro. Intenta nuevamente más tarde.
+                  </p>}
                 </article>
               );
             })}

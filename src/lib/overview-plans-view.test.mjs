@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import ts from "typescript";
+import { membershipPriceQuote } from "./membership-price-quote.mjs";
 
 const require = createRequire(import.meta.url);
 const icon = () => React.createElement("svg", { "aria-hidden": true });
@@ -133,6 +134,7 @@ test("the existing memberships page exposes matching plan anchors without changi
     "@/lib/catalog": { getCatalog: async () => ({ packages: [plan(7)], ranks: [] }) },
     "@/lib/cloudflare-runtime.mjs": { runtimeEnvironment: () => ({}) },
     "@/lib/checkout-policy.mjs": { stripeCheckoutEnabled: () => false, nowpaymentsMembershipsEnabled: () => false },
+    "@/lib/membership-price-quote.mjs": { membershipPriceQuote },
     "./ActivatePackageButton": { default: props => React.createElement("button", { "data-stripe": props.stripeEnabled, "data-nowpayments": props.nowpaymentsEnabled }, "Existing checkout") },
     "./MyPaymentsPanel": { default: () => null }, "./PaymentResultModal": { default: () => null },
     "./PaywallGate": { default: props => { gateProps.push(props); return props.children; } }, "@/hooks/useMemberSummary": { MemberSummaryProvider: children },
@@ -182,4 +184,59 @@ test("the real active-membership gate reveals a validated selected card while it
   html = render(Gate(props));
   assert.match(html, /Selected catalog card/);
   assert.doesNotMatch(html, /Tu membresía está activa/);
+});
+
+function membershipsWithQuotes(packages, checkoutProps) {
+  const children = ({ children: content }) => content;
+  return moduleAt("../app/dashboard/packages/page.jsx", {
+    "@/lib/catalog": { getCatalog: async () => ({ packages, ranks: [] }) },
+    "@/lib/cloudflare-runtime.mjs": { runtimeEnvironment: () => ({}) },
+    "@/lib/checkout-policy.mjs": { stripeCheckoutEnabled: () => false, nowpaymentsMembershipsEnabled: () => false },
+    "@/lib/membership-price-quote.mjs": { membershipPriceQuote },
+    "./ActivatePackageButton": { default: props => { checkoutProps.push(props); return React.createElement("button", {}, "Existing checkout"); } },
+    "./MyPaymentsPanel": { default: () => null }, "./PaymentResultModal": { default: () => null },
+    "./PaywallGate": { default: children }, "@/hooks/useMemberSummary": { MemberSummaryProvider: children },
+  }).default;
+}
+
+test("memberships disclose the included one percent cost and unchanged payable total before checkout", async () => {
+  const checkoutProps = [];
+  const Packages = membershipsWithQuotes([plan(1, "100.00"), plan(2, "250.00"), plan(3, "100000.00"), plan(4, "0.50")], checkoutProps);
+  const html = render(await Packages());
+  const cards = html.match(/<article\b[\s\S]*?<\/article>/g);
+  assert.equal(cards.length, 4);
+  for (const [index, fee, commissionBase, total] of [
+    [0, "$1.00 USD", "$99.00 USD", "$100.00 USD"],
+    [1, "$2.50 USD", "$247.50 USD", "$250.00 USD"],
+    [2, "$1,000.00 USD", "$99,000.00 USD", "$100,000.00 USD"],
+    [3, "$0.005 USD", "$0.495 USD", "$0.50 USD"],
+  ]) {
+    const card = cards[index];
+    assert.ok(card.includes(`<dt>Precio del plan</dt><dd class="font-semibold">${total}</dd>`));
+    assert.ok(card.includes(`<dt>Comisión de procesamiento (1%, incluida)</dt><dd class="font-semibold">${fee}</dd>`));
+    assert.ok(card.includes(`<dt>Base para cálculo de comisiones (99%)</dt><dd class="font-semibold">${commissionBase}</dd>`));
+    assert.ok(card.includes(`<dt>Total a pagar</dt><dd>${total}</dd>`));
+    assert.match(card, /La comisión está incluida; no se suma al precio\./);
+    assert.ok(card.indexOf("Total a pagar") < card.indexOf("Existing checkout"));
+    assert.doesNotMatch(card, /recargo|activación \(1%\)|\$101\.00|\$252\.50|\$101,000\.00/);
+  }
+  assert.equal(checkoutProps.length, 4);
+  for (const props of checkoutProps) {
+    assert.deepEqual(Object.keys(props).sort(), ["featured", "nowpaymentsEnabled", "packageId", "stripeEnabled"]);
+    assert.equal(props.stripeEnabled, false);
+    assert.equal(props.nowpaymentsEnabled, false);
+  }
+});
+
+test("invalid membership prices never render a payable zero or checkout control", async () => {
+  for (const amount of [undefined, null, "", "0.00", "1.001", "1e3", "90071992547409.92", "<script>invalid</script>"]) {
+    const checkoutProps = [];
+    const Packages = membershipsWithQuotes([{ ...plan(7), amount_usd: amount }], checkoutProps);
+    const html = render(await Packages());
+    assert.match(html, /Precio no disponible/);
+    assert.match(html, /No se pudo confirmar el precio de este plan/);
+    assert.match(html, /No se puede iniciar un cobro/);
+    assert.doesNotMatch(html, /Existing checkout|Total a pagar|\$0\.00|NaN|Infinity|<script>/);
+    assert.equal(checkoutProps.length, 0);
+  }
 });

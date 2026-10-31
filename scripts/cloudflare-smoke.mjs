@@ -26,6 +26,7 @@ try {
   const cases = [
     ['/health', {}, 200], ['/login', {}, 200], ['/api/member/tree', {}, 401],
     ['/__overview_fixture/dashboard', {}, 307],
+    ['/__overview_fixture/dashboard/packages', {}, 307],
     ['/account/security', {}, 307], ['/api/auth/phone-number/opt-in', {}, 404],
     ['/api/admin/tree/roots', {}, 404], ['/dashboard/admin', {}, 308],
     ['/api/payments/checkout', { method: 'POST', body: '{}' }, 403],
@@ -197,6 +198,19 @@ try {
     }
     assert.doesNotMatch(html, /999999|11001|postgres:\/\/synthetic/);
     assert.match(overview.headers.get('cache-control'), /no-store/);
+    probes++;
+  }
+  for (const enabled of [false, true]) {
+    const pricing = await fetch(`http://127.0.0.1:8787/__overview_fixture/dashboard/packages${enabled ? '-enabled' : ''}`, {
+      headers: sessionHeaders, redirect: 'manual', signal: AbortSignal.timeout(12000),
+    });
+    assert.equal(pricing.status, 200);
+    const html = await pricing.text();
+    for (const amount of ['$100.00 USD', '$1.00 USD', '$99.00 USD']) assert.ok(html.includes(amount), `included NOWPayments quote ${amount}`);
+    assert.doesNotMatch(html, /\$101\.00 USD|Stripe \(suspendido\)|postgres:\/\/synthetic/);
+    assert.match(html, enabled ? /Continuar al pago/ : /Pagos no disponibles/);
+    if (!enabled) assert.doesNotMatch(html, /Continuar al pago/);
+    assert.match(pricing.headers.get('cache-control'), /no-store/);
     probes++;
   }
   const receiptOrder = 'a02f5a55-5fa3-4239-845b-ac6b699110ee';
