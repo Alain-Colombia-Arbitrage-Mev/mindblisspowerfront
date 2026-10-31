@@ -6,6 +6,7 @@ import { AlertCircle, CalendarDays, CheckCircle2, ChevronDown, CircleHelp, Clock
 import { readNOWPaymentsPurchases, resumeNOWPaymentsPurchase, cancelNOWPaymentsPurchase,
   nowpaymentsPurchaseLabel, nowpaymentsPurchaseError } from '@/lib/nowpayments-purchases.mjs';
 import { readNOWPaymentsReceipt } from '@/lib/nowpayments-receipt.mjs';
+import { nowpaymentsPurchaseCheck, nowpaymentsPurchaseCheckError } from '@/lib/nowpayments-purchase-check.mjs';
 import { nowpaymentsMoney, nowpaymentsDate } from '@/lib/nowpayments-balances.mjs';
 import { cn } from '@/lib/utils';
 import styles from './nowpayments-purchases.module.css';
@@ -18,6 +19,7 @@ export default function NOWPaymentsPurchases({ onChange }) {
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState('');
   const [cancelTarget, setCancelTarget] = useState(null);
+  const [checkResults, setCheckResults] = useState({});
   const readRequest = useRef(null), actionRequest = useRef(null), locked = useRef(false), returnFocus = useRef(null);
   const load = useCallback(async () => {
     readRequest.current?.abort();
@@ -28,7 +30,7 @@ export default function NOWPaymentsPurchases({ onChange }) {
       if (!controller.signal.aborted) setHistory(value);
     } catch (failure) {
       if (!controller.signal.aborted) {
-        if ([401, 403].includes(failure?.status)) setHistory(null);
+        if ([401, 403].includes(failure?.status)) { setHistory(null); setCheckResults({}); }
         setError('No pudimos actualizar el historial NOWPayments. Los registros anteriores, si aparecen, no confirman el estado actual.');
       }
     } finally { if (!controller.signal.aborted) setLoading(false); }
@@ -40,8 +42,11 @@ export default function NOWPaymentsPurchases({ onChange }) {
 
   async function perform(action, item) {
     if (locked.current || !item || !['check', 'resume', 'cancel'].includes(action)
-        || (action === 'resume' && item.can_resume !== true) || (action === 'cancel' && item.can_cancel !== true)) return;
+        || (action === 'resume' && item.can_resume !== true) || (action === 'cancel' && item.can_cancel !== true)
+        || (action !== 'check' && checkResults[item.order_id]?.blockPayment)) return;
     locked.current = true; setBusy(item.order_id); setNotice('');
+    if (action === 'check') setCheckResults(previous => ({ ...previous,
+      [item.order_id]: { ...previous[item.order_id], phase: 'loading' } }));
     const controller = new AbortController(); actionRequest.current = controller;
     try {
       if (action === 'resume') {
@@ -56,17 +61,23 @@ export default function NOWPaymentsPurchases({ onChange }) {
       } else {
         const value = await readNOWPaymentsReceipt(item.order_id, { signal: controller.signal });
         if (controller.signal.aborted) return;
-        setNotice(value.fulfillment_status === 'activated' ? 'El servidor confirma la activación de esta membresía. No es una confirmación de rendimientos cobrados ni retiros.'
-          : value.state === 'completed' ? 'Pago recibido y verificado. La membresía aún no figura activada; no vuelvas a pagar y revisa su estado o contacta al soporte.'
-            : value.state === 'under_review' ? 'Esta compra está en revisión. No vuelvas a pagar; contacta al soporte.'
-              : 'El servidor todavía no confirma el pago de esta compra. Puedes actualizar el historial; no crees otra factura para reanudarla.');
+        const result = nowpaymentsPurchaseCheck(value, item.order_id);
+        if (!result) throw Object.assign(new Error('Invalid payment confirmation'), { status: 502 });
+        setCheckResults(previous => ({ ...previous, [item.order_id]: { phase: 'ready', result,
+          checkedAt: new Date().toISOString(), blockPayment: previous[item.order_id]?.blockPayment || result.blockPayment } }));
         await load();
-        if (value.fulfillment_status === 'activated' && !controller.signal.aborted) void onChange?.();
+        if (result.activated && !controller.signal.aborted) void onChange?.();
       }
     } catch (failure) {
       if (!controller.signal.aborted) {
-        if ([401, 403].includes(failure?.status)) setHistory(null);
-        setNotice(nowpaymentsPurchaseError(failure?.code));
+        if (action === 'check') {
+          const result = nowpaymentsPurchaseCheckError(failure);
+          setCheckResults(previous => ({ ...previous, [item.order_id]: { ...previous[item.order_id], phase: 'error', result, checkedAt: null } }));
+          if ([401, 403].includes(failure?.status)) { setHistory(null); setCheckResults({}); setError(result.description); }
+        } else {
+          if ([401, 403].includes(failure?.status)) { setHistory(null); setCheckResults({}); }
+          setNotice(nowpaymentsPurchaseError(failure?.code));
+        }
       }
     } finally {
       locked.current = false;
@@ -110,17 +121,19 @@ export default function NOWPaymentsPurchases({ onChange }) {
             <div className={styles.payment}>
               <span className={styles.eyebrow}>Total de la compra</span>
               <strong className={styles.amount}>{nowpaymentsMoney(item.total_usd)}</strong>
+              <span className={styles.eyebrow}>Estado del historial</span>
               <PurchaseStatus item={item} />
             </div>
           </div>
           {item.payment_status === 'cancelled_local' && <p className={styles.cancelledNote}><Info size={14} aria-hidden="true" />No pagues la factura anterior; un pago tardío requiere revisión.</p>}
           <div className={styles.purchaseFooter}>
             <div className={styles.actions}>
-              {item.can_resume && <button type="button" className={cn(styles.action, styles.primary)} disabled={Boolean(busy) || loading || Boolean(error)} onClick={() => void perform('resume', item)} aria-label={`Continuar pago de ${item.package_name}, orden ${item.order_id}`}>Continuar pago</button>}
-              <button type="button" className={styles.action} disabled={Boolean(busy) || loading || Boolean(error)} onClick={() => void perform('check', item)} aria-label={`Consultar estado de ${item.package_name}, orden ${item.order_id}`}>Ver estado</button>
-              {item.can_cancel && <button type="button" className={cn(styles.action, styles.tertiary)} disabled={Boolean(busy) || loading || Boolean(error)} onClick={event => { returnFocus.current = event.currentTarget; setCancelTarget(item); }} aria-label={`Cancelar intención de ${item.package_name}, orden ${item.order_id}`}>Cancelar intención</button>}
+              {item.can_resume && <button type="button" className={cn(styles.action, styles.primary)} disabled={Boolean(busy) || loading || Boolean(error) || Boolean(checkResults[item.order_id]?.blockPayment)} onClick={() => void perform('resume', item)} aria-label={`Continuar pago de ${item.package_name}, orden ${item.order_id}`}>Continuar pago</button>}
+              <button type="button" className={styles.action} disabled={Boolean(busy) || loading} onClick={() => void perform('check', item)} aria-label={`Consultar estado de ${item.package_name}, orden ${item.order_id}`} aria-describedby={checkResults[item.order_id] ? `payment-check-${item.order_id}` : undefined} aria-busy={busy === item.order_id && checkResults[item.order_id]?.phase === 'loading'}>Ver estado</button>
+              {item.can_cancel && <button type="button" className={cn(styles.action, styles.tertiary)} disabled={Boolean(busy) || loading || Boolean(error) || Boolean(checkResults[item.order_id]?.blockPayment)} onClick={event => { returnFocus.current = event.currentTarget; setCancelTarget(item); }} aria-label={`Cancelar intención de ${item.package_name}, orden ${item.order_id}`}>Cancelar intención</button>}
             </div>
-            {busy === item.order_id && <p className={styles.busy} role="status"><Loader2 size={14} className={styles.spinner} aria-hidden="true" />Procesando tu solicitud…</p>}
+            {busy === item.order_id && checkResults[item.order_id]?.phase !== 'loading' && <p className={styles.busy} role="status"><Loader2 size={14} className={styles.spinner} aria-hidden="true" />Procesando tu solicitud…</p>}
+            {checkResults[item.order_id] && <PurchaseCheckResult orderId={item.order_id} check={checkResults[item.order_id]} />}
           </div>
         </article>
       </li>)}
@@ -166,4 +179,20 @@ function PurchaseStatus({ item }) {
   const { Icon, tone } = active ? { Icon: CheckCircle2, tone: 'active' }
     : statusPresentation.get(item.payment_status) || { Icon: CircleHelp, tone: 'review' };
   return <span className={cn(styles.badge, styles[tone])}><Icon size={14} aria-hidden="true" /><span>{nowpaymentsPurchaseLabel(item)}</span></span>;
+}
+
+function PurchaseCheckResult({ orderId, check }) {
+  const loading = check.phase === 'loading';
+  const failed = check.phase === 'error';
+  const Icon = loading ? Loader2 : failed ? AlertCircle : Info;
+  return <div id={`payment-check-${orderId}`} className={cn(styles.message, failed ? styles.error : styles.notice)}
+    role={failed ? 'alert' : 'status'} aria-atomic="true" aria-busy={loading}>
+    <Icon size={18} className={loading ? styles.spinner : undefined} aria-hidden="true" />
+    <div className="min-w-0 space-y-2">
+      <p className="font-semibold" style={{ color: failed ? 'var(--vp-danger)' : 'var(--vp-text)' }}>{loading ? 'Consultando estado de esta compra…' : check.result.title}</p>
+      {loading ? <p>Consultando el registro del servidor. No se está iniciando ni repitiendo un pago.</p>
+        : <><p>{check.result.description}</p><p className="text-[11px]">{failed ? 'La consulta no confirma el estado del pago.' : 'Estado registrado por el servidor; no es una consulta en vivo a NOWPayments.'}</p>
+          {check.checkedAt && <p className="text-[11px]">Consulta realizada: <time dateTime={check.checkedAt}>{nowpaymentsDate(check.checkedAt)} (Bogotá)</time>. Esta no es la fecha del pago.</p>}</>}
+    </div>
+  </div>;
 }

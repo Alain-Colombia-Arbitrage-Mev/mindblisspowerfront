@@ -9,6 +9,7 @@ import ts from 'typescript';
 import * as policy from './nowpayments-purchases.mjs';
 import * as balances from './nowpayments-balances.mjs';
 import * as checkoutPolicy from './checkout-policy.mjs';
+import * as purchaseCheck from './nowpayments-purchase-check.mjs';
 
 const require = createRequire(import.meta.url), orderId = 'a02f5a55-5fa3-4239-845b-ac6b699110ee', secondId = 'a02f5a55-5fa3-4239-845b-ac6b699110ef';
 const icons = new Proxy({}, { get: () => () => React.createElement('svg', { 'aria-hidden': 'true' }) });
@@ -17,6 +18,10 @@ const row = (change = {}) => ({ order_id: orderId, package_id: 1, package_name: 
   created_at: '2026-10-31T12:00:00Z', updated_at: '2026-10-31T12:00:00Z', payment_status: 'awaiting_payment',
   fulfillment_status: 'awaiting_payment', can_resume: true, can_cancel: true, cancelled_at: null, ...change });
 const list = rows => ({ provider: 'nowpayments', purpose: 'membership', purchases: rows, has_more: false });
+const receipt = (change = {}, id = orderId) => ({ provider: 'nowpayments', order_id: id, state: 'pending', payment_confirmed: false,
+  signature_validated: false, provider_verified: false, persisted: false, fulfillment_status: 'awaiting_payment', ...change });
+const confirmedReceipt = (change = {}, id = orderId) => receipt({ state: 'completed', payment_confirmed: true,
+  signature_validated: true, provider_verified: true, persisted: true, ...change }, id);
 const settle = () => new Promise(resolve => setImmediate(resolve));
 function hooks() {
   const states = [], refs = [], effects = []; let stateIndex, refIndex;
@@ -44,12 +49,13 @@ function historyView(overrides = {}) {
   const component = loadComponent('../app/dashboard/packages/NOWPaymentsPurchases.jsx', { react: state.react,
     '@radix-ui/react-alert-dialog': { ...RealAlertDialog, Portal: ({ children }) => children },
     '@/lib/nowpayments-balances.mjs': balances,
+    '@/lib/nowpayments-purchase-check.mjs': purchaseCheck,
     '@/lib/nowpayments-purchases.mjs': { ...policy,
       readNOWPaymentsPurchases: async () => { calls.reads++; if (failure) throw failure; return data; },
       resumeNOWPaymentsPurchase: async id => { calls.resumes.push(id); return { url: 'https://nowpayments.io/payment/?iid=12345' }; },
       cancelNOWPaymentsPurchase: async id => { calls.cancels.push(id); data = list([row({ payment_status: 'cancelled_local', can_resume: false, can_cancel: false, cancelled_at: '2026-10-31T12:01:00Z' })]); },
       ...overrides.purchaseMocks },
-    '@/lib/nowpayments-receipt.mjs': { readNOWPaymentsReceipt: async id => { calls.statuses.push(id); return { state: 'pending', fulfillment_status: 'awaiting_payment' }; }, ...overrides.receiptMocks },
+    '@/lib/nowpayments-receipt.mjs': { readNOWPaymentsReceipt: async id => { calls.statuses.push(id); return receipt({}, id); }, ...overrides.receiptMocks },
   });
   return { ...state, calls, setData: value => { data = value; }, fail: value => { failure = value; },
     tree() { state.reset(); return component({ onChange: () => { calls.summaryReloads++; } }); },
@@ -113,10 +119,10 @@ test('resume is explicit, reuses the owner invoice once and status reads cannot 
     button(view.tree(), 'Ver estado').props.onClick(); await settle(); await settle();
     assert.deepEqual(view.calls.statuses, [orderId]); assert.equal(view.calls.summaryReloads, 0);
     assert.match(renderToStaticMarkup(view.tree()), /servidor todavía no confirma el pago/);
-    const paid = historyView({ receiptMocks: { readNOWPaymentsReceipt: async () => ({ state: 'completed', fulfillment_status: 'awaiting_payment' }) } });
+    const paid = historyView({ receiptMocks: { readNOWPaymentsReceipt: async () => confirmedReceipt() } });
     await paid.mount(); button(paid.tree(), 'Ver estado').props.onClick(); await settle(); await settle();
     assert.match(renderToStaticMarkup(paid.tree()), /membresía aún no figura activada; no vuelvas a pagar/); assert.equal(paid.calls.summaryReloads, 0);
-    const active = historyView({ receiptMocks: { readNOWPaymentsReceipt: async () => ({ state: 'completed', fulfillment_status: 'activated' }) } });
+    const active = historyView({ receiptMocks: { readNOWPaymentsReceipt: async () => confirmedReceipt({ fulfillment_status: 'activated' }) } });
     await active.mount(); button(active.tree(), 'Ver estado').props.onClick(); await settle(); await settle();
     assert.equal(active.calls.summaryReloads, 1); assert.match(renderToStaticMarkup(active.tree()), /No es una confirmación de rendimientos cobrados ni retiros/);
   } finally { if (originalWindow === undefined) delete globalThis.window; else globalThis.window = originalWindow; }
@@ -186,4 +192,150 @@ test('history action names identify same-SKU orders and server capabilities rema
   assert.equal((html.match(/<time dateTime="2026-10-31T12:00:00Z"/g)||[]).length,2);
   for(const element of nodes(tree).filter(node=>node.type==='button')) assert.equal(element.props.type,'button');
   assert.deepEqual(view.calls.resumes,[]);assert.deepEqual(view.calls.cancels,[]);assert.deepEqual(view.calls.statuses,[]);
+});
+
+const orderButton = (tree, action, id = orderId) => nodes(tree).find(node => node.type === 'button'
+  && node.props['aria-label'] === `${action} de Synthetic plan, orden ${id}`);
+const orderArticle = (tree, id = orderId) => nodes(tree).find(node => node.type === 'article'
+  && nodes(node).some(child => child.type === 'code' && child.props.children === id));
+
+test('status checking announces progress and its timestamp inline for only the selected same-SKU order, with no duplicate requests or payment mutation', async () => {
+  let finish, reads = 0;
+  const pending = new Promise(resolve => { finish = resolve; });
+  const view = historyView({ receiptMocks: { readNOWPaymentsReceipt: async id => {
+    reads++; assert.equal(id, secondId); await pending; return receipt({}, id);
+  } } });
+  view.setData(list([row(), row({ order_id: secondId })])); await view.mount();
+  const initial = view.tree(), check = orderButton(initial, 'Consultar estado', secondId);
+  assert.equal(check.props['aria-describedby'], undefined);
+  check.props.onClick(); check.props.onClick();
+  let tree = view.tree(), first = renderToStaticMarkup(orderArticle(tree)), second = renderToStaticMarkup(orderArticle(tree, secondId));
+  assert.equal(reads, 1); assert.match(second, /Consultando estado de esta compra/);
+  assert.match(second, /No se está iniciando ni repitiendo un pago/); assert.match(second, /role="status"/);
+  assert.equal(orderButton(tree, 'Consultar estado', secondId).props['aria-busy'], true);
+  assert.equal(orderButton(tree, 'Consultar estado', secondId).props['aria-describedby'], `payment-check-${secondId}`);
+  assert.doesNotMatch(first, /payment-check-|Consultando estado de esta compra|Consulta realizada/);
+  const before = Date.now(); finish(); await settle(); await settle();
+  tree = view.tree(); first = renderToStaticMarkup(orderArticle(tree)); second = renderToStaticMarkup(orderArticle(tree, secondId));
+  assert.match(second, /Pendiente de confirmación/); assert.match(second, /servidor todavía no confirma el pago/);
+  assert.match(second, /Estado registrado por el servidor; no es una consulta en vivo a NOWPayments/);
+  assert.match(second, /Consulta realizada:/); assert.match(second, /\(Bogotá\).*Esta no es la fecha del pago/s);
+  assert.ok(second.includes(`id="payment-check-${secondId}"`)); assert.match(second, /aria-atomic="true"/);
+  const times = [...second.matchAll(/<time dateTime="([^"]+)"/g)].map(match => match[1]);
+  assert.equal(times[0], row().created_at); assert.equal(times.length, 2);
+  assert.ok(Date.parse(times[1]) >= before && Date.parse(times[1]) <= Date.now());
+  assert.doesNotMatch(first, /payment-check-|Pendiente de confirmación|Consulta realizada/);
+  assert.match(first, /Pendiente de pago/); assert.match(second, /Pendiente de pago/);
+  assert.equal(reads, 1); assert.equal(view.calls.reads, 2); assert.equal(view.calls.summaryReloads, 0);
+  assert.deepEqual(view.calls.resumes, []); assert.deepEqual(view.calls.cancels, []);
+});
+
+test('a verified paid result blocks stale-history payment actions through refresh and later query errors without rewriting the stored badge or inventing activation', async () => {
+  let statusCalls = 0;
+  const view = historyView({ receiptMocks: { readNOWPaymentsReceipt: async () => {
+    if (++statusCalls === 1) return confirmedReceipt();
+    throw new DOMException('private diagnostic must-not-leak', 'TimeoutError');
+  } } });
+  await view.mount(); orderButton(view.tree(), 'Consultar estado').props.onClick(); await settle(); await settle();
+  let tree = view.tree(), html = renderToStaticMarkup(orderArticle(tree));
+  assert.match(html, /Pago confirmado · activación pendiente/); assert.match(html, /membresía aún no figura activada/);
+  assert.match(html, /Pendiente de pago/, 'the fresh receipt is separate from the unchanged historical badge');
+  assert.doesNotMatch(html, /Membresía activada/); assert.equal(view.calls.summaryReloads, 0);
+  assert.equal(orderButton(tree, 'Continuar pago').props.disabled, true);
+  assert.equal(orderButton(tree, 'Cancelar intención').props.disabled, true);
+  orderButton(tree, 'Continuar pago').props.onClick(); await settle(); assert.deepEqual(view.calls.resumes, []);
+  button(tree, 'Actualizar historial').props.onClick(); await settle();
+  assert.equal(orderButton(view.tree(), 'Continuar pago').props.disabled, true);
+  orderButton(view.tree(), 'Consultar estado').props.onClick(); await settle();
+  tree = view.tree(); html = renderToStaticMarkup(orderArticle(tree));
+  assert.match(html, /La consulta tardó demasiado/); assert.match(html, /role="alert"/);
+  assert.doesNotMatch(html, /must-not-leak|private diagnostic|Consulta realizada:/);
+  assert.equal(orderButton(tree, 'Continuar pago').props.disabled, true);
+  assert.equal(orderButton(tree, 'Cancelar intención').props.disabled, true);
+  assert.equal(orderButton(tree, 'Consultar estado').props.disabled, false);
+  assert.equal(view.calls.summaryReloads, 0); assert.equal(statusCalls, 2);
+  assert.deepEqual(view.calls.resumes, []); assert.deepEqual(view.calls.cancels, []);
+});
+
+test('query failures remain local, specific and non-financial while denied sessions erase previous private rows and query results', async () => {
+  const cases = [
+    [{ status: 404 }, /No pudimos consultar esta compra/, /Esto no confirma si el pago se realizó/],
+    [{ status: 429, retryAfterMs: 60000 }, /Demasiadas consultas/, /este límite no indica el estado del pago/],
+    [{ name: 'TimeoutError' }, /La consulta tardó demasiado/, /no repitas el pago por este error/],
+    [{ name: 'AbortError' }, /La consulta tardó demasiado/, /no repitas el pago por este error/],
+    [{ status: 503 }, /Estado temporalmente no disponible/, /No vuelvas a pagar sin comprobarlo/],
+  ];
+  for (const [metadata, title, description] of cases) {
+    let requests = 0;
+    const view = historyView({ receiptMocks: { readNOWPaymentsReceipt: async () => {
+      requests++; throw Object.assign(new Error('postgres://private:secret@host must-not-leak'), metadata);
+    } } });
+    await view.mount(); orderButton(view.tree(), 'Consultar estado').props.onClick(); await settle();
+    const tree = view.tree(), article = renderToStaticMarkup(orderArticle(tree));
+    assert.match(article, title); assert.match(article, description); assert.match(article, /role="alert"/);
+    assert.match(article, /La consulta no confirma el estado del pago/);
+    assert.doesNotMatch(article, /private|secret|must-not-leak|Consulta realizada:|Membresía activada/);
+    assert.equal(orderButton(tree, 'Consultar estado').props.disabled, false);
+    assert.equal(requests, 1); assert.equal(view.calls.reads, 1); assert.equal(view.calls.summaryReloads, 0);
+    assert.deepEqual(view.calls.resumes, []); assert.deepEqual(view.calls.cancels, []);
+  }
+  for (const status of [401, 403]) {
+    let requests = 0;
+    const view = historyView({ receiptMocks: { readNOWPaymentsReceipt: async () => {
+      if (++requests === 1) return receipt();
+      throw Object.assign(new Error('must-not-leak'), { status });
+    } } });
+    await view.mount(); orderButton(view.tree(), 'Consultar estado').props.onClick(); await settle(); await settle();
+    assert.match(renderToStaticMarkup(view.tree()), /Consulta realizada:/);
+    orderButton(view.tree(), 'Consultar estado').props.onClick(); await settle();
+    const html = renderToStaticMarkup(view.tree());
+    assert.match(html, /role="alert"/); assert.match(html, /Vuelve a iniciar sesión/);
+    assert.doesNotMatch(html, /Synthetic plan|payment-check-|Consulta realizada:|must-not-leak|Continuar pago/);
+  }
+});
+
+test('invalid, cross-order or unsigned activation claims cannot create an inline paid success or change historical action capabilities', async () => {
+  for (const value of [confirmedReceipt({ fulfillment_status: 'activated', signature_validated: false }),
+    confirmedReceipt({ fulfillment_status: 'activated' }, secondId),
+    { received: true, mode: 'capture_only', state: 'captured', fulfillment_status: 'not_activated' }]) {
+    const view = historyView({ receiptMocks: { readNOWPaymentsReceipt: async () => value } });
+    await view.mount(); orderButton(view.tree(), 'Consultar estado').props.onClick(); await settle();
+    const tree = view.tree(), html = renderToStaticMarkup(orderArticle(tree));
+    assert.match(html, /Estado temporalmente no disponible/); assert.match(html, /role="alert"/);
+    assert.match(html, /Pendiente de pago/); assert.doesNotMatch(html, /Membresía activada|Pago confirmado ·|Consulta realizada:/);
+    assert.equal(orderButton(tree, 'Continuar pago').props.disabled, false);
+    assert.equal(view.calls.summaryReloads, 0); assert.equal(view.calls.reads, 1);
+  }
+});
+
+test('a cancelled intention keeps its no-pay warning and disabled server capabilities when its status requires security review', async () => {
+  const view = historyView({ receiptMocks: { readNOWPaymentsReceipt: async () => receipt({ state: 'under_review', fulfillment_status: 'security_blocked' }) } });
+  view.setData(list([row({ payment_status: 'cancelled_local', can_resume: false, can_cancel: false, cancelled_at: '2026-10-31T12:01:00Z' })]));
+  await view.mount(); orderButton(view.tree(), 'Consultar estado').props.onClick(); await settle(); await settle();
+  const tree = view.tree(), html = renderToStaticMarkup(orderArticle(tree));
+  assert.match(html, /Intención cancelada localmente/); assert.match(html, /Compra en revisión/);
+  assert.match(html, /No pagues la factura anterior/); assert.match(html, /no uses los enlaces de la factura anterior/);
+  assert.equal(orderButton(tree, 'Continuar pago'), undefined); assert.equal(orderButton(tree, 'Cancelar intención'), undefined);
+  assert.equal(view.calls.summaryReloads, 0); assert.deepEqual(view.calls.resumes, []); assert.deepEqual(view.calls.cancels, []);
+});
+
+test('a stale history after 503 still permits the safe owner-status read but never enables payment mutations or presents the old badge as fresh proof', async () => {
+  const view = historyView(); await view.mount();
+  view.fail(Object.assign(new Error('private unavailable diagnostic'), { status: 503 }));
+  button(view.tree(), 'Actualizar historial').props.onClick(); await settle();
+  let tree = view.tree();
+  assert.equal(orderButton(tree, 'Consultar estado').props.disabled, false);
+  assert.equal(orderButton(tree, 'Continuar pago').props.disabled, true);
+  assert.equal(orderButton(tree, 'Cancelar intención').props.disabled, true);
+  orderButton(tree, 'Consultar estado').props.onClick(); await settle(); await settle();
+  tree = view.tree(); const html = renderToStaticMarkup(orderArticle(tree));
+  assert.match(html, /Estado del historial/); assert.match(html, /Pendiente de pago/);
+  assert.match(html, /Pendiente de confirmación/); assert.match(html, /Consulta realizada:/);
+  assert.match(renderToStaticMarkup(tree), /Los registros anteriores, si aparecen, no confirman el estado actual/);
+  assert.doesNotMatch(renderToStaticMarkup(tree), /private unavailable diagnostic|Membresía activada/);
+  assert.equal(orderButton(tree, 'Consultar estado').props.disabled, false);
+  assert.equal(orderButton(tree, 'Continuar pago').props.disabled, true);
+  assert.equal(orderButton(tree, 'Cancelar intención').props.disabled, true);
+  assert.deepEqual(view.calls.statuses, [orderId]); assert.equal(view.calls.reads, 3); assert.equal(view.calls.summaryReloads, 0);
+  assert.deepEqual(view.calls.resumes, []); assert.deepEqual(view.calls.cancels, []);
 });
