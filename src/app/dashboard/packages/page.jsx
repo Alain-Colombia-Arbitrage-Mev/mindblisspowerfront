@@ -3,6 +3,8 @@ import { Package, ShieldCheck, Sparkles, Trophy } from "lucide-react";
 import { Suspense } from "react";
 
 import { getCatalog } from "@/lib/catalog";
+import { runtimeEnvironment } from "@/lib/cloudflare-runtime.mjs";
+import { stripeCheckoutEnabled } from "@/lib/checkout-policy.mjs";
 import ActivatePackageButton from "./ActivatePackageButton";
 import MyPaymentsPanel from "./MyPaymentsPanel";
 import PaymentResultModal from "./PaymentResultModal";
@@ -16,6 +18,7 @@ export const dynamic = "force-dynamic";
  * Activar una membresía habilita beneficios y seguimiento operativo del miembro.
  */
 export default async function PackagesPage() {
+  const stripeEnabled = stripeCheckoutEnabled(runtimeEnvironment());
   let packages = [];
   let ranks = [];
   let unavailable = false;
@@ -98,7 +101,7 @@ export default async function PackagesPage() {
                     </li>
                   </ul>
 
-                  <ActivatePackageButton packageId={pkg.id} featured={featured} />
+                  <ActivatePackageButton packageId={pkg.id} featured={featured} stripeEnabled={stripeEnabled} />
                 </article>
               );
             })}

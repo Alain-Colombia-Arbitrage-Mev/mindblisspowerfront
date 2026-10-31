@@ -166,6 +166,25 @@ try {
   probes++;
   const cookie = confirmed.headers.get('set-cookie').split(';')[0];
   const sessionHeaders = { cookie, 'cf-connecting-ip': '192.0.2.10' };
+  for (const body of [{ package_id: 1 }, { package_id: 1, provider: 'stripe', STRIPE_CHECKOUT_ENABLED: 'true' }]) {
+    const paused = await fetch('http://127.0.0.1:8787/api/payments/checkout', {
+      method: 'POST', headers: { ...authHeaders, ...sessionHeaders }, body: JSON.stringify(body), signal: AbortSignal.timeout(8000),
+    });
+    assert.equal(paused.status, 503); assert.deepEqual(await paused.json(), { error: 'stripe_checkout_disabled' });
+    assert.match(paused.headers.get('cache-control'), /no-store/); probes++;
+  }
+  const resume = await fetch('http://127.0.0.1:8787/api/pay/resume?t=synthetic-never-consume', { redirect: 'manual', signal: AbortSignal.timeout(8000) });
+  assert.equal(resume.status, 303);
+  assert.equal(new URL(resume.headers.get('location'), 'http://127.0.0.1:8787').pathname, '/dashboard/packages');
+  assert.match(resume.headers.get('cache-control'), /no-store/); probes++;
+  const cryptoCheckout = await fetch('http://127.0.0.1:8787/api/payments/checkout', {
+    method: 'POST', headers: { ...authHeaders, ...sessionHeaders }, body: JSON.stringify({ package_id: 1, provider: 'nowpayments' }), signal: AbortSignal.timeout(8000),
+  });
+  assert.equal(cryptoCheckout.status, 200);
+  const cryptoPayload = await cryptoCheckout.json();
+  assert.equal(cryptoPayload.provider, 'nowpayments');
+  assert.equal(cryptoPayload.fulfillment_status, 'review_required');
+  assert.equal(cryptoPayload.url, 'https://nowpayments.io/payment/?iid=12345'); probes++;
   const smsStatus = await fetch('http://127.0.0.1:8787/api/auth/phone-number/opt-in', { headers: sessionHeaders });
   assert.equal(smsStatus.status, 404);
   assert.deepEqual(await smsStatus.json(), { error: 'not_found' });
@@ -211,6 +230,9 @@ try {
   assert.equal(metrics.registrations, 2, 'email-only and optional-contact registrations both work');
   assert.equal(metrics.contactRegistrations, 1, 'optional contacts reach the private signed signup without granting authority');
   assert.equal(metrics.phoneCalls, 0, 'removed SMS routes never reach the private API, even with obsolete flags and credentials');
+  assert.equal(metrics.stripeCheckoutCalls, 0, 'paused explicit/default Stripe requests never create an upstream checkout');
+  assert.equal(metrics.stripeResumeCalls, 0, 'public resume links cannot bypass the Stripe pause');
+  assert.equal(metrics.nowpaymentsCheckoutCalls, 1, 'the Stripe pause preserves the existing NOWPayments review-only contract');
   console.log(JSON.stringify({ workerd: 'passed', probes, privateCalls: metrics.privateCalls, realRsaVerified: true,
     tamperedAndWrongAudienceRejected: true, externalNetwork: 'disabled', databaseQueries: 0, realMessages: 0 }));
 } finally {

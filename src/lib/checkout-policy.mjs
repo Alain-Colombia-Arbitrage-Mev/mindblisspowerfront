@@ -1,4 +1,12 @@
 // Shared presentation policy only. Provider credentials never belong here.
+export const STRIPE_CHECKOUT_PAUSED_NOTICE = 'Los nuevos pagos con Stripe están suspendidos temporalmente. NOWPayments conserva su disponibilidad y validaciones actuales.';
+
+// Only an exact server-owned runtime flag may permit a new Stripe charge.
+// Missing, malformed and public/browser flags all fail closed.
+export function stripeCheckoutEnabled(env) {
+  return env?.STRIPE_CHECKOUT_ENABLED === 'true';
+}
+
 export function checkoutProvider(value) {
   return value === undefined ? 'stripe' : ['stripe', 'nowpayments'].includes(value) ? value : null;
 }
@@ -27,6 +35,7 @@ export function hostedCheckoutURL(value, provider, environment = 'production') {
 }
 
 export function checkoutErrorMessage(code, provider = 'stripe') {
+  if (code === 'stripe_checkout_disabled') return STRIPE_CHECKOUT_PAUSED_NOTICE;
   if (['unauthenticated', 'session-invalid', 'invalid_id_token'].includes(code)) return 'Tu sesión expiró. Vuelve a iniciar sesión antes de pagar.';
   if (code === 'buyer_not_found') return 'Tu cuenta aún no está registrada en la red.';
   if (code === 'invalid_referral_code') return 'El enlace de referido no es válido o ya no está activo. Solicita un enlace nuevo antes de pagar.';

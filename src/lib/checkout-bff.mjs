@@ -1,4 +1,4 @@
-import { checkoutProvider, hostedCheckoutURL } from './checkout-policy.mjs';
+import { checkoutProvider, hostedCheckoutURL, stripeCheckoutEnabled } from './checkout-policy.mjs';
 import { memberMutationError } from './member-mutation-policy.mjs';
 
 const headers = { 'Cache-Control': 'private, no-store' };
@@ -8,7 +8,7 @@ const safeErrors = new Set(['buyer_not_found', 'invalid_referral_code', 'invalid
   'service_read_only', 'core_unavailable', 'financial_services_unavailable', 'account_suspended', 'invalid_id_token',
   'membership_already_active', 'package_not_found', 'nowpayments-unavailable', 'nowpayments_unavailable',
   'nowpayments-review-required', 'nowpayments_review_required', 'checkout_pending_review', 'membership_payment_pending_review',
-  'core_not_ready', 'financial_review_required', 'membership_eligibility_unavailable', 'stripe_unavailable']);
+  'core_not_ready', 'financial_review_required', 'membership_eligibility_unavailable', 'stripe_unavailable', 'stripe_checkout_disabled']);
 const validAmount = value => typeof value === 'string' && /^(?:0|[1-9]\d{0,11})\.\d{2}$/.test(value);
 const minorUnits = value => BigInt(value.replace('.', ''));
 
@@ -64,6 +64,7 @@ export async function handleMembershipCheckout(request, { env, identity, fetchIm
   const ref = rawRef && refEmail === email ? rawRef : '';
   const side = typeof body.preferred_side === 'string' ? body.preferred_side.trim().toUpperCase() : '';
   if (ref && side && !['L', 'R'].includes(side)) return reply({ error: 'invalid_preferred_side' }, 400);
+  if (provider === 'stripe' && !stripeCheckoutEnabled(env)) return reply({ error: 'stripe_checkout_disabled' }, 503);
   if (!env.VP_PAYMENTS_URL || !env.PAYMENTS_SERVICE_TOKEN) return reply({ error: 'payments-unconfigured' }, 503);
   try {
     const upstream = await fetchImpl(`${env.VP_PAYMENTS_URL}/api/payments/checkout`, {

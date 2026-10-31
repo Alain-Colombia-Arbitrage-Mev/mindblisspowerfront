@@ -1,6 +1,28 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { checkoutErrorMessage, checkoutProvider, hostedCheckoutURL } from './checkout-policy.mjs';
+import { readFileSync } from 'node:fs';
+import { checkoutErrorMessage, checkoutProvider, hostedCheckoutURL, stripeCheckoutEnabled } from './checkout-policy.mjs';
+
+test('only the exact server-owned runtime Stripe flag enables new charges', () => {
+  assert.equal(stripeCheckoutEnabled({ STRIPE_CHECKOUT_ENABLED: 'true' }), true);
+  for (const flag of [undefined, 'false', false, true, 'TRUE', ' true ', 1, '1', '']) {
+    assert.equal(stripeCheckoutEnabled({ STRIPE_CHECKOUT_ENABLED: flag, NEXT_PUBLIC_STRIPE_CHECKOUT_ENABLED: 'true' }), false);
+  }
+  assert.equal(stripeCheckoutEnabled(undefined), false);
+  assert.match(checkoutErrorMessage('stripe_checkout_disabled'), /Stripe están suspendidos temporalmente/);
+});
+
+test('every portal deployment scope explicitly pauses Stripe and the page passes only a runtime boolean', () => {
+  const config = JSON.parse(readFileSync(new URL('../../wrangler.jsonc', import.meta.url), 'utf8'));
+  for (const scope of [config, config.env.staging, config.env.production]) {
+    assert.equal(scope.vars.STRIPE_CHECKOUT_ENABLED, 'false');
+    assert.equal(scope.vars.NEXT_PUBLIC_STRIPE_CHECKOUT_ENABLED, undefined);
+  }
+  const page = readFileSync(new URL('../app/dashboard/packages/page.jsx', import.meta.url), 'utf8');
+  assert.match(page, /stripeCheckoutEnabled\(runtimeEnvironment\(\)\)/);
+  assert.match(page, /stripeEnabled=\{stripeEnabled\}/);
+  assert.doesNotMatch(page, /NEXT_PUBLIC_STRIPE_CHECKOUT_ENABLED/);
+});
 
 test('provider omission preserves Stripe; explicit invalid provider never silently falls back', () => {
   assert.equal(checkoutProvider(undefined), 'stripe');

@@ -9,12 +9,12 @@ import * as policy from './checkout-policy.mjs';
 import { cn } from './utils.js';
 
 const require = createRequire(import.meta.url);
-function checkoutComponent({ provider = 'stripe', error = '', loading = false } = {}) {
+function checkoutComponent({ provider, error = '', loading = false } = {}) {
   const states = [loading, error, provider];
   const stateChanges = [];
-  const mockedReact = { ...React, useState: () => {
+  const mockedReact = { ...React, useState: initial => {
     const index = stateChanges.length;
-    const state = states[index]; stateChanges.push([]);
+    const state = index === 2 && provider === undefined ? typeof initial === 'function' ? initial() : initial : states[index]; stateChanges.push([]);
     return [state, value => stateChanges[index].push(value)];
   }, useId: () => 'synthetic-selector', useRef: () => ({ current: false }) };
   const source = readFileSync(new URL('../app/dashboard/packages/ActivatePackageButton.jsx', import.meta.url), 'utf8');
@@ -31,14 +31,39 @@ function findElement(node, type) {
   return children.map(child => findElement(child, type)).find(Boolean);
 }
 
-test('membership selector has a visible associated label, Stripe default and no instant-activation claim', () => {
+test('membership selector keeps its design and NOWPayments while Stripe defaults to visibly paused', () => {
   const { Component } = checkoutComponent();
   const html = renderToStaticMarkup(React.createElement(Component, { packageId: 1 }));
   assert.match(html, /for="synthetic-selector-provider"/);
   assert.match(html, /<select[^>]*id="synthetic-selector-provider"/);
-  assert.match(html, /value="stripe" selected=""/);
+  assert.match(html, /value="stripe" disabled=""/);
+  assert.match(html, /value="nowpayments" selected=""/);
+  assert.match(html, /Tarjeta · Stripe \(suspendido\)/);
+  assert.match(html, /Stripe están suspendidos temporalmente/);
   assert.match(html, /Cripto · NOWPayments/); assert.match(html, /Continuar al pago/);
   assert.match(html, /No es una recarga de saldo/); assert.doesNotMatch(html, /Activar membresía|pago completado/);
+});
+
+test('an explicitly enabled server prop can restore the Stripe choice, never a truthy public string', () => {
+  const { Component } = checkoutComponent();
+  const html = renderToStaticMarkup(React.createElement(Component, { packageId: 1, stripeEnabled: true }));
+  assert.match(html, /value="stripe" selected=""/);
+  assert.doesNotMatch(html, /suspendido|Stripe están suspendidos/);
+  const invalid = checkoutComponent().Component;
+  assert.match(renderToStaticMarkup(React.createElement(invalid, { packageId: 1, stripeEnabled: 'true' })), /value="stripe" disabled=""/);
+});
+
+test('a stale or forged Stripe selection cannot send even a session read or checkout while paused', async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => { calls++; assert.fail('paused Stripe handler performed network I/O'); };
+  try {
+    const { Component, stateChanges } = checkoutComponent({ provider: 'stripe' });
+    const button = findElement(Component({ packageId: 7 }), 'button');
+    assert.equal(button.props.disabled, true);
+    await button.props.onClick();
+    assert.equal(calls, 0); assert.match(stateChanges[1].at(-1), /Stripe están suspendidos/);
+  } finally { globalThis.fetch = originalFetch; }
 });
 
 test('crypto pending enablement and errors are explicit and accessible; loading disables all payment controls', () => {

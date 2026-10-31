@@ -58,12 +58,42 @@ test('membership checkout forwards verified JWT and catalog ID, never client mon
 
 test('unbound referral hints cannot influence another verified account and Stripe remains default', async () => {
   const response = await run(request({ package_id: 1, ref: 'MP-OTHER', ref_email: 'other@example.test', preferred_side: 'R' }), {
+    env: { ...env, STRIPE_CHECKOUT_ENABLED: 'true' },
     fetchImpl: async (url, options) => {
       const body = JSON.parse(options.body); assert.equal(body.ref, ''); assert.equal(body.preferred_side, ''); assert.equal(body.provider, 'stripe');
       return Response.json({ url: 'https://checkout.stripe.com/c/pay/cs_live_Synthetic123#opaqueState', total_usd: '101.00', fee_usd: '1.00' });
     },
   });
   assert.equal(response.status, 200); assert.equal((await response.json()).provider, 'stripe');
+});
+
+test('Stripe checkout fails closed without the exact runtime flag, including direct and omitted-provider requests', async () => {
+  let upstreamCalls = 0;
+  const fetchImpl = async () => { upstreamCalls++; assert.fail('paused Stripe reached payments'); };
+  for (const flag of [undefined, 'false', false, true, 1, '1', 'TRUE', ' true ', '']) {
+    for (const provider of ['stripe', undefined]) {
+      const response = await run(request({ package_id: 1, provider, STRIPE_CHECKOUT_ENABLED: 'true', stripeEnabled: true }), {
+        env: { ...env, STRIPE_CHECKOUT_ENABLED: flag, NEXT_PUBLIC_STRIPE_CHECKOUT_ENABLED: 'true' }, fetchImpl,
+      });
+      assert.equal(response.status, 503);
+      assert.deepEqual(await response.json(), { error: 'stripe_checkout_disabled' });
+      assert.equal(response.headers.get('cache-control'), 'private, no-store');
+    }
+  }
+  assert.equal(upstreamCalls, 0);
+});
+
+test('the Stripe pause does not change NOWPayments creation, provider or required review', async () => {
+  for (const flag of [undefined, 'false', 'true']) {
+    let calls = 0;
+    const response = await run(request(), { env: { ...env, STRIPE_CHECKOUT_ENABLED: flag }, fetchImpl: async (_url, options) => {
+      calls++;
+      assert.equal(JSON.parse(options.body).provider, 'nowpayments');
+      return Response.json(payload);
+    } });
+    assert.equal(calls, 1); assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { ...payload, checkout_environment: 'production' });
+  }
 });
 
 test('NOWPayments cannot fall back to Stripe and sandbox is allowed only by explicit server configuration', async () => {

@@ -9,7 +9,8 @@ const sessionCookie = '__Secure-better-auth.session_token=synthetic.value%2Benco
 const modes = new Map([[sessionCookie, 'member'],
   ['__Secure-better-auth.session_token=synthetic-tampered', 'tampered'],
   ['__Secure-better-auth.session_token=synthetic-wrong-audience', 'wrong-audience']]);
-const metrics = { tokens: 0, jwks: 0, verifiedReferrals: 0, sensitiveJwksHeaders: 0, registrations: 0, contactRegistrations: 0, phoneCalls: 0 };
+const metrics = { tokens: 0, jwks: 0, verifiedReferrals: 0, sensitiveJwksHeaders: 0, registrations: 0, contactRegistrations: 0, phoneCalls: 0,
+  stripeCheckoutCalls: 0, stripeResumeCalls: 0, nowpaymentsCheckoutCalls: 0 };
 function validProxySignature(target, options, headers) {
   const timestamp = headers.get('x-vp-auth-timestamp') || '';
   const ip = headers.get('x-vp-auth-client-ip') || '';
@@ -54,6 +55,22 @@ const syntheticEnv = {
     privateCalls++;
     const target = new URL(url);
     const headers = new Headers(options.headers);
+    if (target.hostname === 'payments.core.internal' && target.pathname === '/api/payments/resume') {
+      metrics.stripeResumeCalls++;
+      throw new Error('paused_stripe_resume_reached_upstream');
+    }
+    if (target.hostname === 'payments.core.internal' && target.pathname === '/api/payments/checkout') {
+      const body = JSON.parse(options.body);
+      if (body.provider !== 'nowpayments') {
+        metrics.stripeCheckoutCalls++;
+        throw new Error('paused_stripe_checkout_reached_upstream');
+      }
+      if (headers.get('x-vp-service-token') !== 'synthetic-service-only'
+        || !await validForwardedIdentity(headers.get('x-vp-id-token') || '')) return Response.json({ error: 'synthetic-identity-rejected' }, { status: 401 });
+      metrics.nowpaymentsCheckoutCalls++;
+      return Response.json({ provider: 'nowpayments', url: 'https://nowpayments.io/payment/?iid=12345',
+        total_usd: '101.00', fee_usd: '1.00', fulfillment_status: 'review_required' });
+    }
     if (/\/registration\/phone\/|\/phone-number\/|\/sign-in\/phone-number/.test(target.pathname)) {
       metrics.phoneCalls++;
       throw new Error('removed_phone_route_reached_upstream');
@@ -124,6 +141,7 @@ const syntheticEnv = {
   BETTER_AUTH_JWT_ISSUER: issuer, BETTER_AUTH_JWT_AUDIENCE: audience,
   BETTER_AUTH_JWKS_URL: 'https://auth.core.internal/api/auth/jwks',
   VP_PAYMENTS_URL: 'https://payments.core.internal', PAYMENTS_SERVICE_TOKEN: 'synthetic-service-only',
+  STRIPE_CHECKOUT_ENABLED: 'false',
 };
 export default {
   async fetch(request, env, ctx) {

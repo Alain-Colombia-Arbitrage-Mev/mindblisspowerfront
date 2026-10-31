@@ -3,21 +3,25 @@
 import { useId, useRef, useState } from "react";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { referralForCheckout } from "@/lib/referral-attribution";
-import { checkoutErrorMessage, hostedCheckoutURL } from "@/lib/checkout-policy.mjs";
+import { checkoutErrorMessage, hostedCheckoutURL, STRIPE_CHECKOUT_PAUSED_NOTICE } from "@/lib/checkout-policy.mjs";
 import { cn } from "@/lib/utils";
 
 /**
  * El proveedor cobra una membresía; regresar al portal no confirma su activación.
  */
-export default function ActivatePackageButton({ packageId, featured }) {
+export default function ActivatePackageButton({ packageId, featured, stripeEnabled = false }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [provider, setProvider] = useState("stripe");
+  const [provider, setProvider] = useState(() => stripeEnabled === true ? "stripe" : "nowpayments");
   const pending = useRef(false);
   const id = useId();
 
   async function activate() {
     if (pending.current) return;
+    if (provider === "stripe" && stripeEnabled !== true) {
+      setError(STRIPE_CHECKOUT_PAUSED_NOTICE);
+      return;
+    }
     pending.current = true;
     setLoading(true);
     setError("");
@@ -73,9 +77,10 @@ export default function ActivatePackageButton({ packageId, featured }) {
         className="mb-3 min-h-11 w-full rounded-lg border px-3 py-2 text-base focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
         style={{ background: "var(--vp-surface-raised)", color: "var(--vp-text)", borderColor: "var(--vp-border)", outlineColor: "var(--vp-accent)" }}
       >
-        <option value="stripe">Tarjeta · Stripe</option>
+        <option value="stripe" disabled={stripeEnabled !== true}>Tarjeta · Stripe{stripeEnabled !== true ? " (suspendido)" : ""}</option>
         <option value="nowpayments">Cripto · NOWPayments</option>
       </select>
+      {stripeEnabled !== true ? <p className="mb-3 text-xs leading-5" style={{ color: "var(--vp-muted)" }}>{STRIPE_CHECKOUT_PAUSED_NOTICE}</p> : null}
       <p id={`${id}-hint`} className="mb-3 text-xs leading-5" style={{ color: "var(--vp-muted)" }}>
         {provider === "nowpayments"
           ? "Compra de membresía sujeta a validación. No es una recarga de saldo. Disponible al finalizar la habilitación de pagos."
@@ -84,7 +89,7 @@ export default function ActivatePackageButton({ packageId, featured }) {
       <button
         type="button"
         onClick={activate}
-        disabled={loading}
+        disabled={loading || (provider === "stripe" && stripeEnabled !== true)}
         aria-describedby={`${id}-hint${error ? ` ${id}-error` : ""}`}
         className={cn("executive-button w-full", featured && "primary")}
         style={

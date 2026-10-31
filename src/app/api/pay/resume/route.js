@@ -1,5 +1,5 @@
-import { coreFetch } from '@/lib/cloudflare-runtime.mjs';
-import { NextResponse } from "next/server";
+import { coreFetch, runtimeEnvironment } from '@/lib/cloudflare-runtime.mjs';
+import { handleStripeResume } from '@/lib/checkout-resume.mjs';
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,25 +11,5 @@ export const dynamic = "force-dynamic";
  * login: la seguridad es el token infalsificable de la URL.
  */
 export async function GET(request) {
-  const t = new URL(request.url).searchParams.get("t") || "";
-  const base = process.env.VP_PAYMENTS_URL;
-  const token = process.env.PAYMENTS_SERVICE_TOKEN;
-  const fallback = new URL("/dashboard/packages", request.url);
-
-  if (!t || !base || !token) {
-    return NextResponse.redirect(fallback, 303);
-  }
-  try {
-    const resp = await coreFetch(`${base}/api/payments/resume?t=${encodeURIComponent(t)}`, {
-      headers: { "X-VP-Service-Token": token },
-      cache: "no-store",
-    });
-    const data = await resp.json().catch(() => null);
-    if (resp.ok && data?.url) {
-      return NextResponse.redirect(data.url, 303);
-    }
-  } catch {
-    // cae al fallback
-  }
-  return NextResponse.redirect(fallback, 303);
+  return handleStripeResume(request, { env: runtimeEnvironment(), fetchImpl: coreFetch });
 }
