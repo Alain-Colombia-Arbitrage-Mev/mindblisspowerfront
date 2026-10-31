@@ -62,8 +62,31 @@ test('payment errors and absent payloads provide an operable retry instead of a 
     const Component = payments({ loading: false, data: null, error }, () => { retries++; });
     const html = render(Component);
     assert.match(html, /role="alert"/); assert.match(html, /Reintentar pagos/); assert.doesNotMatch(html, /\$0\.00/);
-    const card = React.Children.toArray(Component().props.children).find(child => child.type !== React.Fragment);
+    const summary = React.Children.toArray(Component().props.children)[0];
+    const card = summary.type(summary.props);
     const retry = React.Children.toArray(card.props.children).find(child => child.type === 'button');
     retry.props.onClick(); assert.equal(retries, 1);
   }
+});
+
+test('summary loading/error/refresh leaves the history sibling at one stable React identity and one synthetic mount GET', () => {
+  const state = { loading: true, data: null, error: '' };
+  const Component = payments(state);
+  let previous, syntheticHistoryGETs = 0;
+  for (const next of [{ loading: true, data: null, error: '' },
+    { loading: false, data: { active_packages: 0, payments: [], withdrawals: [] }, error: '' },
+    { loading: true, data: null, error: '' }, { loading: false, data: null, error: 'Temporary error' },
+    { loading: false, data: { active_packages: 1, payments: [], withdrawals: [] }, error: '' }]) {
+    Object.assign(state, next);
+    const tree = Component();
+    assert.equal(tree.type, React.Fragment);
+    const siblings = React.Children.toArray(tree.props.children);
+    assert.equal(siblings.length, 2);
+    const identity = { parent: tree.type, index: 1, type: siblings[1].type, key: siblings[1].key };
+    // React preserves a sibling's mounted effects when parent/type/key/index
+    // stay fixed. The real history loads only in its stable mount effect.
+    if (!previous || Object.keys(identity).some(key => identity[key] !== previous[key])) syntheticHistoryGETs++;
+    previous = identity;
+  }
+  assert.equal(syntheticHistoryGETs, 1);
 });

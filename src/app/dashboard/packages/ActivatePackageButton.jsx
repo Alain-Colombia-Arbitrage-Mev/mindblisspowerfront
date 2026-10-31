@@ -3,6 +3,7 @@
 import { useId, useRef, useState } from "react";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { referralForCheckout } from "@/lib/referral-attribution";
+import { useMemberSession } from "@/lib/member-session-context";
 import { checkoutErrorNotice, hostedCheckoutURL } from "@/lib/checkout-policy.mjs";
 import { cn } from "@/lib/utils";
 
@@ -10,6 +11,7 @@ import { cn } from "@/lib/utils";
  * El proveedor cobra una membresía; regresar al portal no confirma su activación.
  */
 export default function ActivatePackageButton({ packageId, featured, stripeEnabled = false, nowpaymentsEnabled = false }) {
+  const memberSession = useMemberSession();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [provider, setProvider] = useState(() => stripeEnabled === true ? "stripe" : "nowpayments");
@@ -43,7 +45,13 @@ export default function ActivatePackageButton({ packageId, featured, stripeEnabl
       if (provider === "nowpayments" && !purchaseRequest.current) purchaseRequest.current = crypto.randomUUID();
       let attribution = { code: "", email: "" };
       try {
-        const session = await fetch("/api/auth/session", { cache: "no-store", signal: AbortSignal.timeout(8000) }).then((r) => (r.ok ? r.json() : null));
+        // The mounted shell already reads this presentation context. Reuse it
+        // only for an email-bound referral hint; the BFF still verifies the
+        // live cookie/JWT and matches ref_email to its authoritative identity.
+        // Preserve the cold-start fallback instead of dropping attribution.
+        const session = typeof memberSession?.email === "string" && memberSession.email.trim()
+          ? memberSession
+          : await fetch("/api/auth/session", { cache: "no-store", signal: AbortSignal.timeout(8000) }).then((r) => (r.ok ? r.json() : null));
         attribution = referralForCheckout(session?.email || "");
       } catch {
         attribution = { code: "", email: "" };

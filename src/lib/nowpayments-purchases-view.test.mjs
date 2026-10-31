@@ -137,6 +137,7 @@ test('checkout retains a purchase UUID after an ambiguous failure, and a process
   let code = 'upstream_unavailable';
   const Component = loadComponent('../app/dashboard/packages/ActivatePackageButton.jsx', { react: state.react,
     'lucide-react': { ArrowRight: () => null, Loader2: () => null }, '@/lib/referral-attribution': { referralForCheckout: () => ({ code: '', email: '' }) },
+    '@/lib/member-session-context': { useMemberSession: () => null },
     '@/lib/checkout-policy.mjs': checkoutPolicy, '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' ') } });
   const tree = () => { state.reset(); return Component({ packageId: 1, nowpaymentsEnabled: true }); };
   globalThis.fetch = async (target, options) => {
@@ -158,7 +159,7 @@ test('checkout retains a purchase UUID after an ambiguous failure, and a process
 
 test('history stays independent of recovered/loading/failed summary and no purchase action can submit customer money or provider URLs', () => {
   const source = readFileSync(new URL('../app/dashboard/packages/MyPaymentsPanel.jsx', import.meta.url), 'utf8');
-  assert.equal((source.match(/<NOWPaymentsPurchases onChange=\{load\}/g) || []).length, 3);
+  assert.equal((source.match(/<NOWPaymentsPurchases onChange=\{load\}/g) || []).length, 1);
   assert.doesNotMatch(source, /!recovered\s*&&\s*<NOWPaymentsPurchases/);
   const view = readFileSync(new URL('../app/dashboard/packages/NOWPaymentsPurchases.jsx', import.meta.url), 'utf8');
   assert.doesNotMatch(view, /\/api\/payments\/checkout|purchase_request_id|setInterval|localStorage|sessionStorage/);

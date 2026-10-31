@@ -7,9 +7,11 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 import * as policy from './checkout-policy.mjs';
 import { cn } from './utils.js';
+import { handleMembershipCheckout } from './checkout-bff.mjs';
 
 const require = createRequire(import.meta.url);
-function checkoutComponent({ provider, error = '', loading = false } = {}) {
+function checkoutComponent({ provider, error = '', loading = false, session = null,
+  referralResolver = () => ({ code: '', email: '' }) } = {}) {
   const states = [loading, error, provider];
   const stateChanges = [];
   const mockedReact = { ...React, useState: initial => {
@@ -21,7 +23,8 @@ function checkoutComponent({ provider, error = '', loading = false } = {}) {
   const code = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
   const module = { exports: {} };
   const mocks = { react: mockedReact, 'lucide-react': { ArrowRight: () => null, Loader2: () => null },
-    '@/lib/referral-attribution': { referralForCheckout: () => ({ code: '', email: '' }) }, '@/lib/checkout-policy.mjs': policy, '@/lib/utils': { cn } };
+    '@/lib/referral-attribution': { referralForCheckout: referralResolver },
+    '@/lib/member-session-context': { useMemberSession: () => session }, '@/lib/checkout-policy.mjs': policy, '@/lib/utils': { cn } };
   new Function('require', 'module', 'exports', code)(id => Object.hasOwn(mocks, id) ? mocks[id] : require(id), module, module.exports);
   return { Component: module.exports.default, stateChanges };
 }
@@ -103,6 +106,53 @@ test('the actual operational membership click handler sends chosen provider once
     resolveCheckout(Response.json({ provider: 'nowpayments', url: 'https://nowpayments.io/payment/?iid=12345', checkout_environment: 'production', fulfillment_status: 'awaiting_payment' }));
     await first; assert.deepEqual(navigations, ['https://nowpayments.io/payment/?iid=12345']);
   } finally { globalThis.fetch = originalFetch; if (originalWindow === undefined) delete globalThis.window; else globalThis.window = originalWindow; }
+});
+
+test('ready shell context removes a sequential session GET while a cold context preserves attribution and authoritative BFF identity', async () => {
+  const originalFetch = globalThis.fetch, originalWindow = globalThis.window;
+  const measurements = [];
+  globalThis.window = { location: { assign() {} } };
+  try {
+    for (const [label, session, expectedSessionReads, expectedElapsedMs] of [
+      ['ready', { email: 'member@example.test' }, 0, 250], ['cold', null, 1, 1050],
+      ['pending', { name: 'Loading member' }, 1, 1050], ['stale', { email: 'previous@example.test' }, 0, 250],
+    ]) {
+      let sessionReads = 0, checkouts = 0, privateCalls = 0, elapsedMs = 0;
+      const emails = [];
+      const { Component } = checkoutComponent({ provider: 'nowpayments', session,
+        referralResolver: email => { emails.push(email); return { code: 'SYNTHETIC-REFERRAL', email, side: 'R' }; } });
+      globalThis.fetch = async (target, options) => {
+        if (target === '/api/auth/session') {
+          sessionReads++; elapsedMs += 800; return Response.json({ email: 'member@example.test' });
+        }
+        assert.equal(target, '/api/payments/checkout'); checkouts++; elapsedMs += 250;
+        return handleMembershipCheckout(new Request('https://portal.example.test/api/payments/checkout', {
+          ...options, headers: { ...options.headers, origin: 'https://portal.example.test' },
+        }), { env: { AUTH_PUBLIC_ORIGIN: 'https://portal.example.test', NOWPAYMENTS_MEMBERSHIPS_ENABLED: 'true',
+          VP_PAYMENTS_URL: 'https://payments.core.internal', PAYMENTS_SERVICE_TOKEN: 'synthetic-private' },
+          identity: async () => ({ token: 'synthetic-verified-jwt', claims: { sub: 'stable-owner-subject', email: 'member@example.test', email_verified: true } }),
+          fetchImpl: async (_target, init) => {
+            privateCalls++; const forwarded = JSON.parse(init.body);
+            assert.equal(forwarded.email, 'member@example.test', 'presentation context can never choose the owner');
+            assert.equal(forwarded.ref, label === 'stale' ? '' : 'SYNTHETIC-REFERRAL');
+            assert.equal(forwarded.preferred_side, label === 'stale' ? '' : 'R');
+            assert.match(forwarded.purchase_request_id, /^[0-9a-f-]{36}$/);
+            return Response.json({ provider: 'nowpayments', url: 'https://nowpayments.io/payment/?iid=12345',
+              total_usd: '100.00', fee_usd: '0.00', fulfillment_status: 'awaiting_payment' });
+          },
+        });
+      };
+      await findElement(Component({ packageId: 7, nowpaymentsEnabled: true }), 'button').props.onClick();
+      assert.equal(sessionReads, expectedSessionReads); assert.equal(checkouts, 1); assert.equal(privateCalls, 1); assert.equal(elapsedMs, expectedElapsedMs);
+      assert.deepEqual(emails, [session?.email || 'member@example.test']);
+      measurements.push({ label, sessionReads, checkoutRequests: checkouts, syntheticElapsedMs: elapsedMs });
+    }
+    assert.equal(measurements[1].syntheticElapsedMs - measurements[0].syntheticElapsedMs, 800,
+      'synthetic 800ms session + 250ms checkout baseline saves exactly one session roundtrip, not an authorization check');
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalWindow === undefined) delete globalThis.window; else globalThis.window = originalWindow;
+  }
 });
 
 test('a successful HTTP response with wrong-provider or malicious URL never navigates', async () => {

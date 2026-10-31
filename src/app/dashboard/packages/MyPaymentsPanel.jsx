@@ -29,14 +29,19 @@ const WD_STATUS = {
 
 export default function MyPaymentsPanel() {
   const { state, reload: load } = useMemberSummary({ fresh: true });
+  // Keep history at the same React position while the independent summary
+  // changes loading/error/ready. A summary refresh must not remount its GET.
+  return <><PaymentsSummary state={state} load={load} /><NOWPaymentsPurchases onChange={load} /></>;
+}
 
+function PaymentsSummary({ state, load }) {
   if (state.loading) {
-    return <><Card><div role="status" aria-live="polite" aria-busy="true" className="flex items-center gap-2 text-sm" style={{ color: "var(--vp-muted)" }}><Loader2 size={15} className="animate-spin" aria-hidden="true" /> Cargando pagos…</div></Card><NOWPaymentsPurchases onChange={load} /></>;
+    return <Card><div role="status" aria-live="polite" aria-busy="true" className="flex items-center gap-2 text-sm" style={{ color: "var(--vp-muted)" }}><Loader2 size={15} className="animate-spin" aria-hidden="true" /> Cargando pagos…</div></Card>;
   }
-  if (state.error || !state.data) return <><Card>
+  if (state.error || !state.data) return <Card>
     <div role="alert" className="text-sm" style={{ color: "var(--vp-muted)" }}>{state.error || "No se pudieron cargar los pagos. Intenta de nuevo."}</div>
     <button type="button" onClick={load} className="executive-button mt-3">Reintentar pagos</button>
-  </Card><NOWPaymentsPurchases onChange={load} /></>;
+  </Card>;
 
   const d = state.data;
   const recovered = isRecoverySummary(d);
@@ -56,7 +61,6 @@ export default function MyPaymentsPanel() {
       )}
 
       <NOWPaymentsBalances data={d.nowpayments} />
-      <NOWPaymentsPurchases onChange={load} />
       <WithdrawalRequest data={d} onDone={load} />
 
       {recovered && <StripeSalesHistory sales={d.stripe_sales} />}
