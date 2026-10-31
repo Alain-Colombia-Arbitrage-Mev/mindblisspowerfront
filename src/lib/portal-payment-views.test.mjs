@@ -10,12 +10,14 @@ import * as paymentDisplay from './payment-display.mjs';
 const require = createRequire(import.meta.url);
 const iconStub = () => React.createElement('svg', { 'aria-hidden': 'true' });
 const icons = new Proxy({}, { get: () => iconStub });
+const cssModule = { default: new Proxy({}, { get: (_target, key) => String(key) }) };
 // Compile the actual JSX in memory: no generated source files or browser/API calls.
 function component(relative, mocks) {
   const source = readFileSync(new URL(relative, import.meta.url), 'utf8');
   const code = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
   const module = { exports: {} };
-  new Function('require', 'module', 'exports', code)(id => id === 'lucide-react' ? icons : Object.hasOwn(mocks, id) ? mocks[id] : require(id), module, module.exports);
+  new Function('require', 'module', 'exports', code)(id => id === 'lucide-react' ? icons : id.endsWith('.module.css') ? cssModule
+    : Object.hasOwn(mocks, id) ? mocks[id] : require(id), module, module.exports);
   return module.exports.default;
 }
 const SalesHistory = component('../app/dashboard/packages/StripeSalesHistory.jsx', { '@/lib/payment-display.mjs': paymentDisplay });

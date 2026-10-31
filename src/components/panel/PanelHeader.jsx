@@ -3,6 +3,7 @@
 import Link from "./IntentLink";
 import { LifeBuoy, Mail, Menu, Power, UserRound } from "lucide-react";
 import ThemeToggle from "@/app/_components/ThemeToggle";
+import LogoutButton from "./LogoutButton";
 
 export default function PanelHeader({
   title,
@@ -54,14 +55,11 @@ export default function PanelHeader({
         >
           <UserRound size={18} />
         </Link>
-        <a
+        <LogoutButton
           className="vp-shell-icon vp-desktop-action"
-          href="/api/auth/logout"
-          aria-label="Cerrar sesión"
-          title="Cerrar sesión"
         >
-          <Power size={18} />
-        </a>
+          <Power size={18} aria-hidden="true" />
+        </LogoutButton>
         <ThemeToggle />
       </div>
     </header>

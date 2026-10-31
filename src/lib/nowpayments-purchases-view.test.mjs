@@ -11,6 +11,8 @@ import * as balances from './nowpayments-balances.mjs';
 import * as checkoutPolicy from './checkout-policy.mjs';
 
 const require = createRequire(import.meta.url), orderId = 'a02f5a55-5fa3-4239-845b-ac6b699110ee', secondId = 'a02f5a55-5fa3-4239-845b-ac6b699110ef';
+const icons = new Proxy({}, { get: () => () => React.createElement('svg', { 'aria-hidden': 'true' }) });
+const cssModule = { default: new Proxy({}, { get: (_target, key) => String(key) }) };
 const row = (change = {}) => ({ order_id: orderId, package_id: 1, package_name: 'Synthetic plan', total_usd: '100.00', fee_usd: '0.00',
   created_at: '2026-10-31T12:00:00Z', updated_at: '2026-10-31T12:00:00Z', payment_status: 'awaiting_payment',
   fulfillment_status: 'awaiting_payment', can_resume: true, can_cancel: true, cancelled_at: null, ...change });
@@ -30,7 +32,8 @@ function loadComponent(relative, mocks) {
   const source = readFileSync(new URL(relative, import.meta.url), 'utf8');
   const code = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
   const module = { exports: {} };
-  new Function('require', 'module', 'exports', code)(id => Object.hasOwn(mocks, id) ? mocks[id] : require(id), module, module.exports);
+  new Function('require', 'module', 'exports', code)(id => Object.hasOwn(mocks, id) ? mocks[id] : id === 'lucide-react' ? icons
+    : id.endsWith('.module.css') ? cssModule : id === '@/lib/utils' ? { cn: (...values) => values.filter(Boolean).join(' ') } : require(id), module, module.exports);
   return module.exports.default;
 }
 function nodes(tree) { return tree && typeof tree === 'object' ? [tree, ...React.Children.toArray(tree.props?.children).flatMap(nodes)] : []; }
@@ -163,4 +166,24 @@ test('history stays independent of recovered/loading/failed summary and no purch
   assert.doesNotMatch(source, /!recovered\s*&&\s*<NOWPaymentsPurchases/);
   const view = readFileSync(new URL('../app/dashboard/packages/NOWPaymentsPurchases.jsx', import.meta.url), 'utf8');
   assert.doesNotMatch(view, /\/api\/payments\/checkout|purchase_request_id|setInterval|localStorage|sessionStorage/);
+});
+
+test('history action names identify same-SKU orders and server capabilities remain authoritative in review states', async () => {
+  const view = historyView();
+  view.setData(list([row({ payment_status: 'under_review', can_resume: false, can_cancel: true }),
+    row({ order_id: secondId, payment_status: 'completed', fulfillment_status: 'activated', can_resume: false, can_cancel: false })]));
+  await view.mount();const tree=view.tree(),html=renderToStaticMarkup(tree);
+  assert.equal((html.match(/>Cancelar intención<\/button>/g)||[]).length,1);
+  assert.doesNotMatch(html,/>Continuar pago<\/button>/);
+  for (const id of [orderId,secondId]) assert.ok(html.includes(`aria-label="Consultar estado de Synthetic plan, orden ${id}"`));
+  assert.ok(html.includes(`aria-label="Cancelar intención de Synthetic plan, orden ${orderId}"`));
+  assert.match(html,/<ul[^>]*role="list"/);assert.equal((html.match(/<article[^>]*aria-label="Compra de Synthetic plan"/g)||[]).length,2);
+  const references=nodes(tree).filter(node=>node.type==='details');assert.equal(references.length,2);
+  for(const reference of references) {
+    assert.notEqual(reference.props.open,true,'long references start collapsed, not hidden behind a custom inaccessible control');
+    assert.ok(React.Children.toArray(reference.props.children).some(child=>child.type==='summary'));
+  }
+  assert.equal((html.match(/<time dateTime="2026-10-31T12:00:00Z"/g)||[]).length,2);
+  for(const element of nodes(tree).filter(node=>node.type==='button')) assert.equal(element.props.type,'button');
+  assert.deepEqual(view.calls.resumes,[]);assert.deepEqual(view.calls.cancels,[]);assert.deepEqual(view.calls.statuses,[]);
 });

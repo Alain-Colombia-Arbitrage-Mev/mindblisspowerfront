@@ -128,13 +128,17 @@ test("an explicitly disabled link stays disabled after intent", t => {
   assert.equal(harness.render(props).props.prefetch, false);
 });
 
-test("only shell links use the wrapper, without changing logout actions or content links", () => {
+test("only shell navigation uses the wrapper and logout is an explicit non-link action", () => {
   for (const filename of ["SidebarNavItem.jsx", "SidebarNavGroup.jsx", "SidebarLogo.jsx", "SidebarUserCard.jsx", "PanelHeader.jsx"]) {
     const shell = readFileSync(new URL(`./${filename}`, import.meta.url), "utf8");
     assert.match(shell, /import Link from "\.\/IntentLink"/);
     assert.doesNotMatch(shell, /from ["']next\/link["']/);
   }
   const sidebar = readFileSync(new URL("./PanelSidebar.jsx", import.meta.url), "utf8");
-  assert.match(sidebar, /<a[\s\S]*?href="\/api\/auth\/logout"/);
+  for (const shell of [sidebar, readFileSync(new URL('./PanelHeader.jsx', import.meta.url), 'utf8')]) {
+    assert.match(shell, /<LogoutButton/);
+    assert.doesNotMatch(shell, /href=["']\/api\/auth\/logout/);
+  }
+  assert.match(sidebar, /<LogoutButton\b[^>]*errorPlacement="above"/);
   assert.doesNotMatch(source, /router\.prefetch|router\.push|setInterval|setTimeout|fetch\(/);
 });

@@ -18,7 +18,10 @@ const require=createRequire(import.meta.url);
 const source=readFileSync(new URL('../components/panel/NOWPaymentsBalances.jsx',import.meta.url),'utf8');
 const code=ts.transpileModule(source,{compilerOptions:{jsx:ts.JsxEmit.ReactJSX,module:ts.ModuleKind.CommonJS}}).outputText;
 const module={exports:{}};
-new Function('require','module','exports',code)(id=>id==='@/lib/nowpayments-balances.mjs'?balances:require(id),module,module.exports);
+const icons=new Proxy({}, {get:()=>()=>React.createElement('svg',{'aria-hidden':'true'})});
+const cssModule={default:new Proxy({}, {get:(_target,key)=>String(key)})};
+new Function('require','module','exports',code)(id=>id==='@/lib/nowpayments-balances.mjs'?balances
+ :id==='lucide-react'?icons:id.endsWith('.module.css')?cssModule:id==='@/lib/utils'?{cn:(...values)=>values.filter(Boolean).join(' ')}:require(id),module,module.exports);
 const View=module.exports.default;
 const render=data=>renderToStaticMarkup(React.createElement(View,{data}));
 
@@ -81,6 +84,34 @@ test('money formatting preserves exact decimal strings and unknown amounts never
  assert.equal(balances.nowpaymentsMoney('0.0050'),'$0.005 USD');
  assert.equal(balances.nowpaymentsMoney('0'),'$0.00 USD');
  for(const value of [null,undefined,'','1e6','-1.00',' 1.00 ',false,Infinity,1.01]) assert.equal(balances.nowpaymentsMoney(value),'No disponible');
+});
+
+test('past dates never override server risk or funding holds and do not turn locked capital into cash',()=>{
+ const data=model();
+ data.commissions.pending_usd='0.00';data.commissions.available_usd='0.00';data.commissions.funding_held_usd='10.00';
+ data.commissions.items[0].generated_at='2000-01-31T23:59:59Z';data.commissions.items[0].available_at='2000-02-29T23:59:59Z';
+ data.commissions.items[0].status='risk_review';data.membership.items[0].eligibility='security_blocked';
+ data.membership.items[0].lock_until='2001-01-01T15:20:00Z';
+ const before=JSON.stringify(data),html=render(data);
+ assert.match(html,/Retenida por revisión de seguridad/);assert.match(html,/Bloqueada por seguridad/);
+ assert.ok(html.includes(balances.nowpaymentsDate(data.commissions.items[0].available_at)));
+ assert.match(html,/\$100\.00 USD/);assert.doesNotMatch(html,/Saldo retirable total|Retirar ahora|Solicitar retiro|Pago completado/);
+ assert.equal(JSON.stringify(data),before,'presentation must not mature or unlock records locally');
+});
+
+test('the redesign keeps each exact backend amount beside its semantic label and the withdrawal warning outside collapsed details',()=>{
+ const data=model(),html=render(data);
+ const amounts=[['Capital de membresías bloqueado','100.00'],['Capital vencido, elegible para solicitud','0.00'],
+  ['Comisiones pendientes de liberación','10.00'],['Comisiones vencidas disponibles (contables)','5.00'],
+  ['Comisiones retenidas por financiación','3.00'],['ROI de CD bloqueado','2.00'],['ROI de CD vencido (contable)','0.00'],
+  ['Acreditadas internamente, no pagadas al banco','20.00'],['Retiros externos NOW registrados','0.00']];
+ const escape=value=>value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+ for(const[label,value]of amounts) assert.match(html,new RegExp(`<dt[^>]*>${escape(label)}</dt><dd[^>]*>${escape(balances.nowpaymentsMoney(value))}</dd>`),label);
+ for(const heading of ['Capital','Comisiones','ROI de membresías']) assert.ok(html.includes(`<h4>${heading}</h4>`));
+ assert.ok(html.indexOf('Retiros externos no habilitados')<html.indexOf('<details'));
+ assert.match(html,/<summary>Cómo se liberan y registran los importes/);
+ assert.match(html,/<caption[^>]*>Capital y ROI/);assert.match(html,/<caption[^>]*>Comisiones NOWPayments/);
+ for(const column of ['Capital','Vencimiento del bloqueo (Bogotá)','Comisión calculada','Crédito líquido','Vencimiento (Bogotá)','Estado']) assert.ok(html.includes(`data-label="${column}"`));
 });
 
 test('all requested portal surfaces consume only the nested NOW read model and checkout has a notice, not fabricated consent',()=>{

@@ -352,7 +352,37 @@ try {
     assert.equal(session.email, null);
     probes++;
   }
+  const logoutGet = await fetch('http://127.0.0.1:8787/api/auth/logout', {
+    headers: sessionHeaders, redirect: 'manual', signal: AbortSignal.timeout(8000),
+  });
+  assert.equal(logoutGet.status, 405); assert.equal(logoutGet.headers.get('allow'), 'POST');
+  assert.equal(logoutGet.headers.get('set-cookie'), null); probes++;
+  const foreignLogout = await fetch('http://127.0.0.1:8787/api/auth/logout', {
+    method: 'POST', headers: { ...authHeaders, ...sessionHeaders, origin: 'https://evil.example.test' },
+    body: '{}', redirect: 'manual', signal: AbortSignal.timeout(8000),
+  });
+  assert.equal(foreignLogout.status, 403); assert.equal(foreignLogout.headers.get('set-cookie'), null); probes++;
+  const loggedOut = await post('/api/auth/logout', {}, sessionHeaders.cookie);
+  assert.equal(loggedOut.status, 200); assert.deepEqual(await loggedOut.json(), { ok: true });
+  assert.match(loggedOut.headers.get('cache-control'), /private.*no-store/);
+  const removedCookies = loggedOut.headers.getSetCookie();
+  assert.equal(removedCookies.length, 1);
+  assert.match(removedCookies[0], /^__Secure-better-auth\.session_token=;/);
+  assert.match(removedCookies[0], /(?:^|;\s*)Max-Age=0(?:;|$)/i);
+  assert.match(removedCookies[0], /(?:^|;\s*)HttpOnly(?:;|$)/i);
+  assert.match(removedCookies[0], /(?:^|;\s*)Secure(?:;|$)/i);
+  assert.doesNotMatch(removedCookies[0], /(?:^|;\s*)Domain=/i); probes++;
+  const revokedSession = await fetch('http://127.0.0.1:8787/api/auth/session', {
+    headers: sessionHeaders, signal: AbortSignal.timeout(8000),
+  });
+  assert.equal(revokedSession.status, 200);
+  assert.equal((await revokedSession.json()).authenticated, false, 'the private fixture revokes the old session, not merely its browser cookie'); probes++;
+  const clearedSession = await fetch('http://127.0.0.1:8787/api/auth/session', {
+    headers: { ...sessionHeaders, cookie: '' }, signal: AbortSignal.timeout(8000),
+  });
+  assert.equal(clearedSession.status, 200); assert.equal((await clearedSession.json()).authenticated, false); probes++;
   const metrics = await (await fetch('http://127.0.0.1:8787/__synthetic_metrics')).json();
+  assert.equal(metrics.signOutCalls, 1, 'GET and foreign-origin logout do not reach the private sign-out service');
   assert.ok(metrics.tokens >= 4, 'sessions still reach the current private token binding');
   assert.equal(metrics.jwks, 1, 'only public JWKS JSON is reused within its bounded 60s TTL');
   assert.equal(metrics.verifiedReferrals, 1, 'invalid identities must not reach a member data query');

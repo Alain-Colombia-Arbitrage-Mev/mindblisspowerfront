@@ -4,7 +4,7 @@ import { Wallet, ReceiptText, Loader2, CheckCircle2, Clock, AlertTriangle, Arrow
 import { isRecoverySummary } from "@/lib/member-read.mjs";
 import { useMemberSummary } from "@/hooks/useMemberSummary";
 import { formatPaymentMoney as money, formatPaymentDate as fmtDate } from "@/lib/payment-display.mjs";
-import { cn } from "@/lib/utils";
+import styles from "./payments-summary.module.css";
 import StripeSalesHistory from "./StripeSalesHistory";
 import WithdrawalRequest from "./WithdrawalRequest";
 import NOWPaymentsBalances from "@/components/panel/NOWPaymentsBalances";
@@ -36,11 +36,11 @@ export default function MyPaymentsPanel() {
 
 function PaymentsSummary({ state, load }) {
   if (state.loading) {
-    return <Card><div role="status" aria-live="polite" aria-busy="true" className="flex items-center gap-2 text-sm" style={{ color: "var(--vp-muted)" }}><Loader2 size={15} className="animate-spin" aria-hidden="true" /> Cargando pagos…</div></Card>;
+    return <Card><div role="status" aria-live="polite" aria-busy="true" className={styles.loading}><Loader2 size={18} className="animate-spin" aria-hidden="true" /> Cargando pagos…</div><div className={styles.skeletons} aria-hidden="true"><span /><span /><span /></div></Card>;
   }
   if (state.error || !state.data) return <Card>
-    <div role="alert" className="text-sm" style={{ color: "var(--vp-muted)" }}>{state.error || "No se pudieron cargar los pagos. Intenta de nuevo."}</div>
-    <button type="button" onClick={load} className="executive-button mt-3">Reintentar pagos</button>
+    <div role="alert" className={styles.error}><AlertTriangle size={21} aria-hidden="true" /><div><h3>No pudimos cargar el resumen</h3><p>{state.error || "No se pudieron cargar los pagos. Intenta de nuevo."}</p></div></div>
+    <button type="button" onClick={load} className={`executive-button ${styles.retry}`}>Reintentar pagos</button>
   </Card>;
 
   const d = state.data;
@@ -48,14 +48,15 @@ function PaymentsSummary({ state, load }) {
 
   return (
     <Card>
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className={styles.heading}><span className={styles.headingIcon}><Wallet size={21} aria-hidden="true" /></span><div><h2>Tu resumen de pagos</h2><p>Membresías, comisiones y movimientos, en un solo lugar.</p></div></div>
+      <div className={styles.metrics}>
         <Metric Icon={Wallet} label={recovered ? "Saldo histórico Stripe" : "Disponible para retirar"} value={money(d.available_for_withdrawal_usd)} accent />
         <Metric Icon={Clock} label={recovered ? "Comisiones históricas en revisión" : "Comisiones en maduración"} value={money(d.commission_maturing_usd)} />
         <Metric Icon={CheckCircle2} label="Membresías activas" value={String(d.active_packages ?? 0)} />
       </div>
 
       {recovered && (
-        <p role="status" className="mt-4 text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
+        <p role="status" className={styles.recovery}>
           Las comisiones están pendientes de cálculo y revisión. Los saldos aún no están determinados y los retiros están bloqueados; esto no significa que tu balance sea cero.
         </p>
       )}
@@ -107,23 +108,23 @@ function PaymentsSummary({ state, load }) {
 }
 
 function Card({ children }) {
-  return <section className="executive-panel vp-glass">{children}</section>;
+  return <section className={`executive-panel vp-glass ${styles.panel}`}>{children}</section>;
 }
 function Metric({ Icon, label, value, accent = false }) {
   return (
-    <div className={cn("executive-card p-3", accent ? "vp-glass-accent" : "vp-glass")}>
-      <div className="mb-1 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider" style={{ color: "var(--vp-subtle)" }}><Icon size={12} /> {label}</div>
-      <div className="text-xl font-semibold" style={{ color: accent ? "var(--vp-accent)" : "var(--vp-text)" }}>{value}</div>
+    <div className={`${styles.metric} ${accent ? styles.metricAccent : ''}`}>
+      <div className={styles.metricLabel}><Icon size={15} aria-hidden="true" /> {label}</div>
+      <div className={styles.metricValue}>{value}</div>
     </div>
   );
 }
 function Row({ top, left, badge }) {
   return (
-    <div className="flex items-center justify-between gap-3 px-4 py-3" style={{ borderTop: top ? "none" : "1px solid var(--vp-border)", background: "var(--vp-surface)" }}>
+    <div className={styles.row} style={{ borderTop: top ? "none" : "1px solid var(--vp-border)", background: "var(--vp-surface)" }}>
       <div className="min-w-0">{left}</div>{badge}
     </div>
   );
 }
 function Badge({ color, children }) {
-  return <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-black" style={{ color, background: "var(--vp-surface-raised)", border: "1px solid var(--vp-border)" }}>{children}</span>;
+  return <span className={styles.badge} style={{ color, background: "var(--vp-surface-raised)", border: "1px solid var(--vp-border)" }}>{children}</span>;
 }

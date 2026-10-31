@@ -22,6 +22,10 @@ function moduleAt(relative, mocks = {}) {
     if (id === "lucide-react") return new Proxy({}, { get: () => icon });
     if (id === "./IntentLink") return { default: Link };
     if (id === "@/lib/member-navigation.mjs") return { matchesRoute };
+    if (id === './LogoutButton') return moduleAt('../components/panel/LogoutButton.jsx', {
+      '@/lib/member-logout.mjs': { logoutMember: async () => {} },
+      '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' ') },
+    });
     if (id.startsWith("./Sidebar")) return moduleAt(`../components/panel/${id.slice(2)}.jsx`);
     return require(id);
   }, module, module.exports);
@@ -37,9 +41,11 @@ test("actual member sidebar removes identity verification while preserving accou
   assert.doesNotMatch(html, /\/dashboard\/kyc|Verificación de identidad|KYC|Identidad verificada/);
   for (const href of ["/dashboard", "/dashboard/communications", "/dashboard/communications/news",
     "/dashboard/support", "/dashboard/communications/testimonials", "/dashboard/packages",
-    "/dashboard/coupons", "/dashboard/withdrawals", "/dashboard/profile", "/dashboard/rank", "/dashboard/network", "/api/auth/logout"]) {
+    "/dashboard/coupons", "/dashboard/withdrawals", "/dashboard/profile", "/dashboard/rank", "/dashboard/network"]) {
     assert.ok(html.includes(`href="${href}"`), `missing retained destination ${href}`);
   }
+  assert.match(html, /<button[^>]*type="button"[^>]*aria-label="Cerrar sesión"/);
+  assert.doesNotMatch(html, /href="\/api\/auth\/logout"/);
   assert.match(html, /aria-label="Navegación del miembro"/);
   assert.match(html, /href="\/dashboard\/communications\/news"[^>]*aria-current="page"/);
 });

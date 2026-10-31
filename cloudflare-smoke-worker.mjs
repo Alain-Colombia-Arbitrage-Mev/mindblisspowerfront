@@ -14,7 +14,7 @@ const modes = new Map([[sessionCookie, 'member'],
   ['__Secure-better-auth.session_token=synthetic-wrong-audience', 'wrong-audience']]);
 const metrics = { tokens: 0, jwks: 0, verifiedReferrals: 0, sensitiveJwksHeaders: 0, registrations: 0, contactRegistrations: 0, phoneCalls: 0,
   stripeCheckoutCalls: 0, stripeResumeCalls: 0, nowpaymentsCheckoutCalls: 0, nowpaymentsCaptures: 0, nowpaymentsStatusReads: 0,
-  nowpaymentsPurchaseReads: 0, nowpaymentsPurchaseResumes: 0, nowpaymentsPurchaseCancels: 0 };
+  nowpaymentsPurchaseReads: 0, nowpaymentsPurchaseResumes: 0, nowpaymentsPurchaseCancels: 0, signOutCalls: 0 };
 const receiptOrder = 'a02f5a55-5fa3-4239-845b-ac6b699110ee';
 const operationalOrder = 'a02f5a55-5fa3-4239-845b-ac6b699110ef';
 let capturedPaymentStatus = 'waiting';
@@ -134,6 +134,17 @@ const syntheticEnv = {
     if (/\/registration\/phone\/|\/phone-number\/|\/sign-in\/phone-number/.test(target.pathname)) {
       metrics.phoneCalls++;
       throw new Error('removed_phone_route_reached_upstream');
+    }
+    if (target.hostname === 'auth.core.internal' && target.pathname === '/api/auth/sign-out') {
+      if (options.method !== 'POST' || !validProxySignature(target, options, headers)
+          || headers.get('cookie') !== sessionCookie || options.body !== '{}') {
+        throw new Error('invalid_synthetic_sign_out');
+      }
+      metrics.signOutCalls++;
+      modes.delete(sessionCookie);
+      return Response.json({ success: true }, {
+        headers: { 'set-cookie': '__Secure-better-auth.session_token=; Domain=auth.core.internal; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0' },
+      });
     }
     if (target.hostname === 'auth.core.internal' && target.pathname === '/api/auth/token') {
       metrics.tokens++;
