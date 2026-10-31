@@ -47,6 +47,7 @@ test("actual payment-result effect refreshes the shared GET once only after conf
     "@/hooks/useCheckoutActivation": { useCheckoutActivation: () => ({ active, checking: false }) },
     "@/lib/checkout-status.mjs": { checkoutStatusCopy: () => ({ title: "Prueba", description: "Prueba" }) },
     "@/hooks/useMemberSummary": { useMemberSummary: () => ({ state: resource.getSnapshot(), reload: resource.refresh }) },
+    './NOWPaymentsReceiptPopup': { default: () => null },
   });
   const renderEffect = () => { Modal(); effects.splice(0).forEach(effect => effect()); };
   renderEffect(); await new Promise(resolve => setImmediate(resolve)); assert.equal(calls, 1);

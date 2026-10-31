@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import test from 'node:test';
-import { handleNOWPaymentsWebhook } from './nowpayments-webhook.mjs';
+import { handleNOWPaymentsWebhook, NOWPAYMENTS_CALLBACK_TIMEOUT_MS } from './nowpayments-webhook.mjs';
 
 const env = { NOWPAYMENTS_WEBHOOK_ENABLED: 'true', PAYMENTS_SERVICE_TOKEN: 'synthetic-private-service-token',
   VP_PAYMENTS_URL: 'https://must-not-be-used.example.test', NOWPAYMENTS_API_KEY: 'synthetic-must-not-be-forwarded' };
@@ -10,7 +10,7 @@ const raw = '{\n  "payment_id": "12345", "order_id": "a02f5a55-5fa3-4239-845b-ac
 // BFF must preserve the original spaced JSON and 101.00 numeric representation.
 const canonical = JSON.stringify(Object.fromEntries(Object.entries(JSON.parse(raw)).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)));
 const signature = createHmac('sha512', 'synthetic-ipn-secret').update(canonical).digest('hex');
-const ack = { received: true, state: 'pending_review', fulfillment_status: 'review_required' };
+const ack = { received: true, mode: 'capture_only', state: 'captured', fulfillment_status: 'not_activated' };
 function request(body = raw, extra = {}, signal) {
   return new Request('https://portal.example.test/api/webhooks/nowpayments', { method: 'POST',
     headers: { 'content-type': 'application/json', 'x-nowpayments-sig': signature, ...extra }, body, signal });
@@ -19,6 +19,14 @@ const run = (req = request(), overrides = {}) => handleNOWPaymentsWebhook(req, {
   env, fetchImpl: async () => Response.json(ack), ...overrides,
 });
 const noBackend = async () => assert.fail('rejected callback reached backend');
+
+test('capture deadline accommodates the bounded provider verification without retries or an unbounded wait', async t => {
+  const timeout = AbortSignal.timeout.bind(AbortSignal), deadlines = [];
+  t.mock.method(AbortSignal, 'timeout', value => { deadlines.push(value); return timeout(value); });
+  assert.equal((await run()).status, 200);
+  assert.equal(NOWPAYMENTS_CALLBACK_TIMEOUT_MS, 20000);
+  assert.deepEqual(deadlines, [20000]);
+});
 
 test('callback is explicitly disabled by default before reading the body or calling Core', async () => {
   for (const enabled of [undefined, 'false', true, 'TRUE', '1']) {
@@ -81,7 +89,7 @@ test('upstream failures and redirects are never acknowledged and leak no diagnos
   assert.equal(network.status, 503); assert.doesNotMatch(await network.text(), /private|received/);
 });
 
-test('only bounded JSON HTTP200 persisted-review acknowledgement is relayed; activation is never claimed', async () => {
+test('only bounded JSON HTTP200 capture acknowledgement is relayed; captured never means completed or activated', async () => {
   for (const upstream of [Response.json({ ...ack, received: false }), Response.json({ ...ack, received: 'true' }),
     Response.json({ ...ack, fulfillment_status: 'activated' }), Response.json({ ...ack, state: 'activated' }),
     Response.json({ ...ack, state: 'closed_reviewed' }), Response.json(ack, { status: 201 }),
@@ -91,10 +99,14 @@ test('only bounded JSON HTTP200 persisted-review acknowledgement is relayed; act
     const response = await run(request(), { fetchImpl: async () => upstream });
     assert.equal(response.status, 503); assert.doesNotMatch(await response.text(), /received|activated|private/);
   }
-  for (const state of ['invoice_created', 'invoice_unknown', 'pending_review']) {
+  for (const state of ['invoice_created', 'invoice_unknown', 'pending_review', 'completed']) {
     const response = await run(request(), { fetchImpl: async () => Response.json({ ...ack, state }) });
-    assert.equal(response.status, 200); assert.deepEqual(await response.json(), { ...ack, state });
+    assert.equal(response.status, 503);
   }
+  for (const value of [{ ...ack, mode: undefined }, { received: true, state: 'pending_review', fulfillment_status: 'review_required' }]) {
+    assert.equal((await run(request(), { fetchImpl: async () => Response.json(value) })).status, 503);
+  }
+  const response = await run(); assert.equal(response.status, 200); assert.deepEqual(await response.json(), ack);
 });
 
 test('cancellation aborts a stalled upstream body and returns a retryable failure without a false ACK', async () => {

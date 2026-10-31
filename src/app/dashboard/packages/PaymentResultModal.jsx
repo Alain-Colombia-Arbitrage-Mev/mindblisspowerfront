@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { useCheckoutActivation } from "@/hooks/useCheckoutActivation";
 import { checkoutStatusCopy } from "@/lib/checkout-status.mjs";
 import { useMemberSummary } from "@/hooks/useMemberSummary";
+import NOWPaymentsReceiptPopup from './NOWPaymentsReceiptPopup';
 
 /**
  * Popup de resultado del pago. Stripe redirige a
@@ -17,7 +18,9 @@ import { useMemberSummary } from "@/hooks/useMemberSummary";
 export default function PaymentResultModal() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const result = searchParams.get("paid") === "1" ? "paid" : searchParams.get("canceled") === "1" ? "canceled" : null;
+  const nowpayments = searchParams.get('payment_provider') === 'nowpayments';
+  const nowOrderId = nowpayments && searchParams.getAll('order_id').length === 1 ? searchParams.get('order_id') : '';
+  const result = nowpayments ? null : searchParams.get("paid") === "1" ? "paid" : searchParams.get("canceled") === "1" ? "canceled" : null;
   const requestKey = `${result}:${searchParams.get("session_id") || ""}`;
   const [dismissedKey, setDismissedKey] = useState(null);
   const visible = result !== null && dismissedKey !== requestKey;
@@ -34,7 +37,7 @@ export default function PaymentResultModal() {
     refreshedKey.current = requestKey;
     void reload();
   }, [visible, result, activation.active, requestKey, reload]);
-  if (!visible) return null;
+  if (!visible) return <NOWPaymentsReceiptPopup orderId={nowOrderId} />;
 
   const close = () => {
     setDismissedKey(requestKey);

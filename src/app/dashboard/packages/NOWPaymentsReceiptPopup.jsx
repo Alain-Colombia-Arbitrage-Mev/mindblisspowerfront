@@ -1,0 +1,36 @@
+'use client';
+
+import { useState } from 'react';
+import * as Dialog from '@radix-ui/react-dialog';
+import { CheckCircle2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useNOWPaymentsReceipt } from '@/hooks/useNOWPaymentsReceipt';
+import { completedNOWPaymentsReceipt } from '@/lib/nowpayments-receipt.mjs';
+
+export default function NOWPaymentsReceiptPopup({ orderId = '' }) {
+  const receipt = useNOWPaymentsReceipt(orderId);
+  const [dismissed, setDismissed] = useState('');
+  const router = useRouter();
+  if (dismissed === orderId || !completedNOWPaymentsReceipt(receipt, orderId)) return null;
+  function close() { setDismissed(orderId); router.replace('/dashboard/packages', { scroll: false }); }
+  return (
+    <Dialog.Root open onOpenChange={open => { if (!open) close(); }}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }} />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%_-_3rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-3xl p-8 text-center"
+          style={{ background: 'var(--vp-surface)', border: '1px solid var(--vp-amber-border, rgba(250,204,21,0.35))' }}
+          onCloseAutoFocus={event => { event.preventDefault(); document.getElementById('memberships-title')?.focus(); }}>
+          <span className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full" aria-hidden="true"
+            style={{ background: 'rgba(250,204,21,0.12)', border: '1px solid rgba(250,204,21,0.3)' }}>
+            <CheckCircle2 size={30} style={{ color: 'var(--vp-accent)' }} />
+          </span>
+          <Dialog.Title className="m-0 text-2xl font-bold" style={{ color: 'var(--vp-text)' }}>Pago recibido y verificado</Dialog.Title>
+          <Dialog.Description className="mt-3 text-sm leading-6" style={{ color: 'var(--vp-muted)' }}>
+            Confirmamos tu pago con NOWPayments y guardamos su comprobante. Esta confirmación no activa una membresía ni genera rendimientos, comisiones o retiros.
+          </Dialog.Description>
+          <Dialog.Close asChild><button type="button" className="executive-button primary mt-6 w-full justify-center">Cerrar confirmación</button></Dialog.Close>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}

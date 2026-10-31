@@ -10,7 +10,9 @@ const modes = new Map([[sessionCookie, 'member'],
   ['__Secure-better-auth.session_token=synthetic-tampered', 'tampered'],
   ['__Secure-better-auth.session_token=synthetic-wrong-audience', 'wrong-audience']]);
 const metrics = { tokens: 0, jwks: 0, verifiedReferrals: 0, sensitiveJwksHeaders: 0, registrations: 0, contactRegistrations: 0, phoneCalls: 0,
-  stripeCheckoutCalls: 0, stripeResumeCalls: 0, nowpaymentsCheckoutCalls: 0 };
+  stripeCheckoutCalls: 0, stripeResumeCalls: 0, nowpaymentsCheckoutCalls: 0, nowpaymentsCaptures: 0, nowpaymentsStatusReads: 0 };
+const receiptOrder = 'a02f5a55-5fa3-4239-845b-ac6b699110ee';
+let capturedPaymentStatus = 'waiting';
 function validProxySignature(target, options, headers) {
   const timestamp = headers.get('x-vp-auth-timestamp') || '';
   const ip = headers.get('x-vp-auth-client-ip') || '';
@@ -55,6 +57,23 @@ const syntheticEnv = {
     privateCalls++;
     const target = new URL(url);
     const headers = new Headers(options.headers);
+    if (target.hostname === 'payments.core.internal' && target.pathname === '/api/webhooks/nowpayments') {
+      const raw = new TextDecoder().decode(options.body);
+      const body = JSON.parse(raw);
+      const canonical = JSON.stringify(Object.fromEntries(Object.entries(body).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)));
+      const expected = createHmac('sha512', 'synthetic-capture-ipn-secret').update(canonical).digest('hex');
+      if (headers.get('x-vp-service-token') !== 'synthetic-service-only' || headers.get('x-nowpayments-sig') !== expected) return Response.json({ error: 'invalid_signature' }, { status: 401 });
+      metrics.nowpaymentsCaptures++; capturedPaymentStatus = body.payment_status;
+      return Response.json({ received: true, mode: 'capture_only', state: 'captured', fulfillment_status: 'not_activated' });
+    }
+    if (target.hostname === 'payments.core.internal' && target.pathname === '/api/payments/nowpayments/status') {
+      if (headers.get('x-vp-service-token') !== 'synthetic-service-only'
+          || !await validForwardedIdentity(headers.get('x-vp-id-token') || '')) return Response.json({ error: 'unauthenticated' }, { status: 401 });
+      metrics.nowpaymentsStatusReads++;
+      if (target.searchParams.get('order_id') !== receiptOrder) return Response.json({ error: 'payment_not_found' }, { status: 404 });
+      return Response.json({ provider: 'nowpayments', order_id: receiptOrder, state: capturedPaymentStatus === 'finished' ? 'completed' : 'pending',
+        payment_confirmed: capturedPaymentStatus === 'finished', signature_validated: true, provider_verified: true, persisted: true, fulfillment_status: 'not_activated' });
+    }
     if (target.hostname === 'payments.core.internal' && target.pathname === '/api/payments/resume') {
       metrics.stripeResumeCalls++;
       throw new Error('paused_stripe_resume_reached_upstream');
@@ -141,7 +160,7 @@ const syntheticEnv = {
   BETTER_AUTH_JWT_ISSUER: issuer, BETTER_AUTH_JWT_AUDIENCE: audience,
   BETTER_AUTH_JWKS_URL: 'https://auth.core.internal/api/auth/jwks',
   VP_PAYMENTS_URL: 'https://payments.core.internal', PAYMENTS_SERVICE_TOKEN: 'synthetic-service-only',
-  STRIPE_CHECKOUT_ENABLED: 'false', NOWPAYMENTS_MEMBERSHIPS_ENABLED: 'true',
+  STRIPE_CHECKOUT_ENABLED: 'false', NOWPAYMENTS_MEMBERSHIPS_ENABLED: 'true', NOWPAYMENTS_WEBHOOK_ENABLED: 'true',
 };
 export default {
   async fetch(request, env, ctx) {

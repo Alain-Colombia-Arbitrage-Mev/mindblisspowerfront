@@ -26,7 +26,7 @@
       "name": "mindbliss-portal-production",
       "workers_dev": false, "preview_urls": false,
       "routes": [{ "pattern": "mindblisspower.com", "custom_domain": true }],
-      "vars": { "CLOUDFLARE_DEPLOYMENT_READY": "true", "MEMBER_DB_PROVIDER": "hyperdrive", "MEMBER_DB_QUERY_CACHE_DISABLED": "true", "AUTH_PROVIDER": "better-auth", "AUTH_PUBLIC_ORIGIN": "https://mindblisspower.com", "BETTER_AUTH_BACKEND_URL": "https://auth.core.internal", "VP_PAYMENTS_URL": "https://payments.core.internal", "VP_WITHDRAWALS_URL": "https://withdrawals.core.internal", "STRIPE_CHECKOUT_ENABLED": "false", "NOWPAYMENTS_MEMBERSHIPS_ENABLED": "false", "NOWPAYMENTS_WEBHOOK_ENABLED": "false" },
+      "vars": { "CLOUDFLARE_DEPLOYMENT_READY": "true", "MEMBER_DB_PROVIDER": "hyperdrive", "MEMBER_DB_QUERY_CACHE_DISABLED": "true", "AUTH_PROVIDER": "better-auth", "AUTH_PUBLIC_ORIGIN": "https://mindblisspower.com", "BETTER_AUTH_BACKEND_URL": "https://auth.core.internal", "VP_PAYMENTS_URL": "https://payments.core.internal", "VP_WITHDRAWALS_URL": "https://withdrawals.core.internal", "STRIPE_CHECKOUT_ENABLED": "false", "NOWPAYMENTS_MEMBERSHIPS_ENABLED": "false", "NOWPAYMENTS_WEBHOOK_ENABLED": "true" },
       "hyperdrive": [{ "binding": "HYPERDRIVE_MEMBER_FRESH", "id": "fea27e02187448dd940393bc63f4eda6" }],
       "services": [{ "binding": "CORE_API", "service": "mindbliss-core-production" }]
     }

@@ -3,8 +3,8 @@ import { coreFetch, runtimeEnvironment } from './cloudflare-runtime.mjs';
 const headers = { 'Cache-Control': 'private, no-store' };
 const reply = (body, status) => Response.json(body, { status, headers });
 const callbackURL = 'https://payments.core.internal/api/webhooks/nowpayments';
-const receiptStates = new Set(['invoice_created', 'invoice_unknown', 'pending_review']);
 const jsonContent = value => /^application\/json(?:\s*;|$)/i.test(value || '');
+export const NOWPAYMENTS_CALLBACK_TIMEOUT_MS = 20000;
 
 async function readBytes(stream, signal, maxBytes) {
   const reader = stream?.getReader();
@@ -47,7 +47,9 @@ export async function handleNOWPaymentsWebhook(request, { env = runtimeEnvironme
   if (!/^[a-f0-9]{128}$/i.test(signature)) return reply({ error: 'invalid_payment_signature' }, 401);
   const declaredLength = request.headers.get('content-length');
   if (declaredLength && /^\d+$/.test(declaredLength) && Number(declaredLength) > 131072) return reply({ error: 'request_too_large' }, 413);
-  const signal = AbortSignal.any([request.signal, AbortSignal.timeout(5000)]);
+  // Capture includes a bounded authoritative provider GET before persistence.
+  // Allow that deadline without retrying or acknowledging a partial result.
+  const signal = AbortSignal.any([request.signal, AbortSignal.timeout(NOWPAYMENTS_CALLBACK_TIMEOUT_MS)]);
   let body;
   try {
     body = await readBytes(request.body, signal, 131072);
@@ -76,9 +78,9 @@ export async function handleNOWPaymentsWebhook(request, { env = runtimeEnvironme
       return reply({ error: 'payment_callback_unavailable' }, 503);
     }
     const ack = parseObject(await readBytes(upstream.body, signal, 4096));
-    if (ack.received !== true || ack.fulfillment_status !== 'review_required' || !receiptStates.has(ack.state)) {
+    if (ack.received !== true || ack.mode !== 'capture_only' || ack.fulfillment_status !== 'not_activated' || ack.state !== 'captured') {
       return reply({ error: 'payment_callback_unavailable' }, 503);
     }
-    return reply({ received: true, state: ack.state, fulfillment_status: 'review_required' }, 200);
+    return reply({ received: true, mode: 'capture_only', state: 'captured', fulfillment_status: 'not_activated' }, 200);
   } catch { return reply({ error: 'payment_callback_unavailable' }, 503); }
 }

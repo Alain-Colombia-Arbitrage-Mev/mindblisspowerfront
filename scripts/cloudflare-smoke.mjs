@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
+import { createHmac } from 'node:crypto';
 
 // Run only inside the isolated build image, with --network none and tmpfs state.
 const worker = spawn(process.execPath, ['node_modules/wrangler/bin/wrangler.js', 'dev', 'cloudflare-smoke-worker.mjs',
@@ -171,6 +172,28 @@ try {
   probes++;
   const cookie = confirmed.headers.get('set-cookie').split(';')[0];
   const sessionHeaders = { cookie, 'cf-connecting-ip': '192.0.2.10' };
+  const receiptOrder = 'a02f5a55-5fa3-4239-845b-ac6b699110ee';
+  for (const paymentStatus of ['waiting', 'finished']) {
+    const payload = { order_id: receiptOrder, payment_status: paymentStatus };
+    const body = JSON.stringify(payload);
+    const signature = createHmac('sha512', 'synthetic-capture-ipn-secret').update(body).digest('hex');
+    const captured = await fetch('http://127.0.0.1:8787/api/webhooks/nowpayments', { method: 'POST', body,
+      headers: { 'content-type': 'application/json', 'x-nowpayments-sig': signature }, signal: AbortSignal.timeout(8000) });
+    assert.equal(captured.status, 200);
+    assert.deepEqual(await captured.json(), { received: true, mode: 'capture_only', state: 'captured', fulfillment_status: 'not_activated' });
+    assert.equal(captured.headers.get('set-cookie'), null); probes++;
+    const status = await fetch(`http://127.0.0.1:8787/api/payments/nowpayments/status?order_id=${receiptOrder}`, { headers: sessionHeaders, signal: AbortSignal.timeout(8000) });
+    assert.equal(status.status, 200);
+    const receipt = await status.json();
+    assert.equal(receipt.payment_confirmed, paymentStatus === 'finished');
+    assert.equal(receipt.state, paymentStatus === 'finished' ? 'completed' : 'pending');
+    assert.equal(receipt.persisted, true); assert.equal(receipt.signature_validated, true); assert.equal(receipt.provider_verified, true);
+    assert.equal(receipt.fulfillment_status, 'not_activated'); assert.match(status.headers.get('cache-control'), /no-store/); probes++;
+  }
+  for (const [id, headers, expected] of [[receiptOrder, {}, 401], ['00000000-0000-4000-8000-000000000002', sessionHeaders, 404]]) {
+    const denied = await fetch(`http://127.0.0.1:8787/api/payments/nowpayments/status?order_id=${id}`, { headers, signal: AbortSignal.timeout(8000) });
+    assert.equal(denied.status, expected); assert.doesNotMatch(await denied.text(), /payment_confirmed|completed/); probes++;
+  }
   const cryptoPaused = await fetch('http://127.0.0.1:8787/__now_disabled/api/payments/checkout', {
     method: 'POST', headers: { ...authHeaders, ...sessionHeaders }, body: JSON.stringify({ package_id: 1, provider: 'nowpayments',
       NOWPAYMENTS_MEMBERSHIPS_ENABLED: 'true' }), signal: AbortSignal.timeout(8000),
@@ -245,6 +268,8 @@ try {
   assert.equal(metrics.stripeCheckoutCalls, 0, 'paused explicit/default Stripe requests never create an upstream checkout');
   assert.equal(metrics.stripeResumeCalls, 0, 'public resume links cannot bypass the Stripe pause');
   assert.equal(metrics.nowpaymentsCheckoutCalls, 1, 'the Stripe pause preserves the existing NOWPayments review-only contract');
+  assert.equal(metrics.nowpaymentsCaptures, 2, 'signed waiting and finished callbacks are captured without a browser session');
+  assert.equal(metrics.nowpaymentsStatusReads, 3, 'only verified users reach owner-scoped payment confirmation reads');
   console.log(JSON.stringify({ workerd: 'passed', probes, privateCalls: metrics.privateCalls, realRsaVerified: true,
     tamperedAndWrongAudienceRejected: true, externalNetwork: 'disabled', databaseQueries: 0, realMessages: 0 }));
 } finally {

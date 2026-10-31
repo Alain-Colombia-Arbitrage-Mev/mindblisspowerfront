@@ -42,7 +42,7 @@ export default async function PackagesPage() {
         <div className="executive-page-header">
           <div>
             <p className="executive-eyebrow">Inversion</p>
-            <h1 className="executive-title">Membresías</h1>
+            <h1 id="memberships-title" tabIndex={-1} className="executive-title">Membresías</h1>
             <p className="executive-subtitle">
               Catalogo conectado a RDS para revisar membresías activas, puntos y carrera de rangos de Mindbliss Power.
             </p>
