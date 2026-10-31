@@ -68,7 +68,7 @@ export default async function PackagesPage({ searchParams } = {}) {
             El catalogo estara disponible al finalizar la sincronizacion de datos.
           </div>
         ) : (
-          <PaywallGate key={selectedPlan || "catalog"} initialShowPlans={Boolean(selectedPlan)}>
+          <PaywallGate initialShowPlans>
           <div className="executive-grid three">
             {packages.map((pkg, index) => {
               const featured = index === Math.min(2, packages.length - 1);
@@ -77,6 +77,7 @@ export default async function PackagesPage({ searchParams } = {}) {
                 <article
                   key={pkg.id}
                   id={`plan-${pkg.id}`}
+                  data-selected-plan={String(pkg.id) === selectedPlan || undefined}
                   className="executive-card flex scroll-mt-24 flex-col"
                   style={{
                     borderColor: featured ? "var(--vp-amber-border)" : "var(--vp-border)",

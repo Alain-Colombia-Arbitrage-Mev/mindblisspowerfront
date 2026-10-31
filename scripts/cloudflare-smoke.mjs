@@ -287,7 +287,7 @@ try {
   assert.match(resume.headers.get('cache-control'), /no-store/); probes++;
   const cryptoCheckout = await fetch('http://127.0.0.1:8787/api/payments/checkout', {
     method: 'POST', headers: { ...authHeaders, ...sessionHeaders }, body: JSON.stringify({ package_id: 1, provider: 'nowpayments',
-      purchase_request_id: 'a02f5a55-5fa3-4239-845b-ac6b699110a2' }), signal: AbortSignal.timeout(8000),
+      purchase_request_id: 'a02f5a55-5fa3-4239-845b-ac6b699110a2', purchase_subject: 'synthetic-member' }), signal: AbortSignal.timeout(8000),
   });
   assert.equal(cryptoCheckout.status, 200);
   const cryptoPayload = await cryptoCheckout.json();

@@ -11,7 +11,7 @@ const safeErrors = new Set(['buyer_not_found', 'invalid_referral_code', 'invalid
   'nowpayments-review-required', 'nowpayments_review_required', 'checkout_pending_review', 'membership_payment_pending_review',
   'core_not_ready', 'financial_review_required', 'membership_eligibility_unavailable', 'nowpayments_financial_configuration_unavailable',
   'stripe_unavailable', 'stripe_checkout_disabled', 'nowpayments_checkout_disabled',
-  'upstream_unavailable', 'nowpayments_checkout_unavailable', 'membership_purchase_already_processed', 'invalid_purchase_request_id']);
+  'upstream_unavailable', 'nowpayments_checkout_unavailable', 'membership_purchase_already_processed', 'invalid_purchase_request_id', 'purchase_request_conflict']);
 const validAmount = value => typeof value === 'string' && /^(?:0|[1-9]\d{0,11})\.\d{2}$/.test(value);
 const minorUnits = value => BigInt(value.replace('.', ''));
 
@@ -69,6 +69,10 @@ export async function handleMembershipCheckout(request, { env, identity, fetchIm
   if (ref && side && !['L', 'R'].includes(side)) return reply({ error: 'invalid_preferred_side' }, 400);
   if (provider === 'stripe' && !stripeCheckoutEnabled(env)) return reply({ error: 'stripe_checkout_disabled' }, 503);
   if (provider === 'nowpayments' && !nowpaymentsMembershipsEnabled(env)) return reply({ error: 'nowpayments_checkout_disabled' }, 503);
+  // Presentation context may be stale after another tab changes the cookie.
+  // This is an equality guard, never a caller-selected identity or JWT claim.
+  // Reject before transport rather than using A's tab intent to invoice B.
+  if (provider === 'nowpayments' && body.purchase_subject !== claims.sub) return reply({ error: 'checkout_session_changed' }, 409);
   const purchaseRequestId = provider === 'nowpayments' ? nowpaymentsOrderId(body.purchase_request_id) : '';
   if (provider === 'nowpayments' && !purchaseRequestId) return reply({ error: 'invalid_purchase_request_id' }, 400);
   if (!env.VP_PAYMENTS_URL || !env.PAYMENTS_SERVICE_TOKEN) return reply({ error: 'payments-unconfigured' }, 503);

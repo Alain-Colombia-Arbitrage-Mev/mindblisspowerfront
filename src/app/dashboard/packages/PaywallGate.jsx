@@ -14,25 +14,22 @@ const PLAN_LABEL = {
 };
 
 /**
- * Puerta del paywall: si el miembro YA tiene una membresía activa, en vez de
- * ofrecerle comprar otra vez muestra una pantalla de "membresía activa" y deja
- * los planes ocultos tras un toggle (por si quiere ver/mejorar). Si no está
- * activo (o aún carga), muestra el paywall normal (children).
+ * Active memberships do not prevent independent purchases. Keep the checkout
+ * children mounted while the summary loads or the catalog is toggled, so an
+ * in-flight request never loses its identity or pending guard.
  */
 export default function PaywallGate({ children, initialShowPlans = false }) {
   const { state } = useMemberSummary({ fresh: true });
   const [showPlans, setShowPlans] = useState(initialShowPlans === true);
 
-  // Mientras carga o si no está activo → paywall normal (evita parpadeo).
-  if (state.loading || state.error || !(Number(state.data?.active_packages) > 0)) return children;
-
+  const active = !state.loading && !state.error && Number(state.data?.active_packages) > 0;
   const d = state.data;
   const plan = d?.plan ? PLAN_LABEL[d.plan] || d.plan : null;
   const rank = d?.rank && d.rank !== "—" ? d.rank : null;
 
   return (
     <div>
-      <div
+      {active ? <div
         className="rounded-3xl p-8 text-center sm:p-10"
         style={{
           background: "var(--vp-surface)",
@@ -70,20 +67,21 @@ export default function PaywallGate({ children, initialShowPlans = false }) {
             <ReceiptText size={16} /> Mi enlace de referido
           </Link>
         </div>
-      </div>
+      </div> : null}
 
-      <div className="mt-6 text-center">
+      {active ? <div className="mt-6 text-center">
         <button
           type="button"
           onClick={() => setShowPlans((v) => !v)}
+          aria-expanded={showPlans}
           className="executive-button ghost"
         >
           {showPlans ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
           {showPlans ? "Ocultar planes" : "Comprar otra membresía"}
         </button>
-      </div>
+      </div> : null}
 
-      {showPlans && <div className="mt-6">{children}</div>}
+      <div hidden={active && !showPlans} className={active ? "mt-6" : undefined}>{children}</div>
     </div>
   );
 }

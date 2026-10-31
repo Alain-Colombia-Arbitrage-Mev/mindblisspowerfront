@@ -146,11 +146,12 @@ test("the existing memberships page exposes matching plan anchors without changi
   assert.match(html, /scroll-mt-24/);
   assert.match(html, /data-stripe="false"/);
   assert.match(html, /data-nowpayments="false"/);
-  assert.equal(gateProps.at(-1).initialShowPlans, false);
+  assert.equal(gateProps.at(-1).initialShowPlans, true, 'an active membership cannot hide other available purchases by default');
   for (const value of ["7", "999", "007", "-7", "7/../../outside", ["7", "7"], true, "", undefined]) {
     const page = await Packages({ searchParams: Promise.resolve({ plan: value, paid: "1", activated: "true" }) });
     const html = render(page);
-    assert.equal(gateProps.at(-1).initialShowPlans, value === "7");
+    assert.equal(gateProps.at(-1).initialShowPlans, true);
+    assert.equal(html.includes('data-selected-plan="true"'), value === "7", 'only a validated catalog selector highlights an existing plan');
     assert.match(html, /data-stripe="false"/);
     assert.match(html, /data-nowpayments="false"/);
   }
@@ -175,11 +176,12 @@ test("the real active-membership gate reveals a validated selected card while it
   const toggle = element.props.children[1].props.children;
   toggle.props.onClick();
   html = render(Gate(props));
-  assert.doesNotMatch(html, /Selected catalog card/);
+  assert.match(html, /<div hidden=""[^>]*><p>Selected catalog card<\/p><\/div>/);
+  assert.equal(Gate(props).props.children[2].props.children, props.children, 'hiding the catalog must not unmount its purchase intents');
   assert.match(html, /Comprar otra membresía/);
   for (const initialShowPlans of [false, "true", 1, undefined]) {
     showPlans = undefined;
-    assert.doesNotMatch(render(Gate({ ...props, initialShowPlans })), /Selected catalog card/);
+    assert.match(render(Gate({ ...props, initialShowPlans })), /<div hidden=""[^>]*><p>Selected catalog card<\/p><\/div>/);
   }
   state.data = { active_packages: 0 };
   showPlans = undefined;

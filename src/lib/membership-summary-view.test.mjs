@@ -57,3 +57,40 @@ test("actual payment-result effect refreshes the shared GET once only after conf
   renderEffect(); await new Promise(resolve => setImmediate(resolve)); assert.equal(calls, 2);
   resource.cancel();
 });
+
+test("catalog children keep one fixed React slot across loading, activation, stale errors and explicit toggles so purchase UUIDs and pending guards do not remount", () => {
+  const state = { loading: true, error: "", data: null };
+  let showPlans = true;
+  const Gate = component("../app/dashboard/packages/PaywallGate.jsx", {
+    react: { ...React, useState: () => [showPlans, value => { showPlans = typeof value === 'function' ? value(showPlans) : value; }] },
+    "@/hooks/useMemberSummary": { useMemberSummary: () => ({ state }) },
+    "next/link": { default: ({ children, ...props }) => React.createElement("a", props, children) },
+  });
+  const PurchaseIntent = () => React.createElement('button', { type: 'button' }, 'Synthetic purchase');
+  const catalog = React.createElement('div', { key: 'catalog' }, React.createElement(PurchaseIntent, { key: 'plan-7' }));
+  const props = { children: catalog, initialShowPlans: true };
+  let previous, syntheticMounts = 0;
+  for (const next of [
+    { loading: true, error: '', data: null },
+    { loading: false, error: '', data: { active_packages: 0 } },
+    { loading: false, error: '', data: { active_packages: 1 } },
+    { loading: true, error: '', data: { active_packages: 1 } },
+    { loading: false, error: 'Unavailable', data: { active_packages: 1 } },
+    { loading: false, error: '', data: { active_packages: 2 } },
+  ]) {
+    Object.assign(state, next);
+    const tree = Gate(props), slot = tree.props.children[2];
+    assert.equal(tree.type, 'div'); assert.equal(tree.props.children.length, 3);
+    assert.equal(slot.type, 'div'); assert.equal(slot.props.children, catalog);
+    assert.equal(slot.props.hidden, false, 'the normal catalog remains visible even if an account already has memberships');
+    const identity = { parent: tree.type, index: 2, type: slot.type, key: slot.key, child: slot.props.children.type, childKey: slot.props.children.key };
+    if (!previous || Object.keys(identity).some(key => identity[key] !== previous[key])) syntheticMounts++;
+    previous = identity;
+  }
+  let tree = Gate(props); const toggle = tree.props.children[1].props.children;
+  assert.equal(toggle.props['aria-expanded'], true); toggle.props.onClick();
+  tree = Gate(props); assert.equal(tree.props.children[2].props.hidden, true); assert.equal(tree.props.children[2].props.children, catalog);
+  tree.props.children[1].props.children.props.onClick();
+  tree = Gate(props); assert.equal(tree.props.children[2].props.hidden, false); assert.equal(tree.props.children[2].props.children, catalog);
+  assert.equal(syntheticMounts, 1);
+});

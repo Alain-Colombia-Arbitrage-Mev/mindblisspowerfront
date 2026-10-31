@@ -9,7 +9,7 @@ const claims = { sub: 'stable-synthetic-subject', email: ' MEMBER@example.test '
 const identity = async () => ({ token: 'synthetic-verified-jwt', claims });
 const payload = { provider: 'nowpayments', url: 'https://nowpayments.io/payment/?iid=12345', total_usd: '101.00', fee_usd: '1.00', fulfillment_status: 'review_required' };
 const purchaseRequestId = 'a02f5a55-5fa3-4239-845b-ac6b699110ef';
-const form = { package_id: 1, provider: 'nowpayments', purchase_request_id: purchaseRequestId, ref: 'MP-SYNTHETIC', ref_email: 'member@example.test', preferred_side: 'l',
+const form = { package_id: 1, provider: 'nowpayments', purchase_request_id: purchaseRequestId, purchase_subject: claims.sub, ref: 'MP-SYNTHETIC', ref_email: 'member@example.test', preferred_side: 'l',
   amount_usd: '0.01', person_id: 1, sponsor_id: 1, email: 'attacker@example.test', is_admin: true };
 function request(body = form, extra = {}) {
   return new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/payments/checkout`, { method: 'POST',
@@ -91,6 +91,29 @@ test('NOW purchase intent requires a canonical UUID, preserves it unchanged and 
     const failed = await run(request(), { fetchImpl: async () => Response.json({ error, private: 'not-public' }, { status: 409 }) });
     assert.deepEqual(await failed.json(), { error });
   }
+});
+
+test('a NOW intention must match the independently verified current session subject before any provider transport, and its subject hint is never forwarded', async () => {
+  let calls = 0;
+  for (const purchase_subject of [undefined, null, '', false, 7, {}, [], 'other-synthetic-subject', `${claims.sub} `, claims.sub.toUpperCase()]) {
+    const response = await run(request({ ...form, purchase_subject }), { fetchImpl: async () => { calls++; assert.fail('stale or malformed intent owner reached provider'); } });
+    assert.equal(response.status, 409); assert.deepEqual(await response.json(), { error: 'checkout_session_changed' });
+    assert.equal(response.headers.get('cache-control'), 'private, no-store'); assert.equal(response.headers.get('set-cookie'), null);
+  }
+  assert.equal(calls, 0);
+  const changedSession = await run(request(), { identity: async () => ({ token: 'verified-other-session',
+    claims: { ...claims, sub: 'other-synthetic-subject', email: 'other@example.test' } }),
+    fetchImpl: async () => { calls++; assert.fail('old context invoice was created for a new cookie owner'); } });
+  assert.equal(changedSession.status, 409); assert.deepEqual(await changedSession.json(), { error: 'checkout_session_changed' });
+  assert.equal(calls, 0);
+  const matching = await run(request(), { fetchImpl: async (_url, options) => {
+    calls++; const body = JSON.parse(options.body);
+    assert.equal(body.email, 'member@example.test'); assert.equal(body.purchase_request_id, purchaseRequestId);
+    assert.equal(Object.hasOwn(body, 'purchase_subject'), false, 'comparison hint never becomes upstream owner authority');
+    assert.equal(Object.hasOwn(body, 'subject'), false); assert.equal(Object.hasOwn(body, 'person_id'), false);
+    return Response.json(payload);
+  } });
+  assert.equal(matching.status, 200); assert.equal(calls, 1);
 });
 
 test('unbound referral hints cannot influence another verified account and Stripe remains default', async () => {

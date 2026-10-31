@@ -58,6 +58,9 @@ export async function GET() {
     mode: betterAuthEnabled() ? "better-auth" : "cognito",
     name: name || null,
     email: email || null,
+    // Opaque, verified identity for namespacing tab-local checkout intents only.
+    // The checkout BFF still authorizes from its independently verified cookie.
+    subject: authenticated && typeof claims.sub === "string" ? claims.sub : null,
     givenName: claims.given_name || null,
     // Código REAL del afiliado (invitation_link o MP{id} canónico del backend).
     // NUNCA inventamos un código: si el miembro aún no está colocado en el árbol

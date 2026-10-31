@@ -10,6 +10,7 @@ import * as policy from './nowpayments-purchases.mjs';
 import * as balances from './nowpayments-balances.mjs';
 import * as checkoutPolicy from './checkout-policy.mjs';
 import * as purchaseCheck from './nowpayments-purchase-check.mjs';
+import * as checkoutIntent from './checkout-intent.mjs';
 
 const require = createRequire(import.meta.url), orderId = 'a02f5a55-5fa3-4239-845b-ac6b699110ee', secondId = 'a02f5a55-5fa3-4239-845b-ac6b699110ef';
 const icons = new Proxy({}, { get: () => () => React.createElement('svg', { 'aria-hidden': 'true' }) });
@@ -142,28 +143,33 @@ test('an uncertain cancellation keeps its dialog and old order, announcing a saf
 });
 
 test('checkout retains a purchase UUID after an ambiguous failure, and a processed intention needs a separate explicit new-purchase action', async () => {
-  const state = hooks(), bodies = [], originalFetch = globalThis.fetch;
+  const state = hooks(), bodies = [], originalFetch = globalThis.fetch, originalWindow = globalThis.window;
+  const stored = new Map();
+  globalThis.window = { sessionStorage: { getItem: key => stored.get(key) ?? null,
+    setItem: (key, value) => { stored.set(key, value); }, removeItem: key => { stored.delete(key); } } };
   let code = 'upstream_unavailable';
   const Component = loadComponent('../app/dashboard/packages/ActivatePackageButton.jsx', { react: state.react,
     'lucide-react': { ArrowRight: () => null, Loader2: () => null }, '@/lib/referral-attribution': { referralForCheckout: () => ({ code: '', email: '' }) },
     '@/lib/member-session-context': { useMemberSession: () => null },
-    '@/lib/checkout-policy.mjs': checkoutPolicy, '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' ') } });
+    '@/lib/checkout-policy.mjs': checkoutPolicy, '@/lib/checkout-intent.mjs': checkoutIntent,
+    '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' ') } });
   const tree = () => { state.reset(); return Component({ packageId: 1, nowpaymentsEnabled: true }); };
   globalThis.fetch = async (target, options) => {
-    if (target === '/api/auth/session') return Response.json({ email: 'member@example.test' });
+    if (target === '/api/auth/session') return Response.json({ authenticated: true, subject: 'synthetic-verified-owner', email: 'member@example.test' });
     assert.equal(target, '/api/payments/checkout'); bodies.push(JSON.parse(options.body)); return Response.json({ error: code }, { status: 409 });
   };
   const primary = value => nodes(value).find(node => node.type === 'button' && node.props.onClick?.name === 'activate');
   try {
     await primary(tree()).props.onClick(); await primary(tree()).props.onClick();
     assert.equal(bodies.length, 2); assert.equal(bodies[0].purchase_request_id, bodies[1].purchase_request_id);
+    assert.equal(bodies[0].purchase_subject, 'synthetic-verified-owner');
     code = 'membership_purchase_already_processed'; await primary(tree()).props.onClick();
     assert.equal(bodies.length, 3); assert.equal(primary(tree()).props.disabled, true);
     const fresh = button(tree(), 'Iniciar otra compra de esta membresía'); assert.ok(fresh); fresh.props.onClick();
     assert.equal(bodies.length, 3, 'resetting the intent does not create or pay an invoice');
     code = 'upstream_unavailable'; await primary(tree()).props.onClick();
     assert.equal(bodies.length, 4); assert.notEqual(bodies[3].purchase_request_id, bodies[0].purchase_request_id);
-  } finally { globalThis.fetch = originalFetch; }
+  } finally { globalThis.fetch = originalFetch; if (originalWindow === undefined) delete globalThis.window; else globalThis.window = originalWindow; }
 });
 
 test('history stays independent of recovered/loading/failed summary and no purchase action can submit customer money or provider URLs', () => {

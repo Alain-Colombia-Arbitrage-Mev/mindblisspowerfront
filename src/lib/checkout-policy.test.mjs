@@ -80,6 +80,9 @@ test('copy never treats a redirect or unavailable provider as activation or invi
   assert.match(checkoutErrorMessage('checkout_pending_review', 'nowpayments'), /No vuelvas a pagar/);
   assert.match(checkoutErrorMessage('membership_payment_pending_review', 'nowpayments'), /No vuelvas a pagar/);
   assert.doesNotMatch(checkoutErrorMessage('membership_payment_pending_review', 'nowpayments'), /No se ha iniciado un cobro/);
+  assert.match(checkoutErrorMessage('membership_payment_pending_review', 'nowpayments'), /esta misma factura/);
+  assert.match(checkoutErrorMessage('membership_payment_pending_review', 'nowpayments'), /factura anterior se conserva/);
+  assert.match(checkoutErrorNotice('purchase_request_conflict', 'nowpayments'), /otra compra.*Referencia: purchase_request_conflict/);
   for (const code of ['core_not_ready', 'financial_review_required', 'membership_eligibility_unavailable', 'stripe_unavailable']) {
     assert.match(checkoutErrorMessage(code), /no están habilitados temporalmente/);
   }
