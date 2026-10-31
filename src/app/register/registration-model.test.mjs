@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { registrationEmail, registrationErrors, registrationHints, registrationRetrySeconds, registrationFailure, registrationLoginUrl, registrationAcknowledged, registrationUrl, registrationPendingDelivery } from './registration-model.mjs';
+import { registrationEmail, registrationErrors, registrationHints, registrationRetrySeconds, registrationFailure, registrationLoginUrl, registrationAcknowledged, registrationUrl, registrationPendingDelivery, registrationRequired, registrationRedirect, consumeRegistrationPrefill } from './registration-model.mjs';
 
 const valid = { fullName: 'Persona Prueba', email: ' test@example.test ', password: 'Synthetic Example 12', confirmPassword: 'Synthetic Example 12', acceptsPrivacy: true };
 
@@ -79,4 +79,61 @@ test('registration links preserve bounded email, referral and binary-side hints 
   assert.equal(malicious.pathname, '/register');
   assert.equal(malicious.searchParams.get('role'), null);
   assert.equal(malicious.searchParams.get('ref'), 'ref?role=admin');
+});
+
+test('only the explicit missing-account contract requests registration, never permissions, throttling or an outage', () => {
+  assert.equal(registrationRequired(400, { error: 'authentication_failed', code: 'REGISTRATION_REQUIRED' }), true);
+  for (const status of [200, 201, 401, 403, 404, 409, 429, 500, 502, 503, 504]) {
+    assert.equal(registrationRequired(status, { code: 'REGISTRATION_REQUIRED' }), false);
+  }
+  for (const payload of [null, [], {}, { needsRegister: true }, { code: 'USER_NOT_FOUND' },
+    { code: 'INVALID_EMAIL_OR_PASSWORD' }, { code: 'REGISTRATION_REQUIRED', ok: true }]) {
+    assert.equal(registrationRequired(400, payload), false);
+  }
+});
+
+function temporaryBrowser() {
+  const data = new Map();
+  return { data, sessionStorage: { getItem: key => data.get(key) ?? null,
+    removeItem: key => data.delete(key), setItem: (key, value) => data.set(key, value) } };
+}
+
+test('missing-account continuation keeps email out of URLs and stores only a five-minute one-shot hint', () => {
+  const browser = temporaryBrowser(), now = 1800000000000;
+  const href = registrationRedirect(' MEMBER@EXAMPLE.TEST ', 'MP-REFERRED', 'R', browser, now);
+  assert.equal(href, '/register?ref=MP-REFERRED&side=R&reason=registration-required');
+  assert.equal(new URL(href, 'https://example.test').searchParams.get('email'), null);
+  assert.equal(new URL(href, 'https://example.test').searchParams.get('resume'), null);
+  assert.deepEqual(JSON.parse([...browser.data.values()][0]), { email: 'member@example.test', createdAt: now });
+  assert.equal(consumeRegistrationPrefill(browser, now + 299999), 'member@example.test');
+  assert.equal(browser.data.size, 0);
+  assert.equal(consumeRegistrationPrefill(browser, now + 299999), '');
+});
+
+test('expired, future-dated, invalid and oversized hints are erased without becoming registration authority', () => {
+  const browser = temporaryBrowser(), now = 1800000000000;
+  for (const age of [300001, -1]) {
+    registrationRedirect('member@example.test', '', '', browser, now - age);
+    assert.equal(consumeRegistrationPrefill(browser, now), '');
+    assert.equal(browser.data.size, 0);
+  }
+  for (const raw of ['not-json', 'null', '[]', JSON.stringify({ email: 'invalid', createdAt: now }),
+    JSON.stringify({ email: 'member@example.test', createdAt: String(now) }), 'a'.repeat(1025)]) {
+    browser.data.set('mindbliss.registration-prefill.v1', raw);
+    assert.equal(consumeRegistrationPrefill(browser, now), '');
+    assert.equal(browser.data.size, 0);
+  }
+});
+
+test('blocked browser storage still navigates to a fixed registration path without email or privilege hints', () => {
+  const browser = { get sessionStorage() { throw new Error('synthetic storage denial'); } };
+  const destination = registrationRedirect('member@example.test', 'ref?role=admin&next=https://attacker.test', 'L', browser);
+  const url = new URL(destination, 'https://example.test');
+  assert.equal(url.pathname, '/register');
+  assert.equal(url.searchParams.get('email'), null);
+  assert.equal(url.searchParams.get('role'), null);
+  assert.equal(url.searchParams.get('next'), null);
+  assert.equal(url.searchParams.get('side'), 'L');
+  assert.equal(consumeRegistrationPrefill(browser), '');
+  assert.equal(registrationRedirect('invalid', 'invalid ref', 'R'), '/register?reason=registration-required');
 });

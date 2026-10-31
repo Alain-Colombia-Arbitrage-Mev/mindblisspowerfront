@@ -1,4 +1,40 @@
 export const REGISTRATION_RESEND_SECONDS = 300;
+const REGISTRATION_PREFILL_KEY = 'mindbliss.registration-prefill.v1';
+const REGISTRATION_PREFILL_TTL_MS = 5 * 60 * 1000;
+
+// Only sign-in OTP requests and password sign-in use this explicit server
+// decision. An invalid code, denied permission or outage is never a new account.
+export function registrationRequired(status, payload) {
+  return status === 400 && payload !== null && typeof payload === 'object'
+    && !Array.isArray(payload) && payload.code === 'REGISTRATION_REQUIRED' && payload.ok !== true;
+}
+
+// This one-shot email is a convenience hint, never an identity or consent. Keep
+// it out of the URL/history and do not fall back to persistent localStorage.
+export function registrationRedirect(email, referralCode = '', preferredSide = '', browser = undefined, now = Date.now()) {
+  try {
+    const storage = browser?.sessionStorage;
+    storage?.removeItem(REGISTRATION_PREFILL_KEY);
+    const normalizedEmail = registrationEmail(email);
+    if (normalizedEmail) storage?.setItem(REGISTRATION_PREFILL_KEY, JSON.stringify({ email: normalizedEmail, createdAt: now }));
+  } catch { /* A blocked storage area must not prevent registration. */ }
+  const destination = new URL(registrationUrl('', referralCode, preferredSide), 'https://registration.invalid');
+  destination.searchParams.set('reason', 'registration-required');
+  return `${destination.pathname}${destination.search}`;
+}
+
+export function consumeRegistrationPrefill(browser = undefined, now = Date.now()) {
+  try {
+    const storage = browser?.sessionStorage;
+    const raw = storage?.getItem(REGISTRATION_PREFILL_KEY);
+    storage?.removeItem(REGISTRATION_PREFILL_KEY);
+    if (typeof raw !== 'string' || raw.length > 1024) return '';
+    const hint = JSON.parse(raw);
+    if (!hint || typeof hint !== 'object' || Array.isArray(hint) || !Number.isSafeInteger(hint.createdAt)
+      || hint.createdAt > now || now - hint.createdAt > REGISTRATION_PREFILL_TTL_MS) return '';
+    return registrationEmail(hint.email);
+  } catch { return ''; }
+}
 
 export function registrationEmail(value) {
   if (typeof value !== 'string') return '';

@@ -4,9 +4,9 @@ import Link from 'next/link';
 import { useRef, useState } from 'react';
 import { RegistrationButton, RegistrationField, RegistrationPassword } from '../register/RegistrationFields';
 import { betterAuthPasswordRequest, betterAuthPasswordFailure, betterAuthAccess, verifiedEmailSignIn } from './better-auth-login.mjs';
-import { registrationUrl } from '../register/registration-model.mjs';
+import { registrationRequired, registrationRedirect, registrationUrl } from '../register/registration-model.mjs';
 
-export default function BetterAuthPasswordLogin({ email, setEmail, onBusy, onError, onNotice, onVerified, rememberReferral, registrationHref = '' }) {
+export default function BetterAuthPasswordLogin({ email, setEmail, onBusy, onError, onNotice, onVerified, onRegistrationRequired = undefined, rememberReferral, registrationHref = '' }) {
   const [password, setPassword] = useState('');
   const [visible, setVisible] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -33,6 +33,13 @@ export default function BetterAuthPasswordLogin({ email, setEmail, onBusy, onErr
         signal: AbortSignal.timeout(12000), headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(contract.body),
       });
       const payload = await response.json().catch(() => ({}));
+      if (registrationRequired(response.status, payload)) {
+        setPassword('');
+        rememberReferral(contract.body.email);
+        if (onRegistrationRequired) onRegistrationRequired(contract.body.email);
+        else window.location.assign(registrationRedirect(contract.body.email, '', '', window));
+        return;
+      }
       if (!response.ok || !verifiedEmailSignIn(payload, contract.body.email)) {
         setRequiresVerification(payload.code === 'EMAIL_NOT_VERIFIED');
         onError(betterAuthPasswordFailure(response.status, payload.code));

@@ -49,6 +49,41 @@ test('registration remains email-only with the existing two-step design and opti
   assert.doesNotMatch(html, /checked=""/);
 });
 
+test('the login continuation consumes its one-time email but starts at details with empty credentials and unchecked consent, without a message request', t => {
+  const previous = globalThis.window, data = new Map();
+  globalThis.window = { sessionStorage: { getItem: key => data.get(key) ?? null,
+    setItem: (key, value) => data.set(key, value), removeItem: key => data.delete(key) } };
+  t.after(() => { if (previous === undefined) delete globalThis.window; else globalThis.window = previous; });
+  const destination = model.registrationRedirect('new@example.test', 'MP-REFERRED', 'R', window);
+  t.mock.method(globalThis, 'fetch', () => assert.fail('arriving at registration must not create an account or send a code'));
+  const harness = view(), props = { initialSearch: new URL(destination, 'https://example.test').search };
+  harness.render(props);
+  const tree = harness.render(props), html = renderToStaticMarkup(tree);
+  assert.equal(find(tree, node => node?.props?.id === 'email').props.value, 'new@example.test');
+  assert.equal(find(tree, node => node?.props?.id === 'password').props.value, '');
+  assert.equal(find(tree, node => node?.props?.id === 'confirmPassword').props.value, '');
+  assert.equal(find(tree, node => node?.props?.id === 'acceptsPrivacy').props.checked, false);
+  assert.match(html, /Paso 1 de 2/);
+  assert.match(html, /Completa tu registro y verifica tu correo/);
+  assert.match(html, /No se enviará ningún código hasta/);
+  assert.match(html, /MP-REFERRED/);
+  assert.equal(data.size, 0);
+  assert.equal(model.consumeRegistrationPrefill(window), '');
+  harness.unmount();
+});
+
+test('an untrusted registration reason is a hint only and cannot skip details or validate email and identity', t => {
+  t.mock.method(globalThis, 'fetch', () => assert.fail('a query hint must not send an email or claim an account'));
+  const harness = view(), props = { initialSearch: 'reason=registration-required&verified=1&registered=1&role=admin' };
+  harness.render(props);
+  const tree = harness.render(props), html = renderToStaticMarkup(tree);
+  assert.equal(find(tree, node => node?.props?.id === 'email').props.value, '');
+  assert.match(html, /Paso 1 de 2/);
+  assert.doesNotMatch(html, /Correo verificado correctamente|Ir al acceso/);
+  assert.equal(find(tree, node => node?.props?.id === 'acceptsPrivacy').props.checked, false);
+  harness.unmount();
+});
+
 test('blank contacts do not block signup and do not add contact or verification claims to its request', async t => {
   const calls = [];
   t.mock.method(globalThis, 'fetch', async (path, options) => { calls.push({ path, body: JSON.parse(options.body) }); return signupAck(); });

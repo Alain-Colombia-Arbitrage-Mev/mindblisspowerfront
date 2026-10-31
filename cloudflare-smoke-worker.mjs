@@ -139,12 +139,24 @@ const syntheticEnv = {
     }
     if (url.endsWith('/email-otp/send-verification-otp')) {
       const body = JSON.parse(options.body);
+      if (body.email === 'unregistered@example.test' && body.type === 'sign-in') {
+        if (!validProxySignature(target, options, headers)) throw new Error('invalid_unknown_login_signature');
+        return Response.json({ code: 'REGISTRATION_REQUIRED', message: 'private-synthetic-diagnostic', token: 'must-not-leak' }, {
+          status: 400, headers: { 'set-cookie': `${sessionCookie}; Secure; HttpOnly; Path=/` },
+        });
+      }
       if (!((body.type === 'sign-in' && body.email === 'fixture@example.test')
         || (body.type === 'email-verification' && body.email === 'signup@example.test'))) throw new Error('invalid_synthetic_contract');
       return Response.json({ success: true });
     }
     if (url.endsWith('/sign-in/email-otp') || url.endsWith('/sign-in/email')) {
       const body = JSON.parse(options.body);
+      if (url.endsWith('/sign-in/email') && body.email === 'unregistered@example.test') {
+        if (!validProxySignature(target, options, headers)) throw new Error('invalid_unknown_password_signature');
+        return Response.json({ code: 'REGISTRATION_REQUIRED', message: 'private-synthetic-diagnostic', token: 'must-not-leak' }, {
+          status: 400, headers: { 'set-cookie': `${sessionCookie}; Secure; HttpOnly; Path=/` },
+        });
+      }
       const valid = url.endsWith('/sign-in/email-otp') ? body.otp === '001234'
         : body.email === 'fixture@example.test' && body.password === 'Synthetic-Password-123';
       if (!valid) throw new Error('invalid_synthetic_contract');

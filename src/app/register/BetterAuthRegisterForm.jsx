@@ -10,7 +10,7 @@ import { otpTimeoutMs } from '@/lib/email-otp-client.mjs';
 import { RegistrationButton, RegistrationField, RegistrationPassword } from './RegistrationFields';
 import ContactPhoneField from './ContactPhoneField';
 import { initialContactPhone, registrationContactValues } from './contact-phone-model.mjs';
-import { REGISTRATION_RESEND_SECONDS, registrationEmail, registrationErrors, registrationFailure, registrationHints, registrationLoginUrl, registrationRetrySeconds, registrationAcknowledged, registrationPendingDelivery } from './registration-model.mjs';
+import { REGISTRATION_RESEND_SECONDS, consumeRegistrationPrefill, registrationEmail, registrationErrors, registrationFailure, registrationHints, registrationLoginUrl, registrationRetrySeconds, registrationAcknowledged, registrationPendingDelivery } from './registration-model.mjs';
 
 const initialForm = { fullName: '', email: '', password: '', confirmPassword: '', acceptsPrivacy: false,
   contactPhone: initialContactPhone(), contactWhatsapp: initialContactPhone(), whatsappSameAsPhone: false };
@@ -36,6 +36,13 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
   const email = registrationEmail(form.email);
   const loginUrl = registrationLoginUrl(email, hints.referralCode, hints.preferredSide);
   const emailSuggestion = suggestEmailFix(form.email);
+
+  useEffect(() => {
+    if (new URLSearchParams(initialSearch).get('reason') !== 'registration-required' || hints.resume) return;
+    const prefill = consumeRegistrationPrefill(typeof window === 'undefined' ? undefined : window);
+    if (prefill) setForm(current => current.email ? current : { ...current, email: prefill });
+    setNotice('Completa tu registro y verifica tu correo para continuar. No se enviará ningún código hasta que solicites crear tu cuenta.');
+  }, [initialSearch, hints.resume]);
 
   useEffect(() => {
     if (step === 'confirm') codeInput.current?.focus();

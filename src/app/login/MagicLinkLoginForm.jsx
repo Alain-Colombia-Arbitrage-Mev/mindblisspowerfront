@@ -22,7 +22,7 @@ import { bindReferralToEmail, captureReferralFromUrl, normalizePlacementSide, no
 import { otpRequest, otpFailureMessage, otpTimeoutMs, OTP_SEND_NOTICE, OTP_SEND_UNCONFIRMED_NOTICE } from "@/lib/email-otp-client.mjs";
 import BetterAuthPasswordLogin from './BetterAuthPasswordLogin';
 import { betterAuthAccess, verifiedEmailSignIn } from './better-auth-login.mjs';
-import { registrationRetrySeconds, registrationUrl } from '../register/registration-model.mjs';
+import { registrationRequired, registrationRedirect, registrationRetrySeconds, registrationUrl } from '../register/registration-model.mjs';
 
 const AUTH_STATE_MESSAGES = {
   "invalid-email": {
@@ -153,6 +153,15 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     bindReferralToEmail(normalizedEmail);
   }
 
+  function continueToRegistration(normalizedEmail) {
+    setPassword('');
+    setLoginCode('');
+    setCodeRecipient('');
+    setCodeStep('request');
+    setNotice('Completa tu registro y verifica tu correo para continuar.');
+    window.location.assign(registrationRedirect(normalizedEmail, referralCode, preferredSide, window));
+  }
+
   function authPathWithReferral(path, normalizedEmail, extraParams = {}) {
     const params = new URLSearchParams(extraParams);
     if (normalizedEmail) params.set("email", normalizedEmail);
@@ -211,6 +220,10 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
       if (controller.signal.aborted || otpRequestRef.current !== controller) return;
 
       if (emailOtpOnly) {
+        if (registrationRequired(response.status, payload)) {
+          continueToRegistration(normalizedEmail);
+          return;
+        }
         if (!response.ok || payload.ok !== true) {
           if (response.status === 429 || response.status >= 500 || response.ok) {
             // The previous/current attempt may already have produced a code.
@@ -699,6 +712,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
         <BetterAuthPasswordLogin email={email} setEmail={setEmail} onBusy={busy => setLoadingAction(busy ? 'password' : '')}
           onError={setError} onNotice={setNotice} rememberReferral={rememberReferralForEmail}
           onVerified={showVerifiedLogin}
+          onRegistrationRequired={continueToRegistration}
           registrationHref={registrationUrl(email, referralCode, preferredSide, true)} />
       ) : mode === "password" ? (
         <form className="space-y-4" onSubmit={handlePasswordSubmit}>

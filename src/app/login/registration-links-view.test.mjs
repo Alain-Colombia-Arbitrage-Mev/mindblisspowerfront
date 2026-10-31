@@ -80,7 +80,7 @@ test('the real password form preserves the supplied safe continuation after EMAI
   const harness = registrationViewHarness('../login/BetterAuthPasswordLogin.jsx', {
     'next/link': { default: ({ children, ...props }) => React.createElement('a', props, children) },
     '../register/RegistrationFields': { RegistrationField: registrationFieldStub, RegistrationButton: registrationButtonStub,
-      RegistrationPassword: ({ visible, onToggle, ...props }) => registrationFieldStub(props) },
+      RegistrationPassword: ({ visible: _visible, onToggle: _onToggle, ...props }) => registrationFieldStub(props) },
     './better-auth-login.mjs': auth, '../register/registration-model.mjs': registration,
   });
   const props = { email: 'member@example.test', setEmail() {}, onBusy() {}, onError() {}, onNotice() {}, rememberReferral() {},
@@ -253,4 +253,99 @@ test('legacy-account guidance and its registration link are generic and availabl
   assert.equal(calls, 1, 'guidance and changing email do not query account existence or resend');
   assert.deepEqual(destinations, []);
   harness.unmount();
+});
+
+test('a definitively missing OTP account goes to registration instead of an impossible code-entry step', async t => {
+  const destinations = browser(t), data = new Map(), calls = [];
+  window.sessionStorage = { getItem: key => data.get(key) ?? null, setItem: (key, value) => data.set(key, value), removeItem: key => data.delete(key) };
+  t.mock.method(globalThis, 'fetch', async (path, init) => {
+    calls.push({ path, body: JSON.parse(init.body) });
+    return Response.json({ error: 'authentication_failed', code: 'REGISTRATION_REQUIRED' }, { status: 400 });
+  });
+  const harness = magicView(), props = { authMode: 'better-auth', initialEmail: ' NEW@EXAMPLE.TEST ', initialRef: 'MP-REFERRED', initialSide: 'R' };
+  await find(harness.render(props), node => node?.type === 'form').props.onSubmit({ preventDefault() {} });
+  assert.deepEqual(destinations, ['/register?ref=MP-REFERRED&side=R&reason=registration-required']);
+  assert.equal(registration.consumeRegistrationPrefill(window), 'new@example.test');
+  assert.equal(data.size, 0);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].path, '/api/auth/email-otp/send-verification-otp');
+  assert.equal(calls[0].body.email, 'new@example.test');
+  assert.equal(find(harness.render(props), node => node?.props?.id === 'login-code'), undefined);
+  harness.unmount();
+});
+
+test('a missing account can still reach registration with denied storage, without falling back to an email query', async t => {
+  const destinations = browser(t);
+  Object.defineProperty(window, 'sessionStorage', { get() { throw new Error('synthetic denial'); } });
+  t.mock.method(globalThis, 'fetch', async () => Response.json({ code: 'REGISTRATION_REQUIRED' }, { status: 400 }));
+  const harness = magicView(), props = { authMode: 'better-auth', initialEmail: 'new@example.test' };
+  await find(harness.render(props), node => node?.type === 'form').props.onSubmit({ preventDefault() {} });
+  assert.deepEqual(destinations, ['/register?reason=registration-required']);
+  harness.unmount();
+});
+
+test('registration-looking fields on permission, throttling and service failures cannot redirect OTP login', async t => {
+  const destinations = browser(t);
+  for (const status of [200, 401, 403, 404, 429, 500, 503]) {
+    t.mock.method(globalThis, 'fetch', async () => Response.json({ code: 'REGISTRATION_REQUIRED', needsRegister: true }, { status }));
+    const harness = magicView(), props = { authMode: 'better-auth', initialEmail: 'member@example.test' };
+    await find(harness.render(props), node => node?.type === 'form').props.onSubmit({ preventDefault() {} });
+    assert.deepEqual(destinations, []);
+    harness.unmount();
+  }
+});
+
+test('an invalid OTP never redirects to registration even if its response contains a registration code', async t => {
+  const destinations = browser(t);
+  t.mock.method(globalThis, 'fetch', async path => path.endsWith('/send-verification-otp') ? Response.json({ ok: true })
+    : Response.json({ code: 'REGISTRATION_REQUIRED' }, { status: 400 }));
+  const harness = magicView(), props = { authMode: 'better-auth', initialEmail: 'member@example.test' };
+  await find(harness.render(props), node => node?.type === 'form').props.onSubmit({ preventDefault() {} });
+  find(harness.render(props), node => node?.props?.id === 'login-code').props.onChange('001234');
+  await find(harness.render(props), node => node?.type === 'form').props.onSubmit({ preventDefault() {} });
+  assert.match(renderToStaticMarkup(harness.render(props)), /Código inválido o expirado/);
+  assert.deepEqual(destinations, []);
+  harness.unmount();
+});
+
+function realPasswordView() {
+  return registrationViewHarness('../login/BetterAuthPasswordLogin.jsx', {
+    'next/link': { default: ({ children, ...props }) => React.createElement('a', props, children) },
+    '../register/RegistrationFields': { RegistrationField: registrationFieldStub, RegistrationButton: registrationButtonStub,
+      RegistrationPassword: ({ visible: _visible, onToggle: _onToggle, ...props }) => registrationFieldStub(props) },
+    './better-auth-login.mjs': auth, '../register/registration-model.mjs': registration,
+  });
+}
+
+test('a definitively missing password account clears the password and retains the parent referral through the same safe redirect', async t => {
+  const destinations = browser(t), data = new Map(), paths = [];
+  window.sessionStorage = { getItem: key => data.get(key) ?? null, setItem: (key, value) => data.set(key, value), removeItem: key => data.delete(key) };
+  t.mock.method(globalThis, 'fetch', async path => { paths.push(path); return Response.json({ code: 'REGISTRATION_REQUIRED' }, { status: 400 }); });
+  const parent = magicView(), tree = parent.render({ authMode: 'better-auth', initialMode: 'password', initialEmail: 'new@example.test', initialRef: 'MP-REFERRED', initialSide: 'L' });
+  const props = find(tree, node => node?.type === passwordView).props;
+  const harness = realPasswordView();
+  harness.render(props); harness.state[0] = 'Synthetic private password';
+  await find(harness.render(props), node => node?.type === 'form').props.onSubmit({ preventDefault() {} });
+  assert.deepEqual(destinations, ['/register?ref=MP-REFERRED&side=L&reason=registration-required']);
+  assert.equal(harness.state[0], '');
+  assert.equal(registration.consumeRegistrationPrefill(window), 'new@example.test');
+  assert.deepEqual(paths, ['/api/auth/sign-in/email']);
+  assert.deepEqual([...data.values()], []);
+  parent.unmount(); harness.unmount();
+});
+
+test('wrong password, denied admin permission and backend failures never become a new-account redirect', async t => {
+  const destinations = browser(t), errors = [];
+  for (const [status, code] of [[400, 'INVALID_EMAIL_OR_PASSWORD'], [401, 'INVALID_EMAIL_OR_PASSWORD'],
+    [403, 'REGISTRATION_REQUIRED'], [429, 'REGISTRATION_REQUIRED'], [503, 'REGISTRATION_REQUIRED']]) {
+    t.mock.method(globalThis, 'fetch', async () => Response.json({ code }, { status }));
+    const harness = realPasswordView(), props = { email: 'member@example.test', setEmail() {}, onBusy() {},
+      onError: message => errors.push(message), onNotice() {}, onVerified() { assert.fail('a rejected login cannot verify an account'); }, rememberReferral() {} };
+    harness.render(props); harness.state[0] = 'Synthetic private password';
+    await find(harness.render(props), node => node?.type === 'form').props.onSubmit({ preventDefault() {} });
+    assert.deepEqual(destinations, []);
+    assert.notEqual(harness.state[0], '');
+    harness.unmount();
+  }
+  assert.ok(errors.some(message => message.includes('correo o la contraseña')));
 });

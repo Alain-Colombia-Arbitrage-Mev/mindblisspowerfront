@@ -84,6 +84,24 @@ test("proxy keeps HttpOnly cookies but never exposes JWT/session tokens or inter
   for (const secret of ["private-session", "private-jwt", "hidden"]) assert.ok(!body.includes(secret));
 });
 
+test('the explicit missing-account decision survives the BFF without diagnostics, cookies, tokens or a redirect supplied by upstream', async () => {
+  for (const path of ['email-otp/send-verification-otp', 'sign-in/email']) {
+    const response = await proxyBetterAuth(request(JSON.stringify({ email: 'new@example.test',
+      ...(path === 'sign-in/email' ? { password: 'Synthetic private password' } : { type: 'sign-in' }) })), path, {
+      env, fetchImpl: async () => Response.json({ code: 'REGISTRATION_REQUIRED', message: 'private-upstream-diagnostic',
+        email: 'new@example.test', token: 'must-not-leak', redirectTo: 'https://attacker.example.test' }, {
+        status: 400, headers: { 'set-cookie': `${cookie}; Secure; HttpOnly`, 'set-auth-jwt': 'must-not-leak', location: 'https://attacker.example.test' },
+      }),
+    });
+    assert.equal(response.status, 400);
+    assert.equal(response.headers.get('cache-control'), 'private, no-store');
+    assert.equal(response.headers.get('set-cookie'), null);
+    assert.equal(response.headers.get('set-auth-jwt'), null);
+    assert.equal(response.headers.get('location'), null);
+    assert.deepEqual(await response.json(), { error: 'authentication_failed', code: 'REGISTRATION_REQUIRED' });
+  }
+});
+
 test("service JWT is obtained server-side only using the filtered session cookie", async () => {
   assert.equal(await betterAuthServiceToken("unrelated=private", { env, fetchImpl: () => { throw Error("not allowed"); } }), "");
   assert.equal(await betterAuthServiceToken(cookie, { env, clientIp: '192.0.2.10', fetchImpl: async (url, options) => {

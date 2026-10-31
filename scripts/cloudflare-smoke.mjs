@@ -106,6 +106,17 @@ try {
   const post = (path, body, cookie = '') => fetch(`http://127.0.0.1:8787${path}`, {
     method: 'POST', headers: { ...authHeaders, cookie }, body: JSON.stringify(body), signal: AbortSignal.timeout(8000),
   });
+  for (const [path, body] of [
+    ['/api/auth/email-otp/send-verification-otp', { email: 'unregistered@example.test', type: 'sign-in' }],
+    ['/api/auth/sign-in/email', { email: 'unregistered@example.test', password: 'Synthetic-Password-123' }],
+  ]) {
+    const missing = await post(path, body);
+    assert.equal(missing.status, 400);
+    assert.equal(missing.headers.get('set-cookie'), null);
+    assert.equal(missing.headers.get('cache-control'), 'private, no-store');
+    assert.deepEqual(await missing.json(), { error: 'authentication_failed', code: 'REGISTRATION_REQUIRED' });
+    probes++;
+  }
   for (const path of ['/api/auth/register/phone/send', '/api/auth/register/phone/verify',
     '/__stale_sms/api/auth/register/phone/send', '/__stale_sms/api/auth/register/phone/verify',
     '/api/auth/registration/phone/send', '/api/auth/sign-in/phone-number']) {
