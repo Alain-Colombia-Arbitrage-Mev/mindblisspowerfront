@@ -25,6 +25,7 @@ try {
   let staticChunk;
   const cases = [
     ['/health', {}, 200], ['/login', {}, 200], ['/api/member/tree', {}, 401],
+    ['/__overview_fixture/dashboard', {}, 307],
     ['/account/security', {}, 307], ['/api/auth/phone-number/opt-in', {}, 404],
     ['/api/admin/tree/roots', {}, 404], ['/dashboard/admin', {}, 308],
     ['/api/payments/checkout', { method: 'POST', body: '{}' }, 403],
@@ -183,6 +184,21 @@ try {
   probes++;
   const cookie = confirmed.headers.get('set-cookie').split(';')[0];
   const sessionHeaders = { cookie, 'cf-connecting-ip': '192.0.2.10' };
+  for (const path of ['/__overview_fixture/dashboard', '/__overview_fixture/dashboard/home']) {
+    const overview = await fetch(`http://127.0.0.1:8787${path}`, {
+      headers: sessionHeaders, redirect: 'manual', signal: AbortSignal.timeout(12000),
+    });
+    assert.equal(overview.status, 200, path);
+    const html = await overview.text();
+    assert.match(html, /Planes de membresía/);
+    for (let id = 1; id <= 13; id++) {
+      assert.ok(html.includes(`>Plan Fixture ${id}<`), `server-rendered catalog name ${id}`);
+      assert.ok(html.includes(`href="/dashboard/packages?plan=${id}#plan-${id}"`), `safe catalog destination ${id}`);
+    }
+    assert.doesNotMatch(html, /999999|11001|postgres:\/\/synthetic/);
+    assert.match(overview.headers.get('cache-control'), /no-store/);
+    probes++;
+  }
   const receiptOrder = 'a02f5a55-5fa3-4239-845b-ac6b699110ee';
   for (const paymentStatus of ['waiting', 'finished']) {
     const payload = { order_id: receiptOrder, payment_status: paymentStatus };

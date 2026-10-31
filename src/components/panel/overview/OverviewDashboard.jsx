@@ -26,7 +26,7 @@ const SHORTCUTS = [
  *  - red directa, últimos de la red y rangos desde /api/member/tree
  * Los fallos de carga no se representan como saldos o posiciones vacios.
  */
-export default function OverviewDashboard() {
+export default function OverviewDashboard({ plans = null }) {
   const [summary, setSummary] = useState(null);
   const [network, setNetwork] = useState(null);
   const [summaryStatus, setSummaryStatus] = useState("loading");
@@ -112,6 +112,8 @@ export default function OverviewDashboard() {
       </div>
 
       <ReferralLinkCard />
+
+      {plans}
 
       {/* Sin gráfica de "volumen": la directiva árbol 2.0 prohíbe mostrar
           volumen al miembro, y la curva anterior era simulada ($100M falsos). */}

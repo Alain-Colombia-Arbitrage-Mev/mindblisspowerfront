@@ -1,5 +1,8 @@
 // Synthetic local-only fixture. Not referenced by the deploy configuration.
 import worker from './cloudflare-worker.mjs';
+import builtWorker from './.open-next/worker.js';
+import { getCloudflareScope, runCloudflareRequest } from './src/lib/cloudflare-runtime.mjs';
+import { cloudflarePortalGuard, privateCloudflareResponse } from './src/lib/cloudflare-portal-guard.mjs';
 import { createHash, createHmac } from 'node:crypto';
 let privateCalls = 0;
 const secret = 'synthetic-private-context-not-a-real-secret-longer-than-32';
@@ -178,6 +181,25 @@ export default {
   async fetch(request, env, ctx) {
     const incoming = new URL(request.url);
     if (incoming.pathname === '/__synthetic_metrics') return Response.json({ privateCalls, ...metrics });
+    // Exercise the actual built Server Component with request-local, synthetic
+    // catalog data. This file is never imported by the production Worker and
+    // no fixture, credential, DB connection or override enters its bundle.
+    if (['/__overview_fixture/dashboard', '/__overview_fixture/dashboard/home'].includes(incoming.pathname)) {
+      const headers = new Headers(request.headers);
+      headers.delete('x-forwarded-host');
+      const input = new Request(`https://app.mindblisspower.com${incoming.pathname.slice('/__overview_fixture'.length)}`, {
+        method: request.method, headers,
+      });
+      const fixtureEnv = { ...env, ...syntheticEnv };
+      const denied = cloudflarePortalGuard(input, fixtureEnv);
+      if (denied) return privateCloudflareResponse(denied);
+      return privateCloudflareResponse(await runCloudflareRequest(input, fixtureEnv, ctx, (r, e, c) => {
+        getCloudflareScope().resources.set('catalog', Promise.resolve({ ranks: [], packages: Array.from({ length: 13 }, (_, index) => ({
+          id: index + 1, name: `Plan Fixture ${index + 1}`, amount_usd: String((index + 1) * 100), pv: 999999, type: '11001',
+        })) }));
+        return builtWorker.fetch(r, e, c);
+      }));
+    }
     // Obsolete flags must not re-enable registration SMS, even with credentials.
     const staleSmsFixture = incoming.pathname.startsWith('/__stale_sms/');
     const nowDisabledFixture = incoming.pathname.startsWith('/__now_disabled/');

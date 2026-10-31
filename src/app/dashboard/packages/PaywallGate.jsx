@@ -19,9 +19,9 @@ const PLAN_LABEL = {
  * los planes ocultos tras un toggle (por si quiere ver/mejorar). Si no está
  * activo (o aún carga), muestra el paywall normal (children).
  */
-export default function PaywallGate({ children }) {
+export default function PaywallGate({ children, initialShowPlans = false }) {
   const { state } = useMemberSummary({ fresh: true });
-  const [showPlans, setShowPlans] = useState(false);
+  const [showPlans, setShowPlans] = useState(initialShowPlans === true);
 
   // Mientras carga o si no está activo → paywall normal (evita parpadeo).
   if (state.loading || state.error || !(Number(state.data?.active_packages) > 0)) return children;

@@ -16,8 +16,9 @@ export const dynamic = "force-dynamic";
 /**
  * Catálogo de paquetes de inversión (mlm.package) + carrera de rangos (mlm.rank).
  * Activar una membresía habilita beneficios y seguimiento operativo del miembro.
+ * @param {{ searchParams?: Promise<Record<string, string | string[] | undefined>> }} [props]
  */
-export default async function PackagesPage() {
+export default async function PackagesPage({ searchParams } = {}) {
   const stripeEnabled = stripeCheckoutEnabled(runtimeEnvironment());
   const nowpaymentsEnabled = nowpaymentsMembershipsEnabled(runtimeEnvironment());
   let packages = [];
@@ -31,6 +32,11 @@ export default async function PackagesPage() {
   } catch {
     unavailable = true;
   }
+  const requestedPlan = (await searchParams)?.plan;
+  // This is presentation-only: a URL hint can reveal an existing catalog card,
+  // never enable a payment provider or establish a membership/payment state.
+  const selectedPlan = typeof requestedPlan === "string" && /^[1-9]\d{0,15}$/.test(requestedPlan)
+    && packages.some(pkg => String(pkg.id) === requestedPlan) ? requestedPlan : "";
 
   return (
     <section className="executive-page">
@@ -61,14 +67,15 @@ export default async function PackagesPage() {
             El catalogo estara disponible al finalizar la sincronizacion de datos.
           </div>
         ) : (
-          <PaywallGate>
+          <PaywallGate key={selectedPlan || "catalog"} initialShowPlans={Boolean(selectedPlan)}>
           <div className="executive-grid three">
             {packages.map((pkg, index) => {
               const featured = index === Math.min(2, packages.length - 1);
               return (
                 <article
                   key={pkg.id}
-                  className="executive-card flex flex-col"
+                  id={`plan-${pkg.id}`}
+                  className="executive-card flex scroll-mt-24 flex-col"
                   style={{
                     borderColor: featured ? "var(--vp-amber-border)" : "var(--vp-border)",
                   }}
