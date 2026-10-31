@@ -163,3 +163,43 @@ test('unknown providers cannot look payable or perform a session read or checkou
     }
   } finally { globalThis.fetch = originalFetch; }
 });
+
+test('the real checkout click presents safe failure references in the existing alert without navigation or retries', async () => {
+  const originalFetch = globalThis.fetch; const originalWindow = globalThis.window;
+  globalThis.window = { location: { assign: () => assert.fail('failed checkout navigated') } };
+  try {
+    for (const [code, pattern] of [['authentication-unavailable', /comprobar tu sesión/],
+      ['nowpayments_checkout_unavailable', /No se ha iniciado un cobro/],
+      ['upstream_unavailable', /No vuelvas a pagar todavía/], ['invalid-checkout-response', /No vuelvas a pagar todavía/],
+      ['private postgres://operator:password@host', /Referencia: checkout_unknown/]]) {
+      let checkouts = 0;
+      globalThis.fetch = async url => {
+        if (url === '/api/auth/session') return Response.json({ email: 'member@example.test' });
+        checkouts++; return Response.json({ error: code, diagnostics: 'private-token' }, { status: 503 });
+      };
+      const { Component, stateChanges } = checkoutComponent({ provider: 'nowpayments' });
+      await findElement(Component({ packageId: 7, nowpaymentsEnabled: true }), 'button').props.onClick();
+      const error = stateChanges[1].at(-1);
+      assert.match(error, pattern); assert.match(error, /Referencia: [a-z_-]+\.$/);
+      assert.doesNotMatch(error, /postgres:|password|operator|private-token/);
+      assert.equal(checkouts, 1);
+      const view = checkoutComponent({ provider: 'nowpayments', error }).Component;
+      const html = renderToStaticMarkup(React.createElement(view, { packageId: 7, nowpaymentsEnabled: true }));
+      assert.match(html, /role="alert"/); assert.match(html, /Referencia:/);
+      assert.equal((html.match(/role="alert"/g) || []).length, 1);
+    }
+    let checkouts = 0;
+    globalThis.fetch = async url => {
+      if (url === '/api/auth/session') return Response.json({ email: 'member@example.test' });
+      checkouts++; throw new Error('private transport exception');
+    };
+    const { Component, stateChanges } = checkoutComponent({ provider: 'nowpayments' });
+    await findElement(Component({ packageId: 7, nowpaymentsEnabled: true }), 'button').props.onClick();
+    assert.equal(checkouts, 1);
+    assert.match(stateChanges[1].at(-1), /No vuelvas a pagar todavía.*Referencia: payments-unreachable\./);
+    assert.doesNotMatch(stateChanges[1].at(-1), /private transport/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalWindow === undefined) delete globalThis.window; else globalThis.window = originalWindow;
+  }
+});

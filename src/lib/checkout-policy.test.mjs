@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
-import { checkoutErrorMessage, checkoutProvider, hostedCheckoutURL, stripeCheckoutEnabled, nowpaymentsMembershipsEnabled } from './checkout-policy.mjs';
+import { checkoutErrorMessage, checkoutErrorNotice, checkoutProvider, hostedCheckoutURL, stripeCheckoutEnabled, nowpaymentsMembershipsEnabled } from './checkout-policy.mjs';
 
 test('only the exact server-owned runtime Stripe flag enables new charges', () => {
   assert.equal(stripeCheckoutEnabled({ STRIPE_CHECKOUT_ENABLED: 'true' }), true);
@@ -85,4 +85,28 @@ test('copy never treats a redirect or unavailable provider as activation or invi
   }
   assert.match(checkoutErrorMessage('private upstream diagnostic', 'nowpayments'), /historial.*antes de volver/);
   assert.doesNotMatch(checkoutErrorMessage('private upstream diagnostic'), /private upstream/);
+});
+
+test('checkout failures distinguish session outage, pre-creation refusal and uncertain outcomes', () => {
+  const session = checkoutErrorMessage('authentication-unavailable', 'nowpayments');
+  assert.match(session, /comprobar tu sesión.*servicio de acceso no está disponible/);
+  assert.doesNotMatch(session, /pagos.*habilitados|pago completado/);
+  const refused = checkoutErrorMessage('nowpayments_checkout_unavailable', 'nowpayments');
+  assert.match(refused, /servicio de pagos no está disponible/i);
+  assert.match(refused, /No se ha iniciado un cobro/);
+  for (const code of ['payments-unreachable', 'invalid-checkout-response', 'upstream_unavailable']) {
+    const message = checkoutErrorMessage(code, 'nowpayments');
+    assert.match(message, /No vuelvas a pagar todavía.*historial/);
+    assert.doesNotMatch(message, /No se ha iniciado un cobro|no están habilitados|pago completado/);
+    assert.match(checkoutErrorNotice(code, 'nowpayments'), new RegExp(`Referencia: ${code}\\.$`));
+  }
+});
+
+test('technical checkout references never reflect arbitrary error data or private identifiers', () => {
+  for (const code of ['private postgres://operator:password@host', 'guard@example.test', '<script>alert(1)</script>',
+    { error: 'secret', toString() { throw new Error('must not stringify'); } }, null, undefined, 'upstream_unavailable\nsecret']) {
+    const notice = checkoutErrorNotice(code, 'nowpayments');
+    assert.match(notice, /Referencia: checkout_unknown\.$/);
+    assert.doesNotMatch(notice, /private|postgres:|password|guard@|script|secret/);
+  }
 });

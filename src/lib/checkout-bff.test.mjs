@@ -180,7 +180,8 @@ test('errors, redirects and oversized provider responses are sanitized without h
 
 test('membership review conflicts and pre-creation disabled gates retain only approved safe error codes', async () => {
   for (const [error, status] of [['membership_payment_pending_review', 409], ['membership_eligibility_unavailable', 503],
-    ['stripe_unavailable', 503], ['core_not_ready', 503], ['financial_review_required', 503], ['nowpayments_financial_configuration_unavailable', 503]]) {
+    ['stripe_unavailable', 503], ['core_not_ready', 503], ['financial_review_required', 503], ['nowpayments_financial_configuration_unavailable', 503],
+    ['upstream_unavailable', 503], ['nowpayments_checkout_unavailable', 503]]) {
     const response = await run(request(), { fetchImpl: async () => Response.json({ error, diagnostics: 'private-payment-details' }, { status }) });
     assert.equal(response.status, status); assert.deepEqual(await response.json(), { error });
   }

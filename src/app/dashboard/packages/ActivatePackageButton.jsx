@@ -3,7 +3,7 @@
 import { useId, useRef, useState } from "react";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { referralForCheckout } from "@/lib/referral-attribution";
-import { checkoutErrorMessage, hostedCheckoutURL, STRIPE_CHECKOUT_PAUSED_NOTICE, NOWPAYMENTS_MEMBERSHIPS_PAUSED_NOTICE } from "@/lib/checkout-policy.mjs";
+import { checkoutErrorNotice, hostedCheckoutURL } from "@/lib/checkout-policy.mjs";
 import { cn } from "@/lib/utils";
 
 /**
@@ -21,11 +21,11 @@ export default function ActivatePackageButton({ packageId, featured, stripeEnabl
   async function activate() {
     if (pending.current) return;
     if (provider === "stripe" && stripeEnabled !== true) {
-      setError(STRIPE_CHECKOUT_PAUSED_NOTICE);
+      setError(checkoutErrorNotice("stripe_checkout_disabled", provider));
       return;
     }
     if (provider === "nowpayments" && nowpaymentsEnabled !== true) {
-      setError(NOWPAYMENTS_MEMBERSHIPS_PAUSED_NOTICE);
+      setError(checkoutErrorNotice("nowpayments_checkout_disabled", provider));
       return;
     }
     if (!providerEnabled) {
@@ -60,14 +60,14 @@ export default function ActivatePackageButton({ packageId, featured, stripeEnabl
       const url = hostedCheckoutURL(data.url, provider, data.checkout_environment);
       if (!resp.ok || !url || data.provider !== provider
           || (provider === "nowpayments" && !["review_required", "awaiting_payment"].includes(data.fulfillment_status))) {
-        setError(checkoutErrorMessage(data.error, provider));
+        setError(checkoutErrorNotice(resp.ok ? "invalid-checkout-response" : data.error, provider));
         setLoading(false);
         pending.current = false;
         return;
       }
       window.location.assign(url);
     } catch {
-      setError(checkoutErrorMessage("payments-unreachable", provider));
+      setError(checkoutErrorNotice("payments-unreachable", provider));
       setLoading(false);
       pending.current = false;
     }

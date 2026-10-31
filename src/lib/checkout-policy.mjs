@@ -44,6 +44,11 @@ export function hostedCheckoutURL(value, provider, environment = 'production') {
 export function checkoutErrorMessage(code, provider = 'stripe') {
   if (code === 'stripe_checkout_disabled') return STRIPE_CHECKOUT_PAUSED_NOTICE;
   if (code === 'nowpayments_checkout_disabled') return NOWPAYMENTS_MEMBERSHIPS_PAUSED_NOTICE;
+  if (code === 'authentication-unavailable') return 'No pudimos comprobar tu sesión porque el servicio de acceso no está disponible. Vuelve a iniciar sesión antes de pagar.';
+  if (code === 'nowpayments_checkout_unavailable') return 'El servicio de pagos no está disponible para iniciar esta compra. No se ha iniciado un cobro desde esta solicitud. Contacta al soporte.';
+  if (['payments-unreachable', 'invalid-checkout-response', 'upstream_unavailable'].includes(code)) {
+    return 'No pudimos confirmar el inicio del pago. No vuelvas a pagar todavía; revisa tu historial o contacta al soporte antes de volver a intentarlo.';
+  }
   if (['unauthenticated', 'session-invalid', 'invalid_id_token'].includes(code)) return 'Tu sesión expiró. Vuelve a iniciar sesión antes de pagar.';
   if (code === 'buyer_not_found') return 'Tu cuenta aún no está registrada en la red.';
   if (code === 'invalid_referral_code') return 'El enlace de referido no es válido o ya no está activo. Solicita un enlace nuevo antes de pagar.';
@@ -59,4 +64,24 @@ export function checkoutErrorMessage(code, provider = 'stripe') {
   if (code === 'account_suspended') return 'Esta cuenta tiene el acceso a compras restringido. Contacta al soporte.';
   if (code === 'membership_already_active') return 'Ya tienes esta membresía activa. No necesitas pagarla otra vez.';
   return 'No pudimos confirmar el inicio del pago. Revisa tu historial o contacta al soporte antes de volver a intentarlo.';
+}
+
+// Technical references are public enums, never arbitrary provider messages,
+// exception strings, tokens, request bodies, email addresses or SQL details.
+const publicErrorReferences = new Set([
+  'authentication-unavailable', 'unauthenticated', 'session-invalid', 'invalid_id_token',
+  'buyer_not_found', 'invalid_referral_code', 'invalid_preferred_side', 'tree_relocation_required',
+  'checkout_identity_review_required', 'stripe_recovery_financial_review_required', 'financial_mutations_unavailable',
+  'service_read_only', 'core_unavailable', 'financial_services_unavailable', 'account_suspended',
+  'membership_already_active', 'package_not_found', 'nowpayments-unavailable', 'nowpayments_unavailable',
+  'nowpayments-review-required', 'nowpayments_review_required', 'checkout_pending_review', 'membership_payment_pending_review',
+  'core_not_ready', 'financial_review_required', 'membership_eligibility_unavailable', 'nowpayments_financial_configuration_unavailable',
+  'stripe_unavailable', 'stripe_checkout_disabled', 'nowpayments_checkout_disabled', 'nowpayments_checkout_unavailable',
+  'payments-unconfigured', 'payments-unreachable', 'upstream_unavailable', 'invalid-checkout-response', 'checkout-failed',
+  'invalid-provider', 'invalid-package', 'invalid-json', 'invalid_origin', 'json_required', 'request_too_large', 'method_not_allowed',
+]);
+
+export function checkoutErrorNotice(code, provider = 'stripe') {
+  const reference = publicErrorReferences.has(code) ? code : 'checkout_unknown';
+  return `${checkoutErrorMessage(code, provider)} Referencia: ${reference}.`;
 }

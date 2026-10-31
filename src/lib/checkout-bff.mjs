@@ -9,7 +9,8 @@ const safeErrors = new Set(['buyer_not_found', 'invalid_referral_code', 'invalid
   'membership_already_active', 'package_not_found', 'nowpayments-unavailable', 'nowpayments_unavailable',
   'nowpayments-review-required', 'nowpayments_review_required', 'checkout_pending_review', 'membership_payment_pending_review',
   'core_not_ready', 'financial_review_required', 'membership_eligibility_unavailable', 'nowpayments_financial_configuration_unavailable',
-  'stripe_unavailable', 'stripe_checkout_disabled', 'nowpayments_checkout_disabled']);
+  'stripe_unavailable', 'stripe_checkout_disabled', 'nowpayments_checkout_disabled',
+  'upstream_unavailable', 'nowpayments_checkout_unavailable']);
 const validAmount = value => typeof value === 'string' && /^(?:0|[1-9]\d{0,11})\.\d{2}$/.test(value);
 const minorUnits = value => BigInt(value.replace('.', ''));
 
