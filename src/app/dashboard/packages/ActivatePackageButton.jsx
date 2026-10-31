@@ -15,6 +15,8 @@ export default function ActivatePackageButton({ packageId, featured, stripeEnabl
   const [provider, setProvider] = useState(() => stripeEnabled === true ? "stripe" : "nowpayments");
   const pending = useRef(false);
   const id = useId();
+  const providerEnabled = provider === "stripe" ? stripeEnabled === true
+    : provider === "nowpayments" && nowpaymentsEnabled === true;
 
   async function activate() {
     if (pending.current) return;
@@ -24,6 +26,10 @@ export default function ActivatePackageButton({ packageId, featured, stripeEnabl
     }
     if (provider === "nowpayments" && nowpaymentsEnabled !== true) {
       setError(NOWPAYMENTS_MEMBERSHIPS_PAUSED_NOTICE);
+      return;
+    }
+    if (!providerEnabled) {
+      setError("Selecciona un método de pago disponible.");
       return;
     }
     pending.current = true;
@@ -85,16 +91,16 @@ export default function ActivatePackageButton({ packageId, featured, stripeEnabl
         <option value="nowpayments" disabled={nowpaymentsEnabled !== true}>Cripto · NOWPayments{nowpaymentsEnabled !== true ? " (no habilitado)" : ""}</option>
       </select>
       <p id={`${id}-hint`} className="mb-3 text-xs leading-5" style={{ color: "var(--vp-muted)" }}>
-        {provider === "nowpayments"
-          ? nowpaymentsEnabled === true
+        {!providerEnabled
+          ? "Los pagos de membresías aún no están habilitados para este método. No se ha iniciado ningún cobro. No es una recarga de saldo."
+          : provider === "nowpayments"
             ? "Realizarás un pago real de membresía. El servidor debe validar el pago y confirmar su activación. No es una recarga de saldo."
-            : "Compra de membresía sujeta a validación. No es una recarga de saldo. Disponible al finalizar la habilitación de pagos."
           : "La membresía se confirma cuando el servidor verifica el pago. No es una recarga de saldo."}
       </p>
       <button
         type="button"
         onClick={activate}
-        disabled={loading || (provider === "stripe" && stripeEnabled !== true) || (provider === "nowpayments" && nowpaymentsEnabled !== true)}
+        disabled={loading || !providerEnabled}
         aria-describedby={`${id}-hint${error ? ` ${id}-error` : ""}`}
         className={cn("executive-button w-full", featured && "primary")}
         style={
@@ -103,7 +109,8 @@ export default function ActivatePackageButton({ packageId, featured, stripeEnabl
             : { background: "var(--vp-surface-raised)", color: "var(--vp-text)", border: "1px solid var(--vp-border)" }
         }
       >
-        {loading ? <><Loader2 size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> Preparando pago…</> : <>Continuar al pago <ArrowRight size={15} aria-hidden="true" /></>}
+        {loading ? <><Loader2 size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> Preparando pago…</>
+          : providerEnabled ? <>Continuar al pago <ArrowRight size={15} aria-hidden="true" /></> : "Pagos no disponibles"}
       </button>
       {error && (
         <p id={`${id}-error`} role="alert" className="mt-2 text-xs font-semibold" style={{ color: "var(--vp-danger)" }}>

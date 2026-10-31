@@ -38,7 +38,10 @@ test('membership selector keeps its design and NOWPayments while disabled Stripe
   assert.match(html, /<select[^>]*id="synthetic-selector-provider"/);
   assert.doesNotMatch(html, /value="stripe"|Stripe|suspendido/);
   assert.match(html, /value="nowpayments" disabled="" selected=""/);
-  assert.match(html, /Cripto · NOWPayments/); assert.match(html, /Continuar al pago/);
+  assert.match(html, /Cripto · NOWPayments/); assert.match(html, /Pagos no disponibles/);
+  assert.match(html, /Los pagos de membresías aún no están habilitados para este método/);
+  assert.match(html, /No se ha iniciado ningún cobro/);
+  assert.doesNotMatch(html, /Continuar al pago/);
   assert.match(html, /No es una recarga de saldo/); assert.doesNotMatch(html, /Activar membresía|pago completado/);
   assert.match(html, /<button[^>]*disabled=""/);
 });
@@ -70,7 +73,7 @@ test('a stale or forged Stripe selection cannot send even a session read or chec
 test('crypto pending enablement and errors are explicit and accessible; loading disables all payment controls', () => {
   const { Component } = checkoutComponent({ provider: 'nowpayments', error: 'Los pagos aún no están habilitados.', loading: true });
   const html = renderToStaticMarkup(React.createElement(Component, { packageId: 1 }));
-  assert.match(html, /sujeta a validación/); assert.match(html, /al finalizar la habilitación/);
+  assert.match(html, /aún no están habilitados/); assert.match(html, /No se ha iniciado ningún cobro/);
   assert.match(html, /aria-busy="true"/); assert.match(html, /role="alert"/);
   assert.match(html, /<select[^>]*disabled=""/); assert.match(html, /<button[^>]*disabled=""/);
   assert.match(html, /Preparando pago/);
@@ -137,6 +140,26 @@ test('enabled NOWPayments retains the design, warns about a real purchase and ne
   assert.match(html, /value="nowpayments" selected=""/);
   assert.doesNotMatch(html, /value="stripe"|Stripe|suspendido/);
   assert.match(html, /Realizarás un pago real de membresía/);
+  assert.match(html, /Continuar al pago/);
+  assert.doesNotMatch(html, /Pagos no disponibles|<button[^>]*disabled=""/);
   assert.match(html, /El servidor debe validar el pago y confirmar su activación/);
   assert.doesNotMatch(html, /membresía activada|pago completado|activación garantizada/);
+});
+
+test('unknown providers cannot look payable or perform a session read or checkout', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => assert.fail('unknown provider performed network I/O');
+  try {
+    for (const provider of ['unknown', '', 'NOWPayments', undefined]) {
+      const { Component, stateChanges } = checkoutComponent({ provider });
+      const element = Component({ packageId: 7 });
+      const html = renderToStaticMarkup(element);
+      assert.match(html, /Pagos no disponibles/);
+      assert.doesNotMatch(html, /Continuar al pago/);
+      const button = findElement(element, 'button');
+      assert.equal(button.props.disabled, true);
+      await button.props.onClick();
+      assert.ok(stateChanges[1].at(-1));
+    }
+  } finally { globalThis.fetch = originalFetch; }
 });
