@@ -81,10 +81,9 @@ export default function ActivatePackageButton({ packageId, featured, stripeEnabl
         className="mb-3 min-h-11 w-full rounded-lg border px-3 py-2 text-base focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
         style={{ background: "var(--vp-surface-raised)", color: "var(--vp-text)", borderColor: "var(--vp-border)", outlineColor: "var(--vp-accent)" }}
       >
-        <option value="stripe" disabled={stripeEnabled !== true}>Tarjeta · Stripe{stripeEnabled !== true ? " (suspendido)" : ""}</option>
+        {stripeEnabled === true ? <option value="stripe">Tarjeta · Stripe</option> : null}
         <option value="nowpayments" disabled={nowpaymentsEnabled !== true}>Cripto · NOWPayments{nowpaymentsEnabled !== true ? " (no habilitado)" : ""}</option>
       </select>
-      {stripeEnabled !== true ? <p className="mb-3 text-xs leading-5" style={{ color: "var(--vp-muted)" }}>{STRIPE_CHECKOUT_PAUSED_NOTICE}</p> : null}
       <p id={`${id}-hint`} className="mb-3 text-xs leading-5" style={{ color: "var(--vp-muted)" }}>
         {provider === "nowpayments"
           ? nowpaymentsEnabled === true

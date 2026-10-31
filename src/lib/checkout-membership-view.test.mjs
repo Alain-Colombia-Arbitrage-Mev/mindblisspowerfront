@@ -31,15 +31,13 @@ function findElement(node, type) {
   return children.map(child => findElement(child, type)).find(Boolean);
 }
 
-test('membership selector keeps its design and NOWPayments while Stripe defaults to visibly paused', () => {
+test('membership selector keeps its design and NOWPayments while disabled Stripe is absent', () => {
   const { Component } = checkoutComponent();
   const html = renderToStaticMarkup(React.createElement(Component, { packageId: 1 }));
   assert.match(html, /for="synthetic-selector-provider"/);
   assert.match(html, /<select[^>]*id="synthetic-selector-provider"/);
-  assert.match(html, /value="stripe" disabled=""/);
+  assert.doesNotMatch(html, /value="stripe"|Stripe|suspendido/);
   assert.match(html, /value="nowpayments" disabled="" selected=""/);
-  assert.match(html, /Tarjeta · Stripe \(suspendido\)/);
-  assert.match(html, /Stripe están suspendidos temporalmente/);
   assert.match(html, /Cripto · NOWPayments/); assert.match(html, /Continuar al pago/);
   assert.match(html, /No es una recarga de saldo/); assert.doesNotMatch(html, /Activar membresía|pago completado/);
   assert.match(html, /<button[^>]*disabled=""/);
@@ -51,7 +49,9 @@ test('an explicitly enabled server prop can restore the Stripe choice, never a t
   assert.match(html, /value="stripe" selected=""/);
   assert.doesNotMatch(html, /suspendido|Stripe están suspendidos/);
   const invalid = checkoutComponent().Component;
-  assert.match(renderToStaticMarkup(React.createElement(invalid, { packageId: 1, stripeEnabled: 'true' })), /value="stripe" disabled=""/);
+  for (const stripeEnabled of [undefined, false, 'true', 1]) {
+    assert.doesNotMatch(renderToStaticMarkup(React.createElement(invalid, { packageId: 1, stripeEnabled })), /value="stripe"|Stripe|suspendido/);
+  }
 });
 
 test('a stale or forged Stripe selection cannot send even a session read or checkout while paused', async () => {
@@ -135,7 +135,7 @@ test('enabled NOWPayments retains the design, warns about a real purchase and ne
   const { Component } = checkoutComponent();
   const html = renderToStaticMarkup(React.createElement(Component, { packageId: 1, nowpaymentsEnabled: true, stripeEnabled: false }));
   assert.match(html, /value="nowpayments" selected=""/);
-  assert.match(html, /value="stripe" disabled=""/);
+  assert.doesNotMatch(html, /value="stripe"|Stripe|suspendido/);
   assert.match(html, /Realizarás un pago real de membresía/);
   assert.match(html, /El servidor debe validar el pago y confirmar su activación/);
   assert.doesNotMatch(html, /membresía activada|pago completado|activación garantizada/);
