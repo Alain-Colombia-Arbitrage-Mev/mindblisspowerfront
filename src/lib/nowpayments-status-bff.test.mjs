@@ -35,7 +35,7 @@ test('receipt lookup accepts one canonical order hint and verifies its session b
 
 test('only persisted, signed, provider-verified completed evidence survives; another order or activation claim does not', async () => {
   for (const change of [{ order_id: '00000000-0000-4000-8000-000000000001' }, { provider: 'stripe' }, { persisted: false },
-    { signature_validated: false }, { provider_verified: false }, { payment_confirmed: 'true' }, { fulfillment_status: 'activated' }, { state: 'pending' }]) {
+    { signature_validated: false }, { provider_verified: false }, { payment_confirmed: 'true' }, { fulfillment_status: 'membership_active' }, { state: 'pending' }]) {
     const result = await run(request(), { fetchImpl: async () => Response.json({ ...receipt, ...change }) });
     assert.equal(result.status, 503); assert.doesNotMatch(await result.text(), /"payment_confirmed":true|activated/);
   }
@@ -43,6 +43,22 @@ test('only persisted, signed, provider-verified completed evidence survives; ano
     const payload = { ...receipt, state, payment_confirmed: false, signature_validated: false, provider_verified: false, persisted: false };
     const result = await run(request(), { fetchImpl: async () => Response.json(payload) });
     assert.equal(result.status, 200); assert.deepEqual(await result.json(), payload);
+  }
+});
+
+test('operational owner status preserves awaiting payment and proof-backed activation without leaking earnings or sessions', async () => {
+  for (const fulfillment_status of ['awaiting_payment', 'activated', 'review_required']) {
+    const expected = { ...receipt, fulfillment_status };
+    const result = await run(request(), { fetchImpl: async () => Response.json({ ...expected,
+      roi_earned: '999999', balance_usd: '999999', token: 'private-signed-token' }) });
+    assert.equal(result.status, 200);
+    assert.deepEqual(await result.json(), expected);
+    assert.equal(result.headers.get('cache-control'), 'private, no-store');
+  }
+  for (const fulfillment_status of ['risk_review', 'security_blocked']) {
+    const expected = { ...receipt, fulfillment_status, state: 'under_review', payment_confirmed: false };
+    const result = await run(request(), { fetchImpl: async () => Response.json(expected) });
+    assert.equal(result.status, 200); assert.deepEqual(await result.json(), expected);
   }
 });
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { nowpaymentsOrderId, nowpaymentsReceiptStatus, completedNOWPaymentsReceipt, readNOWPaymentsReceipt, startNOWPaymentsReceiptPolling } from './nowpayments-receipt.mjs';
+import { nowpaymentsOrderId, nowpaymentsReceiptStatus, completedNOWPaymentsReceipt, activatedNOWPaymentsMembership, readNOWPaymentsReceipt, startNOWPaymentsReceiptPolling } from './nowpayments-receipt.mjs';
 
 const orderId = 'a02f5a55-5fa3-4239-845b-ac6b699110ee';
 const complete = { provider: 'nowpayments', order_id: orderId, state: 'completed', payment_confirmed: true,
@@ -22,7 +22,7 @@ test('completion requires exact own-order persisted signed provider proof, never
   assert.equal(completedNOWPaymentsReceipt(complete, orderId), true);
   for (const value of [pending, { ...pending, state: 'under_review' }, { ...complete, persisted: false }, { ...complete, signature_validated: false },
     { ...complete, provider_verified: false }, { ...complete, payment_confirmed: 'true' }, { ...complete, provider: 'stripe' },
-    { ...complete, fulfillment_status: 'activated' }, { ...complete, order_id: '00000000-0000-4000-8000-000000000001' },
+    { ...complete, fulfillment_status: 'membership_active' }, { ...complete, order_id: '00000000-0000-4000-8000-000000000001' },
     { received: true, mode: 'capture_only', state: 'captured', fulfillment_status: 'not_activated' }, { paid: '1', status: 'finished' }]) {
     assert.equal(completedNOWPaymentsReceipt(value, orderId), false);
   }
@@ -35,6 +35,42 @@ test('completion requires exact own-order persisted signed provider proof, never
     return Response.json(complete);
   } }), complete);
   assert.equal(calls, 1);
+});
+
+test('payment confirmation and membership activation remain separate trusted server states', () => {
+  for (const fulfillment_status of ['not_activated', 'review_required', 'awaiting_payment', 'activated']) {
+    const value = { ...complete, fulfillment_status, roi_earned: '999999', balance: '999999' };
+    assert.equal(completedNOWPaymentsReceipt(value, orderId), true);
+    assert.equal(activatedNOWPaymentsMembership(value, orderId), fulfillment_status === 'activated');
+    assert.deepEqual(nowpaymentsReceiptStatus(value, orderId), { ...complete, fulfillment_status });
+  }
+  for (const value of [{ ...pending, fulfillment_status: 'activated' }, { ...complete, fulfillment_status: 'risk_review' },
+    { ...complete, fulfillment_status: 'security_blocked' }, { ...complete, fulfillment_status: 'activated', persisted: false },
+    { ...complete, fulfillment_status: 'activated', payment_confirmed: false }]) {
+    assert.equal(nowpaymentsReceiptStatus(value, orderId), null);
+    assert.equal(activatedNOWPaymentsMembership(value, orderId), false);
+  }
+  for (const fulfillment_status of ['risk_review', 'security_blocked']) {
+    assert.equal(nowpaymentsReceiptStatus({ ...pending, state: 'under_review', fulfillment_status }, orderId)?.state, 'under_review');
+  }
+});
+
+test('verified receipt keeps bounded polling until the durable membership activation is confirmed', async () => {
+  const timers = clock(), observed = [], stopped = []; let calls = 0;
+  startNOWPaymentsReceiptPolling({ orderId, timers, now: timers.now, ...browser(),
+    read: async () => {
+      calls++;
+      return calls === 1 ? { ...pending, fulfillment_status: 'awaiting_payment' }
+        : { ...complete, fulfillment_status: calls === 2 ? 'awaiting_payment' : 'activated' };
+    }, onResult: value => observed.push(value), onStop: reason => stopped.push(reason) });
+  await timers.tick(); await timers.tick();
+  assert.equal(calls, 2); assert.equal(stopped.length, 0);
+  assert.equal(completedNOWPaymentsReceipt(observed.at(-1), orderId), true);
+  assert.equal(activatedNOWPaymentsMembership(observed.at(-1), orderId), false);
+  await timers.tick();
+  assert.equal(calls, 3); assert.deepEqual(stopped, ['completed']);
+  assert.equal(timers.jobs.size, 0);
+  assert.equal(activatedNOWPaymentsMembership(observed.at(-1), orderId), true);
 });
 
 test('polling has no overlap, exponential backoff and stops at completed or under-review terminal states', async () => {

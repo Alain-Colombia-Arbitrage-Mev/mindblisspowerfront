@@ -56,6 +56,25 @@ test('membership checkout forwards verified JWT and catalog ID, never client mon
   assert.deepEqual(await response.json(), { ...payload, checkout_environment: 'production' });
 });
 
+test('operational NOW checkout accepts awaiting payment only with zero added fee and retains exact server total', async () => {
+  const operational = { ...payload, total_usd: '100.00', fee_usd: '0.00', fulfillment_status: 'awaiting_payment' };
+  let calls = 0;
+  const response = await run(request({ ...form, total_usd: '0.01', fee_usd: '0.00', fulfillment_status: 'activated' }), {
+    fetchImpl: async (_url, options) => {
+      calls++;
+      assert.doesNotMatch(options.body, /amount_usd|total_usd|fee_usd|fulfillment_status|activated/);
+      return Response.json({ ...operational, roi_usd: '999999', private_payload: 'not-public' });
+    },
+  });
+  assert.equal(response.status, 200); assert.equal(calls, 1);
+  assert.deepEqual(await response.json(), { ...operational, checkout_environment: 'production' });
+  assert.equal(response.headers.get('cache-control'), 'private, no-store');
+  for (const fee_usd of ['1.00', 0, null, undefined]) {
+    const invalid = await run(request(), { fetchImpl: async () => Response.json({ ...operational, fee_usd }) });
+    assert.equal(invalid.status, 502);
+  }
+});
+
 test('unbound referral hints cannot influence another verified account and Stripe remains default', async () => {
   const response = await run(request({ package_id: 1, ref: 'MP-OTHER', ref_email: 'other@example.test', preferred_side: 'R' }), {
     env: { ...env, STRIPE_CHECKOUT_ENABLED: 'true' },
@@ -161,7 +180,7 @@ test('errors, redirects and oversized provider responses are sanitized without h
 
 test('membership review conflicts and pre-creation disabled gates retain only approved safe error codes', async () => {
   for (const [error, status] of [['membership_payment_pending_review', 409], ['membership_eligibility_unavailable', 503],
-    ['stripe_unavailable', 503], ['core_not_ready', 503], ['financial_review_required', 503]]) {
+    ['stripe_unavailable', 503], ['core_not_ready', 503], ['financial_review_required', 503], ['nowpayments_financial_configuration_unavailable', 503]]) {
     const response = await run(request(), { fetchImpl: async () => Response.json({ error, diagnostics: 'private-payment-details' }, { status }) });
     assert.equal(response.status, status); assert.deepEqual(await response.json(), { error });
   }

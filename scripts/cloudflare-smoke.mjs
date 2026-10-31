@@ -27,6 +27,7 @@ try {
     ['/health', {}, 200], ['/login', {}, 200], ['/api/member/tree', {}, 401],
     ['/__overview_fixture/dashboard', {}, 307],
     ['/__overview_fixture/dashboard/packages', {}, 307],
+    ['/__overview_fixture/dashboard/kyc', {}, 307],
     ['/account/security', {}, 307], ['/api/auth/phone-number/opt-in', {}, 404],
     ['/api/admin/tree/roots', {}, 404], ['/dashboard/admin', {}, 308],
     ['/api/payments/checkout', { method: 'POST', body: '{}' }, 403],
@@ -192,9 +193,11 @@ try {
     assert.equal(overview.status, 200, path);
     const html = await overview.text();
     assert.match(html, /Planes de membresía/);
+    assert.doesNotMatch(html, /href="\/dashboard\/kyc"|Verificación de identidad/);
     for (let id = 1; id <= 13; id++) {
       assert.ok(html.includes(`>Plan Fixture ${id}<`), `server-rendered catalog name ${id}`);
       assert.ok(html.includes(`href="/dashboard/packages?plan=${id}#plan-${id}"`), `safe catalog destination ${id}`);
+      assert.ok(html.includes(`aria-label="Comprar plan Plan Fixture ${id}"`), `purchase catalog label ${id}`);
     }
     assert.doesNotMatch(html, /999999|11001|postgres:\/\/synthetic/);
     assert.match(overview.headers.get('cache-control'), /no-store/);
@@ -213,6 +216,21 @@ try {
     assert.match(pricing.headers.get('cache-control'), /no-store/);
     probes++;
   }
+  const retiredKyc = await fetch('http://127.0.0.1:8787/__overview_fixture/dashboard/kyc', {
+    headers: sessionHeaders, redirect: 'manual', signal: AbortSignal.timeout(12000),
+  });
+  if (retiredKyc.status === 307) {
+    assert.equal(new URL(retiredKyc.headers.get('location'), 'https://app.mindblisspower.com').pathname, '/dashboard/profile');
+  } else {
+    // Next streams the authenticated layout before a nested page redirect;
+    // its documented streaming redirect uses this exact meta target instead.
+    assert.equal(retiredKyc.status, 200);
+    const html = await retiredKyc.text();
+    assert.match(html, /<meta id="__next-page-redirect" http-equiv="refresh" content="[01];url=\/dashboard\/profile"\s*\/>/);
+    assert.doesNotMatch(html, /Verificación de identidad|Nombre legal completo|\/api\/member\/kyc\//);
+  }
+  assert.match(retiredKyc.headers.get('cache-control'), /no-store/);
+  probes++;
   const receiptOrder = 'a02f5a55-5fa3-4239-845b-ac6b699110ee';
   for (const paymentStatus of ['waiting', 'finished']) {
     const payload = { order_id: receiptOrder, payment_status: paymentStatus };
@@ -234,6 +252,20 @@ try {
   for (const [id, headers, expected] of [[receiptOrder, {}, 401], ['00000000-0000-4000-8000-000000000002', sessionHeaders, 404]]) {
     const denied = await fetch(`http://127.0.0.1:8787/api/payments/nowpayments/status?order_id=${id}`, { headers, signal: AbortSignal.timeout(8000) });
     assert.equal(denied.status, expected); assert.doesNotMatch(await denied.text(), /payment_confirmed|completed/); probes++;
+  }
+  const operationalOrder = 'a02f5a55-5fa3-4239-845b-ac6b699110ef';
+  for (const [state, confirmed, fulfillment] of [['pending', false, 'awaiting_payment'],
+    ['completed', true, 'awaiting_payment'], ['completed', true, 'activated']]) {
+    const response = await fetch(`http://127.0.0.1:8787/api/payments/nowpayments/status?order_id=${operationalOrder}`, {
+      headers: sessionHeaders, signal: AbortSignal.timeout(8000),
+    });
+    assert.equal(response.status, 200);
+    const receipt = await response.json();
+    assert.equal(receipt.state, state); assert.equal(receipt.payment_confirmed, confirmed);
+    assert.equal(receipt.fulfillment_status, fulfillment);
+    assert.match(response.headers.get('cache-control'), /no-store/);
+    assert.doesNotMatch(JSON.stringify(receipt), /roi_earned|balance_usd|session_token/);
+    probes++;
   }
   const cryptoPaused = await fetch('http://127.0.0.1:8787/__now_disabled/api/payments/checkout', {
     method: 'POST', headers: { ...authHeaders, ...sessionHeaders }, body: JSON.stringify({ package_id: 1, provider: 'nowpayments',
@@ -259,7 +291,9 @@ try {
   assert.equal(cryptoCheckout.status, 200);
   const cryptoPayload = await cryptoCheckout.json();
   assert.equal(cryptoPayload.provider, 'nowpayments');
-  assert.equal(cryptoPayload.fulfillment_status, 'review_required');
+  assert.equal(cryptoPayload.fulfillment_status, 'awaiting_payment');
+  assert.equal(cryptoPayload.total_usd, '100.00');
+  assert.equal(cryptoPayload.fee_usd, '0.00');
   assert.equal(cryptoPayload.url, 'https://nowpayments.io/payment/?iid=12345'); probes++;
   const smsStatus = await fetch('http://127.0.0.1:8787/api/auth/phone-number/opt-in', { headers: sessionHeaders });
   assert.equal(smsStatus.status, 404);
@@ -308,9 +342,9 @@ try {
   assert.equal(metrics.phoneCalls, 0, 'removed SMS routes never reach the private API, even with obsolete flags and credentials');
   assert.equal(metrics.stripeCheckoutCalls, 0, 'paused explicit/default Stripe requests never create an upstream checkout');
   assert.equal(metrics.stripeResumeCalls, 0, 'public resume links cannot bypass the Stripe pause');
-  assert.equal(metrics.nowpaymentsCheckoutCalls, 1, 'the Stripe pause preserves the existing NOWPayments review-only contract');
+  assert.equal(metrics.nowpaymentsCheckoutCalls, 1, 'the Stripe pause preserves only the admitted NOWPayments checkout');
   assert.equal(metrics.nowpaymentsCaptures, 2, 'signed waiting and finished callbacks are captured without a browser session');
-  assert.equal(metrics.nowpaymentsStatusReads, 3, 'only verified users reach owner-scoped payment confirmation reads');
+  assert.equal(metrics.nowpaymentsStatusReads, 6, 'only verified users reach owner-scoped payment and activation reads');
   console.log(JSON.stringify({ workerd: 'passed', probes, privateCalls: metrics.privateCalls, realRsaVerified: true,
     tamperedAndWrongAudienceRejected: true, externalNetwork: 'disabled', databaseQueries: 0, realMessages: 0 }));
 } finally {

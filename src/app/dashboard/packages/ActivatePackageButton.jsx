@@ -59,7 +59,7 @@ export default function ActivatePackageButton({ packageId, featured, stripeEnabl
       const data = await resp.json().catch(() => ({}));
       const url = hostedCheckoutURL(data.url, provider, data.checkout_environment);
       if (!resp.ok || !url || data.provider !== provider
-          || (provider === "nowpayments" && data.fulfillment_status !== "review_required")) {
+          || (provider === "nowpayments" && !["review_required", "awaiting_payment"].includes(data.fulfillment_status))) {
         setError(checkoutErrorMessage(data.error, provider));
         setLoading(false);
         pending.current = false;

@@ -15,7 +15,9 @@ const modes = new Map([[sessionCookie, 'member'],
 const metrics = { tokens: 0, jwks: 0, verifiedReferrals: 0, sensitiveJwksHeaders: 0, registrations: 0, contactRegistrations: 0, phoneCalls: 0,
   stripeCheckoutCalls: 0, stripeResumeCalls: 0, nowpaymentsCheckoutCalls: 0, nowpaymentsCaptures: 0, nowpaymentsStatusReads: 0 };
 const receiptOrder = 'a02f5a55-5fa3-4239-845b-ac6b699110ee';
+const operationalOrder = 'a02f5a55-5fa3-4239-845b-ac6b699110ef';
 let capturedPaymentStatus = 'waiting';
+let operationalStatusReads = 0;
 function validProxySignature(target, options, headers) {
   const timestamp = headers.get('x-vp-auth-timestamp') || '';
   const ip = headers.get('x-vp-auth-client-ip') || '';
@@ -73,6 +75,13 @@ const syntheticEnv = {
       if (headers.get('x-vp-service-token') !== 'synthetic-service-only'
           || !await validForwardedIdentity(headers.get('x-vp-id-token') || '')) return Response.json({ error: 'unauthenticated' }, { status: 401 });
       metrics.nowpaymentsStatusReads++;
+      if (target.searchParams.get('order_id') === operationalOrder) {
+        operationalStatusReads++;
+        const confirmed = operationalStatusReads > 1;
+        return Response.json({ provider: 'nowpayments', order_id: operationalOrder, state: confirmed ? 'completed' : 'pending',
+          payment_confirmed: confirmed, signature_validated: confirmed, provider_verified: confirmed, persisted: confirmed,
+          fulfillment_status: operationalStatusReads > 2 ? 'activated' : 'awaiting_payment' });
+      }
       if (target.searchParams.get('order_id') !== receiptOrder) return Response.json({ error: 'payment_not_found' }, { status: 404 });
       return Response.json({ provider: 'nowpayments', order_id: receiptOrder, state: capturedPaymentStatus === 'finished' ? 'completed' : 'pending',
         payment_confirmed: capturedPaymentStatus === 'finished', signature_validated: true, provider_verified: true, persisted: true, fulfillment_status: 'not_activated' });
@@ -91,7 +100,7 @@ const syntheticEnv = {
         || !await validForwardedIdentity(headers.get('x-vp-id-token') || '')) return Response.json({ error: 'synthetic-identity-rejected' }, { status: 401 });
       metrics.nowpaymentsCheckoutCalls++;
       return Response.json({ provider: 'nowpayments', url: 'https://nowpayments.io/payment/?iid=12345',
-        total_usd: '101.00', fee_usd: '1.00', fulfillment_status: 'review_required' });
+        total_usd: '100.00', fee_usd: '0.00', fulfillment_status: 'awaiting_payment' });
     }
     if (/\/registration\/phone\/|\/phone-number\/|\/sign-in\/phone-number/.test(target.pathname)) {
       metrics.phoneCalls++;
@@ -184,7 +193,7 @@ export default {
     // Exercise the actual built Server Component with request-local, synthetic
     // catalog data. This file is never imported by the production Worker and
     // no fixture, credential, DB connection or override enters its bundle.
-    if (['/__overview_fixture/dashboard', '/__overview_fixture/dashboard/home',
+    if (['/__overview_fixture/dashboard', '/__overview_fixture/dashboard/home', '/__overview_fixture/dashboard/kyc',
       '/__overview_fixture/dashboard/packages', '/__overview_fixture/dashboard/packages-enabled'].includes(incoming.pathname)) {
       const headers = new Headers(request.headers);
       headers.delete('x-forwarded-host');

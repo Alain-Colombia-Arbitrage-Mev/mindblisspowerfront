@@ -51,7 +51,7 @@ export function checkoutErrorMessage(code, provider = 'stripe') {
   if (['nowpayments-review-required', 'nowpayments_review_required', 'checkout_pending_review', 'membership_payment_pending_review'].includes(code)) return 'Hay una compra pendiente de revisión. No vuelvas a pagar hasta que soporte confirme su estado.';
   if (['service_read_only', 'stripe_recovery_financial_review_required', 'financial_mutations_unavailable', 'core_unavailable',
     'payments-unconfigured', 'nowpayments-unavailable', 'nowpayments_unavailable', 'financial_services_unavailable',
-    'core_not_ready', 'financial_review_required', 'membership_eligibility_unavailable', 'stripe_unavailable'].includes(code)) {
+    'core_not_ready', 'financial_review_required', 'membership_eligibility_unavailable', 'nowpayments_financial_configuration_unavailable', 'stripe_unavailable'].includes(code)) {
     return provider === 'nowpayments'
       ? 'Los pagos con NOWPayments aún no están habilitados. No se ha iniciado un cobro desde esta solicitud.'
       : 'Los pagos no están habilitados temporalmente. No se ha iniciado un cobro desde esta solicitud.';

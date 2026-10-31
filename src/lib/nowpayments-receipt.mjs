@@ -7,17 +7,21 @@ export function nowpaymentsOrderId(value) {
 // Browser return parameters, IPN acknowledgement and membership state cannot.
 export function nowpaymentsReceiptStatus(value, orderId) {
   if (!nowpaymentsOrderId(orderId) || !value || typeof value !== 'object' || Array.isArray(value) || value.error
-      || value.provider !== 'nowpayments' || value.order_id !== orderId || value.fulfillment_status !== 'not_activated'
+      || value.provider !== 'nowpayments' || value.order_id !== orderId
+      || !['not_activated', 'review_required', 'awaiting_payment', 'activated', 'risk_review', 'security_blocked'].includes(value.fulfillment_status)
       || !['pending', 'completed', 'under_review'].includes(value.state)
       || !['payment_confirmed', 'signature_validated', 'provider_verified', 'persisted'].every(key => typeof value[key] === 'boolean')
       || value.payment_confirmed !== (value.state === 'completed')
-      || (value.state === 'completed' && (!value.signature_validated || !value.provider_verified || !value.persisted))) return null;
+      || (value.state === 'completed' && (!value.signature_validated || !value.provider_verified || !value.persisted))
+      || (value.fulfillment_status === 'activated' && value.state !== 'completed')
+      || (['risk_review', 'security_blocked'].includes(value.fulfillment_status) && value.state !== 'under_review')) return null;
   return { provider: 'nowpayments', order_id: orderId, state: value.state, payment_confirmed: value.payment_confirmed,
     signature_validated: value.signature_validated, provider_verified: value.provider_verified, persisted: value.persisted,
-    fulfillment_status: 'not_activated' };
+    fulfillment_status: value.fulfillment_status };
 }
 
 export const completedNOWPaymentsReceipt = (value, orderId) => nowpaymentsReceiptStatus(value, orderId)?.state === 'completed';
+export const activatedNOWPaymentsMembership = (value, orderId) => nowpaymentsReceiptStatus(value, orderId)?.fulfillment_status === 'activated';
 
 /** @param {string} orderId
  * @param {{signal?: AbortSignal, fetchImpl?: typeof fetch}} [options] */
@@ -69,7 +73,9 @@ export function startNOWPaymentsReceiptPolling({ orderId, onResult, onStop = (_r
       if (stopped || controller.signal.aborted) return;
       if (!receipt) throw Object.assign(new Error('Invalid payment confirmation'), { status: 502 });
       onResult(receipt);
-      if (receipt.state !== 'pending') terminal = receipt.state;
+      // Receipt verification can precede its durable membership job. Keep the
+      // same bounded poll until activation or a terminal review is observed.
+      if (receipt.state !== 'pending' && !(receipt.state === 'completed' && receipt.fulfillment_status === 'awaiting_payment')) terminal = receipt.state;
     } catch (error) {
       if (stopped || controller.signal.aborted) return;
       if ([400, 401, 403, 404].includes(error?.status)) terminal = 'unavailable';

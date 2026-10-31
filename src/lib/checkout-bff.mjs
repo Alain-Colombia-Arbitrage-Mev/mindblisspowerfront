@@ -8,7 +8,8 @@ const safeErrors = new Set(['buyer_not_found', 'invalid_referral_code', 'invalid
   'service_read_only', 'core_unavailable', 'financial_services_unavailable', 'account_suspended', 'invalid_id_token',
   'membership_already_active', 'package_not_found', 'nowpayments-unavailable', 'nowpayments_unavailable',
   'nowpayments-review-required', 'nowpayments_review_required', 'checkout_pending_review', 'membership_payment_pending_review',
-  'core_not_ready', 'financial_review_required', 'membership_eligibility_unavailable', 'stripe_unavailable', 'stripe_checkout_disabled', 'nowpayments_checkout_disabled']);
+  'core_not_ready', 'financial_review_required', 'membership_eligibility_unavailable', 'nowpayments_financial_configuration_unavailable',
+  'stripe_unavailable', 'stripe_checkout_disabled', 'nowpayments_checkout_disabled']);
 const validAmount = value => typeof value === 'string' && /^(?:0|[1-9]\d{0,11})\.\d{2}$/.test(value);
 const minorUnits = value => BigInt(value.replace('.', ''));
 
@@ -86,12 +87,14 @@ export async function handleMembershipCheckout(request, { env, identity, fetchIm
     const url = hostedCheckoutURL(payload.url, provider, environment);
     // Never silently turn a requested crypto purchase into a Stripe checkout.
     if (!url || (payload.provider !== undefined && payload.provider !== provider)
-        || (provider === 'nowpayments' && (payload.provider !== provider || payload.fulfillment_status !== 'review_required'))
+        || (provider === 'nowpayments' && (payload.provider !== provider
+          || !['review_required', 'awaiting_payment'].includes(payload.fulfillment_status)
+          || (payload.fulfillment_status === 'awaiting_payment' && payload.fee_usd !== '0.00')))
         || !validAmount(payload.total_usd) || !validAmount(payload.fee_usd)
         || minorUnits(payload.total_usd) <= 0n || minorUnits(payload.fee_usd) > minorUnits(payload.total_usd)) {
       return reply({ error: 'invalid-checkout-response' }, 502);
     }
     return reply({ provider, url, total_usd: payload.total_usd, fee_usd: payload.fee_usd, checkout_environment: environment,
-      ...(provider === 'nowpayments' ? { fulfillment_status: 'review_required' } : {}) });
+      ...(provider === 'nowpayments' ? { fulfillment_status: payload.fulfillment_status } : {}) });
   } catch { return reply({ error: 'payments-unreachable' }, 502); }
 }

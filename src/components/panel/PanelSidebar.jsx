@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  CreditCard,
   LayoutDashboard,
   LogOut,
   Mail,
@@ -34,7 +33,6 @@ const NAV_ITEMS = [
   { icon: Package, label: "Membresías", href: "/dashboard/packages" },
   { icon: Ticket, label: "Cupones", href: "/dashboard/coupons" },
   { icon: Wallet, label: "Billetera y retiros", href: "/dashboard/withdrawals" },
-  { icon: CreditCard, label: "Verificación de identidad", href: "/dashboard/kyc" },
   { icon: User, label: "Mi perfil", href: "/dashboard/profile" },
   { icon: Medal, label: "Rangos", href: "/dashboard/rank", also: ["/dashboard/ranks"] },
   { icon: Network, label: "Mi red", href: "/dashboard/network", also: ["/dashboard/team"] },

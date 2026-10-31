@@ -72,8 +72,8 @@ export default async function OverviewPlans() {
       {plans.map(plan => <article key={plan.id} className="executive-card flex min-w-0 flex-col items-start gap-5">
         <h3 className="break-words text-base font-semibold" style={{ color: "var(--vp-text)" }}>{plan.name}</h3>
         <p className="executive-card-value break-words" style={{ color: "var(--vp-accent)", fontSize: "clamp(24px, 3vw, 32px)" }}>{plan.price}</p>
-        <Link href={`/dashboard/packages?plan=${plan.id}#plan-${plan.id}`} prefetch={false} className="executive-button mt-auto w-full justify-center" aria-label={`Ver plan ${plan.name}`}>
-          Ver plan <ArrowUpRight size={15} aria-hidden="true" />
+        <Link href={`/dashboard/packages?plan=${plan.id}#plan-${plan.id}`} prefetch={false} className="executive-button mt-auto w-full justify-center" aria-label={`Comprar plan ${plan.name}`}>
+          Comprar plan <ArrowUpRight size={15} aria-hidden="true" />
         </Link>
       </article>)}
     </div>}

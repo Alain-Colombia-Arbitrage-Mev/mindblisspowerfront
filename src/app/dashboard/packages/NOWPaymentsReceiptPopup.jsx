@@ -1,16 +1,25 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { CheckCircle2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useNOWPaymentsReceipt } from '@/hooks/useNOWPaymentsReceipt';
-import { completedNOWPaymentsReceipt } from '@/lib/nowpayments-receipt.mjs';
+import { activatedNOWPaymentsMembership, completedNOWPaymentsReceipt } from '@/lib/nowpayments-receipt.mjs';
+import { useMemberSummary } from '@/hooks/useMemberSummary';
 
 export default function NOWPaymentsReceiptPopup({ orderId = '' }) {
   const receipt = useNOWPaymentsReceipt(orderId);
   const [dismissed, setDismissed] = useState('');
   const router = useRouter();
+  const active = activatedNOWPaymentsMembership(receipt, orderId);
+  const { reload } = useMemberSummary({ fresh: true });
+  const refreshed = useRef('');
+  useEffect(() => {
+    if (!active || refreshed.current === orderId) return;
+    refreshed.current = orderId;
+    void reload?.();
+  }, [active, orderId, reload]);
   if (dismissed === orderId || !completedNOWPaymentsReceipt(receipt, orderId)) return null;
   function close() { setDismissed(orderId); router.replace('/dashboard/packages', { scroll: false }); }
   return (
@@ -24,9 +33,15 @@ export default function NOWPaymentsReceiptPopup({ orderId = '' }) {
             style={{ background: 'rgba(250,204,21,0.12)', border: '1px solid rgba(250,204,21,0.3)' }}>
             <CheckCircle2 size={30} style={{ color: 'var(--vp-accent)' }} />
           </span>
-          <Dialog.Title className="m-0 text-2xl font-bold" style={{ color: 'var(--vp-text)' }}>Pago recibido y verificado</Dialog.Title>
+          <Dialog.Title className="m-0 text-2xl font-bold" style={{ color: 'var(--vp-text)' }}>{active ? 'Membresía activada' : 'Pago recibido y verificado'}</Dialog.Title>
           <Dialog.Description className="mt-3 text-sm leading-6" style={{ color: 'var(--vp-muted)' }}>
-            Confirmamos tu pago con NOWPayments y guardamos su comprobante. Esta confirmación no activa una membresía ni genera rendimientos, comisiones o retiros.
+            {active
+              ? 'Confirmamos tu pago con NOWPayments y la activación de esta membresía en el servidor. Los rendimientos y las comisiones se calculan según las reglas aplicables; no son un saldo cobrado ni un retiro confirmado.'
+              : receipt.fulfillment_status === 'awaiting_payment'
+                ? 'Confirmamos tu pago con NOWPayments y guardamos su comprobante. La activación de tu membresía está en proceso; no vuelvas a pagar. Si sigue pendiente, revisa Mis pagos o contacta al soporte.'
+                : receipt.fulfillment_status === 'review_required'
+                  ? 'Confirmamos tu pago con NOWPayments y guardamos su comprobante. Esta compra anterior requiere revisión antes de activar la membresía. No vuelvas a pagar; contacta al soporte.'
+                  : 'Confirmamos tu pago con NOWPayments y guardamos su comprobante. Esta confirmación no activa una membresía ni genera rendimientos, comisiones o retiros.'}
           </Dialog.Description>
           <Dialog.Close asChild><button type="button" className="executive-button primary mt-6 w-full justify-center">Cerrar confirmación</button></Dialog.Close>
         </Dialog.Content>

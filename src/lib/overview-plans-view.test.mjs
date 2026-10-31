@@ -36,10 +36,11 @@ test("overview renders all catalog plans once on the server, keeping exact USD p
   assert.equal((html.match(/<article/g) || []).length, 13);
   for (let index = 0; index < packages.length; index++) {
     assert.ok(html.includes(`href="/dashboard/packages?plan=${index + 1}#plan-${index + 1}"`));
+    assert.ok(html.includes(`aria-label="Comprar plan ${packages[index].name.trim()}"`));
     assert.ok(html.includes(`>${packages[index].name.trim()}</h3>`));
     assert.ok(html.includes(`$${((index + 1) * 100).toLocaleString("en-US")}.01 USD`));
   }
-  assert.doesNotMatch(html, /private-legacy-type|not-for-summary|\bPV\b|ROI|Recomendado|Comprar|Activar/);
+  assert.doesNotMatch(html, /private-legacy-type|not-for-summary|\bPV\b|ROI|Recomendado|Ver plan|Activar/);
   const section = element.props.children;
   assert.equal(section.props.children[0].props.children[2].props.prefetch, false);
 });

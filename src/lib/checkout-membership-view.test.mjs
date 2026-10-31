@@ -79,7 +79,7 @@ test('crypto pending enablement and errors are explicit and accessible; loading 
   assert.match(html, /Preparando pago/);
 });
 
-test('the actual membership click handler sends chosen provider once and accepts only its validated hosted URL', async () => {
+test('the actual operational membership click handler sends chosen provider once and accepts only its validated hosted URL', async () => {
   const { Component } = checkoutComponent({ provider: 'nowpayments' });
   const button = findElement(Component({ packageId: 7, nowpaymentsEnabled: true }), 'button');
   let resolveCheckout; let checkoutStarted;
@@ -92,13 +92,13 @@ test('the actual membership click handler sends chosen provider once and accepts
     if (url === '/api/auth/session') return Response.json({ email: 'member@example.test' });
     assert.equal(url, '/api/payments/checkout'); checkouts++;
     assert.equal(options.cache, 'no-store'); assert.ok(options.signal instanceof AbortSignal);
-    assert.equal(JSON.parse(options.body).provider, 'nowpayments'); assert.equal(JSON.parse(options.body).package_id, 7);
+    assert.deepEqual(JSON.parse(options.body), { package_id: 7, provider: 'nowpayments', ref: '', ref_email: '', preferred_side: '' });
     checkoutStarted(); return pending;
   };
   try {
     const first = button.props.onClick(); await started;
     await button.props.onClick(); assert.equal(checkouts, 1);
-    resolveCheckout(Response.json({ provider: 'nowpayments', url: 'https://nowpayments.io/payment/?iid=12345', checkout_environment: 'production', fulfillment_status: 'review_required' }));
+    resolveCheckout(Response.json({ provider: 'nowpayments', url: 'https://nowpayments.io/payment/?iid=12345', checkout_environment: 'production', fulfillment_status: 'awaiting_payment' }));
     await first; assert.deepEqual(navigations, ['https://nowpayments.io/payment/?iid=12345']);
   } finally { globalThis.fetch = originalFetch; if (originalWindow === undefined) delete globalThis.window; else globalThis.window = originalWindow; }
 });
