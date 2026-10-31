@@ -8,7 +8,8 @@ const claims = { sub: 'stable-synthetic-subject', email: ' MEMBER@example.test '
   name: 'Synthetic Member', phone_number: '+12025550101', person_public_id: 'a02f5a55-5fa3-4239-845b-ac6b699110ee' };
 const identity = async () => ({ token: 'synthetic-verified-jwt', claims });
 const payload = { provider: 'nowpayments', url: 'https://nowpayments.io/payment/?iid=12345', total_usd: '101.00', fee_usd: '1.00', fulfillment_status: 'review_required' };
-const form = { package_id: 1, provider: 'nowpayments', ref: 'MP-SYNTHETIC', ref_email: 'member@example.test', preferred_side: 'l',
+const purchaseRequestId = 'a02f5a55-5fa3-4239-845b-ac6b699110ef';
+const form = { package_id: 1, provider: 'nowpayments', purchase_request_id: purchaseRequestId, ref: 'MP-SYNTHETIC', ref_email: 'member@example.test', preferred_side: 'l',
   amount_usd: '0.01', person_id: 1, sponsor_id: 1, email: 'attacker@example.test', is_admin: true };
 function request(body = form, extra = {}) {
   return new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/payments/checkout`, { method: 'POST',
@@ -47,7 +48,7 @@ test('membership checkout forwards verified JWT and catalog ID, never client mon
     assert.equal(options.redirect, 'manual'); assert.equal(options.cache, 'no-store');
     assert.equal(options.headers['X-VP-Id-Token'], 'synthetic-verified-jwt');
     assert.deepEqual(JSON.parse(options.body), { provider: 'nowpayments', email: 'member@example.test', package_id: 1,
-      ref: 'MP-SYNTHETIC', preferred_side: 'L', name: 'Synthetic Member', phone: '+12025550101' });
+      ref: 'MP-SYNTHETIC', preferred_side: 'L', purchase_request_id: purchaseRequestId, name: 'Synthetic Member', phone: '+12025550101' });
     assert.doesNotMatch(JSON.stringify(options), /synthetic-not-for-the-portal|attacker|person_id|sponsor_id|is_admin|amount_usd/);
     return Response.json({ ...payload, private: 'private-account-data', token: 'private-token' }, { headers: { 'set-cookie': 'private-cookie' } });
   } });
@@ -72,6 +73,23 @@ test('operational NOW checkout accepts awaiting payment only with zero added fee
   for (const fee_usd of ['1.00', 0, null, undefined]) {
     const invalid = await run(request(), { fetchImpl: async () => Response.json({ ...operational, fee_usd }) });
     assert.equal(invalid.status, 502);
+  }
+});
+
+test('NOW purchase intent requires a canonical UUID, preserves it unchanged and returns only safe reuse identity', async () => {
+  for (const purchase_request_id of [undefined, null, '', {}, purchaseRequestId.toUpperCase(), '00000000-0000-0000-0000-000000000000']) {
+    const result = await run(request({ ...form, purchase_request_id }), { fetchImpl: async () => assert.fail('invalid intent reached checkout') });
+    assert.equal(result.status, 400); assert.deepEqual(await result.json(), { error: 'invalid_purchase_request_id' });
+  }
+  const response = await run(request(), { fetchImpl: async (_target, options) => {
+    assert.equal(JSON.parse(options.body).purchase_request_id, purchaseRequestId);
+    return Response.json({ ...payload, order_id: claims.person_public_id, reused: true, private_id: 'not-public' });
+  } });
+  const value = await response.json(); assert.equal(value.order_id, claims.person_public_id); assert.equal(value.reused, true);
+  assert.doesNotMatch(JSON.stringify(value), /private_id|not-public/);
+  for (const error of ['membership_purchase_already_processed', 'invalid_purchase_request_id']) {
+    const failed = await run(request(), { fetchImpl: async () => Response.json({ error, private: 'not-public' }, { status: 409 }) });
+    assert.deepEqual(await failed.json(), { error });
   }
 });
 

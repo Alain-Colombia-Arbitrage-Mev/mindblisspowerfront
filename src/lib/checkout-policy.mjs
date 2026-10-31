@@ -63,6 +63,8 @@ export function checkoutErrorMessage(code, provider = 'stripe') {
   }
   if (code === 'account_suspended') return 'Esta cuenta tiene el acceso a compras restringido. Contacta al soporte.';
   if (code === 'membership_already_active') return 'Ya tienes esta membresía activa. No necesitas pagarla otra vez.';
+  if (code === 'membership_purchase_already_processed') return 'Esta intención de compra ya fue procesada. Revisa el historial. Para comprar otra membresía, inicia una compra nueva de forma explícita.';
+  if (code === 'invalid_purchase_request_id') return 'No pudimos identificar esta intención de compra. Revisa el historial antes de iniciar una nueva.';
   return 'No pudimos confirmar el inicio del pago. Revisa tu historial o contacta al soporte antes de volver a intentarlo.';
 }
 
@@ -73,7 +75,7 @@ const publicErrorReferences = new Set([
   'buyer_not_found', 'invalid_referral_code', 'invalid_preferred_side', 'tree_relocation_required',
   'checkout_identity_review_required', 'stripe_recovery_financial_review_required', 'financial_mutations_unavailable',
   'service_read_only', 'core_unavailable', 'financial_services_unavailable', 'account_suspended',
-  'membership_already_active', 'package_not_found', 'nowpayments-unavailable', 'nowpayments_unavailable',
+  'membership_already_active', 'membership_purchase_already_processed', 'invalid_purchase_request_id', 'package_not_found', 'nowpayments-unavailable', 'nowpayments_unavailable',
   'nowpayments-review-required', 'nowpayments_review_required', 'checkout_pending_review', 'membership_payment_pending_review',
   'core_not_ready', 'financial_review_required', 'membership_eligibility_unavailable', 'nowpayments_financial_configuration_unavailable',
   'stripe_unavailable', 'stripe_checkout_disabled', 'nowpayments_checkout_disabled', 'nowpayments_checkout_unavailable',

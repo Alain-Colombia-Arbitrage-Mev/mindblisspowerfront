@@ -1,5 +1,6 @@
 import { checkoutProvider, hostedCheckoutURL, stripeCheckoutEnabled, nowpaymentsMembershipsEnabled } from './checkout-policy.mjs';
 import { memberMutationError } from './member-mutation-policy.mjs';
+import { nowpaymentsOrderId } from './nowpayments-receipt.mjs';
 
 const headers = { 'Cache-Control': 'private, no-store' };
 const reply = (body, status = 200) => Response.json(body, { status, headers });
@@ -10,7 +11,7 @@ const safeErrors = new Set(['buyer_not_found', 'invalid_referral_code', 'invalid
   'nowpayments-review-required', 'nowpayments_review_required', 'checkout_pending_review', 'membership_payment_pending_review',
   'core_not_ready', 'financial_review_required', 'membership_eligibility_unavailable', 'nowpayments_financial_configuration_unavailable',
   'stripe_unavailable', 'stripe_checkout_disabled', 'nowpayments_checkout_disabled',
-  'upstream_unavailable', 'nowpayments_checkout_unavailable']);
+  'upstream_unavailable', 'nowpayments_checkout_unavailable', 'membership_purchase_already_processed', 'invalid_purchase_request_id']);
 const validAmount = value => typeof value === 'string' && /^(?:0|[1-9]\d{0,11})\.\d{2}$/.test(value);
 const minorUnits = value => BigInt(value.replace('.', ''));
 
@@ -68,12 +69,15 @@ export async function handleMembershipCheckout(request, { env, identity, fetchIm
   if (ref && side && !['L', 'R'].includes(side)) return reply({ error: 'invalid_preferred_side' }, 400);
   if (provider === 'stripe' && !stripeCheckoutEnabled(env)) return reply({ error: 'stripe_checkout_disabled' }, 503);
   if (provider === 'nowpayments' && !nowpaymentsMembershipsEnabled(env)) return reply({ error: 'nowpayments_checkout_disabled' }, 503);
+  const purchaseRequestId = provider === 'nowpayments' ? nowpaymentsOrderId(body.purchase_request_id) : '';
+  if (provider === 'nowpayments' && !purchaseRequestId) return reply({ error: 'invalid_purchase_request_id' }, 400);
   if (!env.VP_PAYMENTS_URL || !env.PAYMENTS_SERVICE_TOKEN) return reply({ error: 'payments-unconfigured' }, 503);
   try {
     const upstream = await fetchImpl(`${env.VP_PAYMENTS_URL}/api/payments/checkout`, {
       method: 'POST', redirect: 'manual', cache: 'no-store', signal,
       headers: { 'content-type': 'application/json', 'X-VP-Service-Token': env.PAYMENTS_SERVICE_TOKEN, 'X-VP-Id-Token': verified.token },
       body: JSON.stringify({ provider, email, package_id: packageId, ref, preferred_side: ref ? side : '',
+        ...(provider === 'nowpayments' ? { purchase_request_id: purchaseRequestId } : {}),
         name: typeof claims.name === 'string' ? claims.name.trim().slice(0, 120) : '',
         phone: typeof claims.phone_number === 'string' ? claims.phone_number.trim().slice(0, 32) : '' }),
     });
@@ -92,10 +96,13 @@ export async function handleMembershipCheckout(request, { env, identity, fetchIm
           || !['review_required', 'awaiting_payment'].includes(payload.fulfillment_status)
           || (payload.fulfillment_status === 'awaiting_payment' && payload.fee_usd !== '0.00')))
         || !validAmount(payload.total_usd) || !validAmount(payload.fee_usd)
-        || minorUnits(payload.total_usd) <= 0n || minorUnits(payload.fee_usd) > minorUnits(payload.total_usd)) {
+        || minorUnits(payload.total_usd) <= 0n || minorUnits(payload.fee_usd) > minorUnits(payload.total_usd)
+        || (payload.order_id !== undefined && !nowpaymentsOrderId(payload.order_id))
+        || (payload.reused !== undefined && typeof payload.reused !== 'boolean')) {
       return reply({ error: 'invalid-checkout-response' }, 502);
     }
     return reply({ provider, url, total_usd: payload.total_usd, fee_usd: payload.fee_usd, checkout_environment: environment,
-      ...(provider === 'nowpayments' ? { fulfillment_status: payload.fulfillment_status } : {}) });
+      ...(provider === 'nowpayments' ? { fulfillment_status: payload.fulfillment_status,
+        ...(payload.order_id ? { order_id: payload.order_id } : {}), ...(payload.reused !== undefined ? { reused: payload.reused } : {}) } : {}) });
   } catch { return reply({ error: 'payments-unreachable' }, 502); }
 }

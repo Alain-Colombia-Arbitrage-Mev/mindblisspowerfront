@@ -176,7 +176,7 @@ test("the real active-membership gate reveals a validated selected card while it
   toggle.props.onClick();
   html = render(Gate(props));
   assert.doesNotMatch(html, /Selected catalog card/);
-  assert.match(html, /Ver otros planes/);
+  assert.match(html, /Comprar otra membresía/);
   for (const initialShowPlans of [false, "true", 1, undefined]) {
     showPlans = undefined;
     assert.doesNotMatch(render(Gate({ ...props, initialShowPlans })), /Selected catalog card/);

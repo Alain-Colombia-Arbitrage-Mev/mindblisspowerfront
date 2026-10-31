@@ -286,7 +286,8 @@ try {
   assert.equal(new URL(resume.headers.get('location'), 'http://127.0.0.1:8787').pathname, '/dashboard/packages');
   assert.match(resume.headers.get('cache-control'), /no-store/); probes++;
   const cryptoCheckout = await fetch('http://127.0.0.1:8787/api/payments/checkout', {
-    method: 'POST', headers: { ...authHeaders, ...sessionHeaders }, body: JSON.stringify({ package_id: 1, provider: 'nowpayments' }), signal: AbortSignal.timeout(8000),
+    method: 'POST', headers: { ...authHeaders, ...sessionHeaders }, body: JSON.stringify({ package_id: 1, provider: 'nowpayments',
+      purchase_request_id: 'a02f5a55-5fa3-4239-845b-ac6b699110a2' }), signal: AbortSignal.timeout(8000),
   });
   assert.equal(cryptoCheckout.status, 200);
   const cryptoPayload = await cryptoCheckout.json();
@@ -295,6 +296,25 @@ try {
   assert.equal(cryptoPayload.total_usd, '100.00');
   assert.equal(cryptoPayload.fee_usd, '0.00');
   assert.equal(cryptoPayload.url, 'https://nowpayments.io/payment/?iid=12345'); probes++;
+  const purchasePath = '/api/payments/nowpayments/purchases';
+  const purchaseOrder = 'a02f5a55-5fa3-4239-845b-ac6b699110a1';
+  const noHistory = await fetch(`http://127.0.0.1:8787${purchasePath}`, { headers: { 'cf-connecting-ip': '192.0.2.10' }, signal: AbortSignal.timeout(8000) });
+  assert.equal(noHistory.status, 401); probes++;
+  const purchases = await fetch(`http://127.0.0.1:8787${purchasePath}`, { headers: sessionHeaders, signal: AbortSignal.timeout(8000) });
+  assert.equal(purchases.status, 200); assert.match(purchases.headers.get('cache-control'), /private.*no-store/);
+  const purchased = await purchases.json(); assert.equal(purchased.purchases[0].order_id, purchaseOrder); assert.equal(purchased.purchases[0].can_resume, true); probes++;
+  const continuePurchase = await post(`${purchasePath}/resume`, { order_id: purchaseOrder }, sessionHeaders.cookie);
+  assert.equal(continuePurchase.status, 200); const continued = await continuePurchase.json();
+  assert.equal(continued.reused, true); assert.equal(continued.url, 'https://nowpayments.io/payment/?iid=12345'); assert.equal(continued.order_id, purchaseOrder); probes++;
+  const crossCancel = await fetch(`http://127.0.0.1:8787${purchasePath}/cancel`, { method: 'POST',
+    headers: { ...authHeaders, ...sessionHeaders, origin: 'https://admin.example.test' }, body: JSON.stringify({ order_id: purchaseOrder }), signal: AbortSignal.timeout(8000) });
+  assert.equal(crossCancel.status, 403); probes++;
+  const cancelPurchase = await post(`${purchasePath}/cancel`, { order_id: purchaseOrder }, sessionHeaders.cookie);
+  assert.equal(cancelPurchase.status, 200); assert.deepEqual(await cancelPurchase.json(), { order_id: purchaseOrder,
+    state: 'cancelled_local', provider_invoice_revoked: false, late_payment_policy: 'review_required' }); probes++;
+  const afterCancel = await fetch(`http://127.0.0.1:8787${purchasePath}`, { headers: sessionHeaders, signal: AbortSignal.timeout(8000) });
+  assert.equal(afterCancel.status, 200); const cancelledHistory = await afterCancel.json();
+  assert.equal(cancelledHistory.purchases[0].payment_status, 'cancelled_local'); assert.equal(cancelledHistory.purchases[0].can_resume, false); probes++;
   const smsStatus = await fetch('http://127.0.0.1:8787/api/auth/phone-number/opt-in', { headers: sessionHeaders });
   assert.equal(smsStatus.status, 404);
   assert.deepEqual(await smsStatus.json(), { error: 'not_found' });
@@ -345,6 +365,7 @@ try {
   assert.equal(metrics.nowpaymentsCheckoutCalls, 1, 'the Stripe pause preserves only the admitted NOWPayments checkout');
   assert.equal(metrics.nowpaymentsCaptures, 2, 'signed waiting and finished callbacks are captured without a browser session');
   assert.equal(metrics.nowpaymentsStatusReads, 6, 'only verified users reach owner-scoped payment and activation reads');
+  assert.equal(metrics.nowpaymentsPurchaseReads, 2); assert.equal(metrics.nowpaymentsPurchaseResumes, 1); assert.equal(metrics.nowpaymentsPurchaseCancels, 1);
   console.log(JSON.stringify({ workerd: 'passed', probes, privateCalls: metrics.privateCalls, realRsaVerified: true,
     tamperedAndWrongAudienceRejected: true, externalNetwork: 'disabled', databaseQueries: 0, realMessages: 0 }));
 } finally {

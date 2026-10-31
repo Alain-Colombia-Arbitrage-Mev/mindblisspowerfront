@@ -52,6 +52,9 @@ export default function PaywallGate({ children, initialShowPlans = false }) {
         <p className="mt-3 text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
           Tu posición en la red está habilitada. Ya puedes invitar, construir tu equipo y hacer seguimiento de tu progreso.
         </p>
+        <p className="mt-2 text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
+          Puedes comprar otra membresía, incluso del mismo plan. Cada compra activada tiene su propio CD y bloqueo de 365 días. Continuar una factura pendiente no crea otra membresía.
+        </p>
 
         <div className="mt-6 grid gap-3 sm:grid-cols-3">
           <Stat label="Membresías activas" value={String(d?.active_packages ?? 1)} accent />
@@ -76,7 +79,7 @@ export default function PaywallGate({ children, initialShowPlans = false }) {
           className="executive-button ghost"
         >
           {showPlans ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-          {showPlans ? "Ocultar planes" : "Ver otros planes"}
+          {showPlans ? "Ocultar planes" : "Comprar otra membresía"}
         </button>
       </div>
 

@@ -10,7 +10,7 @@ import {validMemberSummary} from './member-read.mjs';
 
 const model = () => ({read_model_status:'operational',withdrawals_enabled:false,
  commissions:{pending_usd:'10.00',available_usd:'5.00',funding_held_usd:'3.00',credited_usd:'20.00',paid_external_usd:'0.00',
-  items:[{generated_at:'2026-01-31T15:20:00Z',available_at:'2026-02-28T15:20:00Z',kind:'direct_bonus',status:'pending_maturity',amount_usd:'10.00',credited_usd:'7.00',funding_held_usd:'3.00',cap_excluded_usd:'0.00'}]},
+  items:[{generated_at:'2026-01-31T15:20:00Z',available_at:'2026-02-28T15:20:00Z',kind:'direct_bonus',status:'pending_maturity',amount_usd:'10.00',credited_usd:'7.00',liquid_credited_usd:'2.00',funding_held_usd:'3.00',cap_excluded_usd:'0.00'}]},
  membership:{principal_locked_usd:'100.00',principal_available_usd:'0.00',roi_locked_usd:'2.00',roi_available_usd:'0.00',
   items:[{principal_usd:'100.00',started_at:'2026-01-01T15:20:00Z',lock_until:'2027-01-01T15:20:00Z',eligibility:'locked',roi_locked_usd:'2.00',roi_available_usd:'0.00'}]}});
 
@@ -31,6 +31,8 @@ test('NOW read model displays independent backend totals without combining princ
  assert.match(html,/un mes calendario desde su generación, no a los 30 días/);
  assert.match(html,/retiros externos de NOWPayments siguen deshabilitados/);
  assert.match(html,/crédito interno no es un pago recibido/);
+ assert.match(html,/Crédito líquido/); assert.match(html,/liberada sólo parcialmente/);
+ assert.match(html,/\$2\.00 USD/);
  assert.match(html,/365 días.*elegible para solicitud/s);
  assert.match(html,/sin perjuicio de los derechos aplicables/);
  assert.doesNotMatch(html,/<button|<form|pago automático garantizado|\$150\.00/);

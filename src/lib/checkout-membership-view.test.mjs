@@ -92,7 +92,9 @@ test('the actual operational membership click handler sends chosen provider once
     if (url === '/api/auth/session') return Response.json({ email: 'member@example.test' });
     assert.equal(url, '/api/payments/checkout'); checkouts++;
     assert.equal(options.cache, 'no-store'); assert.ok(options.signal instanceof AbortSignal);
-    assert.deepEqual(JSON.parse(options.body), { package_id: 7, provider: 'nowpayments', ref: '', ref_email: '', preferred_side: '' });
+    const body = JSON.parse(options.body);
+    assert.match(body.purchase_request_id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    assert.deepEqual({ ...body, purchase_request_id: undefined }, { package_id: 7, provider: 'nowpayments', ref: '', ref_email: '', preferred_side: '', purchase_request_id: undefined });
     checkoutStarted(); return pending;
   };
   try {

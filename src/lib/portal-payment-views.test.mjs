@@ -45,6 +45,7 @@ function payments(state, reload = () => {}) {
     '@/hooks/useMemberSummary': { useMemberSummary: () => ({ state, reload }) },
     '@/lib/payment-display.mjs': paymentDisplay, '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' ') },
     './StripeSalesHistory': { default: () => null }, './WithdrawalRequest': { default: () => null },
+    './NOWPaymentsPurchases': { default: () => null },
     '@/components/panel/NOWPaymentsBalances': { default: () => null },
   });
 }
@@ -61,7 +62,8 @@ test('payment errors and absent payloads provide an operable retry instead of a 
     const Component = payments({ loading: false, data: null, error }, () => { retries++; });
     const html = render(Component);
     assert.match(html, /role="alert"/); assert.match(html, /Reintentar pagos/); assert.doesNotMatch(html, /\$0\.00/);
-    const retry = React.Children.toArray(Component().props.children).find(child => child.type === 'button');
+    const card = React.Children.toArray(Component().props.children).find(child => child.type !== React.Fragment);
+    const retry = React.Children.toArray(card.props.children).find(child => child.type === 'button');
     retry.props.onClick(); assert.equal(retries, 1);
   }
 });

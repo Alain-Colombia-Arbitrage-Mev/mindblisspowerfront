@@ -30,7 +30,7 @@ export default function NOWPaymentsBalances({ data }) {
       <Balance label="ROI de CD vencido (contable)" amount={membership.roi_available_usd} />
     </dl>
     <p role="status" className="mt-4 text-sm leading-6" style={{ color: 'var(--vp-muted)' }}>
-      Los retiros externos de NOWPayments siguen deshabilitados. Un crédito interno no es un pago recibido y puede incluir asignaciones a jubilación. Las acreditaciones acumuladas no se suman a los estados de comisión. El capital y el ROI se muestran separados de las comisiones y del histórico Stripe; no deben sumarse como saldo retirable.
+      Los retiros externos de NOWPayments siguen deshabilitados. Un crédito interno no es un pago recibido y puede incluir asignaciones a jubilación. Las acreditaciones acumuladas no se suman a los estados de comisión. Una fila puede estar liberada sólo parcialmente: su comisión calculada no equivale al crédito líquido ni al importe disponible. El capital y el ROI se muestran separados de las comisiones y del histórico Stripe; no deben sumarse como saldo retirable.
     </p>
     <p className="mt-2 text-xs leading-5" style={{ color: 'var(--vp-muted)' }}>
       El capital permanece bloqueado durante 365 días y después queda elegible para solicitud y validación. No hay reembolso anticipado ordinario, sin perjuicio de los derechos aplicables. Tampoco hay devolución ni retiro automático al vencer.
@@ -47,9 +47,9 @@ export default function NOWPaymentsBalances({ data }) {
     {commissionItems.length > 0 && <div className="executive-table-wrap mt-5">
       <table className="executive-table">
         <caption className="sr-only">Comisiones NOWPayments, fechas de Bogotá y retenciones informadas por el servidor.</caption>
-        <thead><tr><th scope="col">Comisión calculada</th><th scope="col">Generación (Bogotá)</th><th scope="col">Vencimiento (Bogotá)</th><th scope="col">Estado</th><th scope="col">Retenido por financiación</th></tr></thead>
+        <thead><tr><th scope="col">Comisión calculada</th><th scope="col">Crédito líquido</th><th scope="col">Generación (Bogotá)</th><th scope="col">Vencimiento (Bogotá)</th><th scope="col">Estado</th><th scope="col">Retenido por financiación</th></tr></thead>
         <tbody>{commissionItems.map((item, index) => <tr key={index}>
-          <td>{money(item.amount_usd)}</td><td>{date(item.generated_at)}</td><td>{date(item.available_at)}</td><td>{nowpaymentsCommissionStatus(item.status)}</td><td>{money(item.funding_held_usd)}</td>
+          <td>{money(item.amount_usd)}</td><td>{money(item.liquid_credited_usd)}</td><td>{date(item.generated_at)}</td><td>{date(item.available_at)}</td><td>{nowpaymentsCommissionStatus(item.status)}</td><td>{money(item.funding_held_usd)}</td>
         </tr>)}</tbody>
       </table>
     </div>}

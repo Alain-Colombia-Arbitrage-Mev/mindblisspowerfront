@@ -13,11 +13,14 @@ const modes = new Map([[sessionCookie, 'member'],
   ['__Secure-better-auth.session_token=synthetic-tampered', 'tampered'],
   ['__Secure-better-auth.session_token=synthetic-wrong-audience', 'wrong-audience']]);
 const metrics = { tokens: 0, jwks: 0, verifiedReferrals: 0, sensitiveJwksHeaders: 0, registrations: 0, contactRegistrations: 0, phoneCalls: 0,
-  stripeCheckoutCalls: 0, stripeResumeCalls: 0, nowpaymentsCheckoutCalls: 0, nowpaymentsCaptures: 0, nowpaymentsStatusReads: 0 };
+  stripeCheckoutCalls: 0, stripeResumeCalls: 0, nowpaymentsCheckoutCalls: 0, nowpaymentsCaptures: 0, nowpaymentsStatusReads: 0,
+  nowpaymentsPurchaseReads: 0, nowpaymentsPurchaseResumes: 0, nowpaymentsPurchaseCancels: 0 };
 const receiptOrder = 'a02f5a55-5fa3-4239-845b-ac6b699110ee';
 const operationalOrder = 'a02f5a55-5fa3-4239-845b-ac6b699110ef';
 let capturedPaymentStatus = 'waiting';
 let operationalStatusReads = 0;
+const purchaseOrder = 'a02f5a55-5fa3-4239-845b-ac6b699110a1';
+let purchaseCancelled = false;
 function validProxySignature(target, options, headers) {
   const timestamp = headers.get('x-vp-auth-timestamp') || '';
   const ip = headers.get('x-vp-auth-client-ip') || '';
@@ -62,6 +65,31 @@ const syntheticEnv = {
     privateCalls++;
     const target = new URL(url);
     const headers = new Headers(options.headers);
+    if (target.hostname === 'payments.core.internal' && target.pathname.startsWith('/api/payments/nowpayments/purchases')) {
+      if (headers.get('x-vp-service-token') !== 'synthetic-service-only'
+          || !await validForwardedIdentity(headers.get('x-vp-id-token') || '')) return Response.json({ error: 'unauthenticated' }, { status: 401 });
+      if (target.pathname === '/api/payments/nowpayments/purchases' && options.method === 'GET') {
+        metrics.nowpaymentsPurchaseReads++;
+        return Response.json({ provider: 'nowpayments', purpose: 'membership', has_more: false, purchases: [{
+          order_id: purchaseOrder, package_id: 1, package_name: 'Synthetic membership', total_usd: '100.00', fee_usd: '0.00',
+          created_at: '2026-10-31T12:00:00Z', updated_at: '2026-10-31T12:00:00Z',
+          payment_status: purchaseCancelled ? 'cancelled_local' : 'awaiting_payment', fulfillment_status: 'awaiting_payment',
+          can_resume: !purchaseCancelled, can_cancel: !purchaseCancelled, cancelled_at: purchaseCancelled ? '2026-10-31T12:01:00Z' : null,
+        }] });
+      }
+      const input = JSON.parse(options.body || '{}');
+      if (options.method !== 'POST' || input.order_id !== purchaseOrder || Object.keys(input).length !== 1) return Response.json({ error: 'purchase_not_found' }, { status: 404 });
+      if (target.pathname.endsWith('/resume')) {
+        metrics.nowpaymentsPurchaseResumes++;
+        return Response.json({ url: 'https://nowpayments.io/payment/?iid=12345', order_id: purchaseOrder, provider: 'nowpayments',
+          total_usd: '100.00', fee_usd: '0.00', fulfillment_status: 'awaiting_payment', reused: true });
+      }
+      if (target.pathname.endsWith('/cancel')) {
+        metrics.nowpaymentsPurchaseCancels++; purchaseCancelled = true;
+        return Response.json({ order_id: purchaseOrder, state: 'cancelled_local', provider_invoice_revoked: false, late_payment_policy: 'review_required' });
+      }
+      throw new Error('unexpected_purchase_fixture_path');
+    }
     if (target.hostname === 'payments.core.internal' && target.pathname === '/api/webhooks/nowpayments') {
       const raw = new TextDecoder().decode(options.body);
       const body = JSON.parse(raw);
@@ -96,6 +124,7 @@ const syntheticEnv = {
         metrics.stripeCheckoutCalls++;
         throw new Error('paused_stripe_checkout_reached_upstream');
       }
+      if (body.purchase_request_id !== 'a02f5a55-5fa3-4239-845b-ac6b699110a2') return Response.json({ error: 'invalid_purchase_request_id' }, { status: 400 });
       if (headers.get('x-vp-service-token') !== 'synthetic-service-only'
         || !await validForwardedIdentity(headers.get('x-vp-id-token') || '')) return Response.json({ error: 'synthetic-identity-rejected' }, { status: 401 });
       metrics.nowpaymentsCheckoutCalls++;

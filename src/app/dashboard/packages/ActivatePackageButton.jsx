@@ -14,6 +14,10 @@ export default function ActivatePackageButton({ packageId, featured, stripeEnabl
   const [error, setError] = useState("");
   const [provider, setProvider] = useState(() => stripeEnabled === true ? "stripe" : "nowpayments");
   const pending = useRef(false);
+  // A transport failure cannot silently become a second purchase. Keep this
+  // intent's UUID for every explicit retry; the server also deduplicates by SKU.
+  const purchaseRequest = useRef(null);
+  const [processed, setProcessed] = useState(false);
   const id = useId();
   const providerEnabled = provider === "stripe" ? stripeEnabled === true
     : provider === "nowpayments" && nowpaymentsEnabled === true;
@@ -36,6 +40,7 @@ export default function ActivatePackageButton({ packageId, featured, stripeEnabl
     setLoading(true);
     setError("");
     try {
+      if (provider === "nowpayments" && !purchaseRequest.current) purchaseRequest.current = crypto.randomUUID();
       let attribution = { code: "", email: "" };
       try {
         const session = await fetch("/api/auth/session", { cache: "no-store", signal: AbortSignal.timeout(8000) }).then((r) => (r.ok ? r.json() : null));
@@ -54,6 +59,7 @@ export default function ActivatePackageButton({ packageId, featured, stripeEnabl
           ref: attribution.code,
           ref_email: attribution.email,
           preferred_side: attribution.side || "",
+          ...(provider === "nowpayments" ? { purchase_request_id: purchaseRequest.current } : {}),
         }),
       });
       const data = await resp.json().catch(() => ({}));
@@ -61,6 +67,7 @@ export default function ActivatePackageButton({ packageId, featured, stripeEnabl
       if (!resp.ok || !url || data.provider !== provider
           || (provider === "nowpayments" && !["review_required", "awaiting_payment"].includes(data.fulfillment_status))) {
         setError(checkoutErrorNotice(resp.ok ? "invalid-checkout-response" : data.error, provider));
+        if (data.error === "membership_purchase_already_processed") setProcessed(true);
         setLoading(false);
         pending.current = false;
         return;
@@ -100,7 +107,7 @@ export default function ActivatePackageButton({ packageId, featured, stripeEnabl
       <button
         type="button"
         onClick={activate}
-        disabled={loading || !providerEnabled}
+        disabled={loading || !providerEnabled || processed}
         aria-describedby={`${id}-hint${error ? ` ${id}-error` : ""}`}
         className={cn("executive-button w-full", featured && "primary")}
         style={
@@ -117,6 +124,11 @@ export default function ActivatePackageButton({ packageId, featured, stripeEnabl
           {error}
         </p>
       )}
+      {error && <a href="#nowpayments-purchases" className="mt-2 inline-block text-xs underline" style={{ color: "var(--vp-accent)" }}>Revisar historial NOWPayments</a>}
+      {processed && <button type="button" disabled={loading} className="executive-button mt-3 w-full" onClick={() => {
+        if (pending.current) return;
+        purchaseRequest.current = null; setProcessed(false); setError("");
+      }}>Iniciar otra compra de esta membresía</button>}
     </div>
   );
 }
