@@ -21,4 +21,14 @@ Verification uses synthetic JSX handlers and isolated transports/storage, plus
 Linux/OpenNext/workerd and anonymous production guards. No real invoice, payment,
 session forgery or authentication message is used as a deployment test.
 
-Final test counts and production version are recorded after rollout.
+Published source `f96e899`, Worker `f4589036-1f6c-46a3-bf48-7a37e8bd8ae9`,100%.
+Portal530 tests, TypeScript, ESLint, Linux/OpenNext, staging/production dry-runs
+and85 network-disabled workerd probes passed. Thirteen anonymous production
+guards passed; published chunks matched the reviewed local build by SHA256,
+including the independent-purchase control and durable intent. Backend schema85
+and Paymentsv14 readiness were verified separately. No production invoice,
+payment, OTP message or signed synthetic event was created during verification.
+
+Existing design tokens and payment-status feedback were preserved. The security
+review added exact persistent request protection and the live-session equality
+check without adding a sequential session request when context is ready.
