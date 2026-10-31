@@ -21,7 +21,7 @@ import { checkPassword, isValidPassword } from "@/lib/password";
 import { bindReferralToEmail, captureReferralFromUrl, normalizePlacementSide, normalizeReferralCode } from "@/lib/referral-attribution";
 import { otpRequest, otpFailureMessage, otpTimeoutMs, OTP_SEND_NOTICE, OTP_SEND_UNCONFIRMED_NOTICE } from "@/lib/email-otp-client.mjs";
 import BetterAuthPasswordLogin from './BetterAuthPasswordLogin';
-import { betterAuthAccess } from './better-auth-login.mjs';
+import { betterAuthAccess, verifiedEmailSignIn } from './better-auth-login.mjs';
 import { registrationRetrySeconds, registrationUrl } from '../register/registration-model.mjs';
 
 const AUTH_STATE_MESSAGES = {
@@ -68,11 +68,14 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
   const [loadingAction, setLoadingAction] = useState("");
   const [resetStep, setResetStep] = useState("request");
   const [resetCode, setResetCode] = useState("");
+  const [verifiedLogin, setVerifiedLogin] = useState(null);
+  const verifiedTitle = useRef(null);
   const codeCooldown = useResendCooldown(emailOtpOnly ? 300 : 45);
   const resetCooldown = useResendCooldown(45);
 
   const authMessage = getAuthStateMessage(authState);
   const isLoading = Boolean(loadingAction);
+  const verifiedEmail = verifiedLogin?.email;
 
   useEffect(() => {
     const attribution = captureReferralFromUrl(window.location.search);
@@ -86,6 +89,51 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     otpRequestRef.current?.abort();
     otpRequestRef.current = null;
   }, []);
+
+  useEffect(() => {
+    if (verifiedEmail) verifiedTitle.current?.focus();
+  }, [verifiedEmail]);
+
+  function showVerifiedLogin(verifiedEmail, access) {
+    setError('');
+    setNotice('');
+    setLoginCode('');
+    setVerifiedLogin({ email: verifiedEmail, access });
+  }
+
+  async function continueVerifiedLogin() {
+    if (otpSubmittingRef.current || isLoading) return;
+    if (verifiedLogin.access.ready) {
+      // The initial check already proved this session; the destination enforces
+      // authorization again, without duplicating a successful session read.
+      window.location.assign('/dashboard');
+      return;
+    }
+    otpSubmittingRef.current = true;
+    setLoadingAction('access-check');
+    try {
+      // Recheck the current server session; the confirmation never grants a
+      // network binding, role, rank or placement by itself.
+      const access = await betterAuthAccess(fetch, verifiedLogin.email);
+      if (access.ready) window.location.assign('/dashboard');
+      else setVerifiedLogin(current => ({ ...current, access }));
+    } finally {
+      otpSubmittingRef.current = false;
+      setLoadingAction('');
+    }
+  }
+
+  function useAnotherEmail() {
+    if (isLoading) return;
+    setVerifiedLogin(null);
+    setEmail('');
+    setCodeRecipient('');
+    setLoginCode('');
+    setCodeStep('request');
+    setMode('code');
+    setError('');
+    setNotice('');
+  }
 
   function normalizeEmail() {
     return email.trim().toLowerCase();
@@ -373,17 +421,16 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
       if (controller.signal.aborted || otpRequestRef.current !== controller) return;
 
       if (emailOtpOnly) {
-        if (!response.ok || payload.ok !== true) {
+        if (!response.ok || !verifiedEmailSignIn(payload, normalizedEmail)) {
           setError(otpFailureMessage(response.status, 'confirm'));
           return;
         }
         // A verified mailbox is not an approved network identity. Never assign
         // a person, rank, placement or role from the sign-in response.
-        const access = await betterAuthAccess();
+        showVerifiedLogin(normalizedEmail, { ready: false, checking: true });
+        const access = await betterAuthAccess(fetch, normalizedEmail);
         if (controller.signal.aborted || otpRequestRef.current !== controller) return;
-        if (access.ready) window.location.assign('/dashboard');
-        else if (access.error) setError(access.error);
-        else setNotice(access.notice);
+        showVerifiedLogin(normalizedEmail, access);
         return;
       }
 
@@ -536,6 +583,31 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     }
   }
 
+  if (verifiedLogin) {
+    const access = verifiedLogin.access;
+    return (
+      <div className="space-y-4">
+        <Message tone="info">
+          <h2 ref={verifiedTitle} tabIndex={-1} className="text-base font-bold">Correo verificado correctamente</h2>
+          <p className="mt-2 break-words font-normal">Confirmamos el correo {verifiedLogin.email}. Puedes continuar sin repetir este paso.</p>
+        </Message>
+        {access.error ? <Message tone="danger">{access.error}</Message> : null}
+        <p className="text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
+          {access.checking ? 'Comprobando tu acceso actual a la red…' : access.ready
+            ? 'Tu sesión tiene acceso al portal. Pulsa Continuar para abrir el panel.'
+            : access.notice || 'No pudimos comprobar todavía tu acceso a la red. Puedes revisarlo sin solicitar otro código.'}
+        </p>
+        <p className="text-sm leading-6" style={{ color: "var(--vp-muted)" }}>Verificar el correo no aprueba automáticamente la vinculación a una cuenta anterior ni asigna una posición en la red.</p>
+        <SecondaryButton disabled={isLoading || access.checking} onClick={continueVerifiedLogin} icon={<ArrowRight size={16} />}>
+          {isLoading || access.checking ? 'Comprobando acceso…' : access.ready ? 'Continuar al panel' : 'Revisar acceso'}
+        </SecondaryButton>
+        <SecondaryButton disabled={isLoading || access.checking} onClick={useAnotherEmail} icon={<ArrowLeft size={15} />}>
+          Usar otro correo
+        </SecondaryButton>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       {(authMessage || error) && (
@@ -626,6 +698,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
       ) : mode === "password" && emailOtpOnly ? (
         <BetterAuthPasswordLogin email={email} setEmail={setEmail} onBusy={busy => setLoadingAction(busy ? 'password' : '')}
           onError={setError} onNotice={setNotice} rememberReferral={rememberReferralForEmail}
+          onVerified={showVerifiedLogin}
           registrationHref={registrationUrl(email, referralCode, preferredSide, true)} />
       ) : mode === "password" ? (
         <form className="space-y-4" onSubmit={handlePasswordSubmit}>
@@ -758,6 +831,8 @@ function Message({ tone, children }) {
   return (
     <div
       role={isDanger ? 'alert' : 'status'}
+      aria-live={isDanger ? 'assertive' : 'polite'}
+      aria-atomic="true"
       className="rounded-lg px-4 py-3 text-sm font-semibold"
       style={{
         color: isDanger ? "var(--vp-danger)" : "var(--vp-accent)",

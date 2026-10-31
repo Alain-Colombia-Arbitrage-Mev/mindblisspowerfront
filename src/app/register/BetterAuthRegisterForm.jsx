@@ -180,7 +180,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
           </span>
           <div>
             <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-[var(--vp-muted)]">{step === 'details' ? 'Paso 1 de 2' : step === 'confirm' ? 'Paso 2 de 2' : 'Correo verificado'}</p>
-            <h2 ref={title} tabIndex={-1} id="registration-title" className="auth-display text-2xl text-[var(--vp-text)]">{step === 'details' ? 'Crear cuenta' : step === 'confirm' ? 'Verifica tu correo' : 'Continúa al acceso'}</h2>
+            <h2 ref={title} tabIndex={-1} id="registration-title" className="auth-display text-2xl text-[var(--vp-text)]">{step === 'details' ? 'Crear cuenta' : step === 'confirm' ? 'Verifica tu correo' : 'Correo verificado correctamente'}</h2>
           </div>
         </div>
 
@@ -244,7 +244,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
               className="inline-flex min-h-11 items-center gap-2 text-sm text-[var(--vp-text)] underline"><ArrowLeft size={15} aria-hidden="true" />Corregir mis datos</button>
           </form>
         ) : (
-          <div className="space-y-5" role="status">
+          <div className="space-y-5" role="status" aria-live="polite" aria-atomic="true">
             <p className="text-sm leading-7 text-[var(--vp-text)]">El correo está verificado. Abre el inicio de sesión y elige «Código al correo» si tu acceso fue preparado para una cuenta anterior. Si creaste una contraseña al registrarte, también puedes utilizarla.</p>
             <p className="text-sm leading-7 text-[var(--vp-muted)]">Verificar tu correo no concede acceso a saldos ni a cuentas antiguas de la red. La vinculación requiere aprobación.</p>
             <Link href={loginUrl} className="inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-[var(--vp-accent)] px-4 font-bold text-[var(--vp-shell)]">Ir al acceso</Link>

@@ -144,7 +144,9 @@ try {
   assert.equal(passwordLogin.status, 200);
   assert.match(passwordLogin.headers.get('set-cookie'), /HttpOnly/);
   assert.match(passwordLogin.headers.get('set-cookie'), /Secure/);
-  assert.doesNotMatch(await passwordLogin.text(), /must-not-leak/);
+  const passwordProof = await passwordLogin.json();
+  assert.equal(passwordProof.user.emailVerified, true);
+  assert.doesNotMatch(JSON.stringify(passwordProof), /must-not-leak/);
   probes++;
   const denied = await fetch('http://127.0.0.1:8787/api/auth/email-otp/send-verification-otp', { method: 'POST', headers: { ...authHeaders, origin: 'https://evil.example.test' }, body: '{}' });
   assert.equal(denied.status, 403);
@@ -153,7 +155,7 @@ try {
     method: 'POST', headers: authHeaders, body: JSON.stringify({ email: 'fixture@example.test', type: 'sign-in' }),
   });
   assert.equal(sent.status, 200);
-  assert.equal((await sent.json()).ok, true);
+  assert.deepEqual(await sent.json(), { ok: true });
   probes++;
   const confirmed = await fetch('http://127.0.0.1:8787/api/auth/sign-in/email-otp', {
     method: 'POST', headers: authHeaders, body: JSON.stringify({ email: 'fixture@example.test', otp: '001234' }),
@@ -162,7 +164,10 @@ try {
   assert.match(confirmed.headers.get('set-cookie'), /Secure/);
   assert.match(confirmed.headers.get('set-cookie'), /HttpOnly/);
   assert.equal(confirmed.headers.get('cache-control'), 'private, no-store');
-  assert.doesNotMatch(await confirmed.text(), /must-not-leak/);
+  const confirmedProof = await confirmed.json();
+  assert.equal(confirmedProof.user.emailVerified, true);
+  assert.equal(confirmedProof.user.email, 'fixture@example.test');
+  assert.doesNotMatch(JSON.stringify(confirmedProof), /must-not-leak/);
   probes++;
   const cookie = confirmed.headers.get('set-cookie').split(';')[0];
   const sessionHeaders = { cookie, 'cf-connecting-ip': '192.0.2.10' };

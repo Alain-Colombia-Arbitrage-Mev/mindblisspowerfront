@@ -12,7 +12,7 @@ export function authSuccess(path, data) {
         || (data.user.name != null && (typeof data.user.name !== 'string' || data.user.name.length > 512))) {
       throw new Error('invalid_auth_response');
     }
-    return { ok: true, user: { id: data.user.id, email: data.user.email, name: data.user.name ?? null } };
+    return { ok: true, user: { id: data.user.id, email: data.user.email, name: data.user.name ?? null, emailVerified: true } };
   }
   if (['sign-out', 'email-otp/send-verification-otp', 'email-otp/request-password-reset', 'email-otp/reset-password'].includes(path)) {
     if (data.success !== true) throw new Error('invalid_auth_response');

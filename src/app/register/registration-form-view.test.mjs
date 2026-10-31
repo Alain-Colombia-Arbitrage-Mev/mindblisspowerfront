@@ -8,7 +8,7 @@ import * as emailOtp from '../../lib/email-otp-client.mjs';
 import { registrationViewHarness, findRegistrationNode as find, registrationFieldStub, registrationButtonStub } from './registration-view-test-harness.mjs';
 
 const contactView = ({ id, label, value }) => React.createElement('div', null, label, React.createElement('input', { id, value: value.national, readOnly: true }));
-const passwordField = ({ visible, onToggle, ...props }) => registrationFieldStub(props);
+const passwordField = ({ visible: _visible, onToggle: _onToggle, ...props }) => registrationFieldStub(props);
 const valid = { fullName: 'Synthetic Member', email: 'member@example.test', password: 'Synthetic Long Password 123', confirmPassword: 'Synthetic Long Password 123', acceptsPrivacy: true };
 function view(cooldown = { active: false, label: '', start() {} }) {
   return registrationViewHarness('./BetterAuthRegisterForm.jsx', {
@@ -111,12 +111,31 @@ test('every account must explicitly confirm email after signup, without auto-log
   tree = harness.render(props);
   assert.deepEqual(paths, ['/api/auth/register', '/api/auth/register/confirm']);
   assert.match(renderToStaticMarkup(tree), /El correo está verificado/);
+  assert.match(renderToStaticMarkup(tree), /Correo verificado correctamente/);
+  assert.match(renderToStaticMarkup(tree), /role="status" aria-live="polite" aria-atomic="true"/);
   assert.match(renderToStaticMarkup(tree), /Código al correo/);
   assert.match(renderToStaticMarkup(tree), /si tu acceso fue preparado para una cuenta anterior/);
   assert.match(renderToStaticMarkup(tree), /Si creaste una contraseña al registrarte/);
   assert.doesNotMatch(renderToStaticMarkup(tree), /Entra con la contraseña que creaste|no necesitas otro código/);
   assert.match(renderToStaticMarkup(tree), /mode=code/);
   assert.match(renderToStaticMarkup(tree), /vinculación requiere aprobación/);
+});
+
+test('registration cannot show verified success from URL hints, send success, an invalid code or an ambiguous response', async t => {
+  for (const [status, payload] of [[400, { ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: true }],
+    [503, { ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: true }],
+    [200, { ok: true }], [200, { ok: true, mode: 'better-auth', userConfirmed: false, needsLogin: true }]]) {
+    const paths = [];
+    t.mock.method(globalThis, 'fetch', async path => { paths.push(path); return Response.json(payload, { status }); });
+    const harness = view(), resume = { initialSearch: 'email=member%40example.test&resume=1&verified=true&registered=1' };
+    let tree = harness.render(resume);
+    assert.doesNotMatch(renderToStaticMarkup(tree), /Correo verificado correctamente/);
+    find(tree, node => node?.props?.id === 'code').props.onChange({ target: { value: '001234' } });
+    await submit(harness.render(resume));
+    tree = harness.render(resume);
+    assert.doesNotMatch(renderToStaticMarkup(tree), /Correo verificado correctamente|El correo está verificado/);
+    assert.deepEqual(paths, ['/api/auth/register/confirm']);
+  }
 });
 
 test('an existing registration resumes email confirmation without collecting or verifying a phone', () => {

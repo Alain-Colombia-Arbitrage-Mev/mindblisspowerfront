@@ -20,9 +20,31 @@ test('auth operations only acknowledge their exact installed response contracts'
 
 test('sign-in requires a verified user and private session token without projecting secrets', () => {
   const value = { token: 'synthetic-private-token', user: { id: 'synthetic', email: 'member@example.test', emailVerified: true, name: 'Member', role: 'untrusted' } };
-  assert.deepEqual(authSuccess('sign-in/email', value), { ok: true, user: { id: 'synthetic', email: 'member@example.test', name: 'Member' } });
+  assert.deepEqual(authSuccess('sign-in/email', value), { ok: true, user: { id: 'synthetic', email: 'member@example.test', name: 'Member', emailVerified: true } });
   for (const change of [{ token: null }, { token: '' }, { user: { ...value.user, emailVerified: false } }, { user: { ...value.user, id: '' } }]) {
     assert.throws(() => authSuccess('sign-in/email-otp', { ...value, ...change }));
+  }
+});
+
+test('only a validated sign-in projects email proof; send acknowledgements never do', async () => {
+  for (const path of ['sign-in/email', 'sign-in/email-otp']) {
+    const result = await proxyBetterAuth(request(), path, { env, fetchImpl: async () => Response.json({ token: 'synthetic-private-token',
+      user: { id: 'synthetic', email: 'member@example.test', emailVerified: true, role: 'superadmin', person_id: 1 } },
+    { headers: { 'set-cookie': 'better-auth.session_token=synthetic-private-cookie; HttpOnly; Secure' } }) });
+    assert.equal(result.status, 200);
+    const payload = await result.json();
+    assert.equal(payload.user.emailVerified, true);
+    assert.doesNotMatch(JSON.stringify(payload), /token|cookie|superadmin|person_id/);
+    assert.match(result.headers.get('set-cookie'), /HttpOnly/);
+    for (const emailVerified of [false, 'true', undefined]) {
+      const denied = await proxyBetterAuth(request(), path, { env, fetchImpl: async () => Response.json({ token: 'synthetic-token',
+        user: { id: 'synthetic', email: 'member@example.test', emailVerified } }, { headers: { 'set-cookie': 'better-auth.session_token=must-not-install' } }) });
+      assert.equal(denied.status, 503);
+      assert.equal(denied.headers.get('set-cookie'), null);
+    }
+  }
+  for (const path of ['email-otp/send-verification-otp', 'send-verification-email']) {
+    assert.equal(authSuccess(path, { success: true, status: true, emailVerified: true }).emailVerified, undefined);
   }
 });
 
@@ -33,6 +55,21 @@ test('malformed or false-success HTTP 200 never returns success or installs cook
     assert.equal(result.status, 503);
     assert.equal(result.headers.get('set-cookie'), null);
     assert.doesNotMatch(await result.text(), /private-error|private-cookie/);
+  }
+});
+
+test('failed canonical normalization never forwards a partially created session cookie or private diagnostics', async () => {
+  for (const path of ['sign-in/email', 'sign-in/email-otp']) {
+    for (const status of [500, 503]) {
+      const result = await proxyBetterAuth(request(), path, { env, fetchImpl: async () => Response.json({
+        code: 'INTERNAL_SERVER_ERROR', message: 'private-canonical-read-diagnostics', token: 'private-unconfirmed-token',
+      }, { status, headers: { 'set-cookie': 'better-auth.session_token=private-incomplete-cookie; HttpOnly; Secure' } }) });
+      assert.equal(result.ok, false);
+      assert.equal(result.headers.get('set-cookie'), null);
+      const body = await result.text();
+      assert.doesNotMatch(body, /private-|emailVerified|"ok":true/);
+      assert.match(result.headers.get('cache-control'), /no-store/);
+    }
   }
 });
 

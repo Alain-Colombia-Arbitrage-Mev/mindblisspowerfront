@@ -3,10 +3,10 @@
 import Link from 'next/link';
 import { useRef, useState } from 'react';
 import { RegistrationButton, RegistrationField, RegistrationPassword } from '../register/RegistrationFields';
-import { betterAuthPasswordRequest, betterAuthPasswordFailure, betterAuthAccess } from './better-auth-login.mjs';
+import { betterAuthPasswordRequest, betterAuthPasswordFailure, betterAuthAccess, verifiedEmailSignIn } from './better-auth-login.mjs';
 import { registrationUrl } from '../register/registration-model.mjs';
 
-export default function BetterAuthPasswordLogin({ email, setEmail, onBusy, onError, onNotice, rememberReferral, registrationHref = '' }) {
+export default function BetterAuthPasswordLogin({ email, setEmail, onBusy, onError, onNotice, onVerified, rememberReferral, registrationHref = '' }) {
   const [password, setPassword] = useState('');
   const [visible, setVisible] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -33,17 +33,16 @@ export default function BetterAuthPasswordLogin({ email, setEmail, onBusy, onErr
         signal: AbortSignal.timeout(12000), headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(contract.body),
       });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok || payload.ok !== true) {
+      if (!response.ok || !verifiedEmailSignIn(payload, contract.body.email)) {
         setRequiresVerification(payload.code === 'EMAIL_NOT_VERIFIED');
         onError(betterAuthPasswordFailure(response.status, payload.code));
         return;
       }
       setPassword('');
       rememberReferral(contract.body.email);
-      const access = await betterAuthAccess();
-      if (access.ready) window.location.assign('/dashboard');
-      else if (access.error) onError(access.error);
-      else onNotice(access.notice);
+      onVerified(contract.body.email, { ready: false, checking: true });
+      const access = await betterAuthAccess(fetch, contract.body.email);
+      onVerified(contract.body.email, access);
     } catch {
       onError('No pudimos conectar con el servicio de acceso. Intenta otra vez.');
     } finally {
