@@ -717,7 +717,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
         </form>
       )}
       {emailOtpOnly ? <div className="space-y-2 border-t pt-4 text-sm leading-6" style={{ borderColor: "var(--vp-border)", color: "var(--vp-muted)" }}>
-        <p className="m-0">Si ya pertenecías a la red y aún no creaste tu nuevo acceso, créalo en Registro y verifica tu correo. Tu cuenta y posición en la red se conservan; la vinculación requiere revisión y aprobación.</p>
+        <p className="m-0">Si ya pertenecías a la red, solicita un código con tu correo original. Tu cuenta y posición en la red se conservan; verificar el correo no las vincula automáticamente y la vinculación requiere revisión y aprobación. Si todavía no tienes un acceso, utiliza Registro.</p>
         <a className="font-bold no-underline" style={{ color: "var(--vp-text-soft)" }} href={registrationUrl(codeStep === "confirm" ? codeRecipient : email, referralCode, preferredSide)}>Crear acceso en Registro</a>
       </div> : null}
     </div>

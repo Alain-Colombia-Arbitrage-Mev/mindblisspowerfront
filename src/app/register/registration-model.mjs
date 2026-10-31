@@ -69,7 +69,7 @@ export function registrationFailure(status, action = 'register', code = '') {
 
 export function registrationLoginUrl(email, referralCode = '', preferredSide = '') {
   const params = new URLSearchParams();
-  params.set('mode', 'password');
+  params.set('mode', 'code');
   const normalizedEmail = registrationEmail(email);
   if (normalizedEmail) params.set('email', normalizedEmail);
   if (referralCode) {

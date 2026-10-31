@@ -60,8 +60,10 @@ test('OTP resend cooldown cannot be shortened below the 300-second security budg
 test('verification never implies network onboarding or session, and safe errors never echo provider details', () => {
   const href = registrationLoginUrl(' TEST@EXAMPLE.TEST ', 'ref?role=admin', 'R');
   assert.equal(new URL(href, 'https://example.test').pathname, '/login');
-  assert.equal(new URL(href, 'https://example.test').searchParams.get('mode'), 'password');
+  assert.equal(new URL(href, 'https://example.test').searchParams.get('mode'), 'code');
+  assert.equal(new URL(href, 'https://example.test').searchParams.get('email'), 'test@example.test');
   assert.equal(new URL(href, 'https://example.test').searchParams.get('ref'), 'ref?role=admin');
+  assert.equal(new URL(href, 'https://example.test').searchParams.get('side'), 'R');
   assert.ok(!href.includes('/onboarding'));
   assert.ok(registrationFailure(503).includes('no está disponible'));
   assert.ok(registrationFailure(400, 'confirm', 'internal_secret').includes('código'));

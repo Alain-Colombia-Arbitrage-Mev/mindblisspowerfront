@@ -39,6 +39,8 @@ try {
       assert.match(body, /Código al correo/);
       assert.match(body, /Usar mi contraseña/);
       assert.match(body, /Crear cuenta/);
+      assert.match(body, /solicita un código con tu correo original/);
+      assert.match(body, /verificar el correo no las vincula automáticamente/);
       assert.doesNotMatch(body, /Recuperar contraseña/);
       assert.doesNotMatch(body, /SMS|WhatsApp|account\/security/);
       assert.doesNotMatch(body, /fonts\.googleapis|fonts\.gstatic|chatwoot|soporte\.mindbliss/i);
@@ -72,6 +74,7 @@ try {
   assert.equal(registrationPage.status, 200);
   const registrationHtml = await registrationPage.text();
   assert.match(registrationHtml, /Crear cuenta y verificar correo/);
+  assert.match(registrationHtml, /href="\/login\?mode=code(?:&amp;|&)/);
   assert.match(registrationHtml, /id="contactPhone-country"/);
   assert.match(registrationHtml, /id="contactWhatsapp-country"/);
   assert.match(registrationHtml, /WhatsApp/);

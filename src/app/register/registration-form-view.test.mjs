@@ -111,7 +111,11 @@ test('every account must explicitly confirm email after signup, without auto-log
   tree = harness.render(props);
   assert.deepEqual(paths, ['/api/auth/register', '/api/auth/register/confirm']);
   assert.match(renderToStaticMarkup(tree), /El correo está verificado/);
-  assert.match(renderToStaticMarkup(tree), /mode=password/);
+  assert.match(renderToStaticMarkup(tree), /Código al correo/);
+  assert.match(renderToStaticMarkup(tree), /si tu acceso fue preparado para una cuenta anterior/);
+  assert.match(renderToStaticMarkup(tree), /Si creaste una contraseña al registrarte/);
+  assert.doesNotMatch(renderToStaticMarkup(tree), /Entra con la contraseña que creaste|no necesitas otro código/);
+  assert.match(renderToStaticMarkup(tree), /mode=code/);
   assert.match(renderToStaticMarkup(tree), /vinculación requiere aprobación/);
 });
 

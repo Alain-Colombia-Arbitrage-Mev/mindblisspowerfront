@@ -245,7 +245,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
           </form>
         ) : (
           <div className="space-y-5" role="status">
-            <p className="text-sm leading-7 text-[var(--vp-text)]">El correo está verificado. Entra con la contraseña que creaste al registrarte: no necesitas otro código ni esperar para continuar.</p>
+            <p className="text-sm leading-7 text-[var(--vp-text)]">El correo está verificado. Abre el inicio de sesión y elige «Código al correo» si tu acceso fue preparado para una cuenta anterior. Si creaste una contraseña al registrarte, también puedes utilizarla.</p>
             <p className="text-sm leading-7 text-[var(--vp-muted)]">Verificar tu correo no concede acceso a saldos ni a cuentas antiguas de la red. La vinculación requiere aprobación.</p>
             <Link href={loginUrl} className="inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-[var(--vp-accent)] px-4 font-bold text-[var(--vp-shell)]">Ir al acceso</Link>
           </div>

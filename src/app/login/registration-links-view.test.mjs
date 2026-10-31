@@ -238,8 +238,12 @@ test('legacy-account guidance and its registration link are generic and availabl
   for (const stage of ['request', 'confirm', 'changed-email']) {
     const html = renderToStaticMarkup(tree);
     assert.match(html, /Si ya pertenecías a la red/);
+    assert.match(html, /solicita un código con tu correo original/);
     assert.match(html, /Tu cuenta y posición en la red se conservan/);
+    assert.match(html, /verificar el correo no las vincula automáticamente/);
     assert.match(html, /la vinculación requiere revisión y aprobación/);
+    assert.match(html, /Si todavía no tienes un acceso, utiliza Registro/);
+    assert.doesNotMatch(html, /aún no creaste tu nuevo acceso, créalo en Registro/);
     const register = find(tree, node => node?.type === 'a' && node.props.children === 'Crear acceso en Registro');
     assert.equal(register.props.href, '/register?email=member%40example.test&ref=MP-REFERRED&side=R');
     if (stage === 'request') await find(tree, node => node?.type === 'form').props.onSubmit({ preventDefault() {} });
