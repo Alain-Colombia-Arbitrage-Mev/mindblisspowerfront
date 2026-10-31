@@ -99,15 +99,15 @@ export default async function PackagesPage({ searchParams } = {}) {
                   <ul className="mt-5 space-y-3 text-sm leading-6" style={{ color: "var(--vp-text-soft)" }}>
                     <li className="flex items-start gap-2">
                       <ShieldCheck size={15} className="mt-0.5 shrink-0" style={{ color: "var(--vp-accent)" }} />
-                      Beneficios del plan sujetos a reglas y aprobaciones vigentes.
+                      Las comisiones calculadas quedan pendientes un mes calendario desde su generación, no 30 días.
                     </li>
                     <li className="flex items-start gap-2">
                       <ShieldCheck size={15} className="mt-0.5 shrink-0" style={{ color: "var(--vp-accent)" }} />
-                      Seguimiento operativo desde perfil, referidos y actividad.
+                      El capital de la membresía y el ROI del CD permanecen bloqueados durante 365 días.
                     </li>
                     <li className="flex items-start gap-2">
                       <ShieldCheck size={15} className="mt-0.5 shrink-0" style={{ color: "var(--vp-accent)" }} />
-                      No genera saldo disponible hasta que existan cierres publicados.
+                      El capital vencido queda elegible para solicitud y validación; no se devuelve ni se retira automáticamente.
                     </li>
                   </ul>
 
@@ -127,6 +127,7 @@ export default async function PackagesPage({ searchParams } = {}) {
                       </div>
                     </dl>
                     <p className="mt-2 text-xs leading-5" style={{ color: "var(--vp-muted)" }}>La comisión está incluida; no se suma al precio.</p>
+                    <p className="mt-2 text-xs leading-5" style={{ color: "var(--vp-muted)" }}>Sin reembolso anticipado ordinario, sin perjuicio de los derechos aplicables. Una comisión vencida puede seguir retenida por revisión o financiación; su vencimiento no confirma un pago.</p>
                     <ActivatePackageButton packageId={pkg.id} featured={featured} stripeEnabled={stripeEnabled} nowpaymentsEnabled={nowpaymentsEnabled} />
                   </> : <p role="status" className="mt-5 text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
                     No se pudo confirmar el precio de este plan. No se puede iniciar un cobro. Intenta nuevamente más tarde.

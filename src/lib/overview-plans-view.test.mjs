@@ -118,6 +118,7 @@ test("actual summary places the plans slot after the referral and before seconda
   const react = { ...React, useState: initial => [initial, () => {}], useRef: () => ({ current: null }), useCallback: callback => callback, useEffect: () => {} };
   const mocks = { react,
     "@/components/panel/PanelFooter": { default: marker("footer") },
+    "@/components/panel/NOWPaymentsBalances": { default: marker("NOWPaymentsBalances") },
     "@/lib/member-read.mjs": { readMemberParts: () => { throw new Error("Unexpected request"); }, validMemberTree: () => true, validMemberSummary: () => true },
     "@/lib/payment-display.mjs": { formatPaymentMoney: () => "not-called" },
   };

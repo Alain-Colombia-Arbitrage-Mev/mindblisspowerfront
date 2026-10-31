@@ -5,6 +5,7 @@ import { AlertCircle, CreditCard, HandCoins, LifeBuoy, Network, RefreshCw } from
 import Link from "next/link";
 
 import PanelFooter from "@/components/panel/PanelFooter";
+import NOWPaymentsBalances from "@/components/panel/NOWPaymentsBalances";
 import EarningsCard from "./EarningsCard";
 import ReferralLinkCard from "./ReferralLinkCard";
 import PositionSnapshotCard from "./PositionSnapshotCard";
@@ -99,6 +100,7 @@ export default function OverviewDashboard({ plans = null }) {
           wallet={usd(summary?.available_for_withdrawal_usd)}
           directNetwork={directs.length}
           networkReady={networkStatus === "ready"}
+          historical={summary?.data_source === "verified_stripe_recovery"}
         />}
         {networkStatus === "loading" ? <><LoadingPanel label="Cargando posición" /><LoadingPanel label="Cargando red" /></> : networkStatus === "error" ? <ErrorPanel title="Red no disponible" error={errors.network} onRetry={load} /> : <>
           <PositionSnapshotCard network={network} />
@@ -110,6 +112,8 @@ export default function OverviewDashboard({ plans = null }) {
         />
         </>}
       </div>
+
+      {summaryStatus === "ready" && <NOWPaymentsBalances data={summary?.nowpayments} />}
 
       <ReferralLinkCard />
 

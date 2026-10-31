@@ -40,6 +40,7 @@ function loadPages({ summary = { loading: true, data: null, error: '' }, health 
     '@/lib/useSustainability': { useSustainability: () => ({ loading: false, data: null, error: '' }) },
     '@/lib/rank-catalog.mjs': { readRankCatalog: async () => { throw Error('Unexpected render-time request'); } },
     '@/components/member/ReferralModule': { default: emptyComponent },
+    '@/components/panel/NOWPaymentsBalances': { default: emptyComponent },
   };
   function load(url) {
     const key = url.href;

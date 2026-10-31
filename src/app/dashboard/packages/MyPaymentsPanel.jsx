@@ -7,6 +7,7 @@ import { formatPaymentMoney as money, formatPaymentDate as fmtDate } from "@/lib
 import { cn } from "@/lib/utils";
 import StripeSalesHistory from "./StripeSalesHistory";
 import WithdrawalRequest from "./WithdrawalRequest";
+import NOWPaymentsBalances from "@/components/panel/NOWPaymentsBalances";
 
 const PAY_STATUS = {
   activated: { label: "Activado", color: "var(--vp-accent)", Icon: CheckCircle2 },
@@ -42,8 +43,8 @@ export default function MyPaymentsPanel() {
   return (
     <Card>
       <div className="grid gap-3 sm:grid-cols-3">
-        <Metric Icon={Wallet} label="Disponible para retirar" value={money(d.available_for_withdrawal_usd)} accent />
-        <Metric Icon={Clock} label="Comisiones en maduración" value={money(d.commission_maturing_usd)} />
+        <Metric Icon={Wallet} label={recovered ? "Saldo histórico Stripe" : "Disponible para retirar"} value={money(d.available_for_withdrawal_usd)} accent />
+        <Metric Icon={Clock} label={recovered ? "Comisiones históricas en revisión" : "Comisiones en maduración"} value={money(d.commission_maturing_usd)} />
         <Metric Icon={CheckCircle2} label="Membresías activas" value={String(d.active_packages ?? 0)} />
       </div>
 
@@ -53,6 +54,7 @@ export default function MyPaymentsPanel() {
         </p>
       )}
 
+      <NOWPaymentsBalances data={d.nowpayments} />
       <WithdrawalRequest data={d} onDone={load} />
 
       {recovered && <StripeSalesHistory sales={d.stripe_sales} />}

@@ -9,6 +9,7 @@ import { isRecoverySummary } from "@/lib/member-read.mjs";
 import { formatPaymentMoney as money, formatPaymentDate as fmtMoneyDate, withdrawalTerms } from "@/lib/payment-display.mjs";
 
 import StripeSalesHistory from "../../packages/StripeSalesHistory";
+import NOWPaymentsBalances from "@/components/panel/NOWPaymentsBalances";
 
 import { Activity, AlertTriangle, ArrowDownToLine, CreditCard, DollarSign, Download, Loader2, TrendingUp, UserPlus, Wallet } from "lucide-react";
 
@@ -44,7 +45,7 @@ export function FinanceDashboardPage() {
         <PageHeader
           eyebrow="Finanzas"
           title="Billetera y retiros"
-          subtitle="Gestiona tu saldo disponible, historial de retiros y solicitudes. Los montos reflejan tus comisiones publicadas por el motor."
+          subtitle="Consulta por separado el histórico Stripe y tus membresías y comisiones NOWPayments. El vencimiento de un plazo no implica un pago automático."
         />
 
         {state.loading ? (
@@ -90,7 +91,7 @@ function FinanceError({ onRetry }) {
       <div>
         <p className="text-base font-bold" style={{ color: "var(--vp-text)" }}>No pudimos cargar tu saldo</p>
         <p className="mt-1 text-sm" style={{ color: "var(--vp-muted)" }}>
-          Ocurrió un problema al consultar tu billetera. Tu dinero está seguro; vuelve a intentarlo.
+          Ocurrió un problema al consultar tu billetera. No podemos confirmar su saldo; vuelve a consultar más tarde.
         </p>
       </div>
       <button className="executive-button primary" type="button" onClick={onRetry}>
@@ -128,7 +129,7 @@ function FinanceContent({ data, onDone }) {
   return (
     <>
       <div className="executive-grid metrics mb-6">
-        <MetricCard label="Balance disponible" value={money(data.available_for_withdrawal_usd)} detail={recovered ? "pendiente de cálculo y revisión" : "saldo real para retirar"} icon={Wallet} tone="success" />
+        <MetricCard label={recovered ? "Saldo histórico Stripe" : "Balance disponible"} value={money(data.available_for_withdrawal_usd)} detail={recovered ? "pendiente de cálculo y revisión" : "saldo contable sujeto a validación"} icon={Wallet} tone="success" />
         <MetricCard label="Comisiones en maduración" value={money(data.commission_maturing_usd)} detail="aún no disponibles" icon={TrendingUp} tone="accent" />
         <MetricCard label="Retiros pendientes" value={money(pendingTotal)} detail="solicitudes en curso" icon={Activity} tone="muted" />
         <MetricCard label="Membresías activas" value={String(data.active_packages ?? 0)} detail="cuentas con estado activo" icon={CreditCard} tone="info" />
@@ -138,6 +139,8 @@ function FinanceContent({ data, onDone }) {
         Las comisiones siguen pendientes de cálculo y revisión. Los retiros están bloqueados; un saldo no determinado no equivale a cero.
         <StripeSalesHistory sales={data.stripe_sales} />
       </div>}
+
+      <NOWPaymentsBalances data={data.nowpayments} />
 
       <div className="grid gap-6 lg:grid-cols-[390px_minmax(0,1fr)]">
         <WithdrawPanel data={data} onDone={onDone} />

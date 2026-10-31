@@ -45,6 +45,7 @@ function payments(state, reload = () => {}) {
     '@/hooks/useMemberSummary': { useMemberSummary: () => ({ state, reload }) },
     '@/lib/payment-display.mjs': paymentDisplay, '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' ') },
     './StripeSalesHistory': { default: () => null }, './WithdrawalRequest': { default: () => null },
+    '@/components/panel/NOWPaymentsBalances': { default: () => null },
   });
 }
 
