@@ -5,6 +5,7 @@ import { AlertCircle, CreditCard, HandCoins, LifeBuoy, Network, RefreshCw } from
 import Link from "next/link";
 
 import PanelFooter from "@/components/panel/PanelFooter";
+import NOWPaymentsBalances from "@/components/panel/NOWPaymentsBalances";
 import EarningsCard from "./EarningsCard";
 import ReferralLinkCard from "./ReferralLinkCard";
 import PositionSnapshotCard from "./PositionSnapshotCard";
@@ -26,7 +27,7 @@ const SHORTCUTS = [
  *  - red directa, últimos de la red y rangos desde /api/member/tree
  * Los fallos de carga no se representan como saldos o posiciones vacios.
  */
-export default function OverviewDashboard() {
+export default function OverviewDashboard({ plans = null }) {
   const [summary, setSummary] = useState(null);
   const [network, setNetwork] = useState(null);
   const [summaryStatus, setSummaryStatus] = useState("loading");
@@ -99,6 +100,7 @@ export default function OverviewDashboard() {
           wallet={usd(summary?.available_for_withdrawal_usd)}
           directNetwork={directs.length}
           networkReady={networkStatus === "ready"}
+          historical={summary?.data_source === "verified_stripe_recovery"}
         />}
         {networkStatus === "loading" ? <><LoadingPanel label="Cargando posición" /><LoadingPanel label="Cargando red" /></> : networkStatus === "error" ? <ErrorPanel title="Red no disponible" error={errors.network} onRetry={load} /> : <>
           <PositionSnapshotCard network={network} />
@@ -111,7 +113,11 @@ export default function OverviewDashboard() {
         </>}
       </div>
 
+      {summaryStatus === "ready" && <NOWPaymentsBalances data={summary?.nowpayments} />}
+
       <ReferralLinkCard />
+
+      {plans}
 
       {/* Sin gráfica de "volumen": la directiva árbol 2.0 prohíbe mostrar
           volumen al miembro, y la curva anterior era simulada ($100M falsos). */}

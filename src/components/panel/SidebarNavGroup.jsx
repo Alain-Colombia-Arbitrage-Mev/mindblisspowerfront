@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "./IntentLink";
 import { useId, useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { matchesRoute } from "@/lib/member-navigation.mjs";

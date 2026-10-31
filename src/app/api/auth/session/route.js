@@ -1,9 +1,10 @@
-import { cookies } from "next/headers";
+import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
 import { callPayments } from "@/lib/admin-bff";
 import { clearCookie } from "@/lib/cognito-session";
 import { verifyIdToken } from "@/lib/verify-id-token";
+import { betterAuthEnabled, AuthServiceUnavailable } from "@/lib/better-auth-bridge.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,8 +20,11 @@ const SESSION_COOKIES = [
 ];
 
 export async function GET() {
-  const cookieStore = await cookies();
-  const idToken = cookieStore.get("vp_id_token")?.value;
+  let idToken;
+  try { idToken = await rawIdToken(); } catch (error) {
+    if (!(error instanceof AuthServiceUnavailable)) throw error;
+    return NextResponse.json({ error: 'authentication_unavailable' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
+  }
 
   // Claims VERIFICADOS (firma + iss + aud + token_use + exp). Un id token
   // forjado ya no produce sesión: claims = {} ⇒ authenticated=false.
@@ -51,9 +55,12 @@ export async function GET() {
 
   return NextResponse.json({
     authenticated,
-    mode: "cognito",
+    mode: betterAuthEnabled() ? "better-auth" : "cognito",
     name: name || null,
     email: email || null,
+    // Opaque, verified identity for namespacing tab-local checkout intents only.
+    // The checkout BFF still authorizes from its independently verified cookie.
+    subject: authenticated && typeof claims.sub === "string" ? claims.sub : null,
     givenName: claims.given_name || null,
     // Código REAL del afiliado (invitation_link o MP{id} canónico del backend).
     // NUNCA inventamos un código: si el miembro aún no está colocado en el árbol

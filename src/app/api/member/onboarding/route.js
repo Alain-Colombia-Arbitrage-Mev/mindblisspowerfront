@@ -1,4 +1,5 @@
-import { cookies } from "next/headers";
+import { coreFetch } from '@/lib/cloudflare-runtime.mjs';
+import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
 import { memberOnboardingSchema, toPaymentsOnboarding } from "@/lib/member-onboarding-schema";
@@ -10,8 +11,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 async function context() {
-  const cookieStore = await cookies();
-  const idToken = cookieStore.get("vp_id_token")?.value;
+  const idToken = await rawIdToken();
   if (!idToken) return { error: "unauthenticated", status: 401 };
   const claims = await verifyIdToken(idToken);
   const email = String(claims?.email || "").trim().toLowerCase();
@@ -26,7 +26,7 @@ export async function GET() {
   const c = await context();
   if (c.error) return noStoreJson({ error: c.error }, c.status);
   try {
-    const response = await fetch(`${c.base}/api/member/onboarding?email=${encodeURIComponent(c.email)}`, {
+    const response = await coreFetch(`${c.base}/api/member/onboarding?email=${encodeURIComponent(c.email)}`, {
       headers: { "X-VP-Service-Token": c.token, "X-VP-Id-Token": c.idToken },
       cache: "no-store",
     });
@@ -65,7 +65,7 @@ export async function POST(request) {
   if (!parsed.success) return noStoreJson({ error: "invalid_onboarding" }, 400);
 
   try {
-    const response = await fetch(`${c.base}/api/member/onboarding`, {
+    const response = await coreFetch(`${c.base}/api/member/onboarding`, {
       method: "POST",
       headers: {
         "content-type": "application/json",

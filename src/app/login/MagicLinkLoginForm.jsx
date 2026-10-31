@@ -12,7 +12,6 @@ import {
   LockKeyhole,
   Mail,
   ShieldCheck,
-  Smartphone,
   UserPlus,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -20,6 +19,10 @@ import { useEffect, useRef, useState } from "react";
 import { isMicrosoftEmail, suggestEmailFix, useResendCooldown } from "@/lib/useResendCooldown";
 import { checkPassword, isValidPassword } from "@/lib/password";
 import { bindReferralToEmail, captureReferralFromUrl, normalizePlacementSide, normalizeReferralCode } from "@/lib/referral-attribution";
+import { otpRequest, otpFailureMessage, otpTimeoutMs, OTP_SEND_NOTICE, OTP_SEND_UNCONFIRMED_NOTICE } from "@/lib/email-otp-client.mjs";
+import BetterAuthPasswordLogin from './BetterAuthPasswordLogin';
+import { betterAuthAccess, verifiedEmailSignIn } from './better-auth-login.mjs';
+import { registrationRequired, registrationRedirect, registrationRetrySeconds, registrationUrl } from '../register/registration-model.mjs';
 
 const AUTH_STATE_MESSAGES = {
   "invalid-email": {
@@ -28,7 +31,7 @@ const AUTH_STATE_MESSAGES = {
   },
   "use-designed-login": {
     tone: "info",
-    text: "Usa esta pantalla para entrar. Cognito queda conectado por API sin abrir ventanas externas.",
+    text: "Usa esta pantalla para entrar de manera segura, sin abrir ventanas externas.",
   },
   "password-required": {
     tone: "info",
@@ -44,8 +47,9 @@ const AUTH_STATE_MESSAGES = {
   },
 };
 
-export default function MagicLinkLoginForm({ authState, initialEmail = "", initialMode = "code", initialRef = "", initialSide = "" }) {
-  const [mode, setMode] = useState(() => normalizeMode(initialMode));
+export default function MagicLinkLoginForm({ authState, initialEmail = "", initialMode = "code", initialRef = "", initialSide = "", authMode = "cognito" }) {
+  const emailOtpOnly = authMode === "better-auth";
+  const [mode, setMode] = useState(() => emailOtpOnly ? initialMode === 'password' ? 'password' : 'code' : normalizeMode(initialMode));
   const [codeStep, setCodeStep] = useState("request");
   const [email, setEmail] = useState(initialEmail);
   const [referralCode, setReferralCode] = useState(() => normalizeReferralCode(initialRef));
@@ -53,9 +57,9 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loginCode, setLoginCode] = useState("");
-  const [codeChannel, setCodeChannel] = useState("email");
   const [codeRecipient, setCodeRecipient] = useState("");
   const otpSubmittingRef = useRef(false);
+  const otpRequestRef = useRef(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [accessHelpPhone, setAccessHelpPhone] = useState("");
@@ -64,11 +68,14 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
   const [loadingAction, setLoadingAction] = useState("");
   const [resetStep, setResetStep] = useState("request");
   const [resetCode, setResetCode] = useState("");
-  const codeCooldown = useResendCooldown(45);
+  const [verifiedLogin, setVerifiedLogin] = useState(null);
+  const verifiedTitle = useRef(null);
+  const codeCooldown = useResendCooldown(emailOtpOnly ? 300 : 45);
   const resetCooldown = useResendCooldown(45);
 
   const authMessage = getAuthStateMessage(authState);
   const isLoading = Boolean(loadingAction);
+  const verifiedEmail = verifiedLogin?.email;
 
   useEffect(() => {
     const attribution = captureReferralFromUrl(window.location.search);
@@ -77,6 +84,56 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
       setPreferredSide(normalizePlacementSide(attribution.side));
     }
   }, []);
+
+  useEffect(() => () => {
+    otpRequestRef.current?.abort();
+    otpRequestRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    if (verifiedEmail) verifiedTitle.current?.focus();
+  }, [verifiedEmail]);
+
+  function showVerifiedLogin(verifiedEmail, access) {
+    setError('');
+    setNotice('');
+    setLoginCode('');
+    setVerifiedLogin({ email: verifiedEmail, access });
+  }
+
+  async function continueVerifiedLogin() {
+    if (otpSubmittingRef.current || isLoading) return;
+    if (verifiedLogin.access.ready) {
+      // The initial check already proved this session; the destination enforces
+      // authorization again, without duplicating a successful session read.
+      window.location.assign('/dashboard');
+      return;
+    }
+    otpSubmittingRef.current = true;
+    setLoadingAction('access-check');
+    try {
+      // Recheck the current server session; the confirmation never grants a
+      // network binding, role, rank or placement by itself.
+      const access = await betterAuthAccess(fetch, verifiedLogin.email);
+      if (access.ready) window.location.assign('/dashboard');
+      else setVerifiedLogin(current => ({ ...current, access }));
+    } finally {
+      otpSubmittingRef.current = false;
+      setLoadingAction('');
+    }
+  }
+
+  function useAnotherEmail() {
+    if (isLoading) return;
+    setVerifiedLogin(null);
+    setEmail('');
+    setCodeRecipient('');
+    setLoginCode('');
+    setCodeStep('request');
+    setMode('code');
+    setError('');
+    setNotice('');
+  }
 
   function normalizeEmail() {
     return email.trim().toLowerCase();
@@ -96,6 +153,15 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     bindReferralToEmail(normalizedEmail);
   }
 
+  function continueToRegistration(normalizedEmail) {
+    setPassword('');
+    setLoginCode('');
+    setCodeRecipient('');
+    setCodeStep('request');
+    setNotice('Completa tu registro y verifica tu correo para continuar.');
+    window.location.assign(registrationRedirect(normalizedEmail, referralCode, preferredSide, window));
+  }
+
   function authPathWithReferral(path, normalizedEmail, extraParams = {}) {
     const params = new URLSearchParams(extraParams);
     if (normalizedEmail) params.set("email", normalizedEmail);
@@ -106,7 +172,9 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
   }
 
   function switchMode(nextMode) {
+    if (isLoading || (emailOtpOnly && !['code', 'password'].includes(nextMode))) return;
     setMode(nextMode);
+    setPassword('');
     setError("");
     setNotice("");
 
@@ -122,25 +190,61 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     }
   }
 
-  async function requestLoginCode(event, { resend = false, channel = "email" } = {}) {
+  async function requestLoginCode(event, { resend = false } = {}) {
     event?.preventDefault();
     if (otpSubmittingRef.current || isLoading || codeCooldown.active) return;
     setError("");
     setNotice("");
-    const normalizedEmail = validateEmail();
+    // A resend belongs to the displayed challenge, never a hidden/edited email.
+    const normalizedEmail = resend ? codeRecipient : validateEmail();
     if (!normalizedEmail) return;
     rememberReferralForEmail(normalizedEmail);
-    if (channel === "email" && !resend) setShowAccessFallback(false);
+    if (!resend) setShowAccessFallback(false);
 
     otpSubmittingRef.current = true;
-    setLoadingAction(channel === "sms" ? "code-request-sms" : "code-request");
+    const controller = new AbortController();
+    otpRequestRef.current = controller;
+    setLoadingAction('code-request');
     try {
-      const response = await fetch("/api/auth/cognito/code-login/request", {
+      const contract = emailOtpOnly ? otpRequest(authMode, 'send', normalizedEmail) : {
+        path: "/api/auth/cognito/code-login/request", body: { email: normalizedEmail, channel: 'email' },
+      };
+      const response = await fetch(contract.path, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: normalizedEmail, channel }),
+        credentials: "same-origin", cache: "no-store", redirect: "error",
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(otpTimeoutMs('send'))]),
+        body: JSON.stringify(contract.body),
       });
       const payload = await response.json().catch(() => ({}));
+      if (controller.signal.aborted || otpRequestRef.current !== controller) return;
+
+      if (emailOtpOnly) {
+        if (registrationRequired(response.status, payload)) {
+          continueToRegistration(normalizedEmail);
+          return;
+        }
+        if (!response.ok || payload.ok !== true) {
+          if (response.status === 429 || response.status >= 500 || response.ok) {
+            // The previous/current attempt may already have produced a code.
+            // Keep a place to enter it without retrying or claiming a delivery.
+            setCodeStep("confirm");
+            setCodeRecipient(normalizedEmail);
+            setLoginCode("");
+            codeCooldown.start(registrationRetrySeconds(response, payload));
+            setError(response.status === 429
+              ? `${otpFailureMessage(429, 'send')} ${OTP_SEND_UNCONFIRMED_NOTICE}`
+              : OTP_SEND_UNCONFIRMED_NOTICE);
+          } else setError(otpFailureMessage(response.status, 'send'));
+          return;
+        }
+        setCodeStep("confirm");
+        setCodeRecipient(normalizedEmail);
+        setLoginCode("");
+        codeCooldown.start(registrationRetrySeconds(response, payload));
+        setNotice(OTP_SEND_NOTICE);
+        return;
+      }
 
       // Usuario nuevo (no está en el pool): el OTP nunca le llegaría. Lo llevamos
       // a crear cuenta con el email precargado (el registro sí envía el código).
@@ -167,12 +271,6 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
           setError(payload.error || "Tu cuenta no puede recibir códigos de acceso en este momento.");
           return;
         }
-        if (channel === "sms" && (payload.needsPhoneLink || payload.needsPhoneVerification)) {
-          setAccessHelpReason(payload.reason || (payload.needsPhoneLink ? "phone_not_linked" : "phone_not_verified"));
-          setShowAccessFallback(true);
-          setNotice(payload.error || "Tu teléfono no está listo para recibir códigos por SMS. Solicita ayuda para validarlo.");
-          return;
-        }
         setAccessHelpReason(payload.reason || "email_code_not_received");
         setShowAccessFallback(true);
         setError(payload.error || "No se pudo enviar el código de acceso.");
@@ -186,26 +284,35 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
       }
 
       setCodeStep("confirm");
-      setCodeChannel(channel);
       setCodeRecipient(normalizedEmail);
       setShowAccessFallback(true);
       setLoginCode("");
       codeCooldown.start();
       setNotice(
         payload.message ||
-          (channel === "sms"
-            ? `Te enviamos un código por SMS. Puede tardar 1–2 min.`
-            : resend
-              ? `Te reenviamos el código a ${normalizedEmail}. Revisa tu correo (y spam).`
-              : "Te enviamos un código por correo. Si no aparece en 1–2 min, revisa la carpeta de spam."),
+          (resend
+            ? `Te reenviamos el código a ${normalizedEmail}. Revisa tu correo (y spam).`
+            : "Te enviamos un código por correo. Si no aparece en 1–2 min, revisa la carpeta de spam."),
       );
     } catch {
-      setAccessHelpReason("auth_service_unavailable");
-      setShowAccessFallback(true);
-      setError("No se pudo conectar con el servicio de acceso.");
+      if (controller.signal.aborted || otpRequestRef.current !== controller) return;
+      if (emailOtpOnly) {
+        setCodeStep("confirm");
+        setCodeRecipient(normalizedEmail);
+        setLoginCode("");
+        codeCooldown.start(300);
+        setError(OTP_SEND_UNCONFIRMED_NOTICE);
+      } else {
+        setAccessHelpReason("auth_service_unavailable");
+        setShowAccessFallback(true);
+        setError("No se pudo conectar con el servicio de acceso.");
+      }
     } finally {
-      otpSubmittingRef.current = false;
-      setLoadingAction("");
+      if (otpRequestRef.current === controller) {
+        otpRequestRef.current = null;
+        otpSubmittingRef.current = false;
+        if (!controller.signal.aborted) setLoadingAction("");
+      }
     }
   }
 
@@ -246,17 +353,9 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
   }
 
   function renderAccessFallback() {
+    if (emailOtpOnly) return null;
     return (
       <div className="space-y-2 border-t pt-3" style={{ borderColor: "var(--vp-border)" }}>
-        <SecondaryButton
-          disabled={isLoading || codeCooldown.active}
-          onClick={(e) => requestLoginCode(e, { channel: "sms" })}
-          icon={<Smartphone size={15} />}
-          variant="accent"
-          className="mx-auto w-full min-w-0 px-5"
-        >
-          {loadingAction === "code-request-sms" ? "Enviando SMS…" : codeCooldown.active ? `SMS disponible en ${codeCooldown.remaining}s` : "¿No llega? Recíbelo por SMS"}
-        </SecondaryButton>
         <div
           className="space-y-2 rounded-lg p-3"
           style={{
@@ -311,20 +410,42 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     rememberReferralForEmail(normalizedEmail);
 
     const code = loginCode.replace(/[\s-]+/g, "").trim();
-    if (!/^[a-zA-Z0-9]{4,12}$/.test(code)) {
-      setError(codeChannel === "sms" ? "Ingresa el código que recibiste por SMS." : "Ingresa el código que recibiste por correo.");
+    if (!(emailOtpOnly ? /^\d{6}$/ : /^[a-zA-Z0-9]{4,12}$/).test(code)) {
+      setError("Ingresa el código que recibiste por correo.");
       return;
     }
 
     otpSubmittingRef.current = true;
+    const controller = new AbortController();
+    otpRequestRef.current = controller;
     setLoadingAction("code-confirm");
     try {
-      const response = await fetch("/api/auth/cognito/code-login/confirm", {
+      const contract = emailOtpOnly ? otpRequest(authMode, 'confirm', normalizedEmail, code) : {
+        path: "/api/auth/cognito/code-login/confirm", body: { email: normalizedEmail, code },
+      };
+      const response = await fetch(contract.path, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: normalizedEmail, code }),
+        credentials: "same-origin", cache: "no-store", redirect: "error",
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(otpTimeoutMs('confirm'))]),
+        body: JSON.stringify(contract.body),
       });
       const payload = await response.json().catch(() => ({}));
+      if (controller.signal.aborted || otpRequestRef.current !== controller) return;
+
+      if (emailOtpOnly) {
+        if (!response.ok || !verifiedEmailSignIn(payload, normalizedEmail)) {
+          setError(otpFailureMessage(response.status, 'confirm'));
+          return;
+        }
+        // A verified mailbox is not an approved network identity. Never assign
+        // a person, rank, placement or role from the sign-in response.
+        showVerifiedLogin(normalizedEmail, { ready: false, checking: true });
+        const access = await betterAuthAccess(fetch, normalizedEmail);
+        if (controller.signal.aborted || otpRequestRef.current !== controller) return;
+        showVerifiedLogin(normalizedEmail, access);
+        return;
+      }
 
       if (!response.ok || !payload.ok) {
         if (payload.needsNewCode) {
@@ -340,10 +461,13 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
       persistLocalUser(payload.user);
       window.location.assign(payload.redirectTo || "/dashboard");
     } catch {
-      setError("No se pudo conectar con el servicio de acceso.");
+      if (!controller.signal.aborted && otpRequestRef.current === controller) setError("No se pudo conectar con el servicio de acceso.");
     } finally {
-      otpSubmittingRef.current = false;
-      setLoadingAction("");
+      if (otpRequestRef.current === controller) {
+        otpRequestRef.current = null;
+        otpSubmittingRef.current = false;
+        if (!controller.signal.aborted) setLoadingAction("");
+      }
     }
   }
 
@@ -472,6 +596,31 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     }
   }
 
+  if (verifiedLogin) {
+    const access = verifiedLogin.access;
+    return (
+      <div className="space-y-4">
+        <Message tone="info">
+          <h2 ref={verifiedTitle} tabIndex={-1} className="text-base font-bold">Correo verificado correctamente</h2>
+          <p className="mt-2 break-words font-normal">Confirmamos el correo {verifiedLogin.email}. Puedes continuar sin repetir este paso.</p>
+        </Message>
+        {access.error ? <Message tone="danger">{access.error}</Message> : null}
+        <p className="text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
+          {access.checking ? 'Comprobando tu acceso actual a la red…' : access.ready
+            ? 'Tu sesión tiene acceso al portal. Pulsa Continuar para abrir el panel.'
+            : access.notice || 'No pudimos comprobar todavía tu acceso a la red. Puedes revisarlo sin solicitar otro código.'}
+        </p>
+        <p className="text-sm leading-6" style={{ color: "var(--vp-muted)" }}>Verificar el correo no aprueba automáticamente la vinculación a una cuenta anterior ni asigna una posición en la red.</p>
+        <SecondaryButton disabled={isLoading || access.checking} onClick={continueVerifiedLogin} icon={<ArrowRight size={16} />}>
+          {isLoading || access.checking ? 'Comprobando acceso…' : access.ready ? 'Continuar al panel' : 'Revisar acceso'}
+        </SecondaryButton>
+        <SecondaryButton disabled={isLoading || access.checking} onClick={useAnotherEmail} icon={<ArrowLeft size={15} />}>
+          Usar otro correo
+        </SecondaryButton>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       {(authMessage || error) && (
@@ -487,11 +636,11 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
           className="grid grid-cols-2 gap-1 rounded-lg p-1"
           style={{ background: "var(--vp-surface-raised)", border: "1px solid var(--vp-border)" }}
         >
-          <ModeButton active={mode === "code"} onClick={() => switchMode("code")}>
-            {codeStep === "confirm" && codeChannel === "sms" ? "Código por SMS" : "Código al correo"}
+          <ModeButton disabled={isLoading} active={mode === "code"} onClick={() => switchMode("code")}>
+            Código al correo
           </ModeButton>
-          <ModeButton active={mode === "password"} onClick={() => switchMode("password")}>
-            Contraseña
+          <ModeButton disabled={isLoading} active={mode === "password"} onClick={() => switchMode("password")}>
+            {emailOtpOnly ? 'Usar mi contraseña' : 'Contraseña'}
           </ModeButton>
         </div>
       )}
@@ -502,7 +651,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
             <p className="text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
               Recibe un código en tu correo para entrar a tu cuenta.
             </p>
-            <EmailField email={email} setEmail={setEmail} onClearError={() => setError("")} />
+            <EmailField email={email} readOnly={isLoading} setEmail={setEmail} onClearError={() => setError("")} />
 
             <PrimaryButton disabled={isLoading || codeCooldown.active} loading={loadingAction === "code-request"} icon={<ShieldCheck size={16} />}>
               {codeCooldown.active ? codeCooldown.label : "Enviar código"}
@@ -514,7 +663,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
             <SecondaryButton
               disabled={isLoading}
               onClick={() =>
-                window.location.assign(email ? `/register?email=${encodeURIComponent(email)}` : "/register")
+                window.location.assign(registrationUrl(email, referralCode, preferredSide))
               }
               icon={<UserPlus size={15} />}
             >
@@ -529,15 +678,14 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
               id="login-code"
               label="Código de acceso"
               value={loginCode}
+              codeLength={emailOtpOnly ? 6 : 12}
               autoFocus
               onChange={(value) => {
                 setLoginCode(value);
                 setError("");
               }}
             />
-            {codeChannel === "sms" ? (
-              <p className="text-xs leading-5" style={{ color: "var(--vp-subtle)" }}>Ingresa el último código recibido por SMS en tu teléfono registrado.</p>
-            ) : <DeliveryHint email={codeRecipient} />}
+            <DeliveryHint email={codeRecipient} />
 
             <PrimaryButton disabled={isLoading} loading={loadingAction === "code-confirm"} icon={<ArrowRight size={16} />}>
               Entrar con código
@@ -549,17 +697,23 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
               </SecondaryButton>
               <SecondaryButton
                 disabled={isLoading || codeCooldown.active}
-                onClick={(e) => requestLoginCode(e, { resend: true, channel: codeChannel })}
+                onClick={(e) => requestLoginCode(e, { resend: true })}
                 icon={<KeyRound size={15} />}
               >
                 {codeCooldown.active ? codeCooldown.label : "Reenviar"}
               </SecondaryButton>
             </div>
 
-            {/* Escalada sin dead-ends: SMS como canal alterno y, si nada llega, ayuda humana. */}
+            {/* La ayuda de acceso nunca cambia el canal de autenticación. */}
             {renderAccessFallback()}
           </form>
         )
+      ) : mode === "password" && emailOtpOnly ? (
+        <BetterAuthPasswordLogin email={email} setEmail={setEmail} onBusy={busy => setLoadingAction(busy ? 'password' : '')}
+          onError={setError} onNotice={setNotice} rememberReferral={rememberReferralForEmail}
+          onVerified={showVerifiedLogin}
+          onRegistrationRequired={continueToRegistration}
+          registrationHref={registrationUrl(email, referralCode, preferredSide, true)} />
       ) : mode === "password" ? (
         <form className="space-y-4" onSubmit={handlePasswordSubmit}>
           <EmailField email={email} setEmail={setEmail} onClearError={() => setError("")} />
@@ -649,6 +803,10 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
           </div>
         </form>
       )}
+      {emailOtpOnly ? <div className="space-y-2 border-t pt-4 text-sm leading-6" style={{ borderColor: "var(--vp-border)", color: "var(--vp-muted)" }}>
+        <p className="m-0">Si ya pertenecías a la red, solicita un código con tu correo original. Tu cuenta y posición en la red se conservan; verificar el correo no las vincula automáticamente y la vinculación requiere revisión y aprobación. Si todavía no tienes un acceso, utiliza Registro.</p>
+        <a className="font-bold no-underline" style={{ color: "var(--vp-text-soft)" }} href={registrationUrl(codeStep === "confirm" ? codeRecipient : email, referralCode, preferredSide)}>Crear acceso en Registro</a>
+      </div> : null}
     </div>
   );
 }
@@ -686,6 +844,9 @@ function Message({ tone, children }) {
 
   return (
     <div
+      role={isDanger ? 'alert' : 'status'}
+      aria-live={isDanger ? 'assertive' : 'polite'}
+      aria-atomic="true"
       className="rounded-lg px-4 py-3 text-sm font-semibold"
       style={{
         color: isDanger ? "var(--vp-danger)" : "var(--vp-accent)",
@@ -785,7 +946,7 @@ function PasswordField({ id, label, value, showPassword, autoComplete, onChange,
   );
 }
 
-function CodeField({ id, label, value, onChange, autoFocus = false }) {
+function CodeField({ id, label, value, onChange, autoFocus = false, codeLength = 12 }) {
   return (
     <div>
       <label className="mb-2 block text-sm font-bold" htmlFor={id} style={{ color: "var(--vp-text)" }}>
@@ -798,8 +959,8 @@ function CodeField({ id, label, value, onChange, autoFocus = false }) {
         autoFocus={autoFocus}
         maxLength={12}
         value={value}
-        onChange={(event) => onChange(event.target.value.replace(/[\s-]+/g, ""))}
-        placeholder="········"
+        onChange={(event) => onChange(event.target.value.replace(/[\s-]+/g, "").slice(0, codeLength))}
+        placeholder={codeLength === 6 ? "······" : "········"}
         className="min-h-12 w-full rounded-lg px-4 text-base font-semibold outline-none"
         style={{
           color: "var(--vp-text)",
@@ -868,10 +1029,11 @@ function SecondaryButton({ disabled, onClick, icon, children, variant = "default
   );
 }
 
-function ModeButton({ active, onClick, children }) {
+function ModeButton({ active, onClick, children, disabled = false }) {
   return (
     <button
       type="button"
+      disabled={disabled}
       aria-pressed={active}
       onClick={onClick}
       className="min-h-10 rounded-md px-3 text-xs font-black transition"

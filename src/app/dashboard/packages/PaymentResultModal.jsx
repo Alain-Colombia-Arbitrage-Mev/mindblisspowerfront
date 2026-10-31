@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CheckCircle2, Clock3, Loader2, Network, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCheckoutActivation } from "@/hooks/useCheckoutActivation";
 import { checkoutStatusCopy } from "@/lib/checkout-status.mjs";
+import { useMemberSummary } from "@/hooks/useMemberSummary";
+import NOWPaymentsReceiptPopup from './NOWPaymentsReceiptPopup';
 
 /**
  * Popup de resultado del pago. Stripe redirige a
@@ -16,7 +18,9 @@ import { checkoutStatusCopy } from "@/lib/checkout-status.mjs";
 export default function PaymentResultModal() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const result = searchParams.get("paid") === "1" ? "paid" : searchParams.get("canceled") === "1" ? "canceled" : null;
+  const nowpayments = searchParams.get('payment_provider') === 'nowpayments';
+  const nowOrderId = nowpayments && searchParams.getAll('order_id').length === 1 ? searchParams.get('order_id') : '';
+  const result = nowpayments ? null : searchParams.get("paid") === "1" ? "paid" : searchParams.get("canceled") === "1" ? "canceled" : null;
   const requestKey = `${result}:${searchParams.get("session_id") || ""}`;
   const [dismissedKey, setDismissedKey] = useState(null);
   const visible = result !== null && dismissedKey !== requestKey;
@@ -24,12 +28,21 @@ export default function PaymentResultModal() {
     enabled: visible && result === "paid",
     requestKey,
   });
-  if (!visible) return null;
+  const { reload } = useMemberSummary({ fresh: true });
+  const refreshedKey = useRef(null);
+  useEffect(() => {
+    // Only confirmed membership activation invalidates the shared read. A
+    // redirect query string or a pending/cancelled checkout is not payment proof.
+    if (!visible || result !== "paid" || !activation.active || refreshedKey.current === requestKey) return;
+    refreshedKey.current = requestKey;
+    void reload();
+  }, [visible, result, activation.active, requestKey, reload]);
+  if (!visible) return <NOWPaymentsReceiptPopup orderId={nowOrderId} />;
 
   const close = () => {
     setDismissedKey(requestKey);
     router.replace("/dashboard/packages", { scroll: false });
-    router.refresh(); // re-consulta MyPaymentsPanel para reflejar la activación
+    router.refresh(); // refreshes server-rendered catalog; the provider refreshes confirmed membership above
   };
 
   const goToNetwork = () => {

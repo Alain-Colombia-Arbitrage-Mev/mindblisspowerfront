@@ -31,6 +31,7 @@ export default function DashboardShell({ authMode, children }) {
             setMember({
               name: d.name,
               email: d.email,
+              subject: d.subject,
               referralCode: d.referralCode,
             });
         })

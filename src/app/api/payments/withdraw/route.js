@@ -1,4 +1,5 @@
-import { cookies } from "next/headers";
+import { coreFetch } from '@/lib/cloudflare-runtime.mjs';
+import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
 import { idTokenHeader } from "@/lib/admin-bff";
@@ -12,8 +13,7 @@ export const dynamic = "force-dynamic";
  * Go (que valida mínimo $100 + saldo disponible y crea mlm.withdrawal_request).
  */
 export async function POST(request) {
-  const cookieStore = await cookies();
-  const idToken = cookieStore.get("vp_id_token")?.value;
+  const idToken = await rawIdToken();
   if (!idToken) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
 
   // Identidad VERIFICADA (firma JWKS + iss + aud + token_use + exp). Sin esto,
@@ -37,7 +37,7 @@ export async function POST(request) {
   if (!base || !token) return NextResponse.json({ error: "withdrawals-unconfigured" }, { status: 503 });
 
   try {
-    const resp = await fetch(`${base}/api/payments/withdraw`, {
+    const resp = await coreFetch(`${base}/api/payments/withdraw`, {
       method: "POST",
       headers: { "content-type": "application/json", "X-VP-Service-Token": token, ...(await idTokenHeader()) },
       body: JSON.stringify({ email, amount, bank_info: bankInfo }),

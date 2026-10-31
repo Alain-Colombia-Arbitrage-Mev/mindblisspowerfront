@@ -1,7 +1,7 @@
 import { Coins, Users, Wallet } from "lucide-react";
 import StatRow from "./StatRow";
 
-export default function EarningsCard({ total = "Pendiente de cálculo", wallet = "Pendiente de cálculo", directNetwork = 0, networkReady = true }) {
+export default function EarningsCard({ total = "Pendiente de cálculo", wallet = "Pendiente de cálculo", directNetwork = 0, networkReady = true, historical = false }) {
   return (
     <section
       className="relative flex flex-col overflow-hidden rounded-3xl p-6"
@@ -13,7 +13,7 @@ export default function EarningsCard({ total = "Pendiente de cálculo", wallet =
             className="m-0 text-xs font-medium uppercase"
             style={{ color: "var(--vp-muted)", letterSpacing: 0 }}
           >
-            Saldo de billetera
+            {historical ? "Histórico Stripe, en revisión" : "Saldo de billetera"}
           </p>
           <p className="vp-overview-balance m-0 mt-2">
             {total}

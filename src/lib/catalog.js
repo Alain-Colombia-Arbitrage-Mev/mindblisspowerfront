@@ -2,11 +2,12 @@ import { unstable_cache } from "next/cache";
 
 import { memberDb } from "@/lib/member-db";
 import { createSingleFlight } from "./single-flight.mjs";
+import { getCloudflareScope } from './cloudflare-runtime.mjs';
 
 // getCatalog: paquetes activos + carrera de rangos (semi-estático). Cacheado en
 // el Next Data Cache 5 min con tag "catalog": un lote de dos consultas por carga,
 // no un lote por lector concurrente. La invalidacion administrativa expira el tag.
-const catalogLoad = createSingleFlight(async () => {
+async function loadCatalog() {
   const sql = memberDb();
   const [packages, ranks] = await Promise.all([
     sql`SELECT id, name, amount_usd, pv, type
@@ -30,11 +31,20 @@ const catalogLoad = createSingleFlight(async () => {
       bonus_amount_usd: r.bonus_amount_usd,
     })),
   };
-});
+}
+const catalogLoad = createSingleFlight(loadCatalog);
 
 export const invalidateCatalogLoad = () => catalogLoad.invalidate();
-export const getCatalog = unstable_cache(
+const cachedCatalog = unstable_cache(
   () => catalogLoad.read(),
   ["catalog-v2"],
   { revalidate: 300, tags: ["catalog"] },
 );
+
+export function getCatalog() {
+  const scope = getCloudflareScope();
+  if (!scope) return cachedCatalog();
+  // No isolate-global in-flight SQL promises: Workers I/O belongs to its request.
+  if (!scope.resources.has('catalog')) scope.resources.set('catalog', loadCatalog());
+  return scope.resources.get('catalog');
+}

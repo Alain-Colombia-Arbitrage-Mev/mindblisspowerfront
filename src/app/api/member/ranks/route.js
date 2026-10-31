@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
 import { getCatalog } from "@/lib/catalog";
@@ -11,8 +11,7 @@ const privateHeaders = { "Cache-Control": "private, no-store" };
 
 /** Carrera de rangos (mlm.rank) para el panel del miembro — catálogo cacheado 5 min. */
 export async function GET() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("vp_id_token")?.value;
+  const token = await rawIdToken();
   if (!token) {
     return NextResponse.json(
       { error: "unauthenticated" },

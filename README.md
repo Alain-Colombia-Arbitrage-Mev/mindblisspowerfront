@@ -3,6 +3,9 @@
 Aplicación Next.js. El navegador consume las rutas del mismo origen; las
 credenciales de servicios y de PostgreSQL pertenecen únicamente al servidor.
 
+La adaptación opcional a Workers se documenta en [Cloudflare](docs/cloudflare-workers.md).
+Sus configuraciones están bloqueadas por defecto; no publican ni activan pagos.
+
 ## Desarrollo
 
 Usar la versión Node fijada en Docker/CI e instalar con `npm ci`.
@@ -44,3 +47,18 @@ lectura, montar `/app/.next/cache` como tmpfs de UID/GID 65532 y tamaño acotado
 
 Las ramas y PRs ejecutan verificaciones. La publicación de imágenes y el despliegue
 son operaciones separadas, no consecuencias automáticas de subir una rama.
+
+## Better Auth (preparado, no activado)
+
+El transporte opt-in usa `AUTH_PROVIDER=better-auth`, `BETTER_AUTH_BACKEND_URL`,
+`AUTH_PUBLIC_ORIGIN`, `BETTER_AUTH_JWKS_URL`, `BETTER_AUTH_JWT_ISSUER`,
+`BETTER_AUTH_JWT_AUDIENCE` y `AUTH_BFF_SHARED_SECRET` (igual en Bun, mínimo 32 caracteres).
+`AUTH_CLIENT_IP_HEADER` identifica el encabezado que sobreescribe un borde confiable
+(`cf-connecting-ip` o `x-real-ip`); el origen debe rechazar tráfico que evite ese borde.
+No aceptar IPs suministradas por el navegador. La prueba firmada evita que una IP
+arbitraria altere los límites del backend.
+
+JWT de servicio sólo en servidor; navegador con cookies HttpOnly. Falta adaptar las
+pantallas actuales Cognito a los endpoints Better Auth y su logout POST antes del
+corte de producción. No cambiar la variable hasta completar migración, credenciales,
+plantillas y pruebas de entrega descritas en el runbook del backend.
