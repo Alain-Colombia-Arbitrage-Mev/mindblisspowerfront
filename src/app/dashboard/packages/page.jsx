@@ -4,7 +4,7 @@ import { Suspense } from "react";
 
 import { getCatalog } from "@/lib/catalog";
 import { runtimeEnvironment } from "@/lib/cloudflare-runtime.mjs";
-import { stripeCheckoutEnabled } from "@/lib/checkout-policy.mjs";
+import { stripeCheckoutEnabled, nowpaymentsMembershipsEnabled } from "@/lib/checkout-policy.mjs";
 import ActivatePackageButton from "./ActivatePackageButton";
 import MyPaymentsPanel from "./MyPaymentsPanel";
 import PaymentResultModal from "./PaymentResultModal";
@@ -19,6 +19,7 @@ export const dynamic = "force-dynamic";
  */
 export default async function PackagesPage() {
   const stripeEnabled = stripeCheckoutEnabled(runtimeEnvironment());
+  const nowpaymentsEnabled = nowpaymentsMembershipsEnabled(runtimeEnvironment());
   let packages = [];
   let ranks = [];
   let unavailable = false;
@@ -101,7 +102,7 @@ export default async function PackagesPage() {
                     </li>
                   </ul>
 
-                  <ActivatePackageButton packageId={pkg.id} featured={featured} stripeEnabled={stripeEnabled} />
+                  <ActivatePackageButton packageId={pkg.id} featured={featured} stripeEnabled={stripeEnabled} nowpaymentsEnabled={nowpaymentsEnabled} />
                 </article>
               );
             })}

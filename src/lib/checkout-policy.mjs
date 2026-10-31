@@ -1,10 +1,17 @@
 // Shared presentation policy only. Provider credentials never belong here.
-export const STRIPE_CHECKOUT_PAUSED_NOTICE = 'Los nuevos pagos con Stripe están suspendidos temporalmente. NOWPayments conserva su disponibilidad y validaciones actuales.';
+export const STRIPE_CHECKOUT_PAUSED_NOTICE = 'Los nuevos pagos con Stripe están suspendidos temporalmente.';
+export const NOWPAYMENTS_MEMBERSHIPS_PAUSED_NOTICE = 'Las compras de membresías con NOWPayments aún no están habilitadas. No se ha iniciado un cobro desde esta solicitud.';
 
 // Only an exact server-owned runtime flag may permit a new Stripe charge.
 // Missing, malformed and public/browser flags all fail closed.
 export function stripeCheckoutEnabled(env) {
   return env?.STRIPE_CHECKOUT_ENABLED === 'true';
+}
+
+// Independent admission control: enabling crypto membership checkout never
+// enables Stripe, withdrawals, commissions or other financial mutations.
+export function nowpaymentsMembershipsEnabled(env) {
+  return env?.NOWPAYMENTS_MEMBERSHIPS_ENABLED === 'true';
 }
 
 export function checkoutProvider(value) {
@@ -36,6 +43,7 @@ export function hostedCheckoutURL(value, provider, environment = 'production') {
 
 export function checkoutErrorMessage(code, provider = 'stripe') {
   if (code === 'stripe_checkout_disabled') return STRIPE_CHECKOUT_PAUSED_NOTICE;
+  if (code === 'nowpayments_checkout_disabled') return NOWPAYMENTS_MEMBERSHIPS_PAUSED_NOTICE;
   if (['unauthenticated', 'session-invalid', 'invalid_id_token'].includes(code)) return 'Tu sesión expiró. Vuelve a iniciar sesión antes de pagar.';
   if (code === 'buyer_not_found') return 'Tu cuenta aún no está registrada en la red.';
   if (code === 'invalid_referral_code') return 'El enlace de referido no es válido o ya no está activo. Solicita un enlace nuevo antes de pagar.';

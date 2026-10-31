@@ -3,7 +3,7 @@ import test from 'node:test';
 import { handleMembershipCheckout } from './checkout-bff.mjs';
 
 const env = { AUTH_PUBLIC_ORIGIN: 'https://portal.example.test', VP_PAYMENTS_URL: 'https://payments.core.internal',
-  PAYMENTS_SERVICE_TOKEN: 'synthetic-private-service-token', NOWPAYMENTS_API_KEY: 'synthetic-not-for-the-portal' };
+  PAYMENTS_SERVICE_TOKEN: 'synthetic-private-service-token', NOWPAYMENTS_API_KEY: 'synthetic-not-for-the-portal', NOWPAYMENTS_MEMBERSHIPS_ENABLED: 'true' };
 const claims = { sub: 'stable-synthetic-subject', email: ' MEMBER@example.test ', email_verified: true,
   name: 'Synthetic Member', phone_number: '+12025550101', person_public_id: 'a02f5a55-5fa3-4239-845b-ac6b699110ee' };
 const identity = async () => ({ token: 'synthetic-verified-jwt', claims });
@@ -94,6 +94,42 @@ test('the Stripe pause does not change NOWPayments creation, provider or require
     assert.equal(calls, 1); assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { ...payload, checkout_environment: 'production' });
   }
+});
+
+test('NOWPayments checkout requires its own exact server flag before any upstream creation', async () => {
+  let upstreamCalls = 0;
+  for (const enabled of [undefined, 'false', false, true, 1, '1', 'TRUE', ' true ', '']) {
+    const response = await run(request({ ...form, NOWPAYMENTS_MEMBERSHIPS_ENABLED: 'true', nowpaymentsEnabled: true }), {
+      env: { ...env, NOWPAYMENTS_MEMBERSHIPS_ENABLED: enabled, NEXT_PUBLIC_NOWPAYMENTS_MEMBERSHIPS_ENABLED: 'true', STRIPE_CHECKOUT_ENABLED: 'true' },
+      fetchImpl: async () => { upstreamCalls++; assert.fail('disabled NOWPayments reached its provider service'); },
+    });
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { error: 'nowpayments_checkout_disabled' });
+    assert.equal(response.headers.get('cache-control'), 'private, no-store');
+  }
+  assert.equal(upstreamCalls, 0);
+});
+
+test('enabling NOWPayments cannot admit Stripe or forward withdrawal/compensation authority', async () => {
+  let calls = 0;
+  const scopedEnv = { ...env, NOWPAYMENTS_MEMBERSHIPS_ENABLED: 'true', STRIPE_CHECKOUT_ENABLED: 'false',
+    FINANCIAL_MUTATIONS_ENABLED: 'false', WITHDRAWALS_ENABLED: 'false' };
+  const fetchImpl = async (_url, options) => {
+    calls++;
+    const body = JSON.parse(options.body);
+    assert.equal(body.provider, 'nowpayments');
+    assert.doesNotMatch(JSON.stringify(body), /withdraw|commission|activation|FINANCIAL|sponsor_id|person_id/);
+    return Response.json(payload);
+  };
+  for (const provider of ['stripe', undefined]) {
+    const response = await run(request({ ...form, provider }), { env: scopedEnv, fetchImpl });
+    assert.equal(response.status, 503);
+    assert.equal((await response.json()).error, 'stripe_checkout_disabled');
+  }
+  assert.equal(calls, 0);
+  const response = await run(request({ ...form, withdrawals: true, commissions: true, activate: true }), { env: scopedEnv, fetchImpl });
+  assert.equal(response.status, 200); assert.equal(calls, 1);
+  assert.equal((await response.json()).fulfillment_status, 'review_required');
 });
 
 test('NOWPayments cannot fall back to Stripe and sandbox is allowed only by explicit server configuration', async () => {

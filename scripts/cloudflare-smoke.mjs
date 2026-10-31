@@ -171,6 +171,13 @@ try {
   probes++;
   const cookie = confirmed.headers.get('set-cookie').split(';')[0];
   const sessionHeaders = { cookie, 'cf-connecting-ip': '192.0.2.10' };
+  const cryptoPaused = await fetch('http://127.0.0.1:8787/__now_disabled/api/payments/checkout', {
+    method: 'POST', headers: { ...authHeaders, ...sessionHeaders }, body: JSON.stringify({ package_id: 1, provider: 'nowpayments',
+      NOWPAYMENTS_MEMBERSHIPS_ENABLED: 'true' }), signal: AbortSignal.timeout(8000),
+  });
+  assert.equal(cryptoPaused.status, 503);
+  assert.deepEqual(await cryptoPaused.json(), { error: 'nowpayments_checkout_disabled' });
+  assert.match(cryptoPaused.headers.get('cache-control'), /no-store/); probes++;
   for (const body of [{ package_id: 1 }, { package_id: 1, provider: 'stripe', STRIPE_CHECKOUT_ENABLED: 'true' }]) {
     const paused = await fetch('http://127.0.0.1:8787/api/payments/checkout', {
       method: 'POST', headers: { ...authHeaders, ...sessionHeaders }, body: JSON.stringify(body), signal: AbortSignal.timeout(8000),

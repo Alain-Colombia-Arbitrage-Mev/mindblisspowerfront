@@ -37,11 +37,12 @@ test('membership selector keeps its design and NOWPayments while Stripe defaults
   assert.match(html, /for="synthetic-selector-provider"/);
   assert.match(html, /<select[^>]*id="synthetic-selector-provider"/);
   assert.match(html, /value="stripe" disabled=""/);
-  assert.match(html, /value="nowpayments" selected=""/);
+  assert.match(html, /value="nowpayments" disabled="" selected=""/);
   assert.match(html, /Tarjeta · Stripe \(suspendido\)/);
   assert.match(html, /Stripe están suspendidos temporalmente/);
   assert.match(html, /Cripto · NOWPayments/); assert.match(html, /Continuar al pago/);
   assert.match(html, /No es una recarga de saldo/); assert.doesNotMatch(html, /Activar membresía|pago completado/);
+  assert.match(html, /<button[^>]*disabled=""/);
 });
 
 test('an explicitly enabled server prop can restore the Stripe choice, never a truthy public string', () => {
@@ -77,7 +78,7 @@ test('crypto pending enablement and errors are explicit and accessible; loading 
 
 test('the actual membership click handler sends chosen provider once and accepts only its validated hosted URL', async () => {
   const { Component } = checkoutComponent({ provider: 'nowpayments' });
-  const button = findElement(Component({ packageId: 7 }), 'button');
+  const button = findElement(Component({ packageId: 7, nowpaymentsEnabled: true }), 'button');
   let resolveCheckout; let checkoutStarted;
   const started = new Promise(resolve => { checkoutStarted = resolve; });
   const pending = new Promise(resolve => { resolveCheckout = resolve; });
@@ -109,9 +110,33 @@ test('a successful HTTP response with wrong-provider or malicious URL never navi
       { provider: 'nowpayments', url: 'https://nowpayments.io/payment/?iid=1' }]) {
       const { Component, stateChanges } = checkoutComponent({ provider: 'nowpayments' });
       globalThis.fetch = async url => Response.json(url === '/api/auth/session' ? { email: 'member@example.test' } : result);
-      const button = findElement(Component({ packageId: 7 }), 'button');
+      const button = findElement(Component({ packageId: 7, nowpaymentsEnabled: true }), 'button');
       await button.props.onClick();
       assert.equal(stateChanges[0].at(-1), false); assert.match(stateChanges[1].at(-1), /historial/);
     }
   } finally { globalThis.fetch = originalFetch; if (originalWindow === undefined) delete globalThis.window; else globalThis.window = originalWindow; }
+});
+
+test('disabled or loosely typed NOWPayments props cannot send even a session read or a direct checkout', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => assert.fail('disabled NOWPayments performed network I/O');
+  try {
+    for (const nowpaymentsEnabled of [undefined, false, 'true', 1]) {
+      const { Component, stateChanges } = checkoutComponent({ provider: 'nowpayments' });
+      const button = findElement(Component({ packageId: 7, nowpaymentsEnabled }), 'button');
+      assert.equal(button.props.disabled, true);
+      await button.props.onClick();
+      assert.match(stateChanges[1].at(-1), /aún no están habilitadas/);
+    }
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('enabled NOWPayments retains the design, warns about a real purchase and never claims automatic success', () => {
+  const { Component } = checkoutComponent();
+  const html = renderToStaticMarkup(React.createElement(Component, { packageId: 1, nowpaymentsEnabled: true, stripeEnabled: false }));
+  assert.match(html, /value="nowpayments" selected=""/);
+  assert.match(html, /value="stripe" disabled=""/);
+  assert.match(html, /Realizarás un pago real de membresía/);
+  assert.match(html, /El servidor debe validar el pago y confirmar su activación/);
+  assert.doesNotMatch(html, /membresía activada|pago completado|activación garantizada/);
 });

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
-import { checkoutErrorMessage, checkoutProvider, hostedCheckoutURL, stripeCheckoutEnabled } from './checkout-policy.mjs';
+import { checkoutErrorMessage, checkoutProvider, hostedCheckoutURL, stripeCheckoutEnabled, nowpaymentsMembershipsEnabled } from './checkout-policy.mjs';
 
 test('only the exact server-owned runtime Stripe flag enables new charges', () => {
   assert.equal(stripeCheckoutEnabled({ STRIPE_CHECKOUT_ENABLED: 'true' }), true);
@@ -10,6 +10,15 @@ test('only the exact server-owned runtime Stripe flag enables new charges', () =
   }
   assert.equal(stripeCheckoutEnabled(undefined), false);
   assert.match(checkoutErrorMessage('stripe_checkout_disabled'), /Stripe están suspendidos temporalmente/);
+});
+
+test('NOWPayments membership admission has an independent literal server flag and no public override', () => {
+  assert.equal(nowpaymentsMembershipsEnabled({ NOWPAYMENTS_MEMBERSHIPS_ENABLED: 'true', STRIPE_CHECKOUT_ENABLED: 'false' }), true);
+  for (const flag of [undefined, 'false', false, true, 'TRUE', ' true ', 1, '1', '']) {
+    assert.equal(nowpaymentsMembershipsEnabled({ NOWPAYMENTS_MEMBERSHIPS_ENABLED: flag, NEXT_PUBLIC_NOWPAYMENTS_MEMBERSHIPS_ENABLED: 'true', STRIPE_CHECKOUT_ENABLED: 'true' }), false);
+  }
+  assert.equal(nowpaymentsMembershipsEnabled(undefined), false);
+  assert.match(checkoutErrorMessage('nowpayments_checkout_disabled', 'nowpayments'), /aún no están habilitadas/);
 });
 
 test('every portal deployment scope explicitly pauses Stripe and the page passes only a runtime boolean', () => {
@@ -21,7 +30,17 @@ test('every portal deployment scope explicitly pauses Stripe and the page passes
   const page = readFileSync(new URL('../app/dashboard/packages/page.jsx', import.meta.url), 'utf8');
   assert.match(page, /stripeCheckoutEnabled\(runtimeEnvironment\(\)\)/);
   assert.match(page, /stripeEnabled=\{stripeEnabled\}/);
+  assert.match(page, /nowpaymentsMembershipsEnabled\(runtimeEnvironment\(\)\)/);
+  assert.match(page, /nowpaymentsEnabled=\{nowpaymentsEnabled\}/);
   assert.doesNotMatch(page, /NEXT_PUBLIC_STRIPE_CHECKOUT_ENABLED/);
+  assert.doesNotMatch(page, /NEXT_PUBLIC_NOWPAYMENTS_MEMBERSHIPS_ENABLED/);
+  for (const scope of [config, config.env.staging]) {
+    assert.equal(scope.vars.NOWPAYMENTS_MEMBERSHIPS_ENABLED, 'false');
+    assert.equal(scope.vars.NOWPAYMENTS_WEBHOOK_ENABLED, 'false');
+  }
+  for (const flag of ['NOWPAYMENTS_MEMBERSHIPS_ENABLED', 'NOWPAYMENTS_WEBHOOK_ENABLED']) {
+    assert.ok(['true', 'false'].includes(config.env.production.vars[flag]), `${flag} must be explicitly configured`);
+  }
 });
 
 test('provider omission preserves Stripe; explicit invalid provider never silently falls back', () => {
