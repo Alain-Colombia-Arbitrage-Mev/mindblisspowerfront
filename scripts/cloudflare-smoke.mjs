@@ -95,8 +95,13 @@ try {
   }
   for (const path of ['/forgot-password?email=fixture%40example.test']) {
     const response = await fetch(`http://127.0.0.1:8787${path}`, { redirect: 'manual', signal: AbortSignal.timeout(8000) });
-    assert.equal(response.status, 307);
-    assert.match(response.headers.get('location'), /^\/login\?/);
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.match(html, /Crear o cambiar contraseña/);
+    assert.match(html, /Solicitar código por correo/);
+    assert.match(html, /5m/);
+    assert.equal(response.headers.get('location'), null);
+    assert.match(response.headers.get('cache-control'), /no-store/);
     probes++;
   }
   for (const path of ['/__disabled/login', '/__disabled/health', '/__disabled/_next/static/fixture.js']) {
@@ -109,6 +114,18 @@ try {
   const post = (path, body, cookie = '') => fetch(`http://127.0.0.1:8787${path}`, {
     method: 'POST', headers: { ...authHeaders, cookie }, body: JSON.stringify(body), signal: AbortSignal.timeout(8000),
   });
+  for (const email of ['recovery@example.test', 'unknown-recovery@example.test']) {
+    const response = await post('/api/auth/email-otp/request-password-reset', { email, role: 'superadmin', newEmail: 'must-not-forward@example.test' }, 'better-auth.session_token=must-not-forward');
+    assert.equal(response.status, 200);assert.deepEqual(await response.json(), { ok: true });
+    assert.equal(response.headers.get('set-cookie'), null);probes++;
+  }
+  const invalidRecovery = await post('/api/auth/email-otp/reset-password', { email: 'recovery@example.test', otp: '001234', password: 'short' });
+  assert.equal(invalidRecovery.status, 400);probes++;
+  const wrongRecovery = await post('/api/auth/email-otp/reset-password', { email: 'recovery@example.test', otp: '000000', password: 'Synthetic-Recovery-Password-123' });
+  assert.equal(wrongRecovery.status, 400);assert.deepEqual(await wrongRecovery.json(), { error: 'authentication_failed', code: 'INVALID_OTP' });probes++;
+  const recovered = await post('/api/auth/email-otp/reset-password', { email: 'recovery@example.test', otp: '001234', password: 'Synthetic-Recovery-Password-123', emailVerified: true, role: 'admin' }, 'better-auth.session_token=must-not-forward');
+  assert.equal(recovered.status, 200);assert.deepEqual(await recovered.json(), { ok: true });
+  assert.equal(recovered.headers.get('set-cookie'), null);probes++;
   for (const [path, body] of [
     ['/api/auth/email-otp/send-verification-otp', { email: 'unregistered@example.test', type: 'sign-in' }],
     ['/api/auth/sign-in/email', { email: 'unregistered@example.test', password: 'Synthetic-Password-123' }],
@@ -393,6 +410,8 @@ try {
   assert.equal(metrics.stripeCheckoutCalls, 0, 'paused explicit/default Stripe requests never create an upstream checkout');
   assert.equal(metrics.stripeResumeCalls, 0, 'public resume links cannot bypass the Stripe pause');
   assert.equal(metrics.nowpaymentsCheckoutCalls, 1, 'the Stripe pause preserves only the admitted NOWPayments checkout');
+  assert.equal(metrics.passwordRecoveryRequests, 2, 'unknown and existing requests use the same neutral recovery projection');
+  assert.equal(metrics.passwordRecoveryResets, 1, 'only valid synthetic proof completes, without installing a session');
   assert.equal(metrics.nowpaymentsCaptures, 2, 'signed waiting and finished callbacks are captured without a browser session');
   assert.equal(metrics.nowpaymentsStatusReads, 6, 'only verified users reach owner-scoped payment and activation reads');
   assert.equal(metrics.nowpaymentsPurchaseReads, 2); assert.equal(metrics.nowpaymentsPurchaseResumes, 1); assert.equal(metrics.nowpaymentsPurchaseCancels, 1);

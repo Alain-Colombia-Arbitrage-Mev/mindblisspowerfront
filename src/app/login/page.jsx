@@ -54,10 +54,10 @@ export default async function LoginPage({ searchParams }) {
           <Link href={registrationUrl(initialEmail, initialRef, initialSide)} className="font-bold transition hover:opacity-80" style={{ color: "var(--vp-text-soft)" }}>
             Crear cuenta
           </Link>
-          {!emailOtpOnly && <><span style={{ color: "var(--vp-border-strong)" }}>·</span>
+          <span style={{ color: "var(--vp-border-strong)" }}>·</span>
           <Link href="/forgot-password" className="font-bold transition hover:opacity-80" style={{ color: "var(--vp-text-soft)" }}>
-            Recuperar contraseña
-          </Link></>}
+            {emailOtpOnly ? 'Crear o cambiar contraseña' : 'Recuperar contraseña'}
+          </Link>
         </div>
       </div>
     </AuthShell>

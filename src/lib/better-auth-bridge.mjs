@@ -2,6 +2,7 @@
 import { createHash, createHmac } from 'node:crypto';
 import { isIP } from 'node:net';
 import { authSuccess } from './auth-response.mjs';
+import { passwordRecoveryPaths, passwordRecoveryInput, passwordRecoveryAcknowledged, passwordRecoveryError } from './password-recovery-policy.mjs';
 import { coreFetch, runtimeEnvironment } from './cloudflare-runtime.mjs';
 
 export function trustedAuthClientIp(headers, env = runtimeEnvironment()) {
@@ -137,22 +138,43 @@ export async function proxyBetterAuthKeys(request, dependencies = {}) {
 
 export async function proxyBetterAuth(request, path, dependencies = {}) {
   const env = dependencies.env || runtimeEnvironment();
+  const recovery = passwordRecoveryPaths.has(path);
+  const recoveryHeaders = { 'Cache-Control': 'private, no-store' };
   if (!betterAuthEnabled(env)) return Response.json({ error: "better_auth_disabled" }, { status: 404 });
   if (request.method !== "POST" || !browserAuthPaths.has(path)) return Response.json({ error: "not_found" }, { status: 404 });
   const expectedOrigin = env.AUTH_PUBLIC_ORIGIN || new URL(request.url).origin;
-  if (request.headers.get("origin") !== expectedOrigin) return Response.json({ error: "invalid_origin" }, { status: 403 });
+  if (request.headers.get("origin") !== expectedOrigin) return Response.json({ error: "invalid_origin" }, { status: 403, ...(recovery ? { headers: recoveryHeaders } : {}) });
+  if (recovery && (new URL(request.url).search || request.headers.has('content-encoding')
+    || !/^application\/json(?:\s*;|$)/i.test(request.headers.get('content-type') || ''))) {
+    return Response.json({ error: 'invalid_recovery_request' }, { status: 400, headers: recoveryHeaders });
+  }
   try {
     let body;
     try { body = await readAuthBody(request); } catch (error) {
-      return Response.json({ error: error instanceof RangeError ? "request_too_large" : "invalid_json" }, { status: error instanceof RangeError ? 413 : 400 });
+      return Response.json({ error: error instanceof RangeError ? "request_too_large" : "invalid_json" }, { status: error instanceof RangeError ? 413 : 400, ...(recovery ? { headers: recoveryHeaders } : {}) });
     }
-    if (!body || typeof body !== 'object' || Array.isArray(body)) return Response.json({ error: 'invalid_json' }, { status: 400 });
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return Response.json({ error: 'invalid_json' }, { status: 400, ...(recovery ? { headers: recoveryHeaders } : {}) });
+    if (recovery) {
+      const prepared = passwordRecoveryInput(path, body);
+      if (prepared.error) return Response.json({ error: 'invalid_recovery_request', code: prepared.error }, { status: 400, headers: recoveryHeaders });
+      body = prepared.body;
+    }
     const upstream = await fetchBetterAuth(`/${path}`, {
-      method: "POST", body, origin: expectedOrigin, cookie: request.headers.get("cookie") || "", signal: request.signal,
+      method: "POST", body, origin: expectedOrigin, cookie: recovery ? '' : request.headers.get("cookie") || "", signal: request.signal,
     }, { ...dependencies, clientIp: trustedAuthClientIp(request.headers, env) });
     // Do not relay upstream diagnostics, raw session tokens or set-auth-jwt.
     const data = await readAuthBody({ body: upstream.body, signal: request.signal });
     if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('invalid_auth_response');
+    if (recovery) {
+      if (!/^application\/json(?:\s*;|$)/i.test(upstream.headers.get('content-type') || '')
+        || upstream.status < 200 || upstream.status >= 500 || (upstream.ok && (upstream.status !== 200 || !passwordRecoveryAcknowledged(data)))) throw new Error('invalid_auth_response');
+      const response = Response.json(upstream.ok ? { ok: true } : { error: 'authentication_failed', code: passwordRecoveryError(data) },
+        { status: upstream.ok ? 200 : [400, 401, 403, 404, 422, 429].includes(upstream.status) ? upstream.status : 503, headers: recoveryHeaders });
+      if (upstream.status === 429 && /^\d{1,5}$/.test(upstream.headers.get('retry-after') || '')) response.headers.set('retry-after', upstream.headers.get('retry-after'));
+      // Recovery is not sign-in. Never install even a valid-looking auth cookie,
+      // expose tokens or reflect account-existence hints from an upstream error.
+      return response;
+    }
     const response = Response.json(upstream.ok ? authSuccess(path, data)
       : { error: "authentication_failed", code: /^[A-Z_]{1,80}$/.test(data.code) ? data.code : undefined },
       { status: upstream.ok ? 200 : upstream.status >= 400 ? upstream.status : 502,

@@ -14,7 +14,8 @@ const modes = new Map([[sessionCookie, 'member'],
   ['__Secure-better-auth.session_token=synthetic-wrong-audience', 'wrong-audience']]);
 const metrics = { tokens: 0, jwks: 0, verifiedReferrals: 0, sensitiveJwksHeaders: 0, registrations: 0, contactRegistrations: 0, phoneCalls: 0,
   stripeCheckoutCalls: 0, stripeResumeCalls: 0, nowpaymentsCheckoutCalls: 0, nowpaymentsCaptures: 0, nowpaymentsStatusReads: 0,
-  nowpaymentsPurchaseReads: 0, nowpaymentsPurchaseResumes: 0, nowpaymentsPurchaseCancels: 0, signOutCalls: 0 };
+  nowpaymentsPurchaseReads: 0, nowpaymentsPurchaseResumes: 0, nowpaymentsPurchaseCancels: 0, signOutCalls: 0,
+  passwordRecoveryRequests: 0, passwordRecoveryResets: 0 };
 const receiptOrder = 'a02f5a55-5fa3-4239-845b-ac6b699110ee';
 const operationalOrder = 'a02f5a55-5fa3-4239-845b-ac6b699110ef';
 let capturedPaymentStatus = 'waiting';
@@ -188,6 +189,21 @@ const syntheticEnv = {
       const body = JSON.parse(options.body);
       if (body.email !== 'signup@example.test' || body.otp !== '001234') return Response.json({ code: 'INVALID_OTP' }, { status: 400 });
       return Response.json({ status: true, token: null, user: { id: 'synthetic-signup', email: body.email, emailVerified: true } });
+    }
+    if (url.endsWith('/email-otp/request-password-reset') || url.endsWith('/email-otp/reset-password')) {
+      if (!validProxySignature(target, options, headers) || headers.get('cookie')) throw new Error('invalid_recovery_signature_or_cookie');
+      const body = JSON.parse(options.body);
+      const reset = url.endsWith('/email-otp/reset-password');
+      const fields = reset ? ['email', 'otp', 'password'] : ['email'];
+      if (Object.keys(body).length !== fields.length || fields.some(field => typeof body[field] !== 'string')) throw new Error('recovery_authority_field_forwarded');
+      if (!reset) {
+        metrics.passwordRecoveryRequests++;
+        return Response.json({ success: true });
+      }
+      if (body.otp !== '001234') return Response.json({ code: 'INVALID_OTP', message: 'must-not-leak' }, { status: 400 });
+      if (body.email !== 'recovery@example.test' || body.password !== 'Synthetic-Recovery-Password-123') throw new Error('invalid_recovery_fixture');
+      metrics.passwordRecoveryResets++;
+      return Response.json({ success: true }, { headers: { 'set-cookie': `${sessionCookie}; Secure; HttpOnly; Path=/` } });
     }
     if (url.endsWith('/email-otp/send-verification-otp')) {
       const body = JSON.parse(options.body);

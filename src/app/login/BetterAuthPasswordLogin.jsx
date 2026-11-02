@@ -67,6 +67,7 @@ export default function BetterAuthPasswordLogin({ email, setEmail, onBusy, onErr
       <RegistrationPassword id="password-login-password" name="password" label="Contraseña" autoComplete="current-password" required maxLength={128}
         value={password} disabled={loading} onChange={event => { setPassword(event.target.value); onError(''); }} visible={visible} onToggle={() => setVisible(current => !current)} />
       <RegistrationButton type="submit" disabled={loading} loading={loading}>{loading ? 'Comprobando acceso…' : 'Entrar con mi contraseña'}</RegistrationButton>
+      <Link href="/forgot-password" className="inline-flex min-h-11 items-center text-sm font-bold text-[var(--vp-accent)] underline">Crear o cambiar contraseña con un código al correo</Link>
       {requiresVerification ? <Link href={registrationHref || registrationUrl(email, '', '', true)}
         className="inline-flex min-h-11 items-center text-sm text-[var(--vp-text)] underline">Verificar mi correo de registro</Link> : null}
     </form>
