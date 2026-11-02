@@ -123,7 +123,7 @@ test('a definitive send rejection does not advance or reveal suspended, deleted 
 });
 
 test('malformed successful-looking reset payloads or rejected codes never display success or install authority', async t => {
-  for (const [status, body] of [[400, { ok: true }], [403, { ok: true }], [429, { ok: true }], [503, { ok: true }],
+  for (const [status, body] of [[201, { ok: true }], [202, { ok: true }], [400, { ok: true }], [403, { ok: true }], [429, { ok: true }], [503, { ok: true }],
     [200, {}], [200, { ok: 'true' }], [200, { ok: true, token: 'private-token' }], [200, { ok: true, emailVerified: true }]]) {
     const paths = [];
     t.mock.method(globalThis, 'fetch', async path => {
@@ -134,6 +134,19 @@ test('malformed successful-looking reset payloads or rejected codes never displa
     assert.doesNotMatch(html(harness), /Contraseña actualizada|private-token|dashboard/);
     assert.ok(find(harness.render(props), field('recovery-otp')));
     assert.equal(paths.length, 2);
+    harness.unmount();
+  }
+});
+
+test('accepted or created send responses keep an unconfirmed challenge instead of claiming a recovery acknowledgement', async t => {
+  for (const status of [201, 202]) {
+    let calls = 0;
+    t.mock.method(globalThis, 'fetch', async () => { calls++; return Response.json({ ok: true }, { status }); });
+    const harness = view(); await submit(harness);
+    assert.equal(calls, 1);
+    assert.ok(find(harness.render(props), field('recovery-otp')));
+    assert.match(html(harness), /No pudimos confirmar el envío/);
+    assert.doesNotMatch(html(harness), /Si el correo corresponde a una cuenta habilitada|Contraseña actualizada/);
     harness.unmount();
   }
 });

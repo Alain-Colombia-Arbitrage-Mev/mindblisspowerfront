@@ -41,3 +41,23 @@ logout assets match the reviewed build. Recovery pages/responses are private,
 no-store. No valid recipient request, real OTP, password, authenticated session or
 invoice was used in these checks. Real recipient delivery and user completion
 remain user-owned; no automatic verification or account-email change occurred.
+
+## Repository follow-up review
+
+Recovery UI now requires literal HTTP200 and the exact acknowledgement for both
+code requests and password changes;201/202 cannot show confirmed recovery.
+Password login owns an abortable attempt through its canonical session check.
+Unmounting cancels browser work and ignores late sign-in, JSON and session
+responses. The parent receives a single verified result after that check, not
+an early callback that disposes its own pending form. Referral callbacks follow
+the same lifecycle guard. Cancellation does not claim to undo a server sign-in.
+
+Verification passed:560 portal tests, typecheck and ESLint. Added real-view race
+and cancellation tests and extended ambiguous-success coverage; the existing
+email-confirmation regression now asserts no callback while the canonical check
+is pending. Backend installed-handler auth tests pass116 cases with1,781
+assertions. Visual styling, OTP login, permissions and linking policy are unchanged.
+
+This follow-up is repository-only: no Worker or container deployment, real OTP,
+password reset, account change, new session or financial operation was performed.
+Production evidence above describes the earlier release, not these new changes.

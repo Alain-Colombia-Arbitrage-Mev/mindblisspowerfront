@@ -118,10 +118,16 @@ test('send acknowledgements, rejected OTPs and malformed or mismatched proof nev
 });
 
 test('password login uses the same verified confirmation contract without an immediate redirect or email send', async t => {
-  const destinations = browser(t), verified = [], paths = [];
+  const destinations = browser(t), verified = [], referrals = [], paths = [];
+  let releaseSession, sessionStarted;
+  const checkingSession = new Promise(resolve => { sessionStarted = resolve; });
   t.mock.method(globalThis, 'fetch', async path => {
     paths.push(path);
-    return Response.json(path === '/api/auth/session' ? { authenticated: true, mode: 'better-auth', email } : proof());
+    if (path === '/api/auth/session') {
+      sessionStarted();
+      return new Promise(resolve => { releaseSession = resolve; });
+    }
+    return Response.json(proof());
   });
   const harness = registrationViewHarness('../login/BetterAuthPasswordLogin.jsx', {
     'next/link': { default: ({ children, ...attributes }) => React.createElement('a', attributes, children) },
@@ -129,14 +135,22 @@ test('password login uses the same verified confirmation contract without an imm
       RegistrationPassword: ({ visible: _visible, onToggle: _onToggle, ...attributes }) => registrationFieldStub(attributes) },
     './better-auth-login.mjs': auth, '../register/registration-model.mjs': registration,
   });
-  const passwordProps = { email, setEmail() {}, onBusy() {}, onError() {}, onNotice() {}, rememberReferral() {},
+  const passwordProps = { email, setEmail() {}, onBusy() {}, onError() {}, onNotice() {}, rememberReferral: recipient => referrals.push(recipient),
     onVerified: (recipient, access) => verified.push({ recipient, access }) };
   harness.render(passwordProps); harness.state[0] = 'Synthetic Existing Password';
-  await submit(harness.render(passwordProps));
-  assert.deepEqual(verified, [{ recipient: email, access: { ready: false, checking: true } }, { recipient: email, access: { ready: true } }]);
+  const pending = submit(harness.render(passwordProps));
+  await checkingSession;
+  assert.deepEqual(verified, [], 'the child keeps ownership of its pending canonical lookup instead of unmounting itself through its parent');
+  assert.deepEqual(referrals, [], 'referral callbacks also wait for the current canonical result');
+  assert.equal(find(harness.render(passwordProps), node => node?.type === 'form').props['aria-busy'], true);
+  releaseSession(Response.json({ authenticated: true, mode: 'better-auth', email }));
+  await pending;
+  assert.deepEqual(verified, [{ recipient: email, access: { ready: true } }]);
+  assert.deepEqual(referrals, [email]);
   assert.deepEqual(paths, ['/api/auth/sign-in/email', '/api/auth/session']);
   assert.equal(harness.state[0], '');
   assert.deepEqual(destinations, []);
+  harness.unmount();
 });
 
 test('an old canonical cookie for another email never makes the newly verified account ready', async t => {

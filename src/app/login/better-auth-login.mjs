@@ -25,10 +25,13 @@ export function verifiedEmailSignIn(payload, expectedEmail) {
 
 // Email ownership is not an approved member binding. Both sign-in methods must
 // consult the canonical session endpoint, never sign-in response fields.
-export async function betterAuthAccess(fetchImpl = fetch, expectedEmail = '') {
+/** @param {{signal?: AbortSignal}} [options] */
+export async function betterAuthAccess(fetchImpl = fetch, expectedEmail = '', options = {}) {
+  const { signal } = options;
   try {
     const response = await fetchImpl('/api/auth/session', {
-      credentials: 'same-origin', cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(12000),
+      credentials: 'same-origin', cache: 'no-store', redirect: 'error',
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(12000)]) : AbortSignal.timeout(12000),
     });
     const identity = await response.json().catch(() => ({}));
     if (!response.ok) return { ready: false, error: 'El servicio de autorización no está disponible. Intenta más tarde.' };

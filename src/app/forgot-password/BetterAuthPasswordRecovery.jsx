@@ -93,7 +93,7 @@ export default function BetterAuthPasswordRecovery({ initialEmail = '' }) {
     try {
       const { response, payload } = await post(contract, controller, 'request');
       if (controller.signal.aborted || pending.current !== controller) return;
-      if (response.ok && passwordRecoveryAcknowledged(payload)) {
+      if (response.status === 200 && passwordRecoveryAcknowledged(payload)) {
         setEmail(selectedEmail); setRecipient(selectedEmail); clearSecrets(); setStep('confirm');
         cooldown.start(passwordRecoveryRetrySeconds(response, payload));
         setNotice(PASSWORD_RECOVERY_NOTICE);
@@ -130,7 +130,7 @@ export default function BetterAuthPasswordRecovery({ initialEmail = '' }) {
     try {
       const { response, payload } = await post(contract, controller, 'confirm');
       if (controller.signal.aborted || pending.current !== controller) return;
-      if (!response.ok || !passwordRecoveryAcknowledged(payload)) {
+      if (response.status !== 200 || !passwordRecoveryAcknowledged(payload)) {
         if (response.status === 429) cooldown.start(passwordRecoveryRetrySeconds(response, payload));
         setErrors({ form: passwordRecoveryFailure(response.ok ? 502 : response.status) });
         return;

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { RegistrationButton, RegistrationField, RegistrationPassword } from '../register/RegistrationFields';
 import { betterAuthPasswordRequest, betterAuthPasswordFailure, betterAuthAccess, verifiedEmailSignIn } from './better-auth-login.mjs';
 import { registrationRequired, registrationRedirect, registrationUrl } from '../register/registration-model.mjs';
@@ -12,6 +12,14 @@ export default function BetterAuthPasswordLogin({ email, setEmail, onBusy, onErr
   const [loading, setLoading] = useState(false);
   const [requiresVerification, setRequiresVerification] = useState(false);
   const submitting = useRef(false);
+  const pending = useRef(null);
+
+  useEffect(() => () => {
+    // A browser cancellation is not proof that an upstream sign-in was undone.
+    // It only stops this disposed form from continuing or changing its parent.
+    pending.current?.abort();
+    pending.current = null;
+  }, []);
 
   async function submit(event) {
     event.preventDefault();
@@ -25,14 +33,18 @@ export default function BetterAuthPasswordLogin({ email, setEmail, onBusy, onErr
       return;
     }
     submitting.current = true;
+    const controller = new AbortController();
+    pending.current = controller;
     setLoading(true);
     onBusy(true);
     try {
       const response = await fetch(contract.path, {
         method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error',
-        signal: AbortSignal.timeout(12000), headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(contract.body),
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12000)]), headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(contract.body),
       });
+      if (controller.signal.aborted || pending.current !== controller) return;
       const payload = await response.json().catch(() => ({}));
+      if (controller.signal.aborted || pending.current !== controller) return;
       if (registrationRequired(response.status, payload)) {
         setPassword('');
         rememberReferral(contract.body.email);
@@ -46,16 +58,22 @@ export default function BetterAuthPasswordLogin({ email, setEmail, onBusy, onErr
         return;
       }
       setPassword('');
+      const access = await betterAuthAccess(fetch, contract.body.email, { signal: controller.signal });
+      if (controller.signal.aborted || pending.current !== controller) return;
       rememberReferral(contract.body.email);
-      onVerified(contract.body.email, { ready: false, checking: true });
-      const access = await betterAuthAccess(fetch, contract.body.email);
+      // Keep this form mounted until its canonical check completes. Rendering
+      // the parent's verified screen first would dispose its request owner.
       onVerified(contract.body.email, access);
     } catch {
+      if (controller.signal.aborted || pending.current !== controller) return;
       onError('No pudimos conectar con el servicio de acceso. Intenta otra vez.');
     } finally {
-      submitting.current = false;
-      setLoading(false);
-      onBusy(false);
+      if (pending.current === controller) {
+        pending.current = null;
+        submitting.current = false;
+        setLoading(false);
+        onBusy(false);
+      }
     }
   }
 
