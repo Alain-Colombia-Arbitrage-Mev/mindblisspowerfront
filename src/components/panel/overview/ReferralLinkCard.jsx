@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowDownLeft, ArrowDownRight, Check, Copy, RefreshCw, Share2 } from "lucide-react";
 import { readMemberJson, validMemberReferral } from "@/lib/member-read.mjs";
+import { referralLinksFrom } from '@/lib/referral-links.mjs';
+import { createClipboardFeedback } from '@/lib/member-view-effects.mjs';
 
 const EMPTY_LINKS = { left: "", right: "" };
 
@@ -12,10 +14,11 @@ const EMPTY_LINKS = { left: "", right: "" };
 export default function ReferralLinkCard() {
   const [links, setLinks] = useState(EMPTY_LINKS);
   const [code, setCode] = useState("");
-  const [copied, setCopied] = useState("");
+  const [copyFeedback, setCopyFeedback] = useState({ pending: '', copied: '', error: '' });
   const [status, setStatus] = useState("loading");
   const [error, setError] = useState(null);
   const request = useRef(null);
+  const clipboard = useRef(null);
 
   const load = useCallback(() => {
     request.current?.abort();
@@ -41,17 +44,16 @@ export default function ReferralLinkCard() {
       });
   }, []);
   useEffect(() => { load(); return () => request.current?.abort(); }, [load]);
+  useEffect(() => {
+    const active = createClipboardFeedback(setCopyFeedback);
+    clipboard.current = active;
+    return () => { active.dispose(); if (clipboard.current === active) clipboard.current = null; };
+  }, []);
 
   async function copy(side) {
     const link = links[side];
     if (!link) return;
-    try {
-      await navigator.clipboard.writeText(link);
-      setCopied(side);
-      setTimeout(() => setCopied(""), 2000);
-    } catch {
-      // El campo sigue siendo seleccionable si el navegador bloquea clipboard.
-    }
+    await clipboard.current?.copy(link, side);
   }
 
   return (
@@ -71,9 +73,10 @@ export default function ReferralLinkCard() {
         : <button type="button" onClick={load} className="executive-button"><RefreshCw size={15} />Reintentar enlaces</button>}</div> : null}
 
       <div className="grid gap-3 lg:grid-cols-2">
-        <SideLink label="Rama izquierda" hint="Colocación L → L" Icon={ArrowDownLeft} link={links.left} status={status} copied={copied === "left"} onCopy={() => copy("left")} />
-        <SideLink label="Rama derecha" hint="Colocación R → R" Icon={ArrowDownRight} link={links.right} status={status} copied={copied === "right"} onCopy={() => copy("right")} />
+        <SideLink label="Rama izquierda" hint="Colocación L → L" Icon={ArrowDownLeft} link={links.left} status={status} copied={copyFeedback.copied === "left"} onCopy={() => copy("left")} />
+        <SideLink label="Rama derecha" hint="Colocación R → R" Icon={ArrowDownRight} link={links.right} status={status} copied={copyFeedback.copied === "right"} onCopy={() => copy("right")} />
       </div>
+      {copyFeedback.error ? <p role="alert" className="mt-2 text-xs" style={{ color: 'var(--vp-danger)' }}>{copyFeedback.error}</p> : null}
     </div>
   );
 }
@@ -98,23 +101,6 @@ function SideLink({ label, hint, Icon, link, status, copied, onCopy }) {
       </div>
     </section>
   );
-}
-
-function referralLinksFrom(data) {
-  const left = data?.links?.left || data?.link_left || data?.link || "";
-  const right = data?.links?.right || data?.link_right || linkWithSide(left, "R");
-  return { left, right };
-}
-
-function linkWithSide(link, side) {
-  if (!link) return "";
-  try {
-    const url = new URL(link);
-    url.searchParams.set("side", side);
-    return url.toString();
-  } catch {
-    return link;
-  }
 }
 
 function displayValue(status, link) {

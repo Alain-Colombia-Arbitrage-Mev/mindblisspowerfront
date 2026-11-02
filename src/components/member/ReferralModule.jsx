@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import ReferralShareModal from './ReferralShareModal';
 import { readMemberJson, validMemberReferral } from '@/lib/member-read.mjs';
 import { createClipboardFeedback, createLatestViewRequest } from '@/lib/member-view-effects.mjs';
+import { referralLinksFrom } from '@/lib/referral-links.mjs';
 
 const EMPTY_METRICS = { total: 0, active: 0, pending: 0 };
 
@@ -129,7 +130,6 @@ export default function ReferralModule() {
           isOpen={Boolean(shareSide)}
           onClose={() => setShareSide('')}
           code={referralCode}
-          link={referralLinks[shareSide] || ''}
           side={shareSide}
         />
       ) : null}
@@ -348,23 +348,6 @@ export default function ReferralModule() {
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </div>
   );
-}
-
-function referralLinksFrom(data) {
-  const left = data?.links?.left || data?.link_left || data?.link || '';
-  const right = data?.links?.right || data?.link_right || linkWithSide(left, 'R');
-  return { left, right };
-}
-
-function linkWithSide(link, side) {
-  if (!link) return '';
-  try {
-    const url = new URL(link);
-    url.searchParams.set('side', side);
-    return url.toString();
-  } catch {
-    return link;
-  }
 }
 
 function SideShareCard({ title, direction, Icon, link, status, copied, onCopy, onShare }) {

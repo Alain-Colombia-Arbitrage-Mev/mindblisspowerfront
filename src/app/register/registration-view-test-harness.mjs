@@ -8,8 +8,8 @@ const require = createRequire(import.meta.url);
 
 // Exercise real JSX event handlers without a browser, network or real messages.
 export function registrationViewHarness(filename, mocks) {
-  const state = [], refs = [], effects = [];
-  let stateIndex = 0, refIndex = 0, effectIndex = 0;
+  const state = [], refs = [], effects = [], callbacks = [];
+  let stateIndex = 0, refIndex = 0, effectIndex = 0, callbackIndex = 0;
   const queued = [];
   const hooks = { ...React, useState(initial) {
     const index = stateIndex++;
@@ -19,6 +19,13 @@ export function registrationViewHarness(filename, mocks) {
     const index = refIndex++;
     if (!(index in refs)) refs[index] = { current: initial };
     return refs[index];
+  }, useCallback(callback, dependencies) {
+    const index = callbackIndex++, previous = callbacks[index];
+    if (!previous || !dependencies || dependencies.length !== previous.dependencies?.length
+      || dependencies.some((value, i) => !Object.is(value, previous.dependencies[i]))) {
+      callbacks[index] = { callback, dependencies };
+    }
+    return callbacks[index].callback;
   }, useEffect(effect, dependencies) {
     const index = effectIndex++;
     const previous = effects[index];
@@ -36,7 +43,7 @@ export function registrationViewHarness(filename, mocks) {
     assert.fail(`Unexpected test dependency: ${id}`);
   }, module, module.exports);
   return { render(props = {}) {
-    stateIndex = 0; refIndex = 0; effectIndex = 0;
+    stateIndex = 0; refIndex = 0; effectIndex = 0; callbackIndex = 0;
     const tree = module.exports.default(props);
     while (queued.length) queued.shift()();
     return tree;

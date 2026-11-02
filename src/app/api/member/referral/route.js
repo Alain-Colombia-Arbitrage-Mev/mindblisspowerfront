@@ -3,11 +3,15 @@ import { NextResponse } from "next/server";
 
 import { memberDb } from "@/lib/member-db";
 import { verifiedEmailFromIdToken } from "@/lib/verify-id-token";
+import { runtimeEnvironment } from '@/lib/cloudflare-runtime.mjs';
+import { buildReferralLinks, referralPublicOrigin } from '@/lib/referral-links.mjs';
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const REF_BASE_URL = process.env.REFERRAL_BASE_URL || "https://app.mindblisspower.com";
+function referralResponse(body, status = 200) {
+  return NextResponse.json(body, { status, headers: { 'Cache-Control': 'private, no-store, max-age=0', Vary: 'Cookie' } });
+}
 
 /**
  * Código y link de referido del miembro autenticado.
@@ -16,21 +20,26 @@ const REF_BASE_URL = process.env.REFERRAL_BASE_URL || "https://app.mindblisspowe
  * escribir (el rol web es de solo lectura).
  */
 export async function GET() {
-  const idToken = await rawIdToken();
+  let idToken, email;
+  try {
+    idToken = await rawIdToken();
+    if (idToken) email = await verifiedEmailFromIdToken(idToken);
+  } catch {
+    return referralResponse({ error: 'referral-unavailable' }, 503);
+  }
   if (!idToken) {
-    return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+    return referralResponse({ error: "unauthenticated" }, 401);
   }
 
-  const email = await verifiedEmailFromIdToken(idToken);
   if (!email) {
-    return NextResponse.json({ error: "session-invalid" }, { status: 401 });
+    return referralResponse({ error: "session-invalid" }, 401);
   }
 
   let sql;
   try {
     sql = memberDb();
   } catch {
-    return NextResponse.json({ error: "referral-unavailable" }, { status: 503 });
+    return referralResponse({ error: "referral-unavailable" }, 503);
   }
 
   try {
@@ -53,7 +62,7 @@ export async function GET() {
     if (access.length > 0) {
       const row = access[0];
       if (row.blacklisted || row.listed_by_blacklist || ["suspended", "banned", "deleted"].includes(row.status)) {
-        return NextResponse.json({ error: "account_suspended", positioned: false }, { status: 403 });
+        return referralResponse({ error: "account_suspended", positioned: false }, 403);
       }
     }
 
@@ -68,19 +77,21 @@ export async function GET() {
        LIMIT 1`;
 
     if (rows.length === 0) {
-      return NextResponse.json({
+      return referralResponse({
         positioned: false,
         code: null,
         link: null,
         metrics: { total: 0, active: 0, pending: 0 },
         referrals: [],
-      }, { status: 200 });
+      });
     }
 
     const affiliate = rows[0];
     const code = affiliate.invitation_link || deriveCode(affiliate.id);
-    const linkLeft = `${REF_BASE_URL}/register?ref=${encodeURIComponent(code)}&side=L`;
-    const linkRight = `${REF_BASE_URL}/register?ref=${encodeURIComponent(code)}&side=R`;
+    const links = buildReferralLinks(code, referralPublicOrigin(runtimeEnvironment()));
+    if (!links.left || !links.right) throw new Error('invalid_referral_code');
+    const linkLeft = links.left;
+    const linkRight = links.right;
     const referrals = await sql`
       SELECT child.id,
              trim(rp.first_name || ' ' || split_part(rp.last_name, ' ', 1)) AS display_name,
@@ -117,7 +128,7 @@ export async function GET() {
     }));
     const active = normalizedReferrals.filter((ref) => ref.status === "activo").length;
 
-    return NextResponse.json({
+    return referralResponse({
       positioned: true,
       code,
       // `link` remains for older clients; new UI uses the explicit pair.
@@ -133,9 +144,9 @@ export async function GET() {
       },
       referrals: normalizedReferrals,
     });
-  } catch (error) {
-    console.error("member/referral query failed:", error.message);
-    return NextResponse.json({ error: "referral-query-failed" }, { status: 502 });
+  } catch {
+    console.error("member/referral query failed");
+    return referralResponse({ error: "referral-query-failed" }, 502);
   }
 }
 

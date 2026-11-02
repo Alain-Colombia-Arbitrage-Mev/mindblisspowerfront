@@ -92,7 +92,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
         ...contacts.values,
       }, 'send');
       if (registrationPendingDelivery(response.status, payload, email)) {
-        if (hints.referralCode) bindReferralCodeToEmail(email, hints.referralCode);
+        if (hints.referralCode) bindReferralCodeToEmail(email, hints.referralCode, undefined, undefined, 'registration', hints.preferredSide);
         setForm(current => ({ ...current, email, password: '', confirmPassword: '' }));
         setCode('');
         setStep('confirm');
@@ -105,7 +105,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
         setErrors({ form: registrationFailure(response.ok ? 502 : response.status, 'register', payload?.code) });
         return;
       }
-      if (hints.referralCode) bindReferralCodeToEmail(email, hints.referralCode);
+      if (hints.referralCode) bindReferralCodeToEmail(email, hints.referralCode, undefined, undefined, 'registration', hints.preferredSide);
       // Clear credentials from component memory after the server accepts them.
       setForm(current => ({ ...current, email, password: '', confirmPassword: '' }));
       setCode('');

@@ -1,3 +1,5 @@
+import { referralLinkCode } from '../../lib/referral-links.mjs';
+
 export const REGISTRATION_RESEND_SECONDS = 300;
 const REGISTRATION_PREFILL_KEY = 'mindbliss.registration-prefill.v1';
 const REGISTRATION_PREFILL_TTL_MS = 5 * 60 * 1000;
@@ -76,7 +78,7 @@ export function registrationPendingDelivery(status, payload, email) {
 
 export function registrationHints(search) {
   const params = new URLSearchParams(search);
-  const referralCode = String(params.get('ref') || '').trim().slice(0, 64);
+  const referralCode = referralLinkCode(params.get('ref'));
   const side = String(params.get('side') || '').toUpperCase();
   return {
     email: registrationEmail(params.get('email')),
@@ -108,8 +110,9 @@ export function registrationLoginUrl(email, referralCode = '', preferredSide = '
   params.set('mode', 'code');
   const normalizedEmail = registrationEmail(email);
   if (normalizedEmail) params.set('email', normalizedEmail);
-  if (referralCode) {
-    params.set('ref', String(referralCode).slice(0, 64));
+  const referral = referralLinkCode(referralCode);
+  if (referral) {
+    params.set('ref', referral);
     if (['L', 'R'].includes(preferredSide)) params.set('side', preferredSide);
   }
   return `/login${params.size ? `?${params}` : ''}`;
@@ -119,8 +122,8 @@ export function registrationUrl(email, referralCode = '', preferredSide = '', re
   const params = new URLSearchParams();
   const normalizedEmail = registrationEmail(email);
   if (normalizedEmail) params.set('email', normalizedEmail);
-  const referral = typeof referralCode === 'string' ? referralCode.trim().slice(0, 64) : '';
-  if (referral && !/[\u0000-\u0020\u007f]/.test(referral)) {
+  const referral = referralLinkCode(referralCode);
+  if (referral) {
     params.set('ref', referral);
     if (['L', 'R'].includes(preferredSide)) params.set('side', preferredSide);
   }

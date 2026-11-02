@@ -45,7 +45,7 @@ test('URL prefills are bounded hints only and never provide password, consent or
     email: 'test@example.test', referralCode: 'person', preferredSide: 'R', resume: true,
   });
   assert.equal(registrationHints('?side=L').preferredSide, '');
-  assert.equal(registrationHints(`?ref=${'a'.repeat(80)}&side=admin`).referralCode.length, 64);
+  assert.equal(registrationHints(`?ref=${'a'.repeat(80)}&side=admin`).referralCode, '');
   assert.equal(registrationHints('?ref=ref&side=admin').preferredSide, '');
 });
 
@@ -79,6 +79,20 @@ test('registration links preserve bounded email, referral and binary-side hints 
   assert.equal(malicious.pathname, '/register');
   assert.equal(malicious.searchParams.get('role'), null);
   assert.equal(malicious.searchParams.get('ref'), 'ref?role=admin');
+});
+
+test('oversized or malformed shared referral hints are rejected instead of truncating into another sponsor code', () => {
+  for (const code of ['a'.repeat(65), 'bad code', '\u0000bad', {}, 42]) {
+    assert.equal(registrationUrl('', code, 'R'), '/register');
+    assert.equal(new URL(registrationLoginUrl('', code, 'R'), 'https://example.test').searchParams.has('ref'), false);
+  }
+  for (const code of ['a'.repeat(65), 'bad code', '\u0000bad']) {
+    const input = new URLSearchParams({ ref: code, side: 'R' });
+    assert.equal(registrationHints(input.toString()).referralCode, '');
+    assert.equal(registrationHints(input.toString()).preferredSide, '');
+  }
+  assert.equal(registrationHints('ref=OpaqueHandle&side=r').referralCode, 'OpaqueHandle');
+  assert.equal(registrationHints('ref=OpaqueHandle&side=r').preferredSide, 'R');
 });
 
 test('only the explicit missing-account contract requests registration, never permissions, throttling or an outage', () => {

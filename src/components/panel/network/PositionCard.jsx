@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, Copy, MapPin, Network, ShieldCheck, Trophy } from "lucide-react";
+import { referralLinksFrom } from '@/lib/referral-links.mjs';
+import { createClipboardFeedback } from '@/lib/member-view-effects.mjs';
 
 function money(value) {
   if (value == null || String(value).trim() === "" || !Number.isFinite(Number(value))) return "No disponible";
@@ -82,17 +84,23 @@ export default function PositionCard({
   rightLeg,
   childSlotsKnown = false,
 }) {
-  const [copied, setCopied] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState({ pending: '', copied: '', error: '' });
+  const clipboard = useRef(null);
+  const copied = copyFeedback.copied === 'left';
   const hasRankProgress = Boolean(rankProgress);
   const nextRank = rankProgress?.nextRank;
-  const referralLink = referral?.link || "";
+  const referralLink = referralLinksFrom(referral).left;
   const referralCode = referral?.code || "";
+
+  useEffect(() => {
+    const active = createClipboardFeedback(setCopyFeedback);
+    clipboard.current = active;
+    return () => { active.dispose(); if (clipboard.current === active) clipboard.current = null; };
+  }, []);
 
   const copyReferral = async () => {
     if (!referralLink) return;
-    await navigator.clipboard.writeText(referralLink).catch(() => {});
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2200);
+    await clipboard.current?.copy(referralLink, 'left');
   };
 
   return (
@@ -199,6 +207,7 @@ export default function PositionCard({
           {copied ? "Copiado" : "Copiar"}
         </button>
       </div>
+      {copyFeedback.error ? <p role="alert" className="mt-2 text-xs" style={{ color: 'var(--vp-danger)' }}>{copyFeedback.error}</p> : null}
     </section>
   );
 }

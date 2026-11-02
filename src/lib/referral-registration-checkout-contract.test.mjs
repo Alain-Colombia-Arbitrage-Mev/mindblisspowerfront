@@ -1,0 +1,134 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { handleRegistration } from './registration-auth.mjs';
+import { proxyBetterAuth } from './better-auth-bridge.mjs';
+import { handleMembershipCheckout } from './checkout-bff.mjs';
+import { buildReferralLinks } from './referral-links.mjs';
+import { bindReferralCodeToEmail, captureReferralFromUrl, referralForCheckout } from './referral-attribution.js';
+import { betterAuthAccess, verifiedEmailSignIn } from '../app/login/better-auth-login.mjs';
+
+// Strict offline transport fixtures exercise the real public BFF contracts.
+// Native Better Auth OTP, password and binding semantics are tested separately
+// in the backend; no external service, recipient or payable invoice is used here.
+const env = {
+  AUTH_PROVIDER: 'better-auth', NODE_ENV: 'production', AUTH_PUBLIC_ORIGIN: 'https://portal.example.test',
+  BETTER_AUTH_BACKEND_URL: 'https://auth.example.test', AUTH_BFF_SHARED_SECRET: 'synthetic-referral-proxy-secret-longer-than-32',
+  VP_PAYMENTS_URL: 'https://payments.core.internal', PAYMENTS_SERVICE_TOKEN: 'synthetic-service-only',
+  NOWPAYMENTS_MEMBERSHIPS_ENABLED: 'true',
+};
+const now = Date.UTC(2026, 10, 2);
+const email = 'new-member@example.test';
+const password = 'Synthetic password 123';
+const requestID = 'b2c541dc-a117-4c28-a264-79baf29ce282';
+const claims = { sub: 'synthetic-new-member', email, email_verified: true, name: 'Synthetic Member' };
+const newStorage = () => {
+  const values = new Map();
+  return { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
+};
+const request = (path, body) => new Request(`${env.AUTH_PUBLIC_ORIGIN}${path}`, {
+  method: 'POST', headers: { origin: env.AUTH_PUBLIC_ORIGIN, 'content-type': 'application/json', 'cf-connecting-ip': '192.0.2.40' },
+  body: JSON.stringify(body),
+});
+
+for (const side of ['L', 'R']) test(`shared ${side} link survives registration, verified access and owner-scoped NOW checkout`, async () => {
+  const storage = newStorage();
+  const links = buildReferralLinks('MP9101', env.AUTH_PUBLIC_ORIGIN);
+  const entry = new URL(side === 'L' ? links.left : links.right);
+  assert.equal(entry.pathname, '/register');
+  captureReferralFromUrl(entry.search, storage, now);
+  const registration = { fullName: claims.name, email: email.toUpperCase(), password, acceptsPrivacy: true,
+    referralCode: entry.searchParams.get('ref'), preferredSide: entry.searchParams.get('side'),
+    personId: 'forged-person', sponsorId: 'forged-sponsor', emailVerified: true, role: 'super_admin' };
+  let registered = false;
+  let verified = false;
+  let signedIn = false;
+  const authTransport = async (target, options) => {
+    assert.equal(options.headers.cookie, '');
+    assert.match(options.headers['x-vp-auth-signature'], /^[0-9a-f]{64}$/);
+    const body = JSON.parse(options.body);
+    switch (new URL(target).pathname) {
+      case '/api/auth/sign-up/email':
+        assert.deepEqual(body, { name: claims.name, email, password });
+        registered = true;
+        return Response.json({ token: null, user: { id: claims.sub, email, emailVerified: false } });
+      case '/api/auth/email-otp/verify-email':
+        assert.equal(registered, true);
+        assert.deepEqual(body, { email, otp: '123456' });
+        verified = true;
+        return Response.json({ status: true, token: null });
+      case '/api/auth/sign-in/email':
+        assert.equal(verified, true);
+        assert.deepEqual(body, { email, password });
+        signedIn = true;
+        return Response.json({ token: 'synthetic-native-session', user: { id: claims.sub, email, name: claims.name, emailVerified: true } });
+      default: assert.fail('unexpected auth transport path');
+    }
+  };
+  const signup = await handleRegistration(request('/api/auth/register', registration), 'register', { env, fetchImpl: authTransport });
+  assert.equal(signup.status, 201);
+  assert.equal((await signup.json()).requiresConfirmation, true);
+  bindReferralCodeToEmail(email, registration.referralCode, storage, now, 'registration', side);
+
+  const confirmation = await handleRegistration(request('/api/auth/confirm', { email, code: '123456' }), 'confirm', { env, fetchImpl: authTransport });
+  assert.equal(confirmation.status, 200);
+  const confirmed = await confirmation.json();
+  assert.equal(confirmed.needsLogin, true);
+  assert.equal(confirmed.authenticated, undefined);
+  const login = await proxyBetterAuth(request('/api/auth/sign-in/email', { email, password }), 'sign-in/email', { env, fetchImpl: authTransport });
+  assert.equal(login.status, 200);
+  assert.equal(verifiedEmailSignIn(await login.json(), email), true);
+  const access = await betterAuthAccess(async (target, options) => {
+    assert.equal(target, '/api/auth/session');
+    assert.equal(options.cache, 'no-store');
+    assert.equal(signedIn, true);
+    return Response.json({ authenticated: true, mode: 'better-auth', email });
+  }, email);
+  assert.equal(access.ready, true);
+
+  // Another visitor's capture must not replace this registered email's hint.
+  captureReferralFromUrl('?ref=MP9999&side=L&email=other%40example.test', storage, now + 1);
+  bindReferralCodeToEmail('other@example.test', 'MP9999', storage, now + 1, 'registration', 'L');
+  const hint = referralForCheckout(email, storage, now + 2);
+  assert.deepEqual(hint, { code: 'MP9101', email, side });
+  let invoices = 0;
+  const checkout = await handleMembershipCheckout(request('/api/payments/checkout', {
+    provider: 'nowpayments', package_id: 1, purchase_subject: claims.sub, purchase_request_id: requestID,
+    ref: hint.code, ref_email: hint.email, preferred_side: hint.side,
+    sponsor_id: 'forged-sponsor', person_id: 'forged-person', amount_usd: '0.01',
+  }), { env, identity: async () => ({ token: 'synthetic-verified-service-jwt', claims }), fetchImpl: async (target, options) => {
+    assert.equal(target, `${env.VP_PAYMENTS_URL}/api/payments/checkout`);
+    assert.equal(options.cache, 'no-store');
+    assert.deepEqual(JSON.parse(options.body), { provider: 'nowpayments', email, package_id: 1,
+      ref: 'MP9101', preferred_side: side, purchase_request_id: requestID, name: claims.name, phone: '' });
+    invoices++;
+    return Response.json({ provider: 'nowpayments', url: 'https://nowpayments.io/payment/?iid=12345', total_usd: '100.00',
+      fee_usd: '0.00', fulfillment_status: 'awaiting_payment' });
+  } });
+  assert.equal(checkout.status, 200);
+  assert.equal(checkout.headers.get('cache-control'), 'private, no-store');
+  assert.equal(invoices, 1);
+});
+
+test('referral hints cannot grant a verified mailbox network access or cross into another checkout owner', async () => {
+  const access = await betterAuthAccess(async () => Response.json({ authenticated: false, mode: 'better-auth', email }), email);
+  assert.equal(access.ready, false);
+  assert.match(access.notice, /aprobación/);
+  const form = { provider: 'nowpayments', package_id: 1, purchase_subject: claims.sub, purchase_request_id: requestID,
+    ref: 'MP9101', ref_email: email, preferred_side: 'R' };
+  const unbound = await handleMembershipCheckout(request('/api/payments/checkout', form), {
+    env, identity: async () => null, fetchImpl: async () => assert.fail('unbound identity reached checkout'),
+  });
+  assert.equal(unbound.status, 401);
+  const otherClaims = { ...claims, sub: 'other-subject', email: 'other@example.test' };
+  const other = await handleMembershipCheckout(request('/api/payments/checkout', { ...form, purchase_subject: otherClaims.sub }), {
+    env, identity: async () => ({ token: 'synthetic-other-service-jwt', claims: otherClaims }), fetchImpl: async (_target, options) => {
+      const body = JSON.parse(options.body);
+      assert.equal(body.email, otherClaims.email);
+      assert.equal(body.ref, '');
+      assert.equal(body.preferred_side, '');
+      return Response.json({ provider: 'nowpayments', url: 'https://nowpayments.io/payment/?iid=12345', total_usd: '100.00',
+        fee_usd: '0.00', fulfillment_status: 'awaiting_payment' });
+    },
+  });
+  assert.equal(other.status, 200);
+});

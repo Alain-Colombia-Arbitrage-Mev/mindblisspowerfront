@@ -81,3 +81,55 @@ Fuentes: [OpenNext](https://opennext.js.org/cloudflare),
 [Worker personalizado](https://opennext.js.org/cloudflare/howtos/custom-worker),
 [Hyperdrive/Postgres.js](https://developers.cloudflare.com/hyperdrive/examples/connect-to-postgres/postgres-drivers-and-libraries/postgres-js/),
 [caché de Hyperdrive](https://developers.cloudflare.com/hyperdrive/concepts/query-caching/).
+
+## Referidos y acceso — revisión del 2 de noviembre de 2026
+
+La generación de enlaces usa el origen público de autenticación en runtime,
+con `https://mindblisspower.com` como referencia canónica. Ya no comparte el
+host retirado `app.mindblisspower.com`, ni copia URLs arbitrarias del API.
+Conserva códigos opacos válidos y ramas explícitas `L`/`R`; un código demasiado
+largo se rechaza, no se trunca a otro identificador. Todas las respuestas de
+`/api/member/referral` son privadas, `no-store`, con `Vary: Cookie`.
+
+El registro conserva la rama elegida antes del posterior acceso por email.
+Los indicios se aíslan por correo en el navegador, con caducidad máxima de
+30 días y 20 entradas; mirar otra cuenta no borra ni adopta sus referencias.
+No son identidad, consentimiento financiero ni autoridad para cambiar un nodo.
+El servidor conserva el patrocinador de afiliados existentes y valida los
+indicios de compradores aún sin posición. No se habilita el escritor legado de
+atribución ni se envían campos nuevos sin soporte a Better Auth.
+
+Copiar/compartir conserva el diseño y comunica los fallos reales del portapapeles.
+También se incluyen las mejoras de acceso por contraseña ya revisadas: ignorar
+respuestas tardías y esperar la comprobación canónica antes de mostrar éxito;
+recuperación exige HTTP200 con el acuse exacto. OTP, permisos, posiciones,
+rangos, pagos y comisiones no cambian por esta publicación.
+
+Verificación:581 pruebas del portal, TypeScript y ESLint correctos;54 pruebas
+enfocadas, incluidos tres contratos BFF registro → confirmación → acceso →
+checkout con transportes sintéticos. El build Linux/OpenNext pasó90 sondas de
+workerd, sin red externa, consultas a DB ni mensajes reales. La misma imagen
+probada se exportó como artefacto para publicar, sin cargar `.env.local`.
+
+Límites: la atribución local no sincroniza dispositivos. Esta entrega corrige
+los enlaces nuevos y copiados, pero no modifica DNS ni publica un alias para
+los enlaces antiguos de `app.mindblisspower.com`; deben compartirse nuevamente
+desde el panel. El límite diario de correo de Cloudflare es independiente de
+estas reglas de caché; su restablecimiento no equivale a verificar al usuario.
+
+Publicación confirmada a las17:07:58 de Bogotá del2 de noviembre: versión del
+portal `5b7e6665-fdfa-470c-b3af-62dd016db306`, al100% del tráfico. Login,
+recuperación y registro con ambos lados respondieron200; referido, árbol e
+historial NOWPayments anónimos respondieron401, sin caché compartida ni cookies.
+Ocho chunks y `BUILD_ID` coinciden con el mismo artefacto Linux probado; los
+estáticos versionados siguen siendo inmutables. El build anterior se conservó
+en el directorio ignorado `.wrangler/open-next-before-referrals-20261102-1700`.
+Core, Admin, Hyperdrive, DNS y secretos no se modificaron. No se usaron códigos,
+sesiones ni facturas reales para comprobar esta publicación.
+
+El CLI Wrangler4.152.0 autodetecta OpenNext sin `--config` y puede delegar a un
+flujo que exige conexión Hyperdrive local. El primer intento se detuvo antes
+del upload. El código instalado confirma que `--config wrangler.jsonc` evita
+esa autodetección; se validó dry-run y se publicó el artefacto ya probado con
+la configuración explícita de producción y `--keep-vars`, sin proporcionar
+credenciales locales de DB ni saltarse la validación de despliegue.

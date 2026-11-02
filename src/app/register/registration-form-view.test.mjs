@@ -5,18 +5,19 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import * as model from './registration-model.mjs';
 import * as contacts from './contact-phone-model.mjs';
 import * as emailOtp from '../../lib/email-otp-client.mjs';
+import * as referral from '../../lib/referral-attribution.js';
 import { registrationViewHarness, findRegistrationNode as find, registrationFieldStub, registrationButtonStub } from './registration-view-test-harness.mjs';
 
 const contactView = ({ id, label, value }) => React.createElement('div', null, label, React.createElement('input', { id, value: value.national, readOnly: true }));
 const passwordField = ({ visible: _visible, onToggle: _onToggle, ...props }) => registrationFieldStub(props);
 const valid = { fullName: 'Synthetic Member', email: 'member@example.test', password: 'Synthetic Long Password 123', confirmPassword: 'Synthetic Long Password 123', acceptsPrivacy: true };
-function view(cooldown = { active: false, label: '', start() {} }) {
+function view(cooldown = { active: false, label: '', start() {} }, attribution = { bindReferralCodeToEmail() {} }) {
   return registrationViewHarness('./BetterAuthRegisterForm.jsx', {
     'next/link': { default: ({ children, ...props }) => React.createElement('a', props, children) },
     'lucide-react': { ArrowLeft: () => null, CheckCircle2: () => null, Mail: () => null, UserPlus: () => null },
     '../_components/AuthShell': { default: ({ children }) => React.createElement('main', null, children) },
     '@/lib/useResendCooldown': { useResendCooldown: () => cooldown, suggestEmailFix: () => '' },
-    '@/lib/referral-attribution': { bindReferralCodeToEmail() {} },
+    '@/lib/referral-attribution': attribution,
     '@/lib/email-otp-client.mjs': emailOtp,
     './RegistrationFields': { RegistrationField: registrationFieldStub, RegistrationButton: registrationButtonStub, RegistrationPassword: passwordField },
     './ContactPhoneField': { default: contactView },
@@ -93,6 +94,20 @@ test('blank contacts do not block signup and do not add contact or verification 
   const html = renderToStaticMarkup(harness.render(props));
   assert.match(html, /Paso 2 de 2/); assert.match(html, /Verifica tu correo/);
   assert.equal(harness.state[1].password, ''); assert.equal(harness.state[1].confirmPassword, '');
+});
+
+test('a direct shared registration URL preserves its exact sponsor and right branch for later checkout before login captures the URL', async t => {
+  const previous = globalThis.window, values = new Map();
+  const storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, String(value)), removeItem: key => values.delete(key) };
+  globalThis.window = { localStorage: storage };
+  t.after(() => { if (previous === undefined) delete globalThis.window; else globalThis.window = previous; });
+  t.mock.method(globalThis, 'fetch', async () => signupAck());
+  const harness = view(undefined, referral);
+  await submit(enterValid(harness));
+  assert.deepEqual(referral.referralForCheckout(valid.email, storage), { code: 'MP-REFERRAL', email: valid.email, side: 'R' });
+  assert.deepEqual(referral.referralForCheckout('another@example.test', storage), { code: '', email: '' });
+  assert.equal(find(harness.render(props), node => node?.props?.id === 'code').props.value, '');
+  harness.unmount();
 });
 
 test('optional phone and WhatsApp are separate canonical contacts, with no SMS request or implicit consent', async t => {
