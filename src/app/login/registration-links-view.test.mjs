@@ -96,8 +96,8 @@ test('the real password form preserves the supplied safe continuation after EMAI
 test('real email-login send and explicit resend handlers get 30 seconds but verification keeps its 12-second deadline', async t => {
   browser(t);
   const deadlines = [], paths = [];
-  const timeout = AbortSignal.timeout.bind(AbortSignal);
-  t.mock.method(AbortSignal, 'timeout', milliseconds => { deadlines.push(milliseconds); return timeout(milliseconds); });
+  const timeout = globalThis.setTimeout.bind(globalThis);
+  t.mock.method(globalThis, 'setTimeout', (callback, milliseconds) => { deadlines.push(milliseconds); return timeout(callback, milliseconds); });
   t.mock.method(globalThis, 'fetch', async path => {
     paths.push(path);
     return path.endsWith('/send-verification-otp') ? Response.json({ ok: true })
@@ -239,7 +239,7 @@ test('legacy-account guidance and its registration link are generic and availabl
   for (const stage of ['request', 'confirm', 'changed-email']) {
     const html = renderToStaticMarkup(tree);
     assert.match(html, /Si ya pertenecías a la red/);
-    if (stage === 'request') assert.match(html, /Puedes entrar con un código al correo aunque no tengas contraseña/);
+    if (stage === 'request') assert.match(html, /Puedes entrar con un código, aunque no tengas contraseña/);
     assert.match(html, /solicita un código con tu correo original/);
     assert.match(html, /Tu cuenta y posición en la red se conservan/);
     assert.match(html, /Tu cuenta y posición en la red se conservan/);

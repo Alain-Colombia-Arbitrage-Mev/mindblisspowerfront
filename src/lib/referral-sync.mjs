@@ -1,4 +1,5 @@
 import { normalizeReferralCode, normalizeReferralEmail, normalizePlacementSide, referralForCheckout } from './referral-attribution.js';
+import { browserRequestDeadline } from './browser-request-deadline.mjs';
 
 const key = 'mp_ref_verified_visit.v1';
 const ttl = 30 * 60 * 1000;
@@ -43,15 +44,17 @@ async function postVisit(visit, { browser = browserDefault(), fetchImpl = fetch 
   if (writes.has(flight)) return writes.get(flight);
   state.revision++;
   const completion = (async () => {
+    const deadline = browserRequestDeadline(undefined, 5000);
     try {
       const response = await fetchImpl(endpoint, { method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error',
-        keepalive: true, signal: AbortSignal.timeout(5000), headers: { 'Content-Type': 'application/json' },
+        keepalive: true, signal: deadline.signal, headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ref: visit.ref, preferred_side: visit.preferred_side, expected_email: visit.email }) });
       const body = await response.json().catch(() => null);
       if (!response.ok || !validResponse(body) || !matches(body, visit)) return { ok: false };
       clearVisit(visit, browser);
       return body;
     } catch { return { ok: false }; }
+    finally { deadline.dispose(); }
   })();
   writes.set(flight, completion);
   try { return await completion; } finally {
@@ -113,9 +116,13 @@ export async function readVerifiedReferral(email, options = {}) {
         const pending = [...state.writes].filter(([flight]) => flight.startsWith(`${normalized}:`)).map(([, write]) => write);
         if (pending.length) await Promise.all(pending);
         const revision = state.revision, visitId = currentVisit(normalized, browser)?.id;
-        const response = await fetchImpl(endpoint, { credentials: 'same-origin', cache: 'no-store', redirect: 'error',
-          signal: AbortSignal.timeout(8000), headers: { 'X-VP-Expected-Email': normalized } });
-        const body = await response.json().catch(() => null);
+        const deadline = browserRequestDeadline(undefined, 8000);
+        let response, body;
+        try {
+          response = await fetchImpl(endpoint, { credentials: 'same-origin', cache: 'no-store', redirect: 'error',
+            signal: deadline.signal, headers: { 'X-VP-Expected-Email': normalized } });
+          body = await response.json().catch(() => null);
+        } finally { deadline.dispose(); }
         if (!response.ok || !validResponse(body)) return { ok: false };
         const visit = currentVisit(normalized, browser);
         // A late GET must not supersede a write that completed while it was

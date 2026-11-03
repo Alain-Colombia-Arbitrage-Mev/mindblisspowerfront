@@ -36,5 +36,8 @@ test('auth pages without an attribution context retain their existing plain path
   const all = nodes(shell({ activePath: '/login' }));
   assert.equal(all.find(node => node?.props?.children === 'Acceso').props.href, '/login');
   assert.equal(all.find(node => node?.props?.children === 'Registro').props.href, '/register');
-  assert.equal(all.find(node => node?.type === 'main').props.className, 'auth-mono min-h-dvh lg:grid lg:grid-cols-[minmax(420px,46%)_minmax(0,1fr)]');
+  const layout = new Set(all.find(node => node?.type === 'main').props.className.split(/\s+/));
+  for (const token of ['auth-mono', 'min-h-dvh', 'min-w-0', 'lg:grid', 'lg:grid-cols-[minmax(420px,46%)_minmax(0,1fr)]']) {
+    assert.ok(layout.has(token), `Missing auth layout contract: ${token}`);
+  }
 });

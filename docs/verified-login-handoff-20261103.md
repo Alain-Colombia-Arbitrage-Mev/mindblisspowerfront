@@ -87,3 +87,27 @@ login. The member must enter their own OTP; never retrieve or redeem it for them
 
 No email verification state, identity binding, role, rank, position, balance or
 payment rule is changed by this fix.
+
+## Mobile access follow-up
+
+Client authentication, logout and referral requests now use a request-local
+AbortController deadline rather than requiring AbortSignal.any/timeout. The
+deadline is disposed after the response body is read; unmount cancellation,
+timeouts, ownership proofs and acknowledgements keep their existing semantics.
+WebKit added AbortSignal.any in Safari 17.4:
+https://webkit.org/blog/15063/webkit-features-in-safari-17-4/ . This is a verified
+compatibility defect, not proof of the cause on any particular member's device.
+
+The auth shell has a compact mobile photo header, 16px inputs, at least 44px
+navigation targets, 48px primary actions and scoped safe-area spacing. Detailed
+help is progressively disclosed without removing limits or recovery steps.
+Desktop retains the two-column photo/form layout; zoom is not disabled.
+
+Browser checks of the compiled artifact covered 320/375/390px portrait,
+667px landscape and 1280px desktop without horizontal overflow. At 375x667 the
+login email field moved from y=901 to y=544 and the submit button to y=610.
+Synthetic OTP entry navigated directly to the protected dashboard at mobile
+size. These are Chromium viewport/compatibility tests, not physical iPhone or
+Safari testing. A member must confirm their own real-device access; never
+retrieve or redeem their OTP. Opening a different browser does not transfer the
+existing session. No production messages or database mutations were required.

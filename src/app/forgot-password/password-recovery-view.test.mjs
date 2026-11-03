@@ -39,7 +39,7 @@ test('recovery explains first-password setup in three steps without changing the
   const steps = find(tree, node => node?.type === 'ol');
   assert.equal(steps.props['aria-label'], 'Pasos para crear o cambiar la contraseña');
   assert.equal(React.Children.count(steps.props.children), 3);
-  assert.match(markup, /primera contraseña de acceso o reemplazar la anterior/);
+  assert.match(markup, /Crea tu primera contraseña o cambia la anterior verificando tu correo original/);
   assert.match(markup, /tu contraseña antigua no es necesaria/);
   assert.match(markup, /No necesitas cambiar tu correo ni volver a registrarte/);
   assert.match(markup, /5 solicitudes de recuperación y 10 intentos de validación/);
@@ -344,8 +344,8 @@ test('unmount aborts a pending recovery and a late response cannot change any fo
 });
 
 test('delivery and redemption deadlines are bounded separately and a reset timeout never claims completion', async t => {
-  const deadlines = [], original = AbortSignal.timeout.bind(AbortSignal);
-  t.mock.method(AbortSignal, 'timeout', value => { deadlines.push(value); return original(value); });
+  const deadlines = [], original = globalThis.setTimeout.bind(globalThis);
+  t.mock.method(globalThis, 'setTimeout', (callback, milliseconds) => { deadlines.push(milliseconds); return original(callback, milliseconds); });
   t.mock.method(globalThis, 'fetch', async path => {
     if (path.endsWith('/request-password-reset')) return Response.json({ ok: true });
     throw new DOMException('synthetic timeout', 'TimeoutError');

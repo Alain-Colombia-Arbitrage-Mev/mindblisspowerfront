@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { RegistrationButton, RegistrationField, RegistrationPassword } from '../register/RegistrationFields';
 import { betterAuthPasswordRequest, betterAuthPasswordFailure, verifiedEmailSignIn } from './better-auth-login.mjs';
 import { registrationRequired, registrationRedirect, registrationUrl } from '../register/registration-model.mjs';
+import { browserRequestDeadline } from '@/lib/browser-request-deadline.mjs';
 
 export default function BetterAuthPasswordLogin({ email, setEmail, onBusy, onError, onNotice, onVerified, onRegistrationRequired = undefined, rememberReferral, registrationHref = '' }) {
   const [password, setPassword] = useState('');
@@ -48,10 +49,11 @@ export default function BetterAuthPasswordLogin({ email, setEmail, onBusy, onErr
     pending.current = controller;
     setLoading(true);
     onBusy(true);
+    const deadline = browserRequestDeadline(controller.signal, 12000);
     try {
       const response = await fetch(contract.path, {
         method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error',
-        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12000)]), headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(contract.body),
+        signal: deadline.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(contract.body),
       });
       if (controller.signal.aborted || pending.current !== controller) return;
       const payload = await response.json().catch(() => ({}));
@@ -77,6 +79,7 @@ export default function BetterAuthPasswordLogin({ email, setEmail, onBusy, onErr
       if (controller.signal.aborted || pending.current !== controller) return;
       onError('No pudimos conectar con el servicio de acceso. Intenta otra vez.');
     } finally {
+      deadline.dispose();
       if (pending.current === controller) {
         pending.current = null;
         submitting.current = false;

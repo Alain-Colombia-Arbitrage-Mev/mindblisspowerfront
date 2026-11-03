@@ -103,7 +103,8 @@ try {
       assert.match(body, /solicita un código con tu correo original/);
       assert.match(body, /si tu vinculación requiere revisión, debe aprobarse antes de entrar/);
       assert.doesNotMatch(body, /Recuperar contraseña/);
-      assert.doesNotMatch(body, /SMS|WhatsApp|account\/security/);
+      // Browser-context help may mention WhatsApp, never offer it as auth.
+      assert.doesNotMatch(body, /Enviar código SMS|Código por WhatsApp|type="tel"|phoneConsent|account\/security/);
       assert.doesNotMatch(body, /fonts\.googleapis|fonts\.gstatic|chatwoot|soporte\.mindbliss/i);
       assert.match(body, /rel="preload"[^>]*href="\/fonts\/montserrat-latin-wght\.woff2"/);
       assert.match(response.headers.get('cache-control'), /no-store/);

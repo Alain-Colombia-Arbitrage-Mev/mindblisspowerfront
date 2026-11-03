@@ -29,8 +29,8 @@ export default async function ForgotPasswordPage({ searchParams }) {
       visualAlt="Comunidad Mindbliss Power"
       visualPosition="center"
     >
-      <div className="mb-7">
-        <h2 className="auth-display text-3xl" style={{ color: "var(--vp-text)" }}>
+      <div className="mb-5 sm:mb-7">
+        <h2 className="auth-display text-2xl sm:text-3xl" style={{ color: "var(--vp-text)" }}>
           {useBetterAuth ? 'Crear o cambiar contraseña' : 'Recuperar contraseña'}
         </h2>
         <p className="mt-2 text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
@@ -39,7 +39,7 @@ export default async function ForgotPasswordPage({ searchParams }) {
       </div>
 
       <div
-        className="rounded-xl p-6 sm:p-7"
+        className="min-w-0 rounded-xl p-4 sm:p-7"
         style={{
           background: "var(--vp-surface)",
           border: "1px solid var(--vp-border)",
@@ -50,7 +50,7 @@ export default async function ForgotPasswordPage({ searchParams }) {
           : <MagicLinkLoginForm authState={authState} initialEmail={initialEmail} initialMode="reset" />}
 
         <div className="mt-6 border-t pt-5 text-center text-sm" style={{ borderColor: "var(--vp-border)" }}>
-          <Link href="/login" className="font-bold transition hover:opacity-80" style={{ color: "var(--vp-accent)" }}>
+          <Link href="/login" className="inline-flex min-h-11 items-center font-bold transition hover:opacity-80" style={{ color: "var(--vp-accent)" }}>
             Volver al login
           </Link>
         </div>

@@ -8,6 +8,7 @@ import { useResendCooldown, suggestEmailFix } from '@/lib/useResendCooldown';
 import { bindReferralCodeToEmail } from '@/lib/referral-attribution';
 import { RegistrationButton, RegistrationField } from './RegistrationFields';
 import { beginVerifiedReferralSync } from '@/lib/referral-sync.mjs';
+import { browserRequestDeadline } from '@/lib/browser-request-deadline.mjs';
 import ContactPhoneField from './ContactPhoneField';
 import { initialContactPhone, registrationContactValues } from './contact-phone-model.mjs';
 import { REGISTRATION_RESEND_SECONDS, consumeRegistrationPrefill, registrationEmail, registrationErrors, registrationFailure, registrationHints, registrationLoginUrl, registrationUrl, registrationRetrySeconds, registrationAcknowledged, registrationPendingDelivery, registrationTimeoutMs } from './registration-model.mjs';
@@ -115,12 +116,15 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
   }
 
   async function post(path, body, action, operation) {
-    const response = await fetch(path, {
-      method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error',
-      signal: AbortSignal.any([operation.controller.signal, AbortSignal.timeout(registrationTimeoutMs(action))]),
-      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-    });
-    return { response, payload: await response.json().catch(() => ({})) };
+    const deadline = browserRequestDeadline(operation.controller.signal, registrationTimeoutMs(action));
+    try {
+      const response = await fetch(path, {
+        method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error',
+        signal: deadline.signal,
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      });
+      return { response, payload: await response.json().catch(() => ({})) };
+    } finally { deadline.dispose(); }
   }
 
   async function register(event) {
@@ -238,7 +242,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
     <AuthShell activePath="/register" loginHref={loginUrl} registrationHref={registrationUrl(email, hints.referralCode, hints.preferredSide)} eyebrow="Nuevo miembro" title="Tu cuenta, con acceso seguro."
       description="Crea tu acceso y verifica tu correo. Si ya perteneces a la red, tus posiciones y datos anteriores se conservan; si tu vinculación requiere revisión, deberás completarla antes de entrar."
       visualSrc="/mindbliss/mindbliss-01.avif" visualAlt="Equipo Mindbliss Power">
-      <section className="rounded-xl border border-[var(--vp-border)] bg-[var(--vp-surface)] p-6 shadow-[var(--vp-shadow)] sm:p-8" aria-labelledby="registration-title" aria-busy={isLoading}>
+      <section className="min-w-0 rounded-xl border border-[var(--vp-border)] bg-[var(--vp-surface)] p-4 shadow-[var(--vp-shadow)] sm:p-8" aria-labelledby="registration-title" aria-busy={isLoading}>
         <div className="mb-6 flex items-start gap-3">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[var(--vp-accent-muted)] text-[var(--vp-accent)]" aria-hidden="true">
             {step === 'verified' ? <CheckCircle2 size={22} /> : step === 'confirm' ? <Mail size={22} /> : <UserPlus size={22} />}

@@ -27,9 +27,9 @@ export default function AuthShell({
   registrationHref = "/register",
 }) {
   return (
-    <main className="auth-mono min-h-dvh lg:grid lg:grid-cols-[minmax(420px,46%)_minmax(0,1fr)]">
+    <main className="auth-mono min-h-dvh min-w-0 lg:grid lg:grid-cols-[minmax(420px,46%)_minmax(0,1fr)]">
       {/* ── Photo panel ─────────────────────────────────────────── */}
-      <aside className="auth-grain relative flex min-h-[300px] flex-col justify-between overflow-hidden p-6 sm:min-h-[360px] sm:p-8 lg:sticky lg:top-0 lg:h-dvh lg:p-10">
+      <aside className="auth-brand-panel auth-grain relative flex min-h-36 flex-col justify-between gap-3 overflow-hidden p-4 sm:min-h-48 sm:p-6 lg:sticky lg:top-0 lg:h-dvh lg:gap-0 lg:p-10">
         <img
           src={visualSrc}
           alt={visualAlt}
@@ -47,7 +47,7 @@ export default function AuthShell({
         />
 
         <div className="relative z-10 flex items-center justify-between">
-          <Link href="/" className="auth-rise inline-flex items-baseline gap-2" style={{ animationDelay: "0ms" }}>
+          <Link href="/" className="auth-rise inline-flex min-h-11 items-center gap-2" style={{ animationDelay: "0ms" }}>
             <span className="auth-display text-lg leading-none" style={{ color: "var(--vp-text)" }}>
               Mindbliss
             </span>
@@ -57,7 +57,7 @@ export default function AuthShell({
           </Link>
           <Link
             href="/"
-            className="auth-rise inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-[0.18em] transition hover:opacity-80"
+            className="auth-rise inline-flex min-h-11 items-center gap-1 px-2 text-xs font-bold uppercase tracking-[0.12em] transition hover:opacity-80"
             style={{ color: "var(--vp-muted)", animationDelay: "60ms" }}
           >
             Inicio
@@ -67,7 +67,7 @@ export default function AuthShell({
 
         <div className="relative z-10">
           <div
-            className="auth-rise mb-4 inline-flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.28em]"
+            className="auth-rise mb-4 hidden items-center gap-2 text-[11px] font-black uppercase tracking-[0.28em] lg:inline-flex"
             style={{ color: "var(--vp-accent)", animationDelay: "120ms" }}
           >
             <span className="inline-block h-2 w-2" style={{ background: "var(--vp-accent)" }} />
@@ -75,7 +75,7 @@ export default function AuthShell({
           </div>
 
           <h1
-            className="auth-display auth-rise max-w-xl text-4xl leading-[0.98] sm:text-5xl lg:text-6xl"
+            className="auth-display auth-rise max-w-xl break-words text-2xl leading-[1.05] sm:text-3xl lg:text-6xl lg:leading-[0.98]"
             style={{ color: "var(--vp-text)", animationDelay: "180ms" }}
           >
             {title}
@@ -83,7 +83,7 @@ export default function AuthShell({
 
           {description && (
             <p
-              className="auth-rise mt-5 hidden max-w-md text-sm leading-7 sm:block"
+              className="auth-rise mt-5 hidden max-w-md text-sm leading-7 lg:block"
               style={{ color: "var(--vp-text-soft)", animationDelay: "240ms" }}
             >
               {description}
@@ -92,7 +92,7 @@ export default function AuthShell({
 
           {sideKpis.length > 0 && (
             <div
-              className="auth-rise mt-7 hidden border-t pt-5 sm:flex"
+              className="auth-rise mt-7 hidden border-t pt-5 lg:flex"
               style={{ borderColor: "rgba(247,247,244,0.18)", animationDelay: "300ms" }}
             >
               {sideKpis.map((item, index) => (
@@ -115,8 +115,8 @@ export default function AuthShell({
       </aside>
 
       {/* ── Form column ─────────────────────────────────────────── */}
-      <section className="relative flex min-h-[60dvh] flex-col lg:min-h-dvh">
-        <nav className="flex items-center gap-6 px-6 pt-6 sm:px-10 lg:px-14">
+      <section className="relative flex min-h-0 min-w-0 flex-col lg:min-h-dvh">
+        <nav aria-label="Acceso y registro" className="auth-nav flex flex-wrap items-center gap-x-4 gap-y-1 px-4 pt-3 sm:px-10 lg:gap-x-6 lg:px-14 lg:pt-6">
           {navItems.map((item) => {
             const active = activePath === item.href;
             return (
@@ -124,7 +124,7 @@ export default function AuthShell({
                 key={item.href}
                 href={item.href === "/login" ? loginHref : item.href === "/register" ? registrationHref : item.href}
                 aria-current={active ? "page" : undefined}
-                className="border-b-2 pb-2 text-[11px] font-black uppercase tracking-[0.2em] transition"
+                className="inline-flex min-h-11 items-center border-b-2 px-1 text-xs font-black uppercase tracking-[0.1em] transition lg:text-[11px] lg:tracking-[0.2em]"
                 style={{
                   color: active ? "var(--vp-text)" : "var(--vp-subtle)",
                   borderColor: active ? "var(--vp-accent)" : "transparent",
@@ -136,8 +136,8 @@ export default function AuthShell({
           })}
         </nav>
 
-        <div className="flex flex-1 items-start justify-center px-5 py-8 sm:px-10 sm:py-10 lg:items-center lg:px-14">
-          <div className="auth-rise w-full max-w-[560px]" style={{ animationDelay: "200ms" }}>
+        <div className="auth-content flex min-w-0 flex-1 items-start justify-center px-4 py-5 sm:px-10 sm:py-8 lg:items-center lg:px-14 lg:py-10">
+          <div className="auth-rise min-w-0 w-full max-w-[560px] [overflow-wrap:anywhere]" style={{ animationDelay: "200ms" }}>
             {children}
           </div>
         </div>

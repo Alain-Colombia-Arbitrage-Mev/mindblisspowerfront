@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import React from 'react';
 import ts from 'typescript';
+import * as deadline from '../../lib/browser-request-deadline.mjs';
 
 const require = createRequire(import.meta.url);
 
@@ -39,6 +40,7 @@ export function registrationViewHarness(filename, mocks) {
   new Function('require', 'module', 'exports', code)(id => {
     if (id === 'react') return hooks;
     if (Object.hasOwn(mocks, id)) return mocks[id];
+    if (id === '@/lib/browser-request-deadline.mjs') return deadline;
     if (id === 'react/jsx-runtime') return require(id);
     assert.fail(`Unexpected test dependency: ${id}`);
   }, module, module.exports);

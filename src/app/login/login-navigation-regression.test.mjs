@@ -10,6 +10,7 @@ import * as attribution from '../../lib/referral-attribution.js';
 import * as referralSync from '../../lib/referral-sync.mjs';
 import * as registration from '../register/registration-model.mjs';
 import * as auth from './better-auth-login.mjs';
+import * as deadline from '../../lib/browser-request-deadline.mjs';
 
 const require = createRequire(import.meta.url);
 const email = 'navigation-fixture@example.test';
@@ -111,6 +112,7 @@ function component() {
     '@/lib/email-otp-client.mjs': otp,
     './BetterAuthPasswordLogin': { default: () => null },
     '@/lib/referral-sync.mjs': referralSync,
+    '@/lib/browser-request-deadline.mjs': deadline,
     './better-auth-login.mjs': auth,
     '../register/registration-model.mjs': registration,
   };
@@ -195,6 +197,23 @@ test('real React StrictMode navigates once after delayed fresh native POST proof
   assert.equal(nodes(ui.container, node => node.nodeName === 'A' && node.getAttribute('href') === '/dashboard').length, 1);
   assert.equal(ui.paths.some(path => path.startsWith('/api/auth/session')), false);
   assert.equal(ui.paths.filter(path => path === '/api/auth/sign-in/email-otp').length, 1);
+});
+
+test('real React mobile login still confirms fresh proof and navigates with both modern AbortSignal methods absent', async t => {
+  const descriptors = new Map(['any', 'timeout'].map(key => [key, Object.getOwnPropertyDescriptor(AbortSignal, key)]));
+  try {
+    for (const key of descriptors.keys()) Object.defineProperty(AbortSignal, key, { configurable: true, value: undefined });
+    const ui = await view(t, path => response(path));
+    await ui.send(); await ui.code(); await ui.confirm();
+    assert.match(ui.container.textContent, /Correo verificado correctamente/);
+    assert.deepEqual(ui.destinations, ['/dashboard']);
+    assert.deepEqual(ui.navigationMethods, ['replace']);
+    assert.deepEqual(ui.paths, ['/api/auth/email-otp/send-verification-otp', '/api/auth/sign-in/email-otp']);
+    assert.equal(nodes(ui.container, node => node.nodeName === 'A' && node.getAttribute('href') === '/dashboard').length, 1);
+    await ui.unmount();
+  } finally {
+    for (const [key, descriptor] of descriptors) Object.defineProperty(AbortSignal, key, descriptor);
+  }
 });
 
 test('real React rejects a failed sign-in POST and permits an explicit retry without resending its OTP', async t => {

@@ -2104,6 +2104,32 @@ html {
   outline-offset: 2px;
 }
 
+/* Keep auth usable with iPhone browser chrome, notches and larger text. Do not
+   hide overflow or disable pinch zoom to make a narrow screen appear to fit. */
+.auth-mono :is(input, select, textarea) {
+  scroll-margin-block: 1.5rem;
+}
+
+.auth-mono :is(a, button, summary) {
+  touch-action: manipulation;
+}
+
+@media (max-width: 1023px) {
+  .auth-brand-panel {
+    padding-top: max(1rem, env(safe-area-inset-top));
+    padding-inline: max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right));
+  }
+
+  .auth-nav,
+  .auth-content {
+    padding-inline: max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right));
+  }
+
+  .auth-content {
+    padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+  }
+}
+
 /* ══════════════════════════════════════════════════════════════════
    DASHBOARD TYPOGRAPHY — display numerals & headline upgrade.
    .vp-display: opt-in utility for new code.

@@ -454,8 +454,8 @@ test('unconfirmed and mismatched delivery failures do not claim a pending regist
 
 test('registration send and confirmation retain their deadlines without adding a client session preflight', async t => {
   const destinations = browser(t), deadlines = [], paths = [];
-  const timeout = AbortSignal.timeout.bind(AbortSignal);
-  t.mock.method(AbortSignal, 'timeout', milliseconds => { deadlines.push(milliseconds); return timeout(milliseconds); });
+  const timeout = globalThis.setTimeout.bind(globalThis);
+  t.mock.method(globalThis, 'setTimeout', (callback, milliseconds) => { deadlines.push(milliseconds); return timeout(callback, milliseconds); });
   t.mock.method(globalThis, 'fetch', async (path, options) => {
     paths.push(path);
     if (path === '/api/auth/register') return signupAck();

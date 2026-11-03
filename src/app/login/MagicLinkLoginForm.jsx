@@ -24,6 +24,7 @@ import BetterAuthPasswordLogin from './BetterAuthPasswordLogin';
 import { verifiedEmailSignIn } from './better-auth-login.mjs';
 import { registrationRequired, registrationRedirect, registrationRetrySeconds, registrationUrl } from '../register/registration-model.mjs';
 import { beginVerifiedReferralSync } from '@/lib/referral-sync.mjs';
+import { browserRequestDeadline } from '@/lib/browser-request-deadline.mjs';
 
 const AUTH_STATE_MESSAGES = {
   "session-not-established": {
@@ -206,6 +207,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     const controller = new AbortController();
     otpRequestRef.current = controller;
     setLoadingAction('code-request');
+    const deadline = browserRequestDeadline(controller.signal, otpTimeoutMs('send'));
     try {
       const contract = emailOtpOnly ? otpRequest(authMode, 'send', normalizedEmail) : {
         path: "/api/auth/cognito/code-login/request", body: { email: normalizedEmail, channel: 'email' },
@@ -214,7 +216,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin", cache: "no-store", redirect: "error",
-        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(otpTimeoutMs('send'))]),
+        signal: deadline.signal,
         body: JSON.stringify(contract.body),
       });
       const payload = await response.json().catch(() => ({}));
@@ -309,6 +311,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
         setError("No se pudo conectar con el servicio de acceso.");
       }
     } finally {
+      deadline.dispose();
       if (otpRequestRef.current === controller) {
         otpRequestRef.current = null;
         otpSubmittingRef.current = false;
@@ -420,6 +423,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     const controller = new AbortController();
     otpRequestRef.current = controller;
     setLoadingAction("code-confirm");
+    const deadline = browserRequestDeadline(controller.signal, otpTimeoutMs('confirm'));
     try {
       const contract = emailOtpOnly ? otpRequest(authMode, 'confirm', normalizedEmail, code) : {
         path: "/api/auth/cognito/code-login/confirm", body: { email: normalizedEmail, code },
@@ -428,7 +432,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin", cache: "no-store", redirect: "error",
-        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(otpTimeoutMs('confirm'))]),
+        signal: deadline.signal,
         body: JSON.stringify(contract.body),
       });
       const payload = await response.json().catch(() => ({}));
@@ -460,6 +464,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     } catch {
       if (!controller.signal.aborted && otpRequestRef.current === controller) setError("No se pudo conectar con el servicio de acceso.");
     } finally {
+      deadline.dispose();
       if (otpRequestRef.current === controller) {
         otpRequestRef.current = null;
         otpSubmittingRef.current = false;
@@ -605,7 +610,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
           Abriendo tu panel… El servidor comprobará tu sesión y tu acceso a la red.
         </p>
         <p className="text-sm leading-6" style={{ color: "var(--vp-muted)" }}>Si no se abre automáticamente, usa «Continuar al panel». No necesitas registrarte de nuevo ni cambiar tu correo; esto no modifica tu cuenta ni tu posición en la red.</p>
-        <a href="/dashboard" className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[var(--vp-border)] bg-[var(--vp-surface-raised)] px-3 text-center text-xs font-black text-[var(--vp-text-soft)] transition hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--vp-accent)]">
+        <a href="/dashboard" className="flex min-h-12 items-center justify-center gap-2 rounded-lg border border-[var(--vp-accent)] bg-[var(--vp-accent)] px-4 py-3 text-center text-base font-bold text-[var(--vp-shell)] transition hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--vp-accent)]">
           <ArrowRight size={16} aria-hidden="true" />Continuar al panel
         </a>
         <a href="/login" className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[var(--vp-border)] bg-[var(--vp-surface-raised)] px-3 text-center text-xs font-black text-[var(--vp-text-soft)] transition hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--vp-accent)]">
@@ -643,13 +648,19 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
         codeStep === "request" ? (
           <form className="space-y-4" onSubmit={requestLoginCode}>
             <p className="text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
-              {emailOtpOnly ? 'Puedes entrar con un código al correo aunque no tengas contraseña. Usa el correo original de tu cuenta: el código de acceso tiene 6 dígitos, vence en 5 minutos y permite hasta 3 intentos. Es distinto del código de registro o recuperación. Por seguridad, espera al menos 5 minutos entre envíos al mismo correo y respeta el contador. No compartas el código.' : 'Recibe un código en tu correo para entrar a tu cuenta.'}
+              {emailOtpOnly ? 'Usa el correo original de tu cuenta. Puedes entrar con un código, aunque no tengas contraseña.' : 'Recibe un código en tu correo para entrar a tu cuenta.'}
             </p>
             <EmailField email={email} readOnly={isLoading} setEmail={setEmail} onClearError={() => setError("")} />
 
             <PrimaryButton disabled={isLoading || codeCooldown.active} loading={loadingAction === "code-request"} icon={<ShieldCheck size={16} />}>
               {codeCooldown.active ? codeCooldown.label : "Enviar código"}
             </PrimaryButton>
+
+            {emailOtpOnly ? <details className="rounded-lg border border-[var(--vp-border)] px-3">
+              <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold" style={{ color: 'var(--vp-text)' }}>Límites y ayuda para entrar</summary>
+              <p className="pb-3 text-sm leading-6" style={{ color: 'var(--vp-muted)' }}>El código de acceso tiene 6 dígitos, vence en 5 minutos y permite hasta 3 intentos. Es distinto del código de registro o recuperación. Por seguridad, espera al menos 5 minutos entre envíos al mismo correo y respeta el contador. No compartas el código.</p>
+              <p className="pb-3 text-sm leading-6" style={{ color: 'var(--vp-muted)' }}>En iPhone, vuelve a esta misma pestaña después de leer el correo. Si abriste el portal dentro de WhatsApp u otra aplicación, ábrelo en Safari antes de solicitar el código; las sesiones no se comparten entre navegadores.</p>
+            </details> : null}
 
             <p className="text-center text-xs" style={{ color: "var(--vp-muted)" }}>
               ¿Primera vez? Necesitas una cuenta para recibir el código.
@@ -680,11 +691,12 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
                 setError("");
               }}
             />
-            <DeliveryHint email={codeRecipient} />
-
             <PrimaryButton disabled={isLoading} loading={loadingAction === "code-confirm"} icon={<ArrowRight size={16} />}>
               Entrar con código
             </PrimaryButton>
+
+            <p className="text-sm leading-6" style={{ color: 'var(--vp-muted)' }}>Después de leer el correo, vuelve a esta misma pestaña para escribir el código y abrir tu panel.</p>
+            <DeliveryHint email={codeRecipient} />
 
             <div className="grid grid-cols-2 gap-2">
               <SecondaryButton disabled={isLoading} onClick={() => switchMode("code")} icon={<ArrowLeft size={15} />}>
@@ -876,8 +888,11 @@ function EmailField({ email, setEmail, onClearError, readOnly = false }) {
             onClearError();
           }}
           autoComplete="email"
+          autoCapitalize="none"
+          spellCheck={false}
+          inputMode="email"
           placeholder="nombre@correo.com"
-          className="min-h-12 w-full rounded-lg py-3 pl-11 pr-4 text-sm font-semibold outline-none"
+          className="min-h-12 min-w-0 w-full rounded-lg py-3 pl-11 pr-4 text-base font-semibold outline-none"
           style={{
             color: "var(--vp-text)",
             background: "var(--vp-surface-raised)",
@@ -892,7 +907,7 @@ function EmailField({ email, setEmail, onClearError, readOnly = false }) {
             setEmail(suggestEmailFix(email));
             onClearError();
           }}
-          className="mt-2 text-left text-xs font-bold transition hover:opacity-80"
+          className="mt-2 min-h-11 text-left text-sm font-bold transition hover:opacity-80"
           style={{ color: "var(--vp-amber, #d97706)" }}
         >
           ¿Quisiste decir {suggestEmailFix(email)}? Toca aquí para corregirlo.
@@ -920,7 +935,7 @@ function PasswordField({ id, label, value, showPassword, autoComplete, onChange,
           value={value}
           onChange={(event) => onChange(event.target.value)}
           autoComplete={autoComplete}
-          className="min-h-12 w-full rounded-lg py-3 pl-11 pr-12 text-sm font-semibold outline-none"
+          className="min-h-12 min-w-0 w-full rounded-lg py-3 pl-11 pr-14 text-base font-semibold outline-none"
           style={{
             color: "var(--vp-text)",
             background: "var(--vp-surface-raised)",
@@ -931,7 +946,7 @@ function PasswordField({ id, label, value, showPassword, autoComplete, onChange,
           type="button"
           aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
           onClick={onToggle}
-          className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-md"
+          className="absolute right-1 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-md"
           style={{ color: "var(--vp-muted)" }}
         >
           {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
@@ -1036,7 +1051,7 @@ function ModeButton({ active, onClick, children, disabled = false }) {
       disabled={disabled}
       aria-pressed={active}
       onClick={onClick}
-      className="min-h-10 rounded-md px-3 text-xs font-black transition"
+      className="min-h-11 rounded-md px-3 py-2 text-sm font-bold leading-5 transition"
       style={{
         color: active ? "var(--vp-accent)" : "var(--vp-muted)",
         background: active ? "var(--vp-accent-muted)" : "transparent",

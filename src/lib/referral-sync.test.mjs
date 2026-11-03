@@ -13,6 +13,29 @@ function memory() {
 const browser = () => ({ localStorage: memory(), sessionStorage: memory() });
 const pending = () => { let resolve; return { promise: new Promise(done => { resolve = done; }), resolve: value => resolve(value) }; };
 
+test('mobile referral persistence and reads keep exact owner/ACK contracts without modern AbortSignal methods', async () => {
+  const descriptors = new Map(['any', 'timeout'].map(key => [key, Object.getOwnPropertyDescriptor(AbortSignal, key)]));
+  const owner = browser(), calls = [];
+  try {
+    for (const key of descriptors.keys()) Object.defineProperty(AbortSignal, key, { configurable: true, value: undefined });
+    const options = { browser: owner, fetchImpl: async (_path, init) => {
+      calls.push(init);
+      assert.equal(init.signal.aborted, false);
+      return Response.json(serverHint('MobileSponsor', 'R'));
+    } };
+    assert.equal((await beginVerifiedReferralSync(email, 'MobileSponsor', 'R', options)).ok, true);
+    assert.equal(pendingVerifiedReferral(email, { browser: owner }), null);
+    assert.deepEqual(JSON.parse(calls[0].body), { ref: 'MobileSponsor', preferred_side: 'R', expected_email: email });
+    assert.equal(calls[0].keepalive, true);
+    assert.deepEqual(await readVerifiedReferral(email, options), serverHint('MobileSponsor', 'R'));
+    assert.equal(calls[1].method, undefined);
+    assert.equal(calls[1].headers['X-VP-Expected-Email'], email);
+    assert.equal(calls.length, 2);
+  } finally {
+    for (const [key, descriptor] of descriptors) Object.defineProperty(AbortSignal, key, descriptor);
+  }
+});
+
 test('verified entry starts one small keepalive save without waiting, stores only its scoped short-lived hint and confirms only the exact ACK', async () => {
   const owner = browser(), transport = pending(), calls = [];
   bindReferralCodeToEmail(email, 'LocalSponsor', owner.localStorage, undefined, 'login', 'L');

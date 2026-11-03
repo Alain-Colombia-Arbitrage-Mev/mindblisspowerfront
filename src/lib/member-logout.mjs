@@ -1,3 +1,5 @@
+import { browserRequestDeadline } from './browser-request-deadline.mjs';
+
 const unavailable = 'No pudimos confirmar el cierre de sesión. Intenta de nuevo.';
 let pending = null;
 /** @type {Array<['localStorage' | 'sessionStorage', string[]]>} */
@@ -49,17 +51,19 @@ export function logoutMember({ fetchImpl = globalThis.fetch, clearCaches = clear
   navigate = path => globalThis.window.location.replace(path) } = {}) {
   if (pending) return pending;
   pending = (async () => {
-    const signal = AbortSignal.timeout(12000);
-    const response = await fetchImpl('/api/auth/logout', {
-      method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error', signal,
-      headers: { 'content-type': 'application/json' }, body: '{}',
-    });
-    await confirmation(response, signal);
-    // Cookie revocation is owned by the server. Only a validated acknowledgement
-    // permits clearing local presentation data and replacing the whole document,
-    // which also discards the Router Cache and mounted member resources.
-    try { clearCaches(); } catch { /* An optional local cache cannot prevent leaving a revoked session. */ }
-    navigate('/login');
+    const deadline = browserRequestDeadline(undefined, 12000);
+    try {
+      const response = await fetchImpl('/api/auth/logout', {
+        method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error', signal: deadline.signal,
+        headers: { 'content-type': 'application/json' }, body: '{}',
+      });
+      await confirmation(response, deadline.signal);
+      // Cookie revocation is owned by the server. Only a validated acknowledgement
+      // permits clearing local presentation data and replacing the whole document,
+      // which also discards the Router Cache and mounted member resources.
+      try { clearCaches(); } catch { /* An optional local cache cannot prevent leaving a revoked session. */ }
+      navigate('/login');
+    } finally { deadline.dispose(); }
   })().catch(() => { throw new Error(unavailable); }).finally(() => { pending = null; });
   return pending;
 }

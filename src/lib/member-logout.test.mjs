@@ -23,6 +23,25 @@ test('logout posts once with same-origin cookies and only clears local state and
   assert.deepEqual(events,['clear','/login']);
 });
 
+test('mobile logout still requires exact acknowledgement when modern AbortSignal methods are unavailable', async () => {
+  const descriptors = new Map(['any', 'timeout'].map(key => [key, Object.getOwnPropertyDescriptor(AbortSignal, key)]));
+  const events = [];
+  try {
+    for (const key of descriptors.keys()) Object.defineProperty(AbortSignal, key, { configurable: true, value: undefined });
+    await logoutMember({ fetchImpl: async (path, init) => {
+      assert.equal(path, '/api/auth/logout');
+      assert.equal(init.credentials, 'same-origin');
+      assert.equal(init.signal.aborted, false);
+      return Response.json({ ok: true });
+    }, clearCaches: () => events.push('clear'), navigate: path => events.push(path) });
+    assert.deepEqual(events, ['clear', '/login']);
+    await assert.rejects(logoutMember({ fetchImpl: async () => Response.json({ ok: true, extra: true }),
+      clearCaches: () => assert.fail('invalid ACK cannot clear'), navigate: () => assert.fail('invalid ACK cannot navigate') }));
+  } finally {
+    for (const [key, descriptor] of descriptors) Object.defineProperty(AbortSignal, key, descriptor);
+  }
+});
+
 test('redirects, rejected sessions, malformed/oversized acknowledgements and transport errors never claim revocation or silently retry', async () => {
   for(const result of [()=>Response.json({error:'private-server-details'},{status:503}),()=>Response.json({ok:true},{status:401}),
     ()=>new Response(null,{status:302,headers:{location:'https://attacker.example.test'}}),()=>Response.json({success:true}),
