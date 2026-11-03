@@ -90,13 +90,17 @@ export default function BetterAuthPasswordLogin({ email, setEmail, onBusy, onErr
 
   return (
     <form onSubmit={submit} noValidate aria-busy={loading} className="space-y-4">
-      <p className="text-sm leading-6 text-[var(--vp-muted)]">Usa la contraseña que creaste al registrarte. Esta opción no envía otro correo ni requiere esperar para solicitar un código.</p>
+      <p className="text-sm leading-6 text-[var(--vp-muted)]">Si ya creaste una contraseña de acceso, úsala aquí. También puedes entrar con un código al correo, aunque nunca hayas creado una contraseña.</p>
       <RegistrationField id="password-login-email" inputRef={emailInput} error={fieldErrors.email} name="email" label="Correo electrónico" type="email" autoComplete="email" autoCapitalize="none" spellCheck={false} required maxLength={254}
         value={email} disabled={loading} onChange={event => { setEmail(event.target.value); setFieldErrors({}); setRequiresVerification(false); onError(''); }} />
       <RegistrationPassword id="password-login-password" inputRef={passwordInput} error={fieldErrors.password} name="password" label="Contraseña" autoComplete="current-password" required maxLength={128}
         value={password} disabled={loading} onChange={event => { setPassword(event.target.value); setFieldErrors({}); onError(''); }} visible={visible} onToggle={() => setVisible(current => !current)} />
       <RegistrationButton type="submit" disabled={loading} loading={loading}>{loading ? 'Comprobando acceso…' : 'Entrar con mi contraseña'}</RegistrationButton>
-      <Link href="/forgot-password" className="inline-flex min-h-11 items-center text-sm font-bold text-[var(--vp-accent)] underline">Crear o cambiar contraseña con un código al correo</Link>
+      <div className="space-y-1 rounded-lg border border-[var(--vp-border)] p-3 text-sm leading-6">
+        <p className="m-0 font-bold text-[var(--vp-text)]">¿No tienes contraseña o la olvidaste?</p>
+        <Link href="/forgot-password" className="inline-flex min-h-11 items-center font-bold text-[var(--vp-accent)] underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--vp-accent)]">Crear o cambiar contraseña con un código al correo</Link>
+        <p className="m-0 text-[var(--vp-muted)]">Usa el correo original de tu cuenta. No necesitas cambiarlo ni crear otra cuenta.</p>
+      </div>
       {requiresVerification ? <Link href={registrationHref || registrationUrl(email, '', '', true)}
         className="inline-flex min-h-11 items-center text-sm text-[var(--vp-text)] underline">Verificar mi correo de registro</Link> : null}
     </form>

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { registrationViewHarness, findRegistrationNode as find, registrationFieldStub, registrationButtonStub } from '../register/registration-view-test-harness.mjs';
 import * as login from './better-auth-login.mjs';
 import * as registration from '../register/registration-model.mjs';
@@ -36,6 +37,22 @@ function view() {
   changePassword(password);
   return { ...harness, props, events, render, form, changePassword, submit: () => form().props.onSubmit(event) };
 }
+
+test('passwordless members get an explicit recovery path using the original email, without a lookup or automatic code', t => {
+  t.mock.method(globalThis, 'fetch', () => assert.fail('rendering recovery help cannot query or send a code'));
+  const harness = view(), tree = harness.render(), html = renderToStaticMarkup(tree);
+  assert.match(html, /Si ya creaste una contraseña/);
+  assert.match(html, /aunque nunca hayas creado una contraseña/);
+  assert.match(html, /¿No tienes contraseña o la olvidaste\?/);
+  assert.match(html, /Usa el correo original de tu cuenta/);
+  assert.match(html, /No necesitas cambiarlo ni crear otra cuenta/);
+  assert.doesNotMatch(html, /contraseña que creaste al registrarte/);
+  const recovery = find(tree, node => node?.props?.href === '/forgot-password');
+  assert.ok(recovery);
+  assert.match(recovery.props.children, /Crear o cambiar contraseña con un código/);
+  assert.equal(recovery.props.href.includes('@'), false, 'contact details stay out of the link');
+  harness.unmount();
+});
 
 test('password login waits for canonical access before publishing one verified screen and preserves the exact password', async t => {
   const calls = [], check = deferred(), checking = deferred();

@@ -32,6 +32,21 @@ function enterCredentials(harness, password = ' Raw synthetic password ') {
   change(harness, 'recovery-confirm-password', password);
 }
 
+test('recovery explains first-password setup in three steps without changing the original address', t => {
+  t.mock.method(globalThis, 'fetch', () => assert.fail('recovery instructions cannot request or redeem an OTP'));
+  const harness = view(), tree = harness.render(props), markup = renderToStaticMarkup(tree);
+  const steps = find(tree, node => node?.type === 'ol');
+  assert.equal(steps.props['aria-label'], 'Pasos para crear o cambiar la contraseña');
+  assert.equal(React.Children.count(steps.props.children), 3);
+  assert.match(markup, /primera contraseña de acceso o reemplazar la anterior/);
+  assert.match(markup, /tu contraseña antigua no es necesaria/);
+  assert.match(markup, /No necesitas cambiar tu correo ni volver a registrarte/);
+  assert.ok(markup.indexOf('Solicita el código') < markup.indexOf('Escribe el código'));
+  assert.ok(markup.indexOf('Escribe el código') < markup.indexOf('Guarda los cambios'));
+  assert.doesNotMatch(markup, /Te enviamos|cuenta existe|cuenta no existe|Contraseña actualizada/);
+  harness.unmount();
+});
+
 test('first-password setup and reset use one neutral flow and never log in, change email or query credential existence', async t => {
   for (const account of ['existing-password', 'no-password', 'unknown-account']) {
     const calls = [];
@@ -210,7 +225,7 @@ test('correcting the entered email clears OTP and passwords but neither mutates 
   let calls = 0;
   t.mock.method(globalThis, 'fetch', async () => { calls++; return Response.json({ ok: true }); });
   const harness = view(); await submit(harness); enterCredentials(harness);
-  find(harness.render(props), node => node?.props?.children === 'Corregir correo ingresado').props.onClick();
+  find(harness.render(props), node => node?.props?.children === 'Volver al paso del correo').props.onClick();
   assert.equal(calls, 1); assert.equal(harness.state[3], ''); assert.equal(harness.state[4], ''); assert.equal(harness.state[5], '');
   assert.equal(find(harness.render(props), field('recovery-email')).props.readOnly, false);
   assert.equal(find(harness.render(props), field('recovery-otp')), undefined);

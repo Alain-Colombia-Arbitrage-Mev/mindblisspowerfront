@@ -238,6 +238,7 @@ test('legacy-account guidance and its registration link are generic and availabl
   for (const stage of ['request', 'confirm', 'changed-email']) {
     const html = renderToStaticMarkup(tree);
     assert.match(html, /Si ya pertenecías a la red/);
+    if (stage === 'request') assert.match(html, /Puedes entrar con un código al correo aunque no tengas contraseña/);
     assert.match(html, /solicita un código con tu correo original/);
     assert.match(html, /Tu cuenta y posición en la red se conservan/);
     assert.match(html, /verificar el correo no las vincula automáticamente/);

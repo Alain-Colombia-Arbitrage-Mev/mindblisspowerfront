@@ -166,6 +166,12 @@ export default function BetterAuthPasswordRecovery({ initialEmail = '' }) {
   return (
     <div className="space-y-4">
       <p className="text-sm leading-6 text-[var(--vp-muted)]">Si ya tienes una cuenta, puedes crear tu primera contraseña de acceso o reemplazar la anterior. Debes comprobar el correo original con un código de recuperación de 6 dígitos que vence en 5 minutos; tu contraseña antigua no es necesaria.</p>
+      <ol aria-label="Pasos para crear o cambiar la contraseña" className="list-inside list-decimal space-y-1 rounded-lg border border-[var(--vp-border)] p-3 text-sm leading-6 text-[var(--vp-muted)]">
+        <li>Solicita el código al correo que ya está registrado en tu cuenta.</li>
+        <li>Escribe el código de recuperación y elige tu nueva contraseña.</li>
+        <li>Guarda los cambios e inicia sesión con ese mismo correo.</li>
+      </ol>
+      <p className="text-sm leading-6 font-bold text-[var(--vp-text)]">No necesitas cambiar tu correo ni volver a registrarte.</p>
       {errors.form ? <p ref={feedback} tabIndex={-1} role="alert" aria-live="assertive" className="rounded-lg border border-[var(--vp-danger-border)] bg-[var(--vp-danger-muted)] p-3 text-sm text-[var(--vp-danger)]">{errors.form}</p> : null}
       {notice ? <p role="status" aria-live="polite" aria-atomic="true" className="rounded-lg border border-[var(--vp-accent-border)] bg-[var(--vp-accent-muted)] p-3 text-sm text-[var(--vp-text)]">{notice}</p> : null}
       <form onSubmit={step === 'request' ? requestCode : confirm} noValidate aria-busy={busy} className="space-y-4">
@@ -190,7 +196,7 @@ export default function BetterAuthPasswordRecovery({ initialEmail = '' }) {
         </RegistrationButton>
       </form>
       {step === 'confirm' ? <div className="grid gap-2 sm:grid-cols-2">
-        <button type="button" disabled={busy} onClick={correctEmail} className="min-h-11 rounded-lg border border-[var(--vp-border)] px-3 text-sm font-semibold text-[var(--vp-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--vp-accent)] disabled:opacity-60">Corregir correo ingresado</button>
+        <button type="button" disabled={busy} onClick={correctEmail} className="min-h-11 rounded-lg border border-[var(--vp-border)] px-3 text-sm font-semibold text-[var(--vp-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--vp-accent)] disabled:opacity-60">Volver al paso del correo</button>
         <button type="button" disabled={busy || cooldown.active} onClick={event => requestCode(event, true)} className="min-h-11 rounded-lg border border-[var(--vp-border)] px-3 text-sm font-semibold text-[var(--vp-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--vp-accent)] disabled:opacity-60">
           {cooldown.active ? cooldown.label : 'Solicitar otro código'}
         </button>

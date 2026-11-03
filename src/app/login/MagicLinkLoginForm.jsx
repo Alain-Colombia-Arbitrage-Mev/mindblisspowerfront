@@ -656,7 +656,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
         codeStep === "request" ? (
           <form className="space-y-4" onSubmit={requestLoginCode}>
             <p className="text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
-              {emailOtpOnly ? 'Recibe un código de 6 dígitos para iniciar sesión. Vence en 5 minutos y es distinto del código de registro o recuperación.' : 'Recibe un código en tu correo para entrar a tu cuenta.'}
+              {emailOtpOnly ? 'Puedes entrar con un código al correo aunque no tengas contraseña. Recibe un código de 6 dígitos para iniciar sesión. Vence en 5 minutos y es distinto del código de registro o recuperación.' : 'Recibe un código en tu correo para entrar a tu cuenta.'}
             </p>
             <EmailField email={email} readOnly={isLoading} setEmail={setEmail} onClearError={() => setError("")} />
 
