@@ -4,6 +4,7 @@ import { registrationUrl } from "./register/registration-model.mjs";
 
 export const dynamic = "force-dynamic";
 
+/** @param {{ searchParams?: Promise<Record<string, string | string[] | undefined>> }} [props] */
 export default async function HomePage({ searchParams } = {}) {
   const params = (await searchParams) ?? {};
   const ref = referralLinkCode(params.ref);

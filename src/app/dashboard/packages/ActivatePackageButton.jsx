@@ -91,6 +91,7 @@ export default function ActivatePackageButton({ packageId, featured, stripeEnabl
     setError("");
     let requestSent = false;
     try {
+      /** @type {{ code?: string, email?: string, side?: string }} */
       let attribution = { code: "", email: "" };
       let session = null;
       try {
