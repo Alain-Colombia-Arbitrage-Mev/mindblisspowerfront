@@ -112,6 +112,42 @@ test('rate limiting preserves the original recipient and never shortens a longer
   harness.unmount();
 });
 
+test('received recovery code remains usable during send cooldown, while a separate 429 blocks redemption until explicit retry', async t => {
+  const budgets = new Map(), scopes = [], calls = [];
+  const cooldown = (_seconds, scope) => {
+    scopes.push(scope);
+    const remaining = budgets.get(scope) || 0;
+    return { active: remaining > 0, label: `Reenviar en ${remaining}`, start(value) { budgets.set(scope, value); } };
+  };
+  t.mock.method(globalThis, 'fetch', async (path, options) => {
+    calls.push({ path, body: JSON.parse(options.body) });
+    if (path.endsWith('/request-password-reset')) return Response.json({ ok: true });
+    return calls.filter(call => call.path.endsWith('/reset-password')).length === 1
+      ? Response.json({ error: 'private-limit-detail' }, { status: 429, headers: { 'retry-after': '600' } })
+      : Response.json({ ok: true });
+  });
+  const harness = view(cooldown); await submit(harness); enterCredentials(harness);
+  assert.equal(budgets.get(`better-auth:password-recovery:send:${email}`), 300);
+  assert.equal(find(harness.render(props), node => node?.props?.children === 'Guardar nueva contraseña').props.disabled, false);
+  await submit(harness);
+  assert.equal(calls.length, 2, 'send cooldown never blocks the first use of an already received code');
+  assert.equal(budgets.get(`better-auth:password-recovery:send:${email}`), 300, 'redemption cannot overwrite the resend budget');
+  assert.equal(budgets.get(`better-auth:password-recovery:confirm:${email}`), 600);
+  assert.equal(find(harness.render(props), node => node?.props?.children === 'Validar de nuevo en 600').props.disabled, true);
+  assert.equal(find(harness.render(props), field('recovery-otp')).props.value, '001234');
+  assert.equal(find(harness.render(props), field('recovery-password')).props.value, ' Raw synthetic password ');
+  await submit(harness); assert.equal(calls.length, 2, 'handler also rejects an attempted submit during the 429 wait');
+  assert.doesNotMatch(html(harness), /private-limit-detail|Contraseña actualizada/);
+  budgets.set(`better-auth:password-recovery:confirm:${email}`, 0);
+  harness.render(props); assert.equal(calls.length, 2, 'expiry never retries automatically');
+  await submit(harness);
+  assert.match(html(harness), /Contraseña actualizada/);
+  assert.equal(calls.length, 3);
+  assert.equal(scopes.every(scope => scope.startsWith('better-auth:password-recovery:')), true);
+  assert.deepEqual(calls.map(call => call.body.email), [email, email, email]);
+  harness.unmount();
+});
+
 test('a definitive send rejection does not advance or reveal suspended, deleted or missing account states', async t => {
   for (const status of [400, 401, 403, 404]) {
     t.mock.method(globalThis, 'fetch', async () => Response.json({ code: 'SUSPENDED_USER', message: 'private-status-details' }, { status }));

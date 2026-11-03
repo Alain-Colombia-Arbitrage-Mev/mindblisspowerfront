@@ -6,20 +6,21 @@ import * as model from './registration-model.mjs';
 import * as contacts from './contact-phone-model.mjs';
 import * as emailOtp from '../../lib/email-otp-client.mjs';
 import * as referral from '../../lib/referral-attribution.js';
+import * as access from '../login/better-auth-login.mjs';
 import { registrationViewHarness, findRegistrationNode as find, registrationFieldStub, registrationButtonStub } from './registration-view-test-harness.mjs';
 
 const contactView = ({ id, label, value }) => React.createElement('div', null, label, React.createElement('input', { id, value: value.national, readOnly: true }));
-const passwordField = ({ visible: _visible, onToggle: _onToggle, ...props }) => registrationFieldStub(props);
-const valid = { fullName: 'Synthetic Member', email: 'member@example.test', password: 'Synthetic Long Password 123', confirmPassword: 'Synthetic Long Password 123', acceptsPrivacy: true };
-function view(cooldown = { active: false, label: '', start() {} }, attribution = { bindReferralCodeToEmail() {} }) {
+const valid = { fullName: 'Synthetic Member', email: 'member@example.test', acceptsPrivacy: true };
+function view(cooldown = { active: false, label: '', start() {} }, attribution = { bindReferralCodeToEmail() {} }, onCooldown = () => {}) {
   return registrationViewHarness('./BetterAuthRegisterForm.jsx', {
     'next/link': { default: ({ children, ...props }) => React.createElement('a', props, children) },
     'lucide-react': { ArrowLeft: () => null, CheckCircle2: () => null, Mail: () => null, UserPlus: () => null },
     '../_components/AuthShell': { default: ({ children }) => React.createElement('main', null, children) },
-    '@/lib/useResendCooldown': { useResendCooldown: () => cooldown, suggestEmailFix: () => '' },
+    '@/lib/useResendCooldown': { useResendCooldown: (seconds, scope) => { onCooldown(seconds, scope); return cooldown; }, suggestEmailFix: () => '' },
     '@/lib/referral-attribution': attribution,
     '@/lib/email-otp-client.mjs': emailOtp,
-    './RegistrationFields': { RegistrationField: registrationFieldStub, RegistrationButton: registrationButtonStub, RegistrationPassword: passwordField },
+    '../login/better-auth-login.mjs': access,
+    './RegistrationFields': { RegistrationField: registrationFieldStub, RegistrationButton: registrationButtonStub },
     './ContactPhoneField': { default: contactView },
     './contact-phone-model.mjs': contacts,
     './registration-model.mjs': model,
@@ -37,6 +38,8 @@ function enterValid(harness, values = valid) {
 }
 const submit = tree => find(tree, node => node?.type === 'form').props.onSubmit({ preventDefault() {} });
 const signupAck = () => Response.json({ ok: true, mode: 'better-auth', email: valid.email, userConfirmed: false, requiresConfirmation: true, resendAfter: 300 });
+const confirmationAck = () => Response.json({ ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: false, sessionEstablished: true });
+const canonicalAccess = (ready = true, email = valid.email) => Response.json({ authenticated: ready, mode: 'better-auth', email });
 
 test('registration remains email-only with the existing two-step design and optional contacts, never a phone challenge', t => {
   t.mock.method(globalThis, 'fetch', () => assert.fail('render must not send messages or create an account'));
@@ -48,9 +51,44 @@ test('registration remains email-only with the existing two-step design and opti
   assert.match(html, /sin validar el teléfono ni enviar mensajes/);
   assert.doesNotMatch(html, /phoneConsent|Validar teléfono|código SMS|phoneNumberVerified/);
   assert.doesNotMatch(html, /checked=""/);
+  assert.equal(find(harness.render(), node => node?.props?.id === 'password'), undefined);
+  assert.equal(find(harness.render(), node => node?.props?.id === 'confirmPassword'), undefined);
+  assert.equal(Object.hasOwn(harness.state[1], 'password'), false);
+  assert.equal(Object.hasOwn(harness.state[1], 'confirmPassword'), false);
 });
 
-test('the login continuation consumes its one-time email but starts at details with empty credentials and unchecked consent, without a message request', t => {
+test('optional contacts remain available inside a native disclosure closed by default without changing consent or values', () => {
+  const harness = view(), tree = enterValid(harness, { ...valid,
+    contactPhone: { country: 'CO', national: '3001234567' }, contactWhatsapp: { country: 'ES', national: '612345678' } });
+  const details = find(tree, node => node?.type === 'details');
+  assert.ok(details);
+  assert.equal(details.props.open, undefined);
+  const summary = find(details, node => node?.type === 'summary');
+  assert.match(summary.props.children, /Agregar teléfono o WhatsApp \(opcional\)/);
+  assert.match(summary.props.className, /min-h-11/);
+  assert.ok(find(details, node => node?.type === 'fieldset'));
+  assert.equal(find(details, node => node?.props?.id === 'contactPhone').props.value.national, '3001234567');
+  assert.equal(find(details, node => node?.props?.id === 'contactWhatsapp').props.value.national, '612345678');
+  assert.equal(find(tree, node => node?.props?.id === 'acceptsPrivacy').props.checked, true);
+  harness.unmount();
+});
+
+test('an invalid hidden optional contact opens the disclosure before focusing its field and never sends a registration', async t => {
+  const previousDocument = globalThis.document;
+  const harness = view(), tree = enterValid(harness, { ...valid, contactPhone: { country: 'CO', national: '+34612345678' } });
+  const details = find(tree, node => node?.type === 'details'), node = { open: false }, focused = [];
+  details.ref.current = node;
+  globalThis.document = { getElementById: id => ({ focus() { assert.equal(node.open, true); focused.push(id); } }) };
+  t.after(() => { if (previousDocument === undefined) delete globalThis.document; else globalThis.document = previousDocument; });
+  t.mock.method(globalThis, 'fetch', () => assert.fail('invalid hidden contact reached registration'));
+  await submit(tree);
+  assert.equal(node.open, true);
+  assert.deepEqual(focused, ['contactPhone']);
+  assert.ok(find(harness.render(props), value => value?.props?.id === 'contactPhone').props.error);
+  harness.unmount();
+});
+
+test('the login continuation consumes its one-time email but starts at details without credentials and with unchecked consent, without a message request', t => {
   const previous = globalThis.window, data = new Map();
   globalThis.window = { sessionStorage: { getItem: key => data.get(key) ?? null,
     setItem: (key, value) => data.set(key, value), removeItem: key => data.delete(key) } };
@@ -61,8 +99,8 @@ test('the login continuation consumes its one-time email but starts at details w
   harness.render(props);
   const tree = harness.render(props), html = renderToStaticMarkup(tree);
   assert.equal(find(tree, node => node?.props?.id === 'email').props.value, 'new@example.test');
-  assert.equal(find(tree, node => node?.props?.id === 'password').props.value, '');
-  assert.equal(find(tree, node => node?.props?.id === 'confirmPassword').props.value, '');
+  assert.equal(find(tree, node => node?.props?.id === 'password'), undefined);
+  assert.equal(find(tree, node => node?.props?.id === 'confirmPassword'), undefined);
   assert.equal(find(tree, node => node?.props?.id === 'acceptsPrivacy').props.checked, false);
   assert.match(html, /Paso 1 de 2/);
   assert.match(html, /Completa tu registro y verifica tu correo/);
@@ -89,11 +127,11 @@ test('blank contacts do not block signup and do not add contact or verification 
   const calls = [];
   t.mock.method(globalThis, 'fetch', async (path, options) => { calls.push({ path, body: JSON.parse(options.body) }); return signupAck(); });
   const harness = view(); await submit(enterValid(harness));
-  assert.deepEqual(calls, [{ path: '/api/auth/register', body: { fullName: valid.fullName, email: valid.email, password: valid.password, acceptsPrivacy: true,
+  assert.deepEqual(calls, [{ path: '/api/auth/register', body: { fullName: valid.fullName, email: valid.email, acceptsPrivacy: true,
     referralCode: 'MP-REFERRAL', preferredSide: 'R' } }]);
   const html = renderToStaticMarkup(harness.render(props));
   assert.match(html, /Paso 2 de 2/); assert.match(html, /Verifica tu correo/);
-  assert.equal(harness.state[1].password, ''); assert.equal(harness.state[1].confirmPassword, '');
+  assert.equal(Object.hasOwn(harness.state[1], 'password'), false); assert.equal(Object.hasOwn(harness.state[1], 'confirmPassword'), false);
 });
 
 test('a direct shared registration URL preserves its exact sponsor and right branch for later checkout before login captures the URL', async t => {
@@ -118,7 +156,7 @@ test('optional phone and WhatsApp are separate canonical contacts, with no SMS r
   assert.equal(calls.length, 1); assert.equal(calls[0].path, '/api/auth/register');
   assert.equal(calls[0].body.contactPhone, '+573001234567');
   assert.equal(calls[0].body.contactWhatsapp, '+34612345678');
-  for (const key of ['phoneNumber', 'phoneConsent', 'phoneNumberVerified', 'whatsappSameAsPhone', 'proof', 'code']) assert.equal(Object.hasOwn(calls[0].body, key), false);
+  for (const key of ['password', 'confirmPassword', 'phoneNumber', 'phoneConsent', 'phoneNumberVerified', 'whatsappSameAsPhone', 'proof', 'code']) assert.equal(Object.hasOwn(calls[0].body, key), false);
 });
 
 test('using the same WhatsApp number requires the explicit checkbox and tracks the current phone', async t => {
@@ -145,13 +183,18 @@ test('invalid optional contacts stop signup instead of dropping or silently alte
   }
 });
 
-test('every account must explicitly confirm email after signup, without auto-login or phone fallback', async t => {
+test('passwordless signup establishes a session only after OTP proof and checks canonical access without sending a second code', async t => {
   const paths = [];
   t.mock.method(globalThis, 'fetch', async (path, options) => {
     paths.push(path);
     if (path === '/api/auth/register') return signupAck();
+    if (path === '/api/auth/session') {
+      assert.equal(options.cache, 'no-store'); assert.equal(options.credentials, 'same-origin');
+      assert.equal(options.body, undefined);
+      return canonicalAccess();
+    }
     assert.deepEqual(JSON.parse(options.body), { email: valid.email, code: '001234' });
-    return Response.json({ ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: true });
+    return confirmationAck();
   });
   const harness = view(); await submit(enterValid(harness));
   let tree = harness.render(props);
@@ -159,22 +202,103 @@ test('every account must explicitly confirm email after signup, without auto-log
   find(tree, node => node?.props?.id === 'code').props.onChange({ target: { value: '001234' } });
   await submit(harness.render(props));
   tree = harness.render(props);
-  assert.deepEqual(paths, ['/api/auth/register', '/api/auth/register/confirm']);
+  assert.deepEqual(paths, ['/api/auth/register', '/api/auth/register/confirm', '/api/auth/session']);
   assert.match(renderToStaticMarkup(tree), /El correo está verificado/);
   assert.match(renderToStaticMarkup(tree), /Correo verificado correctamente/);
   assert.match(renderToStaticMarkup(tree), /role="status" aria-live="polite" aria-atomic="true"/);
-  assert.match(renderToStaticMarkup(tree), /Código al correo/);
-  assert.match(renderToStaticMarkup(tree), /si tu acceso fue preparado para una cuenta anterior/);
-  assert.match(renderToStaticMarkup(tree), /Si creaste una contraseña al registrarte/);
-  assert.doesNotMatch(renderToStaticMarkup(tree), /Entra con la contraseña que creaste|no necesitas otro código/);
-  assert.match(renderToStaticMarkup(tree), /mode=code/);
+  assert.match(renderToStaticMarkup(tree), /No necesitas solicitar otro código/);
+  assert.match(renderToStaticMarkup(tree), /Tu sesión tiene acceso al portal/);
+  assert.match(renderToStaticMarkup(tree), /Crear o cambiar contraseña \(opcional\)/);
+  assert.doesNotMatch(renderToStaticMarkup(tree), /contraseña (?:guardada|creada correctamente)|tu nueva contraseña está/);
+  assert.doesNotMatch(renderToStaticMarkup(tree), /Entra con la contraseña que creaste|Ir al acceso con código|Entrar con contraseña/);
   assert.match(renderToStaticMarkup(tree), /vinculación requiere aprobación/);
+  assert.equal(find(tree, node => node?.props?.children === 'Continuar al panel').props.href, '/dashboard');
+  assert.equal(find(tree, node => node?.props?.children === 'Crear o cambiar contraseña (opcional)').props.href, '/forgot-password');
+});
+
+test('a verified session without approved network access, a mismatched session or an outage never grants the dashboard and can be rechecked without another OTP', async t => {
+  for (const firstSession of [() => canonicalAccess(false), () => canonicalAccess(true, 'different@example.test'),
+    () => Response.json({ error: 'authorization_unavailable' }, { status: 503 })]) {
+    const paths = []; let reads = 0;
+    t.mock.method(globalThis, 'fetch', async (path, options) => {
+      paths.push(path);
+      if (path === '/api/auth/register/confirm') return confirmationAck();
+      assert.equal(path, '/api/auth/session');
+      assert.equal(options.body, undefined);
+      return reads++ === 0 ? firstSession() : canonicalAccess();
+    });
+    const harness = view(), resume = { initialSearch: `email=${encodeURIComponent(valid.email)}&resume=1` };
+    let tree = harness.render(resume);
+    find(tree, node => node?.props?.id === 'code').props.onChange({ target: { value: '001234' } });
+    await submit(harness.render(resume));
+    tree = harness.render(resume);
+    assert.match(renderToStaticMarkup(tree), /Correo verificado correctamente/);
+    assert.match(renderToStaticMarkup(tree), /vinculación requiere aprobación/);
+    assert.equal(find(tree, node => node?.props?.children === 'Continuar al panel'), undefined);
+    assert.equal(find(tree, node => node?.props?.id === 'code'), undefined);
+    await find(tree, node => node?.props?.children === 'Revisar acceso').props.onClick();
+    tree = harness.render(resume);
+    assert.equal(find(tree, node => node?.props?.children === 'Continuar al panel').props.href, '/dashboard');
+    assert.deepEqual(paths, ['/api/auth/register/confirm', '/api/auth/session', '/api/auth/session']);
+    harness.unmount();
+  }
+});
+
+test('confirmation503 is unconfirmed and offers explicit login without a canonical access claim or another automatic message', async t => {
+  const paths = [];
+  t.mock.method(globalThis, 'fetch', async path => {
+    paths.push(path); return Response.json({ code: 'REGISTRATION_UNAVAILABLE' }, { status: 503 });
+  });
+  const harness = view(), resume = { initialSearch: `email=${encodeURIComponent(valid.email)}&resume=1` };
+  let tree = harness.render(resume);
+  find(tree, node => node?.props?.id === 'code').props.onChange({ target: { value: '001234' } });
+  await submit(harness.render(resume));
+  tree = harness.render(resume);
+  assert.match(renderToStaticMarkup(tree), /No pudimos confirmar el resultado/);
+  assert.match(renderToStaticMarkup(tree), /No reintentaremos automáticamente/);
+  assert.doesNotMatch(renderToStaticMarkup(tree), /Correo verificado correctamente|Continuar al panel/);
+  const login = new URL(find(tree, node => node?.props?.children === 'Entrar de forma segura').props.href, 'https://example.test');
+  assert.equal(login.pathname, '/login'); assert.equal(login.searchParams.get('mode'), 'code');
+  assert.deepEqual(paths, ['/api/auth/register/confirm']);
+  harness.unmount();
+});
+
+test('leaving after confirmation while canonical access is pending aborts the read and suppresses stale authorization without retrying OTP', async t => {
+  let complete, signal, started;
+  const begun = new Promise(resolve => { started = resolve; }), paths = [];
+  t.mock.method(globalThis, 'fetch', async (path, options) => {
+    paths.push(path);
+    if (path === '/api/auth/register/confirm') return confirmationAck();
+    signal = options.signal; started();
+    return new Promise(resolve => { complete = resolve; });
+  });
+  const harness = view(), resume = { initialSearch: `email=${encodeURIComponent(valid.email)}&resume=1` };
+  let tree = harness.render(resume);
+  find(tree, node => node?.props?.id === 'code').props.onChange({ target: { value: '001234' } });
+  const pending = submit(harness.render(resume));
+  await begun;
+  harness.unmount();
+  const previous = JSON.stringify(harness.state);
+  assert.equal(signal.aborted, true);
+  complete(canonicalAccess());
+  await pending;
+  assert.equal(JSON.stringify(harness.state), previous);
+  assert.deepEqual(paths, ['/api/auth/register/confirm', '/api/auth/session']);
+});
+
+test('the confirmation helper identifies its five-minute registration purpose without confusing native OTP purposes', () => {
+  const harness = view(), tree = harness.render({ initialSearch: 'email=member%40example.test&resume=1' });
+  const code = find(tree, node => node?.props?.id === 'code');
+  assert.match(code.props.helper, /código de este registro vence en 5 minutos/);
+  assert.match(code.props.helper, /No lo intercambies con un código de inicio de sesión o de recuperación/);
+  harness.unmount();
 });
 
 test('registration cannot show verified success from URL hints, send success, an invalid code or an ambiguous response', async t => {
-  for (const [status, payload] of [[400, { ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: true }],
-    [503, { ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: true }],
-    [200, { ok: true }], [200, { ok: true, mode: 'better-auth', userConfirmed: false, needsLogin: true }]]) {
+  for (const [status, payload] of [[400, { ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: false, sessionEstablished: true }],
+    [503, { ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: false, sessionEstablished: true }],
+    [200, { ok: true }], [200, { ok: true, mode: 'better-auth', userConfirmed: false, needsLogin: false, sessionEstablished: true }],
+    [200, { ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: true }]]) {
     const paths = [];
     t.mock.method(globalThis, 'fetch', async path => { paths.push(path); return Response.json(payload, { status }); });
     const harness = view(), resume = { initialSearch: 'email=member%40example.test&resume=1&verified=true&registered=1' };
@@ -194,7 +318,7 @@ test('an existing registration resumes email confirmation without collecting or 
   assert.doesNotMatch(html, /Contacto opcional|contactPhone|contactWhatsapp|SMS/);
 });
 
-test('confirmed signup delivery failure resumes pending verification without another signup, automatic email or retained password', async t => {
+test('confirmed signup delivery failure resumes pending verification without another signup, automatic email or any registration password', async t => {
   const paths = [], waits = [];
   const cooldown = { active: false, label: 'Reenviar en 5:00', start(seconds) { waits.push(seconds); this.active = true; } };
   t.mock.method(globalThis, 'fetch', async path => {
@@ -207,8 +331,8 @@ test('confirmed signup delivery failure resumes pending verification without ano
   const tree = harness.render(props), html = renderToStaticMarkup(tree);
   assert.deepEqual(paths, ['/api/auth/register']);
   assert.deepEqual(waits, [300]);
-  assert.equal(harness.state[1].password, '');
-  assert.equal(harness.state[1].confirmPassword, '');
+  assert.equal(Object.hasOwn(harness.state[1], 'password'), false);
+  assert.equal(Object.hasOwn(harness.state[1], 'confirmPassword'), false);
   assert.match(html, /Paso 2 de 2/);
   assert.match(html, /no pudimos enviar el código/);
   assert.match(html, /No crees otra cuenta/);
@@ -220,7 +344,7 @@ test('confirmed signup delivery failure resumes pending verification without ano
   assert.deepEqual(paths, ['/api/auth/register']);
 });
 
-test('unconfirmed and mismatched delivery failures do not claim a pending registration or erase credentials as accepted', async t => {
+test('unconfirmed and mismatched delivery failures do not claim a pending registration or collect credentials', async t => {
   for (const [status, body] of [[503, { code: 'REGISTRATION_UNAVAILABLE' }], [503, { code: 'EMAIL_DELIVERY_UNAVAILABLE',
     registrationPending: true, email: 'other@example.test', requiresConfirmation: true }], [200, { code: 'EMAIL_DELIVERY_UNAVAILABLE',
     registrationPending: true, email: valid.email, requiresConfirmation: true }]]) {
@@ -228,21 +352,23 @@ test('unconfirmed and mismatched delivery failures do not claim a pending regist
     t.mock.method(globalThis, 'fetch', async path => { paths.push(path); return Response.json(body, { status }); });
     const harness = view(); await submit(enterValid(harness));
     assert.deepEqual(paths, ['/api/auth/register']);
-    assert.equal(harness.state[1].password, valid.password);
+    assert.equal(Object.hasOwn(harness.state[1], 'password'), false);
+    assert.equal(harness.state[1].email, valid.email);
     assert.match(renderToStaticMarkup(harness.render(props)), /Paso 1 de 2/);
   }
 });
 
-test('real registration and explicit resend handlers wait 30 seconds, but received-code verification remains 12 seconds', async t => {
+test('registration sends wait30 seconds and confirmation waits20 for its two private proofs before the separate12-second access read', async t => {
   const deadlines = [], paths = [];
   const timeout = AbortSignal.timeout.bind(AbortSignal);
   t.mock.method(AbortSignal, 'timeout', milliseconds => { deadlines.push(milliseconds); return timeout(milliseconds); });
   t.mock.method(globalThis, 'fetch', async (path, options) => {
     paths.push(path);
     if (path === '/api/auth/register') return signupAck();
+    if (path === '/api/auth/session') return canonicalAccess();
     return Response.json(JSON.parse(options.body).resend === true
       ? { ok: true, mode: 'better-auth', resendAfter: 300 }
-      : { ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: true });
+      : { ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: false, sessionEstablished: true });
   });
   const harness = view();
   await submit(enterValid(harness));
@@ -251,6 +377,104 @@ test('real registration and explicit resend handlers wait 30 seconds, but receiv
   tree = harness.render(props);
   find(tree, node => node?.props?.id === 'code').props.onChange({ target: { value: '001234' } });
   await submit(harness.render(props));
-  assert.deepEqual(deadlines, [30000, 30000, 12000]);
-  assert.deepEqual(paths, ['/api/auth/register', '/api/auth/register/confirm', '/api/auth/register/confirm']);
+  assert.deepEqual(deadlines, [30000, 30000, 20000, 12000]);
+  assert.deepEqual(paths, ['/api/auth/register', '/api/auth/register/confirm', '/api/auth/register/confirm', '/api/auth/session']);
+  assert.equal(emailOtp.otpTimeoutMs('confirm'), 12000, 'login OTP exchange keeps its original deadline');
+});
+
+test('registration scopes its shared resend deadline to the normalized current recipient, including after correcting the email', () => {
+  const scopes = [], harness = view(undefined, undefined, (seconds, scope) => scopes.push({ seconds, scope }));
+  let tree = harness.render();
+  find(tree, node => node?.props?.id === 'email').props.onChange({ target: { value: ' FIRST@EXAMPLE.TEST ' } });
+  tree = harness.render();
+  find(tree, node => node?.props?.id === 'email').props.onChange({ target: { value: 'second@example.test' } });
+  tree = harness.render();
+  find(tree, node => node?.props?.id === 'email').props.onChange({ target: { value: 'first@example.test' } });
+  harness.render();
+  assert.deepEqual(scopes, ['', 'first@example.test', 'second@example.test', 'first@example.test'].map(scope => ({ seconds: 300, scope })));
+  harness.unmount();
+});
+
+test('an explicit existing-account error keeps the existing manual choices without sending another purpose or disclosing generic successes', async t => {
+  for (const status of [409, 200]) {
+    const calls = [];
+    t.mock.method(globalThis, 'fetch', async (path, options) => {
+      calls.push({ path, body: JSON.parse(options.body) });
+      return Response.json({ code: 'ACCOUNT_EXISTS', accountExists: true, needsLogin: true }, { status });
+    });
+    const harness = view();
+    await submit(enterValid(harness));
+    const tree = harness.render(props), html = renderToStaticMarkup(tree);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].path, '/api/auth/register');
+    assert.match(html, /Ya solicité mi registro: verificar correo/);
+    assert.match(html, /Entrar de forma segura/);
+    assert.doesNotMatch(html, /Correo verificado correctamente/);
+    if (status === 409) assert.match(html, /Ya existe un acceso con este correo/);
+    else assert.doesNotMatch(html, /Ya existe un acceso con este correo/);
+    harness.unmount();
+  }
+});
+
+test('leaving during signup, verification or resend aborts the request and ignores late success without retrying', async t => {
+  for (const action of ['register', 'confirm', 'resend']) {
+    let complete, signal;
+    const paths = [], waits = [], referrals = [];
+    const harness = view({ active: false, label: '', start: value => waits.push(value) },
+      { bindReferralCodeToEmail: (...values) => referrals.push(values) });
+    t.mock.method(globalThis, 'fetch', (path, options) => {
+      paths.push(path); signal = options.signal;
+      return new Promise(resolve => { complete = resolve; });
+    });
+    let tree;
+    if (action === 'register') tree = enterValid(harness);
+    else {
+      tree = harness.render({ initialSearch: `email=${encodeURIComponent(valid.email)}&resume=1` });
+      if (action === 'confirm') {
+        find(tree, node => node?.props?.id === 'code').props.onChange({ target: { value: '001234' } });
+        tree = harness.render({ initialSearch: `email=${encodeURIComponent(valid.email)}&resume=1` });
+      }
+    }
+    const pending = action === 'resend'
+      ? find(tree, node => node?.props?.children === 'Solicitar otro código').props.onClick() : submit(tree);
+    assert.equal(paths.length, 1);
+    assert.equal(signal.aborted, false);
+    harness.unmount();
+    const stateAtUnmount = JSON.stringify(harness.state), waitsAtUnmount = [...waits];
+    assert.equal(signal.aborted, true);
+    complete(action === 'register' ? signupAck() : Response.json(action === 'resend'
+      ? { ok: true, mode: 'better-auth', resendAfter: 300 }
+      : { ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: false, sessionEstablished: true }));
+    await pending;
+    assert.equal(paths.length, 1);
+    assert.equal(JSON.stringify(harness.state), stateAtUnmount);
+    assert.deepEqual(waits, waitsAtUnmount);
+    assert.deepEqual(referrals, []);
+  }
+});
+
+test('cancellation also ignores a late decoded body or rejected transport without altering the next screen', async t => {
+  for (const outcome of ['late-body', 'abort-rejection']) {
+    let finish;
+    const waits = [], referrals = [], paths = [];
+    const harness = view({ active: false, label: '', start: value => waits.push(value) },
+      { bindReferralCodeToEmail: (...values) => referrals.push(values) });
+    t.mock.method(globalThis, 'fetch', (path, options) => {
+      paths.push(path);
+      if (outcome === 'abort-rejection') return new Promise((_resolve, reject) => {
+        options.signal.addEventListener('abort', () => reject(new DOMException('Synthetic cancellation', 'AbortError')), { once: true });
+      });
+      return Promise.resolve({ ok: true, status: 201, headers: new Headers(), json: () => new Promise(resolve => { finish = resolve; }) });
+    });
+    const pending = submit(enterValid(harness));
+    await Promise.resolve();
+    harness.unmount();
+    const previous = JSON.stringify(harness.state);
+    if (outcome === 'late-body') finish(await signupAck().json());
+    await pending;
+    assert.equal(JSON.stringify(harness.state), previous);
+    assert.deepEqual(waits, []);
+    assert.deepEqual(referrals, []);
+    assert.equal(paths.length, 1);
+  }
 });

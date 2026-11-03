@@ -1,14 +1,16 @@
 import { getCountries, getCountryCallingCode, parsePhoneNumberFromString } from 'libphonenumber-js/min';
+import { CONTACT_COUNTRY_NAMES_ES } from './contact-country-names-es.mjs';
 
 const countries = getCountries();
 const countrySet = new Set(countries);
-const displayNames = typeof Intl.DisplayNames === 'function' ? new Intl.DisplayNames(['es'], { type: 'region' }) : null;
+const orderKey = value => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const compare = (left, right) => left < right ? -1 : left > right ? 1 : 0;
 
 export const CONTACT_COUNTRIES = countries.map(country => ({
   country,
-  name: displayNames?.of(country) || country,
+  name: CONTACT_COUNTRY_NAMES_ES[country] || country,
   dialCode: `+${getCountryCallingCode(country)}`,
-})).sort((left, right) => left.name.localeCompare(right.name, 'es') || left.country.localeCompare(right.country));
+})).sort((left, right) => compare(orderKey(left.name), orderKey(right.name)) || compare(left.country, right.country));
 
 // This visible default is a convenience, never a location or identity claim.
 export const initialContactPhone = () => ({ country: 'CO', national: '' });

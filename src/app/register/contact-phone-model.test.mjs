@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { getCountries } from 'libphonenumber-js/min';
 import { CONTACT_COUNTRIES, initialContactPhone, normalizeContactPhone, registrationContactValues } from './contact-phone-model.mjs';
+import { CONTACT_COUNTRY_NAMES_ES } from './contact-country-names-es.mjs';
 
 test('country selector covers every supported country with its ISO code, readable name and international prefix', () => {
   assert.deepEqual(CONTACT_COUNTRIES.map(option => option.country).sort(), getCountries().sort());
@@ -13,6 +14,19 @@ test('country selector covers every supported country with its ISO code, readabl
   }
   assert.deepEqual(initialContactPhone(), { country: 'CO', national: '' });
   assert.notEqual(initialContactPhone(), initialContactPhone());
+  assert.deepEqual(Object.keys(CONTACT_COUNTRY_NAMES_ES).sort(), getCountries().sort());
+  assert.ok(Object.isFrozen(CONTACT_COUNTRY_NAMES_ES));
+});
+
+test('SSR and browser labels and order never depend on different runtime ICU names or collation', async t => {
+  t.mock.method(Intl, 'DisplayNames', function () { assert.fail('runtime-localized labels break hydration'); });
+  t.mock.method(String.prototype, 'localeCompare', () => assert.fail('runtime ICU collation breaks hydration'));
+  const fresh = await import('./contact-phone-model.mjs?hydration-stability-regression');
+  assert.deepEqual(fresh.CONTACT_COUNTRIES, CONTACT_COUNTRIES);
+  assert.equal(fresh.CONTACT_COUNTRIES.find(option => option.country === 'HK').name, CONTACT_COUNTRY_NAMES_ES.HK);
+  assert.equal(fresh.CONTACT_COUNTRIES.find(option => option.country === 'HU').name, CONTACT_COUNTRY_NAMES_ES.HU);
+  assert.ok(fresh.CONTACT_COUNTRIES.findIndex(option => option.country === 'HK')
+    < fresh.CONTACT_COUNTRIES.findIndex(option => option.country === 'HU'));
 });
 
 test('national contacts and pasted international contacts become the same E164 without duplicate country prefix', () => {

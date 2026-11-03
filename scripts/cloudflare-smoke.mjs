@@ -111,6 +111,7 @@ try {
   assert.equal(registrationPage.status, 200);
   const registrationHtml = await registrationPage.text();
   assert.match(registrationHtml, /Crear cuenta y verificar correo/);
+  assert.doesNotMatch(registrationHtml, /type="password"/);
   assert.match(registrationHtml, /href="\/login\?mode=code(?:&amp;|&)/);
   assert.match(registrationHtml, /id="contactPhone-country"/);
   assert.match(registrationHtml, /id="contactWhatsapp-country"/);
@@ -177,11 +178,16 @@ try {
     assert.equal(removed.status, 404, path); probes++;
   }
   const contactSignup = { fullName: 'Synthetic Registration', email: 'signup@example.test',
-    password: 'Synthetic-Registration-123', acceptsPrivacy: true,
+    acceptsPrivacy: true,
     contactPhone: '+573001234567', contactWhatsapp: '+390612345678',
     phoneNumberVerified: true, emailVerified: true, person_id: 1, role: 'superadmin' };
   for (const invalid of ['3001234567', '+573001234567 ext 1', null]) {
     assert.equal((await post('/api/auth/register', { ...contactSignup, contactPhone: invalid })).status, 400); probes++;
+  }
+  for (const field of ['password', 'confirmPassword']) {
+    const rejected = await post('/api/auth/register', { ...contactSignup, [field]: 'Browser-Must-Not-Choose-123' });
+    assert.equal(rejected.status, 400);
+    assert.equal(rejected.headers.get('set-cookie'), null); probes++;
   }
   const contactRegistered = await post('/__stale_sms/api/auth/register', contactSignup,
     '__Secure-vp_registration_phone=obsolete-proof');
@@ -189,7 +195,7 @@ try {
   assert.equal((await contactRegistered.json()).userConfirmed, false);
   assert.equal(contactRegistered.headers.get('set-cookie'), null); probes++;
   const signup = await fetch('http://127.0.0.1:8787/api/auth/register', { method: 'POST', headers: authHeaders,
-    body: JSON.stringify({ fullName: 'Synthetic Registration', email: 'signup@example.test', password: 'Synthetic-Registration-123', acceptsPrivacy: true, referralCode: 'MP123' }) });
+    body: JSON.stringify({ fullName: 'Synthetic Registration', email: 'signup@example.test', acceptsPrivacy: true, referralCode: 'MP123' }) });
   assert.equal(signup.status, 201);
   assert.equal((await signup.json()).userConfirmed, false);
   assert.equal(signup.headers.get('set-cookie'), null);
@@ -199,9 +205,14 @@ try {
     assert.equal(confirmation.status, 200);
     const payload = await confirmation.json();
     assert.equal(payload.ok, true);
-    assert.equal(confirmation.headers.get('set-cookie'), null);
     assert.equal(payload.authenticated, undefined);
-    if (body.code) assert.equal(payload.needsLogin, true);
+    if (body.code) {
+      assert.deepEqual(payload, { ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: false, sessionEstablished: true });
+      assert.match(confirmation.headers.get('set-cookie'), /__Secure-better-auth\.session_token=/);
+      assert.match(confirmation.headers.get('set-cookie'), /HttpOnly/);
+      assert.match(confirmation.headers.get('set-cookie'), /Secure/);
+      assert.doesNotMatch(JSON.stringify(payload), /synthetic-registration-token/);
+    } else assert.equal(confirmation.headers.get('set-cookie'), null);
     probes++;
   }
   const passwordLogin = await fetch('http://127.0.0.1:8787/api/auth/sign-in/email', { method: 'POST', headers: authHeaders,

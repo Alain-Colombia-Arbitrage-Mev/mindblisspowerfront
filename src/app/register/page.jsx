@@ -12,5 +12,8 @@ export default async function RegisterPage({ searchParams }) {
   for (const key of ['email', 'ref', 'side', 'resume', 'reason']) {
     if (typeof supplied?.[key] === 'string') params.set(key, supplied[key].slice(0, 254));
   }
-  return <BetterAuthRegisterForm initialSearch={params.toString()} />;
+  // A changed registration context must not reuse another recipient's code,
+  // form credentials or referral hint during an in-app navigation.
+  const initialSearch = params.toString();
+  return <BetterAuthRegisterForm key={initialSearch} initialSearch={initialSearch} />;
 }

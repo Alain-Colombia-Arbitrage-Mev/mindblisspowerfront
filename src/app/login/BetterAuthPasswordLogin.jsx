@@ -11,8 +11,11 @@ export default function BetterAuthPasswordLogin({ email, setEmail, onBusy, onErr
   const [visible, setVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [requiresVerification, setRequiresVerification] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState(/** @type {Record<string, string>} */ ({}));
   const submitting = useRef(false);
   const pending = useRef(null);
+  const emailInput = useRef(null);
+  const passwordInput = useRef(null);
 
   useEffect(() => () => {
     // A browser cancellation is not proof that an upstream sign-in was undone.
@@ -27,8 +30,16 @@ export default function BetterAuthPasswordLogin({ email, setEmail, onBusy, onErr
     onError('');
     onNotice('');
     setRequiresVerification(false);
+    setFieldErrors({});
     let contract;
-    try { contract = betterAuthPasswordRequest(email, password); } catch {
+    try { contract = betterAuthPasswordRequest(email, password); } catch (error) {
+      if (error.message === 'invalid_email') {
+        setFieldErrors({ email: 'Ingresa un correo electrónico válido.' });
+        emailInput.current?.focus();
+      } else {
+        setFieldErrors({ password: 'Ingresa tu contraseña de hasta 128 caracteres.' });
+        passwordInput.current?.focus();
+      }
       onError('Ingresa un correo válido y tu contraseña para continuar.');
       return;
     }
@@ -80,10 +91,10 @@ export default function BetterAuthPasswordLogin({ email, setEmail, onBusy, onErr
   return (
     <form onSubmit={submit} noValidate aria-busy={loading} className="space-y-4">
       <p className="text-sm leading-6 text-[var(--vp-muted)]">Usa la contraseña que creaste al registrarte. Esta opción no envía otro correo ni requiere esperar para solicitar un código.</p>
-      <RegistrationField id="password-login-email" name="email" label="Correo electrónico" type="email" autoComplete="email" autoCapitalize="none" spellCheck={false} required maxLength={254}
-        value={email} disabled={loading} onChange={event => { setEmail(event.target.value); onError(''); }} />
-      <RegistrationPassword id="password-login-password" name="password" label="Contraseña" autoComplete="current-password" required maxLength={128}
-        value={password} disabled={loading} onChange={event => { setPassword(event.target.value); onError(''); }} visible={visible} onToggle={() => setVisible(current => !current)} />
+      <RegistrationField id="password-login-email" inputRef={emailInput} error={fieldErrors.email} name="email" label="Correo electrónico" type="email" autoComplete="email" autoCapitalize="none" spellCheck={false} required maxLength={254}
+        value={email} disabled={loading} onChange={event => { setEmail(event.target.value); setFieldErrors({}); setRequiresVerification(false); onError(''); }} />
+      <RegistrationPassword id="password-login-password" inputRef={passwordInput} error={fieldErrors.password} name="password" label="Contraseña" autoComplete="current-password" required maxLength={128}
+        value={password} disabled={loading} onChange={event => { setPassword(event.target.value); setFieldErrors({}); onError(''); }} visible={visible} onToggle={() => setVisible(current => !current)} />
       <RegistrationButton type="submit" disabled={loading} loading={loading}>{loading ? 'Comprobando acceso…' : 'Entrar con mi contraseña'}</RegistrationButton>
       <Link href="/forgot-password" className="inline-flex min-h-11 items-center text-sm font-bold text-[var(--vp-accent)] underline">Crear o cambiar contraseña con un código al correo</Link>
       {requiresVerification ? <Link href={registrationHref || registrationUrl(email, '', '', true)}

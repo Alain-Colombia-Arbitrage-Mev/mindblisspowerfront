@@ -143,3 +143,23 @@ test('malformed or rejected sign-in proof cannot trigger a canonical lookup, ref
     harness.unmount();
   }
 });
+
+test('local password-login validation focuses and explains the first invalid field without a provider request', async t => {
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', () => { calls++; assert.fail('invalid form reached the provider'); });
+  const harness = view(), focused = [];
+  harness.props.email = 'invalid';
+  find(harness.render(), node => node?.props?.id === 'password-login-email').props.inputRef.current = { focus() { focused.push('email'); } };
+  await harness.submit();
+  assert.deepEqual(focused, ['email']);
+  assert.match(find(harness.render(), node => node?.props?.id === 'password-login-email').props.error, /correo electrónico válido/);
+  harness.props.email = email; harness.changePassword('');
+  find(harness.render(), node => node?.props?.id === 'password-login-password').props.inputRef.current = { focus() { focused.push('password'); } };
+  await harness.submit();
+  assert.deepEqual(focused, ['email', 'password']);
+  assert.match(find(harness.render(), node => node?.props?.id === 'password-login-password').props.error, /contraseña/);
+  harness.changePassword(password);
+  assert.equal(find(harness.render(), node => node?.props?.id === 'password-login-password').props.error, undefined);
+  assert.equal(harness.state[0], password, 'input bytes remain unchanged');
+  assert.equal(calls, 0); harness.unmount();
+});

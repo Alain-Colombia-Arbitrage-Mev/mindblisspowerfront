@@ -19,10 +19,10 @@ function browser(t) {
   t.after(() => { if (previous === undefined) delete globalThis.window; else globalThis.window = previous; });
   return destinations;
 }
-function view() {
+function view({ microsoft = false } = {}) {
   return registrationViewHarness('../login/MagicLinkLoginForm.jsx', {
     'lucide-react': new Proxy({}, { get: () => () => null }),
-    '@/lib/useResendCooldown': { useResendCooldown: () => ({ active: false, label: '', start() {} }), isMicrosoftEmail: () => false, suggestEmailFix: () => '' },
+    '@/lib/useResendCooldown': { useResendCooldown: () => ({ active: false, label: '', start() {} }), isMicrosoftEmail: () => microsoft, suggestEmailFix: () => '' },
     '@/lib/password': { checkPassword: () => ({ results: [] }), isValidPassword: () => true },
     '@/lib/referral-attribution': { bindReferralToEmail() {}, captureReferralFromUrl: () => null, normalizePlacementSide: () => '', normalizeReferralCode: value => value },
     '@/lib/email-otp-client.mjs': emailOtp, './BetterAuthPasswordLogin': { default: () => null },
@@ -163,4 +163,61 @@ test('an old canonical cookie for another email never makes the newly verified a
   assert.doesNotMatch(html(harness), /Continuar al panel|previous@example\.test/);
   assert.deepEqual(destinations, []);
   harness.unmount();
+});
+
+test('manual access review is duplicate-locked, aborts on unmount and ignores a late canonical result or error', async t => {
+  const destinations = browser(t);
+  for (const result of [Response.json({ authenticated: true, mode: 'better-auth', email }),
+    Response.json({ error: 'synthetic-private-error' }, { status: 503 })]) {
+    let checks = 0, release, signal;
+    t.mock.method(globalThis, 'fetch', async (path, options) => {
+      if (path === '/api/auth/session') {
+        if (++checks === 1) return Response.json({ authenticated: false, mode: 'better-auth', state: 'review_required' });
+        signal = options.signal;
+        return new Promise(resolve => { release = resolve; });
+      }
+      return Response.json(path.endsWith('/send-verification-otp') ? { ok: true } : proof());
+    });
+    const harness = view(); await enterCode(harness);
+    const click = find(harness.render(props), node => node?.props?.children === 'Revisar acceso').props.onClick;
+    const pending = click(); await click();
+    assert.equal(checks, 2, 'the initial check and one explicit review are the only session requests');
+    harness.unmount(); const state = [...harness.state];
+    assert.equal(signal.aborted, true);
+    release(result); await pending;
+    assert.deepEqual(harness.state, state);
+    assert.deepEqual(destinations, [], 'an abandoned form cannot navigate after a late review');
+  }
+});
+
+test('a current explicit access review can proceed without sending or redeeming another OTP', async t => {
+  const destinations = browser(t), paths = [];
+  let checks = 0;
+  t.mock.method(globalThis, 'fetch', async path => {
+    paths.push(path);
+    return Response.json(path.endsWith('/send-verification-otp') ? { ok: true }
+      : path === '/api/auth/session' ? { authenticated: ++checks > 1, mode: 'better-auth', email } : proof());
+  });
+  const harness = view(); await enterCode(harness);
+  await find(harness.render(props), node => node?.props?.children === 'Revisar acceso').props.onClick();
+  assert.deepEqual(destinations, ['/dashboard']);
+  assert.deepEqual(paths, ['/api/auth/email-otp/send-verification-otp', '/api/auth/sign-in/email-otp', '/api/auth/session', '/api/auth/session']);
+  harness.unmount();
+});
+
+test('Microsoft delivery help preserves the original account and distinguishes the six-digit login purpose', async t => {
+  browser(t);
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', async () => { calls++; return Response.json({ ok: true }); });
+  const harness = view({ microsoft: true });
+  assert.match(html(harness), /6 dígitos.*5 minutos.*distinto del código de registro o recuperación/);
+  await submit(harness.render(props));
+  const markup = html(harness);
+  assert.match(markup, /conserva el correo original de tu cuenta/);
+  assert.match(markup, /no uses un código de registro o recuperación/);
+  assert.doesNotMatch(markup, /usa otro correo|cambia(?:r)? (?:el|tu) correo/i);
+  assert.match(markup, /name="login-code"/);
+  assert.match(markup, /aria-describedby="login-code-helper"/);
+  assert.match(markup, /maxLength="6"/);
+  assert.equal(calls, 1); harness.unmount();
 });

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   PASSWORD_RECOVERY_NOTICE, passwordRecoveryEmail, passwordRecoveryErrors, passwordRecoveryRequest,
-  passwordRecoveryAcknowledged, passwordRecoveryRetrySeconds, passwordRecoveryFailure,
+  passwordRecoveryAcknowledged, passwordRecoveryRetrySeconds, passwordRecoveryConfirmationRetrySeconds, passwordRecoveryFailure,
 } from './password-recovery-model.mjs';
 
 const input = { email: ' MEMBER@EXAMPLE.TEST ', otp: '001234', password: ' Raw password with spaces ', confirmPassword: ' Raw password with spaces ' };
@@ -53,4 +53,15 @@ test('recovery failures are neutral and never echo private provider diagnostics'
   assert.match(passwordRecoveryFailure(503), /Prueba iniciar sesión/);
   assert.match(passwordRecoveryFailure(400), /Revisa el código y los datos/);
   assert.doesNotMatch(passwordRecoveryFailure(403), /suspendid|existe|contraseña anterior/);
+});
+
+test('code redemption honors its own bounded Retry-After rather than borrowing the five-minute send budget', () => {
+  for (const [value, expected] of [[null, 60], ['30', 30], ['0.5', 1], ['600', 600], ['100000', 86400],
+    ['0', 60], ['-1', 60], ['Infinity', 60], ['invalid', 60]]) {
+    assert.equal(passwordRecoveryConfirmationRetrySeconds(new Response(null, { headers: value === null ? {} : { 'retry-after': value } })), expected);
+  }
+  assert.equal(passwordRecoveryConfirmationRetrySeconds(new Response(), { retryAfterSec: 45 }), 45);
+  assert.equal(passwordRecoveryConfirmationRetrySeconds(new Response(null, { headers: { 'retry-after': '90' } }), { retryAfter: 10 }), 90);
+  const now = Date.UTC(2026, 10, 3);
+  assert.equal(passwordRecoveryConfirmationRetrySeconds(new Response(null, { headers: { 'retry-after': new Date(now + 120000).toUTCString() } }), {}, now), 120);
 });

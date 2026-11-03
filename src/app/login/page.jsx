@@ -26,7 +26,7 @@ export default async function LoginPage({ searchParams }) {
       activePath="/login"
       eyebrow="Acceso"
       title="Tu equipo ya está adentro."
-      description="Entra con código al correo o contraseña y retoma tu actividad donde la dejaste."
+      description="Entra con un código a tu correo, sin recordar una contraseña. Si ya tienes contraseña de acceso, también puedes utilizarla."
       sideKpis={sideKpis}
       visualSrc="/mindbliss/mindbliss-02.avif"
       visualAlt="Equipo Mindbliss celebrando"
@@ -36,7 +36,7 @@ export default async function LoginPage({ searchParams }) {
           Iniciar sesión
         </h2>
         <p className="mt-2 text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
-          Usa tu correo para recibir un código de acceso o entra con tu contraseña.
+          Recibe un código de 6 dígitos en tu correo. Si aún no tienes cuenta, te guiaremos al registro.
         </p>
       </div>
 
@@ -50,12 +50,12 @@ export default async function LoginPage({ searchParams }) {
       >
         <MagicLinkLoginForm authMode={emailOtpOnly ? "better-auth" : "cognito"} authState={authState} initialEmail={initialEmail} initialRef={initialRef} initialSide={initialSide} initialMode={initialMode} />
 
-        <div className="mt-6 flex items-center justify-center gap-3 border-t pt-5 text-sm" style={{ borderColor: "var(--vp-border)" }}>
-          <Link href={registrationUrl(initialEmail, initialRef, initialSide)} className="font-bold transition hover:opacity-80" style={{ color: "var(--vp-text-soft)" }}>
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-3 border-t pt-5 text-sm" style={{ borderColor: "var(--vp-border)" }}>
+          <Link href={registrationUrl(initialEmail, initialRef, initialSide)} className="inline-flex min-h-11 items-center font-bold transition hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--vp-accent)]" style={{ color: "var(--vp-text-soft)" }}>
             Crear cuenta
           </Link>
           <span style={{ color: "var(--vp-border-strong)" }}>·</span>
-          <Link href="/forgot-password" className="font-bold transition hover:opacity-80" style={{ color: "var(--vp-text-soft)" }}>
+          <Link href="/forgot-password" className="inline-flex min-h-11 items-center font-bold transition hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--vp-accent)]" style={{ color: "var(--vp-text-soft)" }}>
             {emailOtpOnly ? 'Crear o cambiar contraseña' : 'Recuperar contraseña'}
           </Link>
         </div>

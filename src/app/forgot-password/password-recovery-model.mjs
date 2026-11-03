@@ -42,6 +42,17 @@ export function passwordRecoveryRetrySeconds(response, payload = {}) {
     : PASSWORD_RECOVERY_RESEND_SECONDS;
 }
 
+// A rate-limited code redemption is independent of the resend budget. A user
+// may redeem a received code while resend is cooling down, but must honor a
+// separate server 429 without losing their code or submitting automatically.
+export function passwordRecoveryConfirmationRetrySeconds(response, payload = {}, now = Date.now()) {
+  const header = response.headers?.get('retry-after');
+  const value = header || payload?.retryAfter || payload?.retryAfterSec;
+  const supplied = Number(value);
+  const seconds = Number.isFinite(supplied) ? supplied : header ? (Date.parse(header) - now) / 1000 : NaN;
+  return Number.isFinite(seconds) && seconds > 0 ? Math.min(86400, Math.ceil(seconds)) : 60;
+}
+
 export function passwordRecoveryFailure(status, action = 'confirm') {
   if (status === 429) return 'Demasiados intentos. Espera antes de volver a intentarlo.';
   if (status >= 500) return action === 'confirm'

@@ -70,7 +70,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
   const [resetCode, setResetCode] = useState("");
   const [verifiedLogin, setVerifiedLogin] = useState(null);
   const verifiedTitle = useRef(null);
-  const codeCooldown = useResendCooldown(emailOtpOnly ? 300 : 45);
+  const codeCooldown = useResendCooldown(emailOtpOnly ? 300 : 45, `${authMode}:sign-in:${(codeStep === 'confirm' ? codeRecipient : email).trim().toLowerCase()}`);
   const resetCooldown = useResendCooldown(45);
 
   const authMessage = getAuthStateMessage(authState);
@@ -110,16 +110,23 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
       return;
     }
     otpSubmittingRef.current = true;
+    const controller = new AbortController();
+    otpRequestRef.current = controller;
+    const recipient = verifiedLogin.email;
     setLoadingAction('access-check');
     try {
       // Recheck the current server session; the confirmation never grants a
       // network binding, role, rank or placement by itself.
-      const access = await betterAuthAccess(fetch, verifiedLogin.email);
+      const access = await betterAuthAccess(fetch, recipient, { signal: controller.signal });
+      if (controller.signal.aborted || otpRequestRef.current !== controller) return;
       if (access.ready) window.location.assign('/dashboard');
-      else setVerifiedLogin(current => ({ ...current, access }));
+      else setVerifiedLogin(current => current?.email === recipient ? { ...current, access } : current);
     } finally {
-      otpSubmittingRef.current = false;
-      setLoadingAction('');
+      if (otpRequestRef.current === controller) {
+        otpRequestRef.current = null;
+        otpSubmittingRef.current = false;
+        if (!controller.signal.aborted) setLoadingAction('');
+      }
     }
   }
 
@@ -441,7 +448,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
         // A verified mailbox is not an approved network identity. Never assign
         // a person, rank, placement or role from the sign-in response.
         showVerifiedLogin(normalizedEmail, { ready: false, checking: true });
-        const access = await betterAuthAccess(fetch, normalizedEmail);
+        const access = await betterAuthAccess(fetch, normalizedEmail, { signal: controller.signal });
         if (controller.signal.aborted || otpRequestRef.current !== controller) return;
         showVerifiedLogin(normalizedEmail, access);
         return;
@@ -649,7 +656,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
         codeStep === "request" ? (
           <form className="space-y-4" onSubmit={requestLoginCode}>
             <p className="text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
-              Recibe un código en tu correo para entrar a tu cuenta.
+              {emailOtpOnly ? 'Recibe un código de 6 dígitos para iniciar sesión. Vence en 5 minutos y es distinto del código de registro o recuperación.' : 'Recibe un código en tu correo para entrar a tu cuenta.'}
             </p>
             <EmailField email={email} readOnly={isLoading} setEmail={setEmail} onClearError={() => setError("")} />
 
@@ -679,6 +686,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
               label="Código de acceso"
               value={loginCode}
               codeLength={emailOtpOnly ? 6 : 12}
+              helper={emailOtpOnly ? 'Usa el código de acceso más reciente de 6 dígitos. Vence en 5 minutos; no uses un código de registro o recuperación.' : ''}
               autoFocus
               onChange={(value) => {
                 setLoginCode(value);
@@ -946,7 +954,7 @@ function PasswordField({ id, label, value, showPassword, autoComplete, onChange,
   );
 }
 
-function CodeField({ id, label, value, onChange, autoFocus = false, codeLength = 12 }) {
+function CodeField({ id, label, value, onChange, autoFocus = false, codeLength = 12, helper = '' }) {
   return (
     <div>
       <label className="mb-2 block text-sm font-bold" htmlFor={id} style={{ color: "var(--vp-text)" }}>
@@ -954,10 +962,14 @@ function CodeField({ id, label, value, onChange, autoFocus = false, codeLength =
       </label>
       <input
         id={id}
+        name={id}
         inputMode="numeric"
         autoComplete="one-time-code"
+        autoCapitalize="none"
+        spellCheck={false}
+        aria-describedby={helper ? `${id}-helper` : undefined}
         autoFocus={autoFocus}
-        maxLength={12}
+        maxLength={codeLength}
         value={value}
         onChange={(event) => onChange(event.target.value.replace(/[\s-]+/g, "").slice(0, codeLength))}
         placeholder={codeLength === 6 ? "······" : "········"}
@@ -968,6 +980,7 @@ function CodeField({ id, label, value, onChange, autoFocus = false, codeLength =
           border: "1px solid var(--vp-border)",
         }}
       />
+      {helper ? <p id={`${id}-helper`} className="mt-2 text-xs leading-5" style={{ color: 'var(--vp-muted)' }}>{helper}</p> : null}
     </div>
   );
 }
@@ -980,7 +993,7 @@ function DeliveryHint({ email }) {
   return (
     <p className="text-xs leading-5" style={{ color: microsoft ? "var(--vp-amber, #d97706)" : "var(--vp-subtle)" }}>
       {microsoft
-        ? "Tu correo es de Microsoft (Hotmail/Outlook/Live): a veces demora o cae en «Correo no deseado». Revisa esa carpeta o usa otro correo."
+        ? "Tu correo es de Microsoft (Hotmail/Outlook/Live): a veces demora o cae en «Correo no deseado». Revisa esa carpeta y conserva el correo original de tu cuenta. Si no llega, espera antes de reenviar o contacta al soporte."
         : "¿No llega en 1–2 min? Revisa la carpeta de spam / correo no deseado."}
     </p>
   );

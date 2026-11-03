@@ -8,7 +8,7 @@ import { proxyBetterAuth } from './better-auth-bridge.mjs';
 const env = { AUTH_PROVIDER: 'better-auth', NODE_ENV: 'production', AUTH_PUBLIC_ORIGIN: 'https://portal.example.test',
   BETTER_AUTH_BACKEND_URL: 'https://auth.example.test', AUTH_BFF_SHARED_SECRET: 'synthetic-proxy-signature-secret-longer-than-32',
   BETTER_AUTH_REGISTRATION_SMS_REQUIRED: 'true', SENTDM_API_KEY: 'synthetic-stale-key' };
-const form = { fullName: 'Synthetic Contact', email: 'contact@example.test', password: 'synthetic password 123', acceptsPrivacy: true };
+const form = { fullName: 'Synthetic Contact', email: 'contact@example.test', acceptsPrivacy: true };
 const request = (body, cookie = '') => new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/auth/register`, {
   method: 'POST', headers: { origin: env.AUTH_PUBLIC_ORIGIN, 'cf-connecting-ip': '192.0.2.10', 'content-type': 'application/json', cookie }, body: JSON.stringify(body),
 });
@@ -39,7 +39,9 @@ test('email-only signup saves only declared contacts through signed transport; s
     'register', { env, fetchImpl: async (url, options) => {
       calls++;
       assert.equal(url, `${env.BETTER_AUTH_BACKEND_URL}/api/auth/sign-up/email`);
-      assert.deepEqual(JSON.parse(options.body), { name: form.fullName, email: form.email, password: form.password, ...contacts });
+      const { password, ...body } = JSON.parse(options.body);
+      assert.match(password, /^[A-Za-z0-9_-]{64}$/);
+      assert.deepEqual(body, { name: form.fullName, email: form.email, ...contacts });
       assert.equal(options.headers.cookie, '');
       const hash = value => createHash('sha256').update(value).digest('hex');
       assert.equal(options.headers['x-vp-auth-signature'], createHmac('sha256', env.AUTH_BFF_SHARED_SECRET)

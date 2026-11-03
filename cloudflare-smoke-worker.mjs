@@ -9,6 +9,8 @@ const secret = 'synthetic-private-context-not-a-real-secret-longer-than-32';
 const issuer = 'https://portal.example.test';
 const audience = 'member-services';
 const sessionCookie = '__Secure-better-auth.session_token=synthetic.value%2Bencoded';
+const registrationCookie = '__Secure-better-auth.session_token=synthetic.registration%2Bproof';
+const registrationToken = 'synthetic-registration-token';
 const modes = new Map([[sessionCookie, 'member'],
   ['__Secure-better-auth.session_token=synthetic-tampered', 'tampered'],
   ['__Secure-better-auth.session_token=synthetic-wrong-audience', 'wrong-audience']]);
@@ -174,7 +176,7 @@ const syntheticEnv = {
     if (url.endsWith('/sign-up/email')) {
       const body = JSON.parse(options.body);
       if (body.name !== 'Synthetic Registration' || body.email !== 'signup@example.test'
-        || typeof body.password !== 'string' || body.password.length < 12) throw new Error('invalid_synthetic_registration');
+        || typeof body.password !== 'string' || !/^[A-Za-z0-9_-]{64}$/.test(body.password)) throw new Error('invalid_synthetic_registration');
       if (!validProxySignature(target, options, headers) || headers.get('cookie')) throw new Error('invalid_signup_signature_or_cookie');
       const allowed = new Set(['name', 'email', 'password', 'contactPhone', 'contactWhatsapp']);
       if (Object.keys(body).some(key => !allowed.has(key))) throw new Error('signup_authority_field_forwarded');
@@ -186,9 +188,19 @@ const syntheticEnv = {
       return Response.json({ token: null, user: { id: 'synthetic-signup', email: body.email, emailVerified: false } });
     }
     if (url.endsWith('/email-otp/verify-email')) {
+      if (!validProxySignature(target, options, headers) || headers.get('cookie')) throw new Error('invalid_verify_signature_or_cookie');
       const body = JSON.parse(options.body);
       if (body.email !== 'signup@example.test' || body.otp !== '001234') return Response.json({ code: 'INVALID_OTP' }, { status: 400 });
-      return Response.json({ status: true, token: null, user: { id: 'synthetic-signup', email: body.email, emailVerified: true } });
+      return Response.json({ status: true, token: registrationToken, user: { id: 'synthetic-signup', email: body.email, emailVerified: true } }, {
+        headers: { 'set-cookie': `${registrationCookie}; Secure; HttpOnly; Path=/` },
+      });
+    }
+    if (url.endsWith('/get-session')) {
+      if (options.method !== 'GET' || !validProxySignature(target, options, headers)
+        || headers.get('cookie') !== registrationCookie) throw new Error('invalid_registration_session_proof');
+      return Response.json({ session: { id: 'synthetic-registration-session', userId: 'synthetic-signup',
+        token: registrationToken, expiresAt: new Date(Date.now() + 300000).toISOString() },
+      user: { id: 'synthetic-signup', email: 'signup@example.test', emailVerified: true } });
     }
     if (url.endsWith('/email-otp/request-password-reset') || url.endsWith('/email-otp/reset-password')) {
       if (!validProxySignature(target, options, headers) || headers.get('cookie')) throw new Error('invalid_recovery_signature_or_cookie');

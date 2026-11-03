@@ -8,7 +8,7 @@ import { RegistrationButton, RegistrationField, RegistrationPassword } from '../
 import {
   PASSWORD_RECOVERY_RESEND_SECONDS, PASSWORD_RECOVERY_NOTICE, PASSWORD_RECOVERY_UNCONFIRMED,
   passwordRecoveryEmail, passwordRecoveryErrors, passwordRecoveryRequest, passwordRecoveryAcknowledged,
-  passwordRecoveryRetrySeconds, passwordRecoveryFailure,
+  passwordRecoveryRetrySeconds, passwordRecoveryConfirmationRetrySeconds, passwordRecoveryFailure,
 } from './password-recovery-model.mjs';
 
 // Recovery is the same flow with or without an existing password. The browser
@@ -33,7 +33,9 @@ export default function BetterAuthPasswordRecovery({ initialEmail = '' }) {
   const passwordInput = useRef(null);
   const confirmationInput = useRef(null);
   const title = useRef(null);
-  const cooldown = useResendCooldown(PASSWORD_RECOVERY_RESEND_SECONDS);
+  const cooldownScope = passwordRecoveryEmail(recipient || email);
+  const cooldown = useResendCooldown(PASSWORD_RECOVERY_RESEND_SECONDS, `better-auth:password-recovery:send:${cooldownScope}`);
+  const confirmationCooldown = useResendCooldown(60, `better-auth:password-recovery:confirm:${cooldownScope}`);
   const busy = Boolean(loading);
 
   useEffect(() => () => {
@@ -119,7 +121,7 @@ export default function BetterAuthPasswordRecovery({ initialEmail = '' }) {
 
   async function confirm(event) {
     event.preventDefault();
-    if (submitting.current || busy || step !== 'confirm') return;
+    if (submitting.current || busy || confirmationCooldown.active || step !== 'confirm') return;
     const input = { email: recipient, otp, password, confirmPassword };
     const validation = passwordRecoveryErrors(input);
     setErrors(validation); setNotice('');
@@ -131,7 +133,7 @@ export default function BetterAuthPasswordRecovery({ initialEmail = '' }) {
       const { response, payload } = await post(contract, controller, 'confirm');
       if (controller.signal.aborted || pending.current !== controller) return;
       if (response.status !== 200 || !passwordRecoveryAcknowledged(payload)) {
-        if (response.status === 429) cooldown.start(passwordRecoveryRetrySeconds(response, payload));
+        if (response.status === 429) confirmationCooldown.start(passwordRecoveryConfirmationRetrySeconds(response, payload));
         setErrors({ form: passwordRecoveryFailure(response.ok ? 502 : response.status) });
         return;
       }
@@ -163,7 +165,7 @@ export default function BetterAuthPasswordRecovery({ initialEmail = '' }) {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm leading-6 text-[var(--vp-muted)]">Si ya tienes una cuenta, puedes crear tu primera contraseña de acceso o reemplazar la anterior. Debes comprobar el correo original con un código; tu contraseña antigua no es necesaria.</p>
+      <p className="text-sm leading-6 text-[var(--vp-muted)]">Si ya tienes una cuenta, puedes crear tu primera contraseña de acceso o reemplazar la anterior. Debes comprobar el correo original con un código de recuperación de 6 dígitos que vence en 5 minutos; tu contraseña antigua no es necesaria.</p>
       {errors.form ? <p ref={feedback} tabIndex={-1} role="alert" aria-live="assertive" className="rounded-lg border border-[var(--vp-danger-border)] bg-[var(--vp-danger-muted)] p-3 text-sm text-[var(--vp-danger)]">{errors.form}</p> : null}
       {notice ? <p role="status" aria-live="polite" aria-atomic="true" className="rounded-lg border border-[var(--vp-accent-border)] bg-[var(--vp-accent-muted)] p-3 text-sm text-[var(--vp-text)]">{notice}</p> : null}
       <form onSubmit={step === 'request' ? requestCode : confirm} noValidate aria-busy={busy} className="space-y-4">
@@ -173,7 +175,7 @@ export default function BetterAuthPasswordRecovery({ initialEmail = '' }) {
         {step === 'confirm' ? <>
           <RegistrationField id="recovery-otp" name="otp" label="Código de recuperación" inputRef={codeInput} autoComplete="one-time-code" inputMode="numeric"
             required minLength={6} maxLength={6} pattern="[0-9]{6}" value={otp} disabled={busy} error={errors.otp}
-            onChange={event => update('otp', event.target.value)} helper="Usa el código de recuperación más reciente, no un código para iniciar sesión." />
+            onChange={event => update('otp', event.target.value)} helper="Usa los 6 dígitos del código de recuperación más reciente. Vence en 5 minutos; no uses un código de inicio de sesión o registro." />
           <RegistrationPassword id="recovery-password" name="password" label="Nueva contraseña" inputRef={passwordInput} autoComplete="new-password" required minLength={12} maxLength={128}
             value={password} disabled={busy} error={errors.password} helper="Entre 12 y 128 caracteres. Puedes usar una frase larga."
             visible={visiblePassword} onToggle={() => setVisiblePassword(current => !current)} onChange={event => update('password', event.target.value)} />
@@ -181,9 +183,10 @@ export default function BetterAuthPasswordRecovery({ initialEmail = '' }) {
             value={confirmPassword} disabled={busy} error={errors.confirmPassword} visible={visibleConfirmation}
             onToggle={() => setVisibleConfirmation(current => !current)} onChange={event => update('confirmPassword', event.target.value)} />
         </> : null}
-        <RegistrationButton type="submit" disabled={busy || (step === 'request' && cooldown.active)} loading={busy}>
+        <RegistrationButton type="submit" disabled={busy || (step === 'request' ? cooldown.active : confirmationCooldown.active)} loading={busy}>
           {busy ? loading === 'confirm' ? 'Guardando contraseña…' : 'Solicitando código…'
-            : step === 'confirm' ? 'Guardar nueva contraseña' : cooldown.active ? cooldown.label : 'Solicitar código por correo'}
+            : step === 'confirm' ? confirmationCooldown.active ? confirmationCooldown.label.replace(/^Reenviar/, 'Validar de nuevo') : 'Guardar nueva contraseña'
+              : cooldown.active ? cooldown.label : 'Solicitar código por correo'}
         </RegistrationButton>
       </form>
       {step === 'confirm' ? <div className="grid gap-2 sm:grid-cols-2">

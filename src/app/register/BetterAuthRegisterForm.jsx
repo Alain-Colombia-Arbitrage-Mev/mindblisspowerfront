@@ -6,13 +6,13 @@ import { useEffect, useRef, useState } from 'react';
 import AuthShell from '../_components/AuthShell';
 import { useResendCooldown, suggestEmailFix } from '@/lib/useResendCooldown';
 import { bindReferralCodeToEmail } from '@/lib/referral-attribution';
-import { otpTimeoutMs } from '@/lib/email-otp-client.mjs';
-import { RegistrationButton, RegistrationField, RegistrationPassword } from './RegistrationFields';
+import { RegistrationButton, RegistrationField } from './RegistrationFields';
+import { betterAuthAccess } from '../login/better-auth-login.mjs';
 import ContactPhoneField from './ContactPhoneField';
 import { initialContactPhone, registrationContactValues } from './contact-phone-model.mjs';
-import { REGISTRATION_RESEND_SECONDS, consumeRegistrationPrefill, registrationEmail, registrationErrors, registrationFailure, registrationHints, registrationLoginUrl, registrationRetrySeconds, registrationAcknowledged, registrationPendingDelivery } from './registration-model.mjs';
+import { REGISTRATION_RESEND_SECONDS, consumeRegistrationPrefill, registrationEmail, registrationErrors, registrationFailure, registrationHints, registrationLoginUrl, registrationRetrySeconds, registrationAcknowledged, registrationPendingDelivery, registrationTimeoutMs } from './registration-model.mjs';
 
-const initialForm = { fullName: '', email: '', password: '', confirmPassword: '', acceptsPrivacy: false,
+const initialForm = { fullName: '', email: '', acceptsPrivacy: false,
   contactPhone: initialContactPhone(), contactWhatsapp: initialContactPhone(), whatsappSameAsPhone: false };
 
 // Registration verifies email ownership only; optional phone contacts remain
@@ -25,17 +25,33 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState('');
   const [code, setCode] = useState('');
-  const [visiblePassword, setVisiblePassword] = useState(false);
-  const [visibleConfirmation, setVisibleConfirmation] = useState(false);
+  const [access, setAccess] = useState(/** @type {{ ready: boolean, checking: boolean, error?: string, notice?: string }} */ ({ ready: false, checking: false }));
   const submitting = useRef(false);
+  const mounted = useRef(false);
+  const activeRequest = useRef(null);
+  const requestGeneration = useRef(0);
   const feedback = useRef(null);
   const codeInput = useRef(null);
   const title = useRef(null);
-  const cooldown = useResendCooldown(REGISTRATION_RESEND_SECONDS);
-  const isLoading = Boolean(loading);
+  const contactDetails = useRef(null);
   const email = registrationEmail(form.email);
+  const cooldown = useResendCooldown(REGISTRATION_RESEND_SECONDS, email);
+  const isLoading = Boolean(loading);
   const loginUrl = registrationLoginUrl(email, hints.referralCode, hints.preferredSide);
   const emailSuggestion = suggestEmailFix(form.email);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      requestGeneration.current++;
+      // Cancellation prevents stale UI updates, not a provider delivery that
+      // may already have been accepted. It never schedules another send.
+      activeRequest.current?.controller.abort();
+      activeRequest.current = null;
+      submitting.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (new URLSearchParams(initialSearch).get('reason') !== 'registration-required' || hints.resume) return;
@@ -64,36 +80,58 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
     });
   }
 
-  async function post(path, body, action = 'confirm') {
+  function beginRequest() {
+    const operation = { generation: ++requestGeneration.current, controller: new AbortController() };
+    activeRequest.current = operation;
+    return operation;
+  }
+
+  function currentRequest(operation) {
+    return mounted.current && activeRequest.current === operation
+      && requestGeneration.current === operation.generation && !operation.controller.signal.aborted;
+  }
+
+  function finishRequest(operation) {
+    if (!currentRequest(operation)) return;
+    activeRequest.current = null;
+    submitting.current = false;
+    setLoading('');
+  }
+
+  async function post(path, body, action, operation) {
     const response = await fetch(path, {
       method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error',
-      signal: AbortSignal.timeout(otpTimeoutMs(action)), headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      signal: AbortSignal.any([operation.controller.signal, AbortSignal.timeout(registrationTimeoutMs(action))]),
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     });
     return { response, payload: await response.json().catch(() => ({})) };
   }
 
   async function register(event) {
     event.preventDefault();
-    if (submitting.current) return;
+    if (submitting.current || !mounted.current) return;
     setNotice('');
     const contacts = registrationContactValues(form);
     const nextErrors = { ...registrationErrors(form), ...contacts.errors };
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) {
+      if ((nextErrors.contactPhone || nextErrors.contactWhatsapp) && contactDetails.current) contactDetails.current.open = true;
       document.getElementById(Object.keys(nextErrors)[0])?.focus();
       return;
     }
     submitting.current = true;
+    const operation = beginRequest();
     setLoading('register');
     try {
       const { response, payload } = await post('/api/auth/register', {
-        fullName: form.fullName.trim(), email, password: form.password, acceptsPrivacy: true,
+        fullName: form.fullName.trim(), email, acceptsPrivacy: true,
         referralCode: hints.referralCode, preferredSide: hints.preferredSide,
         ...contacts.values,
-      }, 'send');
+      }, 'send', operation);
+      if (!currentRequest(operation)) return;
       if (registrationPendingDelivery(response.status, payload, email)) {
         if (hints.referralCode) bindReferralCodeToEmail(email, hints.referralCode, undefined, undefined, 'registration', hints.preferredSide);
-        setForm(current => ({ ...current, email, password: '', confirmPassword: '' }));
+        setForm(current => ({ ...current, email }));
         setCode('');
         setStep('confirm');
         cooldown.start(registrationRetrySeconds(response, payload));
@@ -106,24 +144,23 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
         return;
       }
       if (hints.referralCode) bindReferralCodeToEmail(email, hints.referralCode, undefined, undefined, 'registration', hints.preferredSide);
-      // Clear credentials from component memory after the server accepts them.
-      setForm(current => ({ ...current, email, password: '', confirmPassword: '' }));
+      setForm(current => ({ ...current, email }));
       setCode('');
       setStep('confirm');
       cooldown.start(registrationRetrySeconds(response, payload));
       setNotice('Si el registro se puede completar con este correo, recibirás un código. Revisa también spam o correo no deseado.');
     } catch {
+      if (!currentRequest(operation)) return;
       cooldown.start();
       setErrors({ form: 'No pudimos confirmar el resultado. No enviaremos otro correo automáticamente. Si recibes el código, usa «Ya solicité mi registro»; de lo contrario espera antes de reintentar.' });
     } finally {
-      submitting.current = false;
-      setLoading('');
+      finishRequest(operation);
     }
   }
 
   async function confirm(event) {
     event.preventDefault();
-    if (submitting.current) return;
+    if (submitting.current || !mounted.current) return;
     setErrors({});
     setNotice('');
     if (!/^\d{6}$/.test(code)) {
@@ -132,9 +169,11 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
       return;
     }
     submitting.current = true;
+    const operation = beginRequest();
     setLoading('confirm');
     try {
-      const { response, payload } = await post('/api/auth/register/confirm', { email, code });
+      const { response, payload } = await post('/api/auth/register/confirm', { email, code }, 'confirm', operation);
+      if (!currentRequest(operation)) return;
       if (!response.ok || !registrationAcknowledged('confirm', payload)) {
         if (response.status === 429) cooldown.start(registrationRetrySeconds(response, payload));
         setErrors({ form: registrationFailure(response.ok ? 502 : response.status, 'confirm', payload?.code) });
@@ -142,23 +181,44 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
       }
       setCode('');
       setStep('verified');
+      setAccess({ ready: false, checking: true });
+      const currentAccess = await betterAuthAccess(fetch, email, { signal: operation.controller.signal });
+      if (!currentRequest(operation)) return;
+      setAccess({ ...currentAccess, checking: false });
     } catch {
-      setErrors({ form: 'No pudimos verificar el código. Revisa tu conexión e inténtalo otra vez.' });
+      if (!currentRequest(operation)) return;
+      setErrors({ form: registrationFailure(503, 'confirm') });
     } finally {
-      submitting.current = false;
-      setLoading('');
+      finishRequest(operation);
+    }
+  }
+
+  async function recheckAccess() {
+    if (submitting.current || !mounted.current) return;
+    submitting.current = true;
+    const operation = beginRequest();
+    setLoading('access');
+    setAccess({ ready: false, checking: true });
+    try {
+      const currentAccess = await betterAuthAccess(fetch, email, { signal: operation.controller.signal });
+      if (!currentRequest(operation)) return;
+      setAccess({ ...currentAccess, checking: false });
+    } finally {
+      finishRequest(operation);
     }
   }
 
   async function resend() {
-    if (submitting.current || cooldown.active) return;
+    if (submitting.current || cooldown.active || !mounted.current) return;
     submitting.current = true;
+    const operation = beginRequest();
     setLoading('resend');
     setErrors({});
     setNotice('');
     cooldown.start();
     try {
-      const { response, payload } = await post('/api/auth/register/confirm', { email, resend: true }, 'send');
+      const { response, payload } = await post('/api/auth/register/confirm', { email, resend: true }, 'send', operation);
+      if (!currentRequest(operation)) return;
       if (!response.ok || !registrationAcknowledged('resend', payload)) {
         if (response.status === 429) cooldown.start(registrationRetrySeconds(response, payload));
         setErrors({ form: registrationFailure(response.ok ? 502 : response.status, 'resend', payload?.code) });
@@ -168,11 +228,11 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
       cooldown.start(registrationRetrySeconds(response, payload));
       setNotice('Solicitud recibida. Si corresponde, recibirás un código en ese correo. Usa el código más reciente.');
     } catch {
+      if (!currentRequest(operation)) return;
       cooldown.start();
       setErrors({ form: 'No pudimos solicitar el código. Revisa tu conexión e inténtalo otra vez.' });
     } finally {
-      submitting.current = false;
-      setLoading('');
+      finishRequest(operation);
     }
   }
 
@@ -200,26 +260,23 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
               value={form.fullName} onChange={event => update('fullName', event.target.value)} error={errors.fullName} disabled={isLoading} />
             <RegistrationField id="email" name="email" label="Correo electrónico" type="email" autoComplete="email" autoCapitalize="none" spellCheck={false} required maxLength={254}
               value={form.email} onChange={event => update('email', event.target.value)} error={errors.email} disabled={isLoading}
-              helper="Usa un correo propio al que tengas acceso. Recibirás allí tu código de verificación." />
+              helper="Tu correo será tu acceso. Recibirás un código de verificación; puedes crear una contraseña opcional más adelante." />
             {emailSuggestion ? <button type="button" onClick={() => update('email', emailSuggestion)} disabled={isLoading} className="min-h-10 text-left text-sm underline text-[var(--vp-text)]">¿Quisiste escribir {emailSuggestion}?</button> : null}
-            <fieldset className="min-w-0 space-y-4 rounded-lg border border-[var(--vp-border)] p-4">
-              <legend className="px-1 text-sm font-semibold text-[var(--vp-text)]">Contacto opcional</legend>
-              <p id="contact-purpose" className="text-sm leading-6 text-[var(--vp-muted)]">Estos datos se guardan en tu perfil, sin validar el teléfono ni enviar mensajes. Sólo verificaremos tu correo; añadir un número no autoriza publicidad.</p>
-              <ContactPhoneField id="contactPhone" label="Teléfono" value={form.contactPhone} onChange={value => update('contactPhone', value)} error={errors.contactPhone} disabled={isLoading} />
-              <label htmlFor="whatsappSameAsPhone" className="flex cursor-pointer items-start gap-3 text-sm leading-6 text-[var(--vp-text)]">
-                <input id="whatsappSameAsPhone" name="whatsappSameAsPhone" type="checkbox" checked={form.whatsappSameAsPhone} disabled={isLoading}
-                  onChange={event => update('whatsappSameAsPhone', event.target.checked)} aria-describedby="contact-purpose" className="mt-1 h-5 w-5 shrink-0 accent-[var(--vp-accent)]" />
-                Mi WhatsApp usa el mismo número de teléfono.
-              </label>
-              {form.whatsappSameAsPhone ? <p role="status" className="text-sm leading-6 text-[var(--vp-muted)]">Guardaremos el teléfono indicado también como tu contacto de WhatsApp.</p>
-                : <ContactPhoneField id="contactWhatsapp" label="WhatsApp" value={form.contactWhatsapp} onChange={value => update('contactWhatsapp', value)} error={errors.contactWhatsapp} disabled={isLoading} />}
-            </fieldset>
-            <RegistrationPassword id="password" name="new-password" label="Contraseña" autoComplete="new-password" required minLength={12} maxLength={128}
-              value={form.password} onChange={event => update('password', event.target.value)} error={errors.password} helper="Entre 12 y 128 caracteres. Usa una frase larga que no utilices en otros sitios."
-              visible={visiblePassword} onToggle={() => setVisiblePassword(value => !value)} disabled={isLoading} />
-            <RegistrationPassword id="confirmPassword" name="confirm-password" label="Confirmar contraseña" autoComplete="new-password" required minLength={12} maxLength={128}
-              value={form.confirmPassword} onChange={event => update('confirmPassword', event.target.value)} error={errors.confirmPassword}
-              visible={visibleConfirmation} onToggle={() => setVisibleConfirmation(value => !value)} disabled={isLoading} />
+            <details ref={contactDetails} className="min-w-0 rounded-lg border border-[var(--vp-border)] p-4">
+              <summary className="min-h-11 cursor-pointer text-sm font-semibold leading-6 text-[var(--vp-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--vp-accent)]">Agregar teléfono o WhatsApp (opcional)</summary>
+              <fieldset className="mt-4 min-w-0 space-y-4">
+                <legend className="px-1 text-sm font-semibold text-[var(--vp-text)]">Contacto opcional</legend>
+                <p id="contact-purpose" className="text-sm leading-6 text-[var(--vp-muted)]">Estos datos se guardan en tu perfil, sin validar el teléfono ni enviar mensajes. Sólo verificaremos tu correo; añadir un número no autoriza publicidad.</p>
+                <ContactPhoneField id="contactPhone" label="Teléfono" value={form.contactPhone} onChange={value => update('contactPhone', value)} error={errors.contactPhone} disabled={isLoading} />
+                <label htmlFor="whatsappSameAsPhone" className="flex cursor-pointer items-start gap-3 text-sm leading-6 text-[var(--vp-text)]">
+                  <input id="whatsappSameAsPhone" name="whatsappSameAsPhone" type="checkbox" checked={form.whatsappSameAsPhone} disabled={isLoading}
+                    onChange={event => update('whatsappSameAsPhone', event.target.checked)} aria-describedby="contact-purpose" className="mt-1 h-5 w-5 shrink-0 accent-[var(--vp-accent)]" />
+                  Mi WhatsApp usa el mismo número de teléfono.
+                </label>
+                {form.whatsappSameAsPhone ? <p role="status" className="text-sm leading-6 text-[var(--vp-muted)]">Guardaremos el teléfono indicado también como tu contacto de WhatsApp.</p>
+                  : <ContactPhoneField id="contactWhatsapp" label="WhatsApp" value={form.contactWhatsapp} onChange={value => update('contactWhatsapp', value)} error={errors.contactWhatsapp} disabled={isLoading} />}
+              </fieldset>
+            </details>
             {hints.referralCode ? <p className="rounded-lg border border-[var(--vp-border)] p-3 text-sm leading-6 text-[var(--vp-muted)]">Referencia recibida: <span className="break-all text-[var(--vp-text)]">{hints.referralCode}</span>. Se revisará al vincular tu cuenta; no asigna automáticamente una posición en la red.</p> : null}
             <div>
               <label className="flex cursor-pointer items-start gap-3 text-sm leading-6 text-[var(--vp-text)]" htmlFor="acceptsPrivacy">
@@ -241,6 +298,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
             <p className="break-words text-sm leading-6 text-[var(--vp-muted)]">Ingresa el código de verificación de <strong className="text-[var(--vp-text)]">{email}</strong> cuando lo recibas. No compartas este código con nadie.</p>
             <RegistrationField id="code" name="one-time-code" label="Código de 6 dígitos" type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" required maxLength={6}
               value={code} onChange={event => { setCode(event.target.value.replace(/\D/g, '').slice(0, 6)); setErrors({}); }} error={errors.code} disabled={isLoading}
+              helper="El código de este registro vence en 5 minutos. No lo intercambies con un código de inicio de sesión o de recuperación."
               inputRef={codeInput} />
             <RegistrationButton type="submit" disabled={isLoading || code.length !== 6} loading={loading === 'confirm'}>{loading === 'confirm' ? 'Verificando…' : 'Verificar correo'}</RegistrationButton>
             <button type="button" onClick={resend} disabled={isLoading || cooldown.active} className="min-h-12 w-full rounded-lg border border-[var(--vp-border)] px-3 text-sm font-semibold text-[var(--vp-text)] disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--vp-accent)]">
@@ -252,9 +310,16 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
           </form>
         ) : (
           <div className="space-y-5" role="status" aria-live="polite" aria-atomic="true">
-            <p className="text-sm leading-7 text-[var(--vp-text)]">El correo está verificado. Abre el inicio de sesión y elige «Código al correo» si tu acceso fue preparado para una cuenta anterior. Si creaste una contraseña al registrarte, también puedes utilizarla.</p>
+            <p className="text-sm leading-7 text-[var(--vp-text)]">El correo está verificado. No necesitas solicitar otro código para revisar tu acceso.</p>
+            {access.error ? <p role="alert" className="text-sm leading-6 text-[var(--vp-danger)]">{access.error}</p> : null}
+            <p className="text-sm leading-7 text-[var(--vp-muted)]">{access.checking ? 'Comprobando tu sesión y tu acceso a la red…' : access.ready
+              ? 'Tu sesión tiene acceso al portal. Puedes continuar al panel.'
+              : access.notice || 'Tu correo ya está verificado. Puedes comprobar el estado de tu acceso sin pedir otro código.'}</p>
             <p className="text-sm leading-7 text-[var(--vp-muted)]">Verificar tu correo no concede acceso a saldos ni a cuentas antiguas de la red. La vinculación requiere aprobación.</p>
-            <Link href={loginUrl} className="inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-[var(--vp-accent)] px-4 font-bold text-[var(--vp-shell)]">Ir al acceso</Link>
+            {access.ready ? <Link href="/dashboard" className="inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-[var(--vp-accent)] px-4 font-bold text-[var(--vp-shell)]">Continuar al panel</Link>
+              : <RegistrationButton type="button" onClick={recheckAccess} disabled={isLoading || access.checking} loading={loading === 'access'}>{access.checking ? 'Comprobando acceso…' : 'Revisar acceso'}</RegistrationButton>}
+            <p className="text-sm leading-7 text-[var(--vp-muted)]">Seguirás entrando con códigos por correo. Si prefieres una contraseña, puedes crearla o cambiarla después verificando un nuevo código.</p>
+            <Link href="/forgot-password" className="inline-flex min-h-12 w-full items-center justify-center rounded-lg border border-[var(--vp-border)] px-4 font-semibold text-[var(--vp-text)]">Crear o cambiar contraseña (opcional)</Link>
           </div>
         )}
 

@@ -1,20 +1,19 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { registrationEmail, registrationErrors, registrationHints, registrationRetrySeconds, registrationFailure, registrationLoginUrl, registrationAcknowledged, registrationUrl, registrationPendingDelivery, registrationRequired, registrationRedirect, consumeRegistrationPrefill } from './registration-model.mjs';
+import { registrationEmail, registrationErrors, registrationHints, registrationRetrySeconds, registrationFailure, registrationLoginUrl, registrationAcknowledged, registrationUrl, registrationPendingDelivery, registrationRequired, registrationRedirect, consumeRegistrationPrefill, registrationTimeoutMs } from './registration-model.mjs';
 
-const valid = { fullName: 'Persona Prueba', email: ' test@example.test ', password: 'Synthetic Example 12', confirmPassword: 'Synthetic Example 12', acceptsPrivacy: true };
+const valid = { fullName: 'Persona Prueba', email: ' test@example.test ', acceptsPrivacy: true };
 
-test('registration validates required identity, exact password and explicit consent', () => {
+test('passwordless registration validates required identity and explicit consent without collecting a credential', () => {
   assert.deepEqual(registrationErrors(valid), {});
   assert.equal(registrationEmail(valid.email), 'test@example.test');
   assert.equal(registrationEmail('bad@@example.test'), '');
   assert.equal(registrationEmail(`${'a'.repeat(250)}@example.test`), '');
-  for (const password of ['short123', 'a'.repeat(129)]) assert.ok(registrationErrors({ ...valid, password, confirmPassword: password }).password);
+  assert.deepEqual(registrationErrors({ ...valid, password: 'not-a-registration-input', confirmPassword: 'ignored' }), {});
   assert.ok(registrationErrors({ ...valid, fullName: ' ' }).fullName);
   assert.ok(registrationErrors({ ...valid, fullName: 'a'.repeat(121) }).fullName);
   assert.ok(registrationErrors({ ...valid, fullName: 'Persona\nPrueba' }).fullName);
   assert.ok(registrationErrors({ ...valid, acceptsPrivacy: 'true' }).acceptsPrivacy);
-  assert.ok(registrationErrors({ ...valid, confirmPassword: `${valid.password} ` }).confirmPassword);
 });
 
 test('a successful HTTP response never verifies registration without the exact purpose-specific acknowledgement', () => {
@@ -22,7 +21,11 @@ test('a successful HTTP response never verifies registration without the exact p
   assert.equal(registrationAcknowledged('register', signup, valid.email), true);
   assert.equal(registrationAcknowledged('register', { ...signup, email: 'other@example.test' }, valid.email), false);
   assert.equal(registrationAcknowledged('register', { ...signup, userConfirmed: true }, valid.email), false);
-  assert.equal(registrationAcknowledged('confirm', { ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: true }), true);
+  const confirmed = { ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: false, sessionEstablished: true };
+  assert.equal(registrationAcknowledged('confirm', confirmed), true);
+  for (const payload of [{ ...confirmed, needsLogin: true }, { ...confirmed, sessionEstablished: false },
+    { ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: true }, { ...confirmed, token: 'private' },
+    { ...confirmed, authenticated: true }, { ...confirmed, error: '' }]) assert.equal(registrationAcknowledged('confirm', payload), false);
   assert.equal(registrationAcknowledged('resend', { ok: true, mode: 'better-auth', resendAfter: 300 }), true);
   for (const action of ['register', 'confirm', 'resend']) for (const payload of [null, [], {}, { ok: true }, { ok: 'true', mode: 'better-auth' }]) assert.equal(registrationAcknowledged(action, payload, valid.email), false);
 });
@@ -57,7 +60,16 @@ test('OTP resend cooldown cannot be shortened below the 300-second security budg
   assert.equal(registrationRetrySeconds(new Response(), { retryAfterSec: 480 }), 480);
 });
 
-test('verification never implies network onboarding or session, and safe errors never echo provider details', () => {
+test('registration confirmation covers native verification plus private session proof without changing delivery deadlines', () => {
+  assert.equal(registrationTimeoutMs('send'), 30000);
+  assert.equal(registrationTimeoutMs('confirm'), 20000);
+  for (const action of ['login', 'resend', '', undefined]) assert.throws(() => registrationTimeoutMs(action), /invalid_registration_action/);
+  assert.match(registrationFailure(503, 'confirm'), /resultado de la verificación/);
+  assert.match(registrationFailure(503, 'confirm'), /Entrar de forma segura/);
+  assert.match(registrationFailure(503, 'confirm'), /No reintentaremos automáticamente/);
+});
+
+test('registration links and failures never imply network onboarding or expose provider details', () => {
   const href = registrationLoginUrl(' TEST@EXAMPLE.TEST ', 'ref?role=admin', 'R');
   assert.equal(new URL(href, 'https://example.test').pathname, '/login');
   assert.equal(new URL(href, 'https://example.test').searchParams.get('mode'), 'code');
@@ -68,6 +80,26 @@ test('verification never implies network onboarding or session, and safe errors 
   assert.ok(registrationFailure(503).includes('no está disponible'));
   assert.ok(registrationFailure(400, 'confirm', 'internal_secret').includes('código'));
   assert.ok(!registrationFailure(400, 'register', 'internal_secret').includes('internal_secret'));
+});
+
+test('only the explicit existing-account registration failure offers the matching access and pending-registration choices', () => {
+  const message = registrationFailure(409, 'register', 'ACCOUNT_EXISTS');
+  assert.match(message, /Ya existe un acceso/);
+  assert.match(message, /Entrar de forma segura/);
+  assert.match(message, /crear\/restablecer tu contraseña/);
+  assert.match(message, /Ya solicité mi registro: verificar correo/);
+  assert.match(message, /No se enviará otro código automáticamente/);
+  for (const status of [200, 201, 400, 401, 403, 429, 500, 503]) {
+    assert.doesNotMatch(registrationFailure(status, 'register', 'ACCOUNT_EXISTS'), /Ya existe un acceso/);
+  }
+  for (const action of ['confirm', 'resend']) assert.doesNotMatch(registrationFailure(409, action, 'ACCOUNT_EXISTS'), /Ya existe un acceso/);
+  assert.doesNotMatch(registrationFailure(409, 'register', 'UNKNOWN_PRIVATE_CODE'), /UNKNOWN_PRIVATE_CODE|Ya existe un acceso/);
+});
+
+test('existing-account login continuation remains explicit email-code entry without adding authority or sending a message', () => {
+  const url = new URL(registrationLoginUrl(valid.email, 'MP-REFERRED', 'R'), 'https://example.test');
+  assert.equal(url.pathname, '/login');
+  assert.deepEqual(Object.fromEntries(url.searchParams), { mode: 'code', email: 'test@example.test', ref: 'MP-REFERRED', side: 'R' });
 });
 
 test('registration links preserve bounded email, referral and binary-side hints without accepting redirects or privileges', () => {
