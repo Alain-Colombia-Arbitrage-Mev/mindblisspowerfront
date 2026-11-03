@@ -42,10 +42,13 @@ test('recovery explains first-password setup in three steps without changing the
   assert.match(markup, /tu contraseña antigua no es necesaria/);
   assert.match(markup, /No necesitas cambiar tu correo ni volver a registrarte/);
   assert.match(markup, /5 solicitudes de recuperación y 10 intentos de validación/);
-  assert.match(markup, /24 horas/);
+  assert.match(markup, /últimas 24 horas/);
+  assert.match(markup, /Recargar la página, cambiar de dispositivo o pedir otro código no reinicia el límite diario/);
   assert.match(markup, /no bloquea el inicio de sesión/);
   assert.ok(markup.indexOf('Solicita el código') < markup.indexOf('Escribe el código'));
   assert.ok(markup.indexOf('Escribe el código') < markup.indexOf('Guarda los cambios'));
+  assert.match(markup, /revisa esa bandeja, incluido spam/);
+  assert.match(markup, /repítela para confirmarla/);
   assert.doesNotMatch(markup, /Te enviamos|cuenta existe|cuenta no existe|Contraseña actualizada/);
   harness.unmount();
 });
@@ -94,6 +97,33 @@ test('local validation blocks malformed email, OTP and mismatched or short passw
   assert.equal(calls, 1); assert.match(html(harness), /no coinciden/);
   enterCredentials(harness); change(harness, 'recovery-otp', '１２３４５６'); await submit(harness);
   assert.equal(calls, 1); assert.match(html(harness), /6 dígitos/);
+  harness.unmount();
+});
+
+test('code-entry guidance states the three-attempt policy but a rejected code never reports fabricated remaining attempts or proof', async t => {
+  const calls = [];
+  t.mock.method(globalThis, 'fetch', async (path, options) => {
+    calls.push({ path, body: JSON.parse(options.body) });
+    return path.endsWith('/request-password-reset') ? Response.json({ ok: true }) : Response.json({
+      code: 'OTP_EXPIRED', error: 'private-provider-diagnostic', message: 'Te quedan 0 intentos. Correo verificado.',
+      remainingAttempts: 0, accountExists: true, emailVerified: true,
+    }, { status: 400 });
+  });
+  const harness = view(); await submit(harness);
+  let markup = html(harness);
+  assert.match(markup, /Vence en 5 minutos y permite hasta 3 intentos/);
+  assert.match(markup, /no uses un código de inicio de sesión o registro ni lo compartas/);
+  assert.match(markup, /espera a que termine el contador antes de solicitar otro/);
+  assert.doesNotMatch(markup, /Te enviamos|Contraseña actualizada|Te quedan/);
+  enterCredentials(harness); await submit(harness);
+  markup = html(harness);
+  assert.match(markup, /Si el código venció o agotó sus 3 intentos, espera el contador y solicita otro/);
+  assert.doesNotMatch(markup, /private-provider|Te quedan|Correo verificado|Contraseña actualizada|accountExists|remainingAttempts/);
+  assert.equal(find(harness.render(props), field('recovery-email')).props.value, email);
+  assert.equal(find(harness.render(props), field('recovery-email')).props.readOnly, true);
+  assert.equal(find(harness.render(props), field('recovery-otp')).props.value, '001234');
+  assert.equal(calls.length, 2, 'guidance cannot resend, verify, navigate or request account state automatically');
+  assert.deepEqual(calls.map(call => call.body.email), [email, email]);
   harness.unmount();
 });
 

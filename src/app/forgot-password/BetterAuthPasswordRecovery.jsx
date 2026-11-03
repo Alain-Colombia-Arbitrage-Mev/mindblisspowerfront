@@ -170,8 +170,8 @@ export default function BetterAuthPasswordRecovery({ initialEmail = '' }) {
     <div className="space-y-4">
       <p className="text-sm leading-6 text-[var(--vp-muted)]">Si ya tienes una cuenta, puedes crear tu primera contraseña de acceso o reemplazar la anterior. Debes comprobar el correo original con un código de recuperación de 6 dígitos que vence en 5 minutos; tu contraseña antigua no es necesaria.</p>
       <ol aria-label="Pasos para crear o cambiar la contraseña" className="list-inside list-decimal space-y-1 rounded-lg border border-[var(--vp-border)] p-3 text-sm leading-6 text-[var(--vp-muted)]">
-        <li>Solicita el código al correo que ya está registrado en tu cuenta.</li>
-        <li>Escribe el código de recuperación y elige tu nueva contraseña.</li>
+        <li>Solicita el código al correo que ya está registrado en tu cuenta y revisa esa bandeja, incluido spam.</li>
+        <li>Escribe el código de recuperación más reciente, elige tu nueva contraseña y repítela para confirmarla.</li>
         <li>Guarda los cambios e inicia sesión con ese mismo correo.</li>
       </ol>
       <p className="text-sm leading-6 font-bold text-[var(--vp-text)]">No necesitas cambiar tu correo ni volver a registrarte.</p>
@@ -185,7 +185,7 @@ export default function BetterAuthPasswordRecovery({ initialEmail = '' }) {
         {step === 'confirm' ? <>
           <RegistrationField id="recovery-otp" name="otp" label="Código de recuperación" inputRef={codeInput} autoComplete="one-time-code" inputMode="numeric"
             required minLength={6} maxLength={6} pattern="[0-9]{6}" value={otp} disabled={busy} error={errors.otp}
-            onChange={event => update('otp', event.target.value)} helper="Usa los 6 dígitos del código de recuperación más reciente. Vence en 5 minutos; no uses un código de inicio de sesión o registro." />
+            onChange={event => update('otp', event.target.value)} helper="Usa los 6 dígitos del código de recuperación más reciente. Vence en 5 minutos y permite hasta 3 intentos; no uses un código de inicio de sesión o registro ni lo compartas." />
           <RegistrationPassword id="recovery-password" name="password" label="Nueva contraseña" inputRef={passwordInput} autoComplete="new-password" required minLength={12} maxLength={128}
             value={password} disabled={busy} error={errors.password} helper="Entre 12 y 128 caracteres. Puedes usar una frase larga."
             visible={visiblePassword} onToggle={() => setVisiblePassword(current => !current)} onChange={event => update('password', event.target.value)} />

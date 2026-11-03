@@ -1,7 +1,7 @@
 export const PASSWORD_RECOVERY_RESEND_SECONDS = 300;
-export const PASSWORD_RECOVERY_NOTICE = 'Si el correo corresponde a una cuenta habilitada, recibirás un código para crear o cambiar tu contraseña. Revisa también spam o correo no deseado.';
-export const PASSWORD_RECOVERY_UNCONFIRMED = 'No pudimos confirmar el envío. Si recibes un código, introdúcelo aquí. No enviaremos otro automáticamente; espera antes de solicitarlo de nuevo.';
-export const PASSWORD_RECOVERY_LIMIT_NOTICE = 'Por seguridad, cada correo tiene un límite de 5 solicitudes de recuperación y 10 intentos de validación en un período de 24 horas. Este límite sólo afecta a la recuperación; no bloquea el inicio de sesión.';
+export const PASSWORD_RECOVERY_NOTICE = 'Si el correo corresponde a una cuenta habilitada, busca el código para crear o cambiar tu contraseña en tu bandeja de entrada. Revisa también spam o correo no deseado. Si no llega, espera a que termine el contador antes de solicitar otro. Usa únicamente el código de recuperación más reciente y no lo compartas.';
+export const PASSWORD_RECOVERY_UNCONFIRMED = 'No pudimos confirmar el envío. Revisa tu bandeja y spam o correo no deseado. Si recibes un código vigente, introdúcelo aquí. No enviaremos otro automáticamente; espera a que termine el contador antes de solicitarlo de nuevo.';
+export const PASSWORD_RECOVERY_LIMIT_NOTICE = 'Por seguridad, cada correo tiene un límite de 5 solicitudes de recuperación y 10 intentos de validación en las últimas 24 horas. Recargar la página, cambiar de dispositivo o pedir otro código no reinicia el límite diario. Este límite sólo afecta a la recuperación; no bloquea el inicio de sesión.';
 
 export function passwordRecoveryEmail(value) {
   if (typeof value !== 'string') return '';
@@ -14,9 +14,9 @@ export function passwordRecoveryErrors({ email, otp = '', password = '', confirm
   const errors = {};
   if (!passwordRecoveryEmail(email)) errors.email = 'Ingresa el correo original de tu cuenta.';
   if (action === 'confirm') {
-    if (typeof otp !== 'string' || !/^[0-9]{6}$/.test(otp)) errors.otp = 'Ingresa los 6 dígitos del código recibido por correo.';
+    if (typeof otp !== 'string' || !/^[0-9]{6}$/.test(otp)) errors.otp = 'Ingresa los 6 dígitos del código de recuperación más reciente, sin espacios.';
     if (typeof password !== 'string' || password.length < 12 || password.length > 128) errors.password = 'Usa una contraseña de entre 12 y 128 caracteres.';
-    if (confirmPassword !== password) errors.confirmPassword = 'Las contraseñas no coinciden.';
+    if (confirmPassword !== password) errors.confirmPassword = 'Las contraseñas no coinciden. Repite exactamente la nueva contraseña.';
   }
   return errors;
 }
@@ -73,6 +73,6 @@ export function passwordRecoveryFailure(status, action = 'confirm') {
     ? 'No pudimos confirmar el cambio. Prueba iniciar sesión con la nueva contraseña antes de repetir la solicitud.'
     : PASSWORD_RECOVERY_UNCONFIRMED;
   return action === 'confirm'
-    ? 'No pudimos cambiar la contraseña. Revisa el código y los datos. Si el problema continúa, contacta al soporte sin compartir el código.'
+    ? 'No pudimos cambiar la contraseña. Revisa el código y los datos. Usa el código de recuperación más reciente y repite la misma nueva contraseña. Si el código venció o agotó sus 3 intentos, espera el contador y solicita otro. Si el problema continúa, contacta al soporte sin compartir el código.'
     : 'No pudimos solicitar la recuperación. Revisa el correo e inténtalo de nuevo.';
 }

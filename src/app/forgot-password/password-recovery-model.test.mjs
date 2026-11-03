@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  PASSWORD_RECOVERY_NOTICE, PASSWORD_RECOVERY_LIMIT_NOTICE, passwordRecoveryEmail, passwordRecoveryErrors, passwordRecoveryRequest,
+  PASSWORD_RECOVERY_NOTICE, PASSWORD_RECOVERY_UNCONFIRMED, PASSWORD_RECOVERY_LIMIT_NOTICE, passwordRecoveryEmail, passwordRecoveryErrors, passwordRecoveryRequest,
   passwordRecoveryAcknowledged, passwordRecoveryRetrySeconds, passwordRecoveryConfirmationRetrySeconds, passwordRecoveryWaitLabel, passwordRecoveryFailure,
 } from './password-recovery-model.mjs';
 
@@ -58,9 +58,34 @@ test('recovery failures are neutral and never echo private provider diagnostics'
 
 test('daily recovery policy is explained without implying an account-wide lock or confirming account existence', () => {
   assert.match(PASSWORD_RECOVERY_LIMIT_NOTICE, /5 solicitudes de recuperación y 10 intentos de validación/);
-  assert.match(PASSWORD_RECOVERY_LIMIT_NOTICE, /24 horas/);
+  assert.match(PASSWORD_RECOVERY_LIMIT_NOTICE, /últimas 24 horas/);
+  assert.match(PASSWORD_RECOVERY_LIMIT_NOTICE, /Recargar la página, cambiar de dispositivo o pedir otro código no reinicia el límite diario/);
   assert.match(PASSWORD_RECOVERY_LIMIT_NOTICE, /no bloquea el inicio de sesión/);
   assert.doesNotMatch(PASSWORD_RECOVERY_LIMIT_NOTICE, /cuenta existe|cuenta bloqueada|hemos enviado/);
+});
+
+test('delivery guidance explains spam, manual waits and code privacy without claiming delivery or verification', () => {
+  for (const message of [PASSWORD_RECOVERY_NOTICE, PASSWORD_RECOVERY_UNCONFIRMED]) {
+    assert.match(message, /spam o correo no deseado/);
+    assert.match(message, /espera a que termine el contador antes de solicitar/);
+    assert.doesNotMatch(message, /Te enviamos|hemos enviado|recibirás|entrega garantizada|correo verificado|cuenta existe|cuenta no existe/);
+  }
+  assert.match(PASSWORD_RECOVERY_NOTICE, /^Si el correo corresponde a una cuenta habilitada/);
+  assert.match(PASSWORD_RECOVERY_NOTICE, /recuperación más reciente y no lo compartas/);
+  assert.match(PASSWORD_RECOVERY_UNCONFIRMED, /No pudimos confirmar el envío/);
+  assert.match(PASSWORD_RECOVERY_UNCONFIRMED, /No enviaremos otro automáticamente/);
+});
+
+test('unconfirmed recovery errors explain the next safe step without inventing a remaining attempt count', () => {
+  const message = passwordRecoveryFailure(400);
+  assert.match(message, /código de recuperación más reciente/);
+  assert.match(message, /repite la misma nueva contraseña/);
+  assert.match(message, /Si el código venció o agotó sus 3 intentos, espera el contador y solicita otro/);
+  for (const status of [400, 401, 403, 404, 429, 503]) {
+    assert.doesNotMatch(passwordRecoveryFailure(status), /te quedan|intentos restantes|dispones de \d|cuenta existe|cuenta no existe|correo verificado|Contraseña actualizada/);
+  }
+  assert.match(passwordRecoveryErrors({ ...input, otp: '123 56' }).otp, /recuperación más reciente, sin espacios/);
+  assert.match(passwordRecoveryErrors({ ...input, confirmPassword: 'another' }).confirmPassword, /Repite exactamente la nueva contraseña/);
 });
 
 test('recovery-only countdown expresses a whole-day wait in hours and never rounds a deadline down', () => {
