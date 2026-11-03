@@ -148,7 +148,7 @@ test('timeout recovery does not lose a possibly delivered code or start an autom
   await find(harness.render(props), node => node?.type === 'form').props.onSubmit({ preventDefault() {} });
   const html = renderToStaticMarkup(harness.render(props));
   assert.match(html, /Código de acceso/);
-  assert.match(html, /Si recibes un código, introdúcelo aquí/);
+  assert.match(html, /Si recibes un código vigente, introdúcelo aquí/);
   assert.match(html, /No enviaremos otro automáticamente/);
   assert.equal(calls, 1); assert.equal(seconds, 300);
   harness.unmount();

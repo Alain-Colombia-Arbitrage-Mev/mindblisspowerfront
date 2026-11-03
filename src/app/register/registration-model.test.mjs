@@ -69,6 +69,27 @@ test('registration confirmation covers native verification plus private session 
   assert.match(registrationFailure(503, 'confirm'), /No reintentaremos automáticamente/);
 });
 
+test('registration throttling explains the indicated wait without inventing a daily quota or blocked account', () => {
+  for (const action of ['register', 'confirm', 'resend']) {
+    const message = registrationFailure(429, action, 'INTERNAL_PROVIDER_DETAIL');
+    assert.match(message, /límite temporal/);
+    assert.match(message, /Espera el plazo indicado/);
+    assert.match(message, /respeta el contador para solicitar otro código/);
+    assert.match(message, /No reintentaremos automáticamente/);
+    assert.doesNotMatch(message, /INTERNAL_PROVIDER_DETAIL|cuenta bloqueada|5 solicitudes|10 (?:intentos|validaciones)|24 horas|intentos restantes/i);
+  }
+});
+
+test('an unverified registration code gives purpose-specific help without revealing identity or claiming remaining attempts', () => {
+  const message = registrationFailure(400, 'confirm', 'INTERNAL_PROVIDER_DETAIL');
+  assert.match(message, /No pudimos verificar el código/);
+  assert.match(message, /6 dígitos del código de registro más reciente/);
+  assert.match(message, /vence en 5 minutos y permite hasta 3 intentos por código/);
+  assert.match(message, /espera a que termine el contador y solicítalo manualmente/);
+  assert.match(message, /No compartas el código/);
+  assert.doesNotMatch(message, /INTERNAL_PROVIDER_DETAIL|Ya existe|No existe|te quedan|restantes|5 solicitudes|10 (?:intentos|validaciones)|24 horas/i);
+});
+
 test('registration links and failures never imply network onboarding or expose provider details', () => {
   const href = registrationLoginUrl(' TEST@EXAMPLE.TEST ', 'ref?role=admin', 'R');
   assert.equal(new URL(href, 'https://example.test').pathname, '/login');

@@ -40,6 +40,17 @@ test('password errors remain safe, actionable and do not echo upstream diagnosti
   assert.ok(!betterAuthPasswordFailure(400, 'private_provider_diagnostics').includes('private_provider'));
 });
 
+test('password help separates creation by recovery OTP from password login limits and never exposes account state', () => {
+  const failed = betterAuthPasswordFailure(401, 'private-provider-diagnostic');
+  assert.match(failed, /Si no tienes contraseña o la olvidaste/);
+  assert.match(failed, /Crear o cambiar contraseña.*correo original/);
+  assert.match(betterAuthPasswordFailure(403, 'EMAIL_NOT_VERIFIED'), /código de registro, no el de inicio de sesión ni el de recuperación/);
+  for (const status of [400, 401, 403, 429, 503]) {
+    assert.doesNotMatch(betterAuthPasswordFailure(status, 'private-provider-diagnostic'), /private-provider|te quedan|24 horas|5 solicitudes|10 intentos|cuenta existe|cuenta bloqueada/);
+  }
+  assert.match(betterAuthPasswordFailure(429), /Espera antes de volver a entrar/);
+});
+
 test('email confirmation requires trusted sign-in proof for the same recipient, not a send or URL hint', () => {
   const proof = { ok: true, user: { id: 'synthetic', email: 'member@example.test', emailVerified: true } };
   assert.equal(verifiedEmailSignIn(proof, ' MEMBER@EXAMPLE.TEST '), true);

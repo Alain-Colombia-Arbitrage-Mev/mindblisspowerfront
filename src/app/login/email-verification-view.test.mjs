@@ -35,6 +35,47 @@ async function enterCode(harness) {
   return submit(harness.render(props));
 }
 
+test('login guidance states the actual OTP policy and manual waits without changing recovery, delivery or account authority', async t => {
+  const destinations = browser(t), paths = [];
+  t.mock.method(globalThis, 'fetch', async path => { paths.push(path); return Response.json({ ok: true }); });
+  const harness = view();
+  let markup = html(harness);
+  assert.match(markup, /correo original de tu cuenta/);
+  assert.match(markup, /6 dígitos, vence en 5 minutos y permite hasta 3 intentos/);
+  assert.match(markup, /espera al menos 5 minutos entre envíos al mismo correo y respeta el contador/);
+  assert.match(markup, /No compartas el código/);
+  assert.doesNotMatch(markup, /5 solicitudes|10 intentos|24 horas|recibirás|Te enviamos|te quedan|Correo verificado correctamente/);
+  assert.deepEqual(paths, []);
+  await submit(harness.render(props));
+  markup = html(harness);
+  assert.match(markup, /Vence en 5 minutos y permite hasta 3 intentos/);
+  assert.match(markup, /no uses un código de registro o recuperación ni lo compartas/);
+  assert.match(markup, /Espera a que termine el contador antes de solicitar otro código/);
+  assert.doesNotMatch(markup, /recibirás|Te enviamos|te quedan|Correo verificado correctamente/);
+  assert.deepEqual(paths, ['/api/auth/email-otp/send-verification-otp']);
+  assert.deepEqual(destinations, []);
+  harness.unmount();
+});
+
+test('rejected login OTP guidance cannot reflect provider diagnostics, delivery claims or fabricated remaining attempts', async t => {
+  const destinations = browser(t), paths = [];
+  t.mock.method(globalThis, 'fetch', async path => {
+    paths.push(path);
+    return path.endsWith('/send-verification-otp') ? Response.json({ ok: true }) : Response.json({
+      code: 'INVALID_OTP', message: 'private-provider-diagnostic: Te quedan 2 intentos; correo verificado.', remainingAttempts: 2,
+    }, { status: 400 });
+  });
+  const harness = view(); await enterCode(harness);
+  const markup = html(harness);
+  assert.match(markup, /Código inválido o expirado/);
+  assert.match(markup, /código de acceso más reciente/);
+  assert.match(markup, /espera el contador antes de solicitar otro/);
+  assert.doesNotMatch(markup, /private-provider|Te quedan|correo verificado|Correo verificado correctamente|remainingAttempts/);
+  assert.deepEqual(paths, ['/api/auth/email-otp/send-verification-otp', '/api/auth/sign-in/email-otp']);
+  assert.deepEqual(destinations, []);
+  harness.unmount();
+});
+
 test('accepted OTP displays durable accessible email confirmation before any user-initiated navigation', async t => {
   const destinations = browser(t), paths = [];
   t.mock.method(globalThis, 'fetch', async path => {

@@ -101,11 +101,11 @@ export function registrationRetrySeconds(response, payload = {}) {
 }
 
 export function registrationFailure(status, action = 'register', code = '') {
-  if (status === 429) return 'Has realizado varios intentos. Espera antes de solicitar otro código.';
+  if (status === 429) return 'Alcanzaste un límite temporal. Espera el plazo indicado antes de volver a intentarlo y respeta el contador para solicitar otro código. No reintentaremos automáticamente.';
   if (status >= 500 && action === 'confirm') return 'No pudimos confirmar el resultado de la verificación. Si el código ya fue utilizado, abre «Entrar de forma segura» y solicita un código de acceso. No reintentaremos automáticamente.';
   if (status >= 500) return 'El servicio de registro no está disponible en este momento. Intenta más tarde.';
   if (status === 409 && action === 'register' && code === 'ACCOUNT_EXISTS') return 'Ya existe un acceso con este correo. Usa «Entrar de forma segura» para iniciar sesión o crear/restablecer tu contraseña. Si dejaste un registro pendiente, usa «Ya solicité mi registro: verificar correo». No se enviará otro código automáticamente.';
-  if (action === 'confirm') return 'El código no es válido o ha vencido. Revísalo o solicita otro cuando termine la espera.';
+  if (action === 'confirm') return 'No pudimos verificar el código. Revisa los 6 dígitos del código de registro más reciente; vence en 5 minutos y permite hasta 3 intentos por código. Si necesitas otro, espera a que termine el contador y solicítalo manualmente. No compartas el código.';
   if (action === 'resend') return 'No pudimos solicitar el código. Revisa el correo e inténtalo de nuevo.';
   return 'No pudimos completar el registro. Revisa los datos o entra si ya tienes una cuenta.';
 }

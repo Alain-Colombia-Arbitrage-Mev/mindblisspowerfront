@@ -656,7 +656,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
         codeStep === "request" ? (
           <form className="space-y-4" onSubmit={requestLoginCode}>
             <p className="text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
-              {emailOtpOnly ? 'Puedes entrar con un código al correo aunque no tengas contraseña. Recibe un código de 6 dígitos para iniciar sesión. Vence en 5 minutos y es distinto del código de registro o recuperación.' : 'Recibe un código en tu correo para entrar a tu cuenta.'}
+              {emailOtpOnly ? 'Puedes entrar con un código al correo aunque no tengas contraseña. Usa el correo original de tu cuenta: el código de acceso tiene 6 dígitos, vence en 5 minutos y permite hasta 3 intentos. Es distinto del código de registro o recuperación. Por seguridad, espera al menos 5 minutos entre envíos al mismo correo y respeta el contador. No compartas el código.' : 'Recibe un código en tu correo para entrar a tu cuenta.'}
             </p>
             <EmailField email={email} readOnly={isLoading} setEmail={setEmail} onClearError={() => setError("")} />
 
@@ -686,7 +686,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
               label="Código de acceso"
               value={loginCode}
               codeLength={emailOtpOnly ? 6 : 12}
-              helper={emailOtpOnly ? 'Usa el código de acceso más reciente de 6 dígitos. Vence en 5 minutos; no uses un código de registro o recuperación.' : ''}
+              helper={emailOtpOnly ? 'Usa el código de acceso más reciente de 6 dígitos. Vence en 5 minutos y permite hasta 3 intentos; no uses un código de registro o recuperación ni lo compartas. Para pedir otro, espera a que termine el contador.' : ''}
               autoFocus
               onChange={(value) => {
                 setLoginCode(value);
@@ -993,8 +993,8 @@ function DeliveryHint({ email }) {
   return (
     <p className="text-xs leading-5" style={{ color: microsoft ? "var(--vp-amber, #d97706)" : "var(--vp-subtle)" }}>
       {microsoft
-        ? "Tu correo es de Microsoft (Hotmail/Outlook/Live): a veces demora o cae en «Correo no deseado». Revisa esa carpeta y conserva el correo original de tu cuenta. Si no llega, espera antes de reenviar o contacta al soporte."
-        : "¿No llega en 1–2 min? Revisa la carpeta de spam / correo no deseado."}
+        ? "Tu correo es de Microsoft (Hotmail/Outlook/Live): a veces demora o cae en «Correo no deseado». Revisa esa carpeta y conserva el correo original de tu cuenta. Si no llega, espera antes de reenviar: deja que termine el contador o contacta al soporte. No compartas el código."
+        : "¿No llega? Revisa la carpeta de spam / correo no deseado y el correo original que escribiste. Espera a que termine el contador antes de solicitar otro código. No lo compartas."}
     </p>
   );
 }

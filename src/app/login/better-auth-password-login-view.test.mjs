@@ -46,6 +46,11 @@ test('passwordless members get an explicit recovery path using the original emai
   assert.match(html, /¿No tienes contraseña o la olvidaste\?/);
   assert.match(html, /Usa el correo original de tu cuenta/);
   assert.match(html, /No necesitas cambiarlo ni crear otra cuenta/);
+  assert.match(html, /solicita el código de recuperación, escríbelo y repite tu nueva contraseña para confirmarla/);
+  assert.match(html, /Los pasos y límites de recuperación se muestran allí/);
+  assert.match(html, /ese código no es el de inicio de sesión/);
+  assert.match(html, /No compartas tu contraseña ni tus códigos/);
+  assert.doesNotMatch(html, /5 solicitudes|10 intentos|24 horas|recibirás|Te enviamos|te quedan/);
   assert.doesNotMatch(html, /contraseña que creaste al registrarte/);
   const recovery = find(tree, node => node?.props?.href === '/forgot-password');
   assert.ok(recovery);

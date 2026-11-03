@@ -18,9 +18,9 @@ export function otpRequest(provider, action, email, code = '') {
 }
 
 export function otpFailureMessage(status, action) {
-  if (status === 429) return 'Demasiados intentos. Espera un momento antes de volver a intentar.';
+  if (status === 429) return 'Demasiados intentos. Espera antes de volver a intentarlo. Si aparece un contador, deja que termine; no envíes solicitudes repetidas.';
   if (status >= 500) return 'El servicio de acceso no está disponible. Intenta más tarde.';
-  return action === 'confirm' ? 'Código inválido o expirado. Revisa el último correo recibido.' : 'No se pudo solicitar el código. Intenta de nuevo.';
+  return action === 'confirm' ? 'Código inválido o expirado. Usa el código de acceso más reciente; si venció o agotó sus intentos, espera el contador antes de solicitar otro.' : 'No se pudo solicitar el código. Revisa el correo original y vuelve a intentarlo cuando termine el contador, si aparece.';
 }
 
 // Give the single delivery request room to finish; never automatically resend
@@ -31,8 +31,8 @@ export function otpTimeoutMs(action) {
   throw new Error('invalid_action');
 }
 
-export const OTP_SEND_NOTICE = 'Si tu cuenta está habilitada, recibirás un código por correo. Revisa también la carpeta de spam.';
+export const OTP_SEND_NOTICE = 'Si tu cuenta está habilitada, busca el código de acceso en tu correo y revisa también la carpeta de spam. Si no aparece, espera a que termine el contador antes de solicitar otro. No lo compartas.';
 
 // A lost/failed acknowledgement does not prove that no message was sent. This
 // never claims delivery, account existence or permission to enter the network.
-export const OTP_SEND_UNCONFIRMED_NOTICE = 'No pudimos confirmar el envío. Si recibes un código, introdúcelo aquí. No enviaremos otro automáticamente.';
+export const OTP_SEND_UNCONFIRMED_NOTICE = 'No pudimos confirmar el envío. Revisa tu bandeja y spam. Si recibes un código vigente, introdúcelo aquí. No enviaremos otro automáticamente; espera el contador antes de solicitarlo de nuevo y no lo compartas.';

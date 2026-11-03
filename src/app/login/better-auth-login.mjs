@@ -6,10 +6,10 @@ export function betterAuthPasswordRequest(email, password) {
 }
 
 export function betterAuthPasswordFailure(status, code = '') {
-  if (status === 429) return 'Demasiados intentos. Espera antes de volver a entrar.';
+  if (status === 429) return 'Demasiados intentos. Espera antes de volver a entrar; no repitas la solicitud continuamente.';
   if (status >= 500) return 'El servicio de acceso no está disponible. Intenta más tarde.';
-  if (code === 'EMAIL_NOT_VERIFIED') return 'Verifica tu correo de registro antes de entrar con contraseña.';
-  return 'El correo o la contraseña no son correctos. Revisa tus datos o usa un código de acceso.';
+  if (code === 'EMAIL_NOT_VERIFIED') return 'Verifica tu correo de registro antes de entrar con contraseña. Usa el código de registro, no el de inicio de sesión ni el de recuperación.';
+  return 'El correo o la contraseña no son correctos. Revisa tus datos o usa un código de acceso. Si no tienes contraseña o la olvidaste, usa «Crear o cambiar contraseña» con el correo original.';
 }
 
 // This flag is projected by the same-origin BFF only after validating Better

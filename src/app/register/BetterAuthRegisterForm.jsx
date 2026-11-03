@@ -135,7 +135,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
         setCode('');
         setStep('confirm');
         cooldown.start(registrationRetrySeconds(response, payload));
-        setErrors({ form: 'Tu registro quedó pendiente de verificar el correo, pero no pudimos enviar el código. No crees otra cuenta. Espera 5 minutos y usa «Solicitar otro código». El reenvío es manual.' });
+        setErrors({ form: 'Tu registro quedó pendiente de verificar el correo, pero no pudimos enviar el código. No crees otra cuenta. Espera a que termine el contador y usa «Solicitar otro código». El reenvío es manual.' });
         return;
       }
       if (!response.ok || !registrationAcknowledged('register', payload, email)) {
@@ -148,7 +148,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
       setCode('');
       setStep('confirm');
       cooldown.start(registrationRetrySeconds(response, payload));
-      setNotice('Si el registro se puede completar con este correo, recibirás un código. Revisa también spam o correo no deseado.');
+      setNotice('Solicitud recibida. Revisa tu correo y spam. Si recibes el código de registro, úsalo para verificar tu correo; solicitarlo no completa la verificación.');
     } catch {
       if (!currentRequest(operation)) return;
       cooldown.start();
@@ -226,7 +226,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
       }
       setCode('');
       cooldown.start(registrationRetrySeconds(response, payload));
-      setNotice('Solicitud recibida. Si corresponde, recibirás un código en ese correo. Usa el código más reciente.');
+      setNotice('Solicitud recibida. Si recibes un nuevo código de registro, usa sólo el más reciente. Revisa también spam; no se enviará otro automáticamente.');
     } catch {
       if (!currentRequest(operation)) return;
       cooldown.start();
@@ -260,7 +260,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
               value={form.fullName} onChange={event => update('fullName', event.target.value)} error={errors.fullName} disabled={isLoading} />
             <RegistrationField id="email" name="email" label="Correo electrónico" type="email" autoComplete="email" autoCapitalize="none" spellCheck={false} required maxLength={254}
               value={form.email} onChange={event => update('email', event.target.value)} error={errors.email} disabled={isLoading}
-              helper="Tu correo será tu acceso. Recibirás un código de verificación; puedes crear una contraseña opcional más adelante." />
+              helper="Completa tus datos y solicita el código por correo. Verifica tu correo con ese código; no necesitas contraseña para este paso. Si ya tienes cuenta, usa tu correo de siempre para iniciar sesión." />
             {emailSuggestion ? <button type="button" onClick={() => update('email', emailSuggestion)} disabled={isLoading} className="min-h-10 text-left text-sm underline text-[var(--vp-text)]">¿Quisiste escribir {emailSuggestion}?</button> : null}
             <details ref={contactDetails} className="min-w-0 rounded-lg border border-[var(--vp-border)] p-4">
               <summary className="min-h-11 cursor-pointer text-sm font-semibold leading-6 text-[var(--vp-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--vp-accent)]">Agregar teléfono o WhatsApp (opcional)</summary>
@@ -298,13 +298,13 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
             <p className="break-words text-sm leading-6 text-[var(--vp-muted)]">Ingresa el código de verificación de <strong className="text-[var(--vp-text)]">{email}</strong> cuando lo recibas. No compartas este código con nadie.</p>
             <RegistrationField id="code" name="one-time-code" label="Código de 6 dígitos" type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" required maxLength={6}
               value={code} onChange={event => { setCode(event.target.value.replace(/\D/g, '').slice(0, 6)); setErrors({}); }} error={errors.code} disabled={isLoading}
-              helper="El código de este registro vence en 5 minutos. No lo intercambies con un código de inicio de sesión o de recuperación."
+              helper="Usa los 6 dígitos del código más reciente de este registro: vence en 5 minutos y permite hasta 3 intentos por código. No uses un código de inicio de sesión o de recuperación."
               inputRef={codeInput} />
             <RegistrationButton type="submit" disabled={isLoading || code.length !== 6} loading={loading === 'confirm'}>{loading === 'confirm' ? 'Verificando…' : 'Verificar correo'}</RegistrationButton>
             <button type="button" onClick={resend} disabled={isLoading || cooldown.active} className="min-h-12 w-full rounded-lg border border-[var(--vp-border)] px-3 text-sm font-semibold text-[var(--vp-text)] disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--vp-accent)]">
               {loading === 'resend' ? 'Solicitando código…' : cooldown.active ? cooldown.label : 'Solicitar otro código'}
             </button>
-            <p className="text-sm leading-6 text-[var(--vp-muted)]">Si no lo ves, revisa spam. Espera antes de reenviar para no invalidar el código anterior. Cambiar de pantalla no envía correos.</p>
+            <p className="text-sm leading-6 text-[var(--vp-muted)]">Si no lo ves, revisa spam o correo no deseado. El reenvío es manual: espera a que termine el contador; entre solicitudes deben pasar al menos 5 minutos y la espera puede ser mayor. Cambiar de pantalla no envía correos ni evita los límites.</p>
             <button type="button" disabled={isLoading} onClick={() => { setStep('details'); setCode(''); setErrors({}); setNotice('Corrige tus datos y vuelve a solicitar el registro. Si la cuenta ya existe, utiliza el acceso.'); }}
               className="inline-flex min-h-11 items-center gap-2 text-sm text-[var(--vp-text)] underline"><ArrowLeft size={15} aria-hidden="true" />Corregir mis datos</button>
           </form>
@@ -318,12 +318,12 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
             <p className="text-sm leading-7 text-[var(--vp-muted)]">Verificar tu correo no concede acceso a saldos ni a cuentas antiguas de la red. La vinculación requiere aprobación.</p>
             {access.ready ? <Link href="/dashboard" className="inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-[var(--vp-accent)] px-4 font-bold text-[var(--vp-shell)]">Continuar al panel</Link>
               : <RegistrationButton type="button" onClick={recheckAccess} disabled={isLoading || access.checking} loading={loading === 'access'}>{access.checking ? 'Comprobando acceso…' : 'Revisar acceso'}</RegistrationButton>}
-            <p className="text-sm leading-7 text-[var(--vp-muted)]">Seguirás entrando con códigos por correo. Si prefieres una contraseña, puedes crearla o cambiarla después verificando un nuevo código.</p>
+            <p className="text-sm leading-7 text-[var(--vp-muted)]">Puedes seguir entrando con códigos por correo, sin contraseña. Para crear tu primera contraseña o cambiarla, abre recuperación y verifica un nuevo código de recuperación; el código de registro no sirve para ese proceso.</p>
             <Link href="/forgot-password" className="inline-flex min-h-12 w-full items-center justify-center rounded-lg border border-[var(--vp-border)] px-4 font-semibold text-[var(--vp-text)]">Crear o cambiar contraseña (opcional)</Link>
           </div>
         )}
 
-        {step !== 'verified' ? <p className="mt-6 border-t border-[var(--vp-border)] pt-5 text-sm leading-6 text-[var(--vp-muted)]">¿Ya tienes cuenta? <Link href={loginUrl} className="font-bold text-[var(--vp-text)] underline">Entrar de forma segura</Link></p> : null}
+        {step !== 'verified' ? <p className="mt-6 border-t border-[var(--vp-border)] pt-5 text-sm leading-6 text-[var(--vp-muted)]">¿Ya tienes cuenta? <Link href={loginUrl} className="font-bold text-[var(--vp-text)] underline">Entrar de forma segura</Link>. No cambies tu correo ni vuelvas a registrarte para crear o cambiar tu contraseña.</p> : null}
       </section>
     </AuthShell>
   );

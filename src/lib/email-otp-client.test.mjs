@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { otpRequest, otpFailureMessage, otpTimeoutMs, OTP_SEND_NOTICE } from './email-otp-client.mjs';
+import { otpRequest, otpFailureMessage, otpTimeoutMs, OTP_SEND_NOTICE, OTP_SEND_UNCONFIRMED_NOTICE } from './email-otp-client.mjs';
 
 test('Better Auth uses only the same-origin sign-in OTP contract', () => {
   assert.deepEqual(otpRequest('better-auth', 'send', ' Member+1@Example.test '), {
@@ -37,4 +37,26 @@ test('single email delivery attempt waits 30 seconds while received-code confirm
   assert.equal(otpTimeoutMs('send'), 30000);
   assert.equal(otpTimeoutMs('confirm'), 12000);
   for (const action of ['', undefined, 'reset', 'https://evil.example.test']) assert.throws(() => otpTimeoutMs(action));
+});
+
+test('OTP send guidance stays neutral, private and manual without promising delivery or importing daily recovery quotas', () => {
+  assert.match(OTP_SEND_NOTICE, /^Si tu cuenta está habilitada, busca el código de acceso/);
+  assert.match(OTP_SEND_UNCONFIRMED_NOTICE, /^No pudimos confirmar el envío/);
+  assert.match(OTP_SEND_UNCONFIRMED_NOTICE, /No enviaremos otro automáticamente/);
+  for (const notice of [OTP_SEND_NOTICE, OTP_SEND_UNCONFIRMED_NOTICE]) {
+    assert.match(notice, /spam/);
+    assert.match(notice, /espera.*contador/i);
+    assert.match(notice, /no lo compartas/i);
+    assert.doesNotMatch(notice, /recibirás|Te enviamos|correo verificado|cuenta existe|te quedan|24 horas|5 solicitudes|10 intentos/);
+  }
+});
+
+test('login limit messages require manual waiting without fabricated times or remaining attempts', () => {
+  const limited = otpFailureMessage(429, 'confirm');
+  assert.match(limited, /Espera antes de volver a intentarlo/);
+  assert.match(limited, /Si aparece un contador, deja que termine/);
+  for (const status of [400, 401, 403, 429, 503]) {
+    assert.doesNotMatch(otpFailureMessage(status, 'confirm'), /te quedan|intentos restantes|24 horas|5 solicitudes|10 intentos|correo verificado|cuenta bloqueada/);
+  }
+  assert.match(otpFailureMessage(400, 'confirm'), /código de acceso más reciente/);
 });

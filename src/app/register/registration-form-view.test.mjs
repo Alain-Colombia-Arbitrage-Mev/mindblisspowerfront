@@ -57,6 +57,18 @@ test('registration remains email-only with the existing two-step design and opti
   assert.equal(Object.hasOwn(harness.state[1], 'confirmPassword'), false);
 });
 
+test('registration guidance explains the manual email-first steps and optional password without promising delivery or importing recovery quotas', t => {
+  t.mock.method(globalThis, 'fetch', () => assert.fail('guidance must not create accounts or send messages'));
+  const harness = view(), tree = harness.render(), html = renderToStaticMarkup(tree);
+  const email = find(tree, node => node?.props?.id === 'email');
+  assert.match(email.props.helper, /Completa tus datos y solicita el código por correo/);
+  assert.match(email.props.helper, /Verifica tu correo con ese código; no necesitas contraseña para este paso/);
+  assert.match(email.props.helper, /Si ya tienes cuenta, usa tu correo de siempre/);
+  assert.match(html, /No cambies tu correo ni vuelvas a registrarte para crear o cambiar tu contraseña/);
+  assert.doesNotMatch(html, /recibirás|código enviado|5 solicitudes|10 (?:intentos|validaciones)|24 horas|intentos restantes/i);
+  harness.unmount();
+});
+
 test('optional contacts remain available inside a native disclosure closed by default without changing consent or values', () => {
   const harness = view(), tree = enterValid(harness, { ...valid,
     contactPhone: { country: 'CO', national: '3001234567' }, contactWhatsapp: { country: 'ES', national: '612345678' } });
@@ -131,6 +143,9 @@ test('blank contacts do not block signup and do not add contact or verification 
     referralCode: 'MP-REFERRAL', preferredSide: 'R' } }]);
   const html = renderToStaticMarkup(harness.render(props));
   assert.match(html, /Paso 2 de 2/); assert.match(html, /Verifica tu correo/);
+  assert.match(html, /Solicitud recibida/);
+  assert.match(html, /solicitarlo no completa la verificación/);
+  assert.doesNotMatch(html, /recibirás|código enviado|5 solicitudes|10 (?:intentos|validaciones)|24 horas|intentos restantes/i);
   assert.equal(Object.hasOwn(harness.state[1], 'password'), false); assert.equal(Object.hasOwn(harness.state[1], 'confirmPassword'), false);
 });
 
@@ -214,6 +229,10 @@ test('passwordless signup establishes a session only after OTP proof and checks 
   assert.match(renderToStaticMarkup(tree), /vinculación requiere aprobación/);
   assert.equal(find(tree, node => node?.props?.children === 'Continuar al panel').props.href, '/dashboard');
   assert.equal(find(tree, node => node?.props?.children === 'Crear o cambiar contraseña (opcional)').props.href, '/forgot-password');
+  assert.match(renderToStaticMarkup(tree), /Puedes seguir entrando con códigos por correo, sin contraseña/);
+  assert.match(renderToStaticMarkup(tree), /crear tu primera contraseña o cambiarla/);
+  assert.match(renderToStaticMarkup(tree), /verifica un nuevo código de recuperación/);
+  assert.match(renderToStaticMarkup(tree), /el código de registro no sirve para ese proceso/);
 });
 
 test('a verified session without approved network access, a mismatched session or an outage never grants the dashboard and can be rechecked without another OTP', async t => {
@@ -286,11 +305,34 @@ test('leaving after confirmation while canonical access is pending aborts the re
   assert.deepEqual(paths, ['/api/auth/register/confirm', '/api/auth/session']);
 });
 
-test('the confirmation helper identifies its five-minute registration purpose without confusing native OTP purposes', () => {
+test('the confirmation helper explains the latest registration code purpose, lifetime, three-attempt limit and manual cooldown', () => {
   const harness = view(), tree = harness.render({ initialSearch: 'email=member%40example.test&resume=1' });
-  const code = find(tree, node => node?.props?.id === 'code');
-  assert.match(code.props.helper, /código de este registro vence en 5 minutos/);
-  assert.match(code.props.helper, /No lo intercambies con un código de inicio de sesión o de recuperación/);
+  const code = find(tree, node => node?.props?.id === 'code'), html = renderToStaticMarkup(tree);
+  assert.match(code.props.helper, /6 dígitos del código más reciente de este registro/);
+  assert.match(code.props.helper, /vence en 5 minutos y permite hasta 3 intentos por código/);
+  assert.match(code.props.helper, /No uses un código de inicio de sesión o de recuperación/);
+  assert.match(html, /No compartas este código con nadie/);
+  assert.match(html, /Si no lo ves, revisa spam o correo no deseado/);
+  assert.match(html, /El reenvío es manual: espera a que termine el contador/);
+  assert.match(html, /al menos 5 minutos y la espera puede ser mayor/);
+  assert.match(html, /Cambiar de pantalla no envía correos ni evita los límites/);
+  assert.doesNotMatch(html, /recibirás|código enviado|5 solicitudes|10 (?:intentos|validaciones)|24 horas|intentos restantes/i);
+  harness.unmount();
+});
+
+test('manual registration resend acknowledgement guides the latest code without claiming delivery or auto-resending', async t => {
+  const paths = [];
+  t.mock.method(globalThis, 'fetch', async path => {
+    paths.push(path); return Response.json({ ok: true, mode: 'better-auth', resendAfter: 300 });
+  });
+  const harness = view(), resume = { initialSearch: 'email=member%40example.test&resume=1' };
+  const tree = harness.render(resume);
+  await find(tree, node => node?.props?.children === 'Solicitar otro código').props.onClick();
+  const html = renderToStaticMarkup(harness.render(resume));
+  assert.match(html, /Si recibes un nuevo código de registro, usa sólo el más reciente/);
+  assert.match(html, /Revisa también spam; no se enviará otro automáticamente/);
+  assert.doesNotMatch(html, /recibirás|código enviado|5 solicitudes|10 (?:intentos|validaciones)|24 horas|intentos restantes/i);
+  assert.deepEqual(paths, ['/api/auth/register/confirm']);
   harness.unmount();
 });
 
