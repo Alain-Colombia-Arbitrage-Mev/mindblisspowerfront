@@ -1,7 +1,7 @@
 import { ArrowUpRight, Package } from "lucide-react";
 import Link from "next/link";
 
-import { getCatalog } from "@/lib/catalog";
+import { getPackageCatalog } from "@/lib/catalog";
 
 // Catalog prices are decimal USD, not browser-calculated balances. Reject an
 // invalid row instead of rounding it or presenting an invented zero-dollar plan.
@@ -52,7 +52,7 @@ export function OverviewPlansLoading() {
 export default async function OverviewPlans() {
   let plans;
   try {
-    const catalog = await getCatalog();
+    const catalog = await getPackageCatalog();
     if (!Array.isArray(catalog?.packages)) throw new Error("Invalid catalog");
     plans = catalog.packages.map(planView);
     if (new Set(plans.map(plan => plan.id)).size !== plans.length) throw new Error("Duplicate catalog plan");

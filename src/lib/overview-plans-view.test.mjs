@@ -22,7 +22,7 @@ function moduleAt(relative, mocks = {}) {
 const render = element => renderToStaticMarkup(element);
 const plan = (id = 1, amount_usd = "100.00", name = "Plan original") => ({ id, name, amount_usd, pv: 999, type: "private-legacy-type" });
 function overviewPlans(getCatalog) {
-  return moduleAt("../components/panel/overview/OverviewPlans.jsx", { "@/lib/catalog": { getCatalog } });
+  return moduleAt("../components/panel/overview/OverviewPlans.jsx", { "@/lib/catalog": { getPackageCatalog: getCatalog } });
 }
 
 test("overview renders all catalog plans once on the server, keeping exact USD prices and safe plan links", async () => {
@@ -117,6 +117,7 @@ test("both summary routes stream the server catalog slot without adding a catalo
 test("actual summary places the plans slot after the referral and before secondary support", () => {
   const react = { ...React, useState: initial => [initial, () => {}], useRef: () => ({ current: null }), useCallback: callback => callback, useEffect: () => {} };
   const mocks = { react,
+    "next/navigation": { useRouter: () => ({ push() { throw new Error("Unexpected transition during render"); } }) },
     "@/components/panel/PanelFooter": { default: marker("footer") },
     "@/components/panel/NOWPaymentsBalances": { default: marker("NOWPaymentsBalances") },
     "@/lib/member-read.mjs": { readMemberParts: () => { throw new Error("Unexpected request"); }, validMemberTree: () => true, validMemberSummary: () => true },

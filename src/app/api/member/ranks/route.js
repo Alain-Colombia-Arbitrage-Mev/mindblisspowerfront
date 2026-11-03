@@ -1,7 +1,7 @@
 import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
-import { getCatalog } from "@/lib/catalog";
+import { getRankCatalog } from "@/lib/catalog";
 import { verifiedEmailFromIdToken } from "@/lib/verify-id-token";
 import { memberReadLimit } from "@/lib/member-read-policy.mjs";
 
@@ -27,7 +27,7 @@ export async function GET() {
   const limited = memberReadLimit(email, "ranks");
   if (limited) return limited;
   try {
-    const { ranks } = await getCatalog();
+    const { ranks } = await getRankCatalog();
     return NextResponse.json({ ranks }, { headers: privateHeaders });
   } catch {
     return NextResponse.json(

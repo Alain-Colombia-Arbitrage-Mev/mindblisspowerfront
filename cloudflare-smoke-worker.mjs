@@ -279,9 +279,10 @@ export default {
       const denied = cloudflarePortalGuard(input, fixtureEnv);
       if (denied) return privateCloudflareResponse(denied);
       return privateCloudflareResponse(await runCloudflareRequest(input, fixtureEnv, ctx, (r, e, c) => {
-        getCloudflareScope().resources.set('catalog', Promise.resolve({ ranks: [], packages: Array.from({ length: 13 }, (_, index) => ({
+        getCloudflareScope().resources.set('catalog-packages-v3', Promise.resolve(Array.from({ length: 13 }, (_, index) => ({
           id: index + 1, name: `Plan Fixture ${index + 1}`, amount_usd: String((index + 1) * 100), pv: 999999, type: '11001',
-        })) }));
+        }))));
+        getCloudflareScope().resources.set('catalog-ranks-v3', Promise.resolve([]));
         return builtWorker.fetch(r, e, c);
       }));
     }

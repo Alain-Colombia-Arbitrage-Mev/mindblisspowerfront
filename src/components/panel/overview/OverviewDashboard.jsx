@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, CreditCard, HandCoins, LifeBuoy, Network, RefreshCw } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import PanelFooter from "@/components/panel/PanelFooter";
 import NOWPaymentsBalances from "@/components/panel/NOWPaymentsBalances";
@@ -28,6 +29,7 @@ const SHORTCUTS = [
  * Los fallos de carga no se representan como saldos o posiciones vacios.
  */
 export default function OverviewDashboard({ plans = null }) {
+  const router = useRouter();
   const [summary, setSummary] = useState(null);
   const [network, setNetwork] = useState(null);
   const [summaryStatus, setSummaryStatus] = useState("loading");
@@ -108,7 +110,7 @@ export default function OverviewDashboard({ plans = null }) {
           signups={recentSignups}
           pendingCount={Math.max(0, nodes.length - recentSignups.length)}
           onRefresh={load}
-          onSeeAll={() => window.location.assign("/dashboard/network")}
+          onSeeAll={() => router.push("/dashboard/network")}
         />
         </>}
       </div>

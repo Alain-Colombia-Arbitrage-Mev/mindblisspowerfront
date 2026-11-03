@@ -2,18 +2,42 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { CreditCard, Loader2, MapPin, Network, RefreshCw, ShieldAlert, UserCheck } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 
-import BinaryTreeView from "@/components/panel/network/BinaryTreeView";
-import GenerationView from "@/components/panel/network/GenerationView";
 import NetworkSummaryCard from "@/components/panel/network/NetworkSummaryCard";
 import NetworkTabs, { NETWORK_TABS } from "@/components/panel/network/NetworkTabs";
-import OperativeListView from "@/components/panel/network/OperativeListView";
 import PositionCard from "@/components/panel/network/PositionCard";
-import RankView from "@/components/panel/network/RankView";
 import { treeRefreshFailure } from "@/lib/tree-read-model.mjs";
 import { createMemberNetworkReader } from "@/lib/member-network-reader.mjs";
+
+// Keep the route shell and the data requests small. A view is downloaded only
+// when selected; the initial one is warmed alongside the reads below so the
+// tree request does not have to finish before its JavaScript starts loading.
+const BinaryTreeView = dynamic(() => import("@/components/panel/network/BinaryTreeView"), { loading: NetworkViewLoading });
+const GenerationView = dynamic(() => import("@/components/panel/network/GenerationView"), { loading: NetworkViewLoading });
+const RankView = dynamic(() => import("@/components/panel/network/RankView"), { loading: NetworkViewLoading });
+const OperativeListView = dynamic(() => import("@/components/panel/network/OperativeListView"), { loading: NetworkViewLoading });
+
+function NetworkViewLoading() {
+  return <section className="flex min-h-80 items-center justify-center gap-3 rounded-2xl border p-6"
+    style={{ background: "var(--vp-surface)", borderColor: "var(--vp-border)", color: "var(--vp-muted)" }}
+    role="status" aria-busy="true">
+    <Loader2 size={18} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+    <span className="text-sm font-semibold">Cargando vista de la red…</span>
+  </section>;
+}
+
+function warmNetworkView(tab) {
+  const pending = tab === "generation" ? import("@/components/panel/network/GenerationView")
+    : tab === "rank" ? import("@/components/panel/network/RankView")
+    : tab === "list" ? import("@/components/panel/network/OperativeListView")
+    : import("@/components/panel/network/BinaryTreeView");
+  // A failed warm-up is not a data error. The dynamic component retains the
+  // normal route error boundary/retry behavior when it is actually rendered.
+  void pending.catch(() => {});
+}
 
 function StatusCard({ children }) {
   return (
@@ -126,7 +150,8 @@ export default function NetworkPage() {
   const searchParams = useSearchParams();
   const requestedTab = searchParams.get("tab");
   const validTabs = useMemo(() => new Set(NETWORK_TABS.map((item) => item.id)), []);
-  const [tab, setTab] = useState("tree");
+  const [tab, setTab] = useState(() => validTabs.has(requestedTab) ? requestedTab : "tree");
+  const initialTab = useRef(tab);
   const [treeDepth, setTreeDepth] = useState("4");
   const [refreshTick, setRefreshTick] = useState(0);
   const reader = useRef(null);
@@ -139,6 +164,7 @@ export default function NetworkPage() {
   }, [requestedTab, validTabs]);
 
   useEffect(() => {
+    warmNetworkView(initialTab.current);
     const current = createMemberNetworkReader({
       onStart: full => setState(prev => ({ ...prev, loading: !prev.data, refreshing: Boolean(prev.data), error: "", refreshError: "",
         ...(full ? { summary: null, referral: null, summaryError: null, referralError: null } : {}), syncing: false })),
