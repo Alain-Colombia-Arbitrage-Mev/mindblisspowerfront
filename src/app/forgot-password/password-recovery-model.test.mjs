@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  PASSWORD_RECOVERY_NOTICE, passwordRecoveryEmail, passwordRecoveryErrors, passwordRecoveryRequest,
-  passwordRecoveryAcknowledged, passwordRecoveryRetrySeconds, passwordRecoveryConfirmationRetrySeconds, passwordRecoveryFailure,
+  PASSWORD_RECOVERY_NOTICE, PASSWORD_RECOVERY_LIMIT_NOTICE, passwordRecoveryEmail, passwordRecoveryErrors, passwordRecoveryRequest,
+  passwordRecoveryAcknowledged, passwordRecoveryRetrySeconds, passwordRecoveryConfirmationRetrySeconds, passwordRecoveryWaitLabel, passwordRecoveryFailure,
 } from './password-recovery-model.mjs';
 
 const input = { email: ' MEMBER@EXAMPLE.TEST ', otp: '001234', password: ' Raw password with spaces ', confirmPassword: ' Raw password with spaces ' };
@@ -53,6 +53,26 @@ test('recovery failures are neutral and never echo private provider diagnostics'
   assert.match(passwordRecoveryFailure(503), /Prueba iniciar sesión/);
   assert.match(passwordRecoveryFailure(400), /Revisa el código y los datos/);
   assert.doesNotMatch(passwordRecoveryFailure(403), /suspendid|existe|contraseña anterior/);
+  assert.match(passwordRecoveryFailure(429), /no al inicio de sesión/);
+});
+
+test('daily recovery policy is explained without implying an account-wide lock or confirming account existence', () => {
+  assert.match(PASSWORD_RECOVERY_LIMIT_NOTICE, /5 solicitudes de recuperación y 10 intentos de validación/);
+  assert.match(PASSWORD_RECOVERY_LIMIT_NOTICE, /24 horas/);
+  assert.match(PASSWORD_RECOVERY_LIMIT_NOTICE, /no bloquea el inicio de sesión/);
+  assert.doesNotMatch(PASSWORD_RECOVERY_LIMIT_NOTICE, /cuenta existe|cuenta bloqueada|hemos enviado/);
+});
+
+test('recovery-only countdown expresses a whole-day wait in hours and never rounds a deadline down', () => {
+  for (const [seconds, expected] of [[1, '0:01'], [60, '1:00'], [3599, '59:59'], [3600, '1 h'],
+    [3601, '1 h 1 min'], [7199, '2 h'], [86399, '24 h'], [86400, '24 h'], [999999, '24 h']]) {
+    assert.equal(passwordRecoveryWaitLabel(seconds), `Reenviar en ${expected}`);
+    assert.equal(passwordRecoveryWaitLabel(seconds, 'confirm'), `Validar de nuevo en ${expected}`);
+  }
+  for (const value of [undefined, null, '86400', 0, -1, NaN, Infinity]) assert.equal(passwordRecoveryWaitLabel(value), '');
+  const daily = new Response(null, { status: 429, headers: { 'retry-after': '86400' } });
+  assert.equal(passwordRecoveryRetrySeconds(daily), 86400);
+  assert.equal(passwordRecoveryConfirmationRetrySeconds(daily), 86400);
 });
 
 test('code redemption honors its own bounded Retry-After rather than borrowing the five-minute send budget', () => {

@@ -41,6 +41,9 @@ test('recovery explains first-password setup in three steps without changing the
   assert.match(markup, /primera contraseña de acceso o reemplazar la anterior/);
   assert.match(markup, /tu contraseña antigua no es necesaria/);
   assert.match(markup, /No necesitas cambiar tu correo ni volver a registrarte/);
+  assert.match(markup, /5 solicitudes de recuperación y 10 intentos de validación/);
+  assert.match(markup, /24 horas/);
+  assert.match(markup, /no bloquea el inicio de sesión/);
   assert.ok(markup.indexOf('Solicita el código') < markup.indexOf('Escribe el código'));
   assert.ok(markup.indexOf('Escribe el código') < markup.indexOf('Guarda los cambios'));
   assert.doesNotMatch(markup, /Te enviamos|cuenta existe|cuenta no existe|Contraseña actualizada/);
@@ -160,6 +163,70 @@ test('received recovery code remains usable during send cooldown, while a separa
   assert.equal(calls.length, 3);
   assert.equal(scopes.every(scope => scope.startsWith('better-auth:password-recovery:')), true);
   assert.deepEqual(calls.map(call => call.body.email), [email, email, email]);
+  harness.unmount();
+});
+
+test('daily send cooldown remains scoped to the normalized original email after returning to the email step', async t => {
+  const budgets = new Map(), calls = [];
+  const cooldown = (_seconds, scope) => {
+    const remaining = budgets.get(scope) || 0;
+    return { remaining, active: remaining > 0, label: 'must-not-display-1440:00', start(value) { budgets.set(scope, value); } };
+  };
+  t.mock.method(globalThis, 'fetch', async (path, options) => {
+    calls.push({ path, body: JSON.parse(options.body) });
+    return Response.json({ code: 'private-daily-limit-detail' }, { status: 429, headers: { 'retry-after': '86400' } });
+  });
+  const harness = view(cooldown); await submit(harness);
+  assert.equal(budgets.get(`better-auth:password-recovery:send:${email}`), 86400);
+  assert.equal(find(harness.render(props), node => node?.props?.children === 'Reenviar en 24 h').props.disabled, true);
+  assert.match(html(harness), /Este límite sólo afecta a la recuperación, no al inicio de sesión/);
+  assert.doesNotMatch(html(harness), /private-daily|1440:00|cuenta bloqueada|cuenta existe/);
+  find(harness.render(props), node => node?.props?.children === 'Volver al paso del correo').props.onClick();
+  assert.equal(find(harness.render(props), field('recovery-email')).props.readOnly, false);
+  change(harness, 'recovery-email', ' MEMBER@EXAMPLE.TEST ');
+  assert.equal(find(harness.render(props), node => node?.props?.children === 'Reenviar en 24 h').props.disabled, true);
+  await submit(harness);
+  assert.equal(calls.length, 1, 'returning or changing email case cannot clear its server deadline hint');
+  budgets.set(`better-auth:password-recovery:send:${email}`, 0);
+  harness.render(props);
+  assert.equal(calls.length, 1, 'deadline expiry never sends automatically');
+  await submit(harness);
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls.map(call => call.body), [{ email }, { email }]);
+  harness.unmount();
+});
+
+test('daily validation cooldown survives a new challenge and uses an independent 24-hour countdown', async t => {
+  const budgets = new Map(), calls = [];
+  const cooldown = (_seconds, scope) => {
+    const remaining = budgets.get(scope) || 0;
+    return { remaining, active: remaining > 0, label: 'must-not-display-1440:00', start(value) { budgets.set(scope, value); } };
+  };
+  t.mock.method(globalThis, 'fetch', async (path, options) => {
+    calls.push({ path, body: JSON.parse(options.body) });
+    if (path.endsWith('/request-password-reset')) return Response.json({ ok: true });
+    return calls.filter(call => call.path.endsWith('/reset-password')).length === 1
+      ? Response.json({ code: 'private-daily-limit-detail' }, { status: 429, headers: { 'retry-after': '86400' } })
+      : Response.json({ ok: true });
+  });
+  const harness = view(cooldown); await submit(harness); enterCredentials(harness); await submit(harness);
+  const sendScope = `better-auth:password-recovery:send:${email}`;
+  const confirmScope = `better-auth:password-recovery:confirm:${email}`;
+  assert.equal(budgets.get(sendScope), 300);
+  assert.equal(budgets.get(confirmScope), 86400);
+  assert.equal(find(harness.render(props), node => node?.props?.children === 'Validar de nuevo en 24 h').props.disabled, true);
+  await submit(harness); assert.equal(calls.length, 2);
+  find(harness.render(props), node => node?.props?.children === 'Volver al paso del correo').props.onClick();
+  budgets.set(sendScope, 0);
+  await submit(harness); enterCredentials(harness); await submit(harness);
+  assert.equal(calls.length, 3, 'requesting another challenge does not reset the daily validation cooldown');
+  assert.equal(find(harness.render(props), node => node?.props?.children === 'Validar de nuevo en 24 h').props.disabled, true);
+  assert.doesNotMatch(html(harness), /private-daily|1440:00|Contraseña actualizada/);
+  budgets.set(confirmScope, 0); harness.render(props);
+  assert.equal(calls.length, 3, 'daily validation expiry never redeems automatically');
+  await submit(harness);
+  assert.equal(calls.length, 4);
+  assert.match(html(harness), /Contraseña actualizada/);
   harness.unmount();
 });
 

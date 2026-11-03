@@ -6,9 +6,9 @@ import { useEffect, useRef, useState } from 'react';
 import { useResendCooldown } from '@/lib/useResendCooldown';
 import { RegistrationButton, RegistrationField, RegistrationPassword } from '../register/RegistrationFields';
 import {
-  PASSWORD_RECOVERY_RESEND_SECONDS, PASSWORD_RECOVERY_NOTICE, PASSWORD_RECOVERY_UNCONFIRMED,
+  PASSWORD_RECOVERY_RESEND_SECONDS, PASSWORD_RECOVERY_NOTICE, PASSWORD_RECOVERY_UNCONFIRMED, PASSWORD_RECOVERY_LIMIT_NOTICE,
   passwordRecoveryEmail, passwordRecoveryErrors, passwordRecoveryRequest, passwordRecoveryAcknowledged,
-  passwordRecoveryRetrySeconds, passwordRecoveryConfirmationRetrySeconds, passwordRecoveryFailure,
+  passwordRecoveryRetrySeconds, passwordRecoveryConfirmationRetrySeconds, passwordRecoveryWaitLabel, passwordRecoveryFailure,
 } from './password-recovery-model.mjs';
 
 // Recovery is the same flow with or without an existing password. The browser
@@ -36,6 +36,9 @@ export default function BetterAuthPasswordRecovery({ initialEmail = '' }) {
   const cooldownScope = passwordRecoveryEmail(recipient || email);
   const cooldown = useResendCooldown(PASSWORD_RECOVERY_RESEND_SECONDS, `better-auth:password-recovery:send:${cooldownScope}`);
   const confirmationCooldown = useResendCooldown(60, `better-auth:password-recovery:confirm:${cooldownScope}`);
+  const resendLabel = passwordRecoveryWaitLabel(cooldown.remaining) || cooldown.label;
+  const confirmationLabel = passwordRecoveryWaitLabel(confirmationCooldown.remaining, 'confirm')
+    || confirmationCooldown.label.replace(/^Reenviar/, 'Validar de nuevo');
   const busy = Boolean(loading);
 
   useEffect(() => () => {
@@ -172,6 +175,7 @@ export default function BetterAuthPasswordRecovery({ initialEmail = '' }) {
         <li>Guarda los cambios e inicia sesión con ese mismo correo.</li>
       </ol>
       <p className="text-sm leading-6 font-bold text-[var(--vp-text)]">No necesitas cambiar tu correo ni volver a registrarte.</p>
+      <p className="text-xs leading-5 text-[var(--vp-muted)]">{PASSWORD_RECOVERY_LIMIT_NOTICE}</p>
       {errors.form ? <p ref={feedback} tabIndex={-1} role="alert" aria-live="assertive" className="rounded-lg border border-[var(--vp-danger-border)] bg-[var(--vp-danger-muted)] p-3 text-sm text-[var(--vp-danger)]">{errors.form}</p> : null}
       {notice ? <p role="status" aria-live="polite" aria-atomic="true" className="rounded-lg border border-[var(--vp-accent-border)] bg-[var(--vp-accent-muted)] p-3 text-sm text-[var(--vp-text)]">{notice}</p> : null}
       <form onSubmit={step === 'request' ? requestCode : confirm} noValidate aria-busy={busy} className="space-y-4">
@@ -191,14 +195,14 @@ export default function BetterAuthPasswordRecovery({ initialEmail = '' }) {
         </> : null}
         <RegistrationButton type="submit" disabled={busy || (step === 'request' ? cooldown.active : confirmationCooldown.active)} loading={busy}>
           {busy ? loading === 'confirm' ? 'Guardando contraseña…' : 'Solicitando código…'
-            : step === 'confirm' ? confirmationCooldown.active ? confirmationCooldown.label.replace(/^Reenviar/, 'Validar de nuevo') : 'Guardar nueva contraseña'
-              : cooldown.active ? cooldown.label : 'Solicitar código por correo'}
+            : step === 'confirm' ? confirmationCooldown.active ? confirmationLabel : 'Guardar nueva contraseña'
+              : cooldown.active ? resendLabel : 'Solicitar código por correo'}
         </RegistrationButton>
       </form>
       {step === 'confirm' ? <div className="grid gap-2 sm:grid-cols-2">
         <button type="button" disabled={busy} onClick={correctEmail} className="min-h-11 rounded-lg border border-[var(--vp-border)] px-3 text-sm font-semibold text-[var(--vp-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--vp-accent)] disabled:opacity-60">Volver al paso del correo</button>
         <button type="button" disabled={busy || cooldown.active} onClick={event => requestCode(event, true)} className="min-h-11 rounded-lg border border-[var(--vp-border)] px-3 text-sm font-semibold text-[var(--vp-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--vp-accent)] disabled:opacity-60">
-          {cooldown.active ? cooldown.label : 'Solicitar otro código'}
+          {cooldown.active ? resendLabel : 'Solicitar otro código'}
         </button>
       </div> : null}
       <p className="text-xs leading-5 text-[var(--vp-muted)]">Corregir el correo en este formulario no cambia el correo registrado de tu cuenta. Si ya no tienes acceso a esa bandeja, contacta al soporte. No compartas contraseñas ni códigos.</p>

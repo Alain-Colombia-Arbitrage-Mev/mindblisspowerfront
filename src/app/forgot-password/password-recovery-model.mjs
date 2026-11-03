@@ -1,6 +1,7 @@
 export const PASSWORD_RECOVERY_RESEND_SECONDS = 300;
 export const PASSWORD_RECOVERY_NOTICE = 'Si el correo corresponde a una cuenta habilitada, recibirás un código para crear o cambiar tu contraseña. Revisa también spam o correo no deseado.';
 export const PASSWORD_RECOVERY_UNCONFIRMED = 'No pudimos confirmar el envío. Si recibes un código, introdúcelo aquí. No enviaremos otro automáticamente; espera antes de solicitarlo de nuevo.';
+export const PASSWORD_RECOVERY_LIMIT_NOTICE = 'Por seguridad, cada correo tiene un límite de 5 solicitudes de recuperación y 10 intentos de validación en un período de 24 horas. Este límite sólo afecta a la recuperación; no bloquea el inicio de sesión.';
 
 export function passwordRecoveryEmail(value) {
   if (typeof value !== 'string') return '';
@@ -53,8 +54,21 @@ export function passwordRecoveryConfirmationRetrySeconds(response, payload = {},
   return Number.isFinite(seconds) && seconds > 0 ? Math.min(86400, Math.ceil(seconds)) : 60;
 }
 
+// Recovery can be paused for an entire daily budget. Keep long deadlines
+// understandable without changing the shared login/registration countdown.
+export function passwordRecoveryWaitLabel(remaining, action = 'request') {
+  if (typeof remaining !== 'number' || !Number.isFinite(remaining) || remaining <= 0) return '';
+  const seconds = Math.min(86400, Math.ceil(remaining));
+  const prefix = action === 'confirm' ? 'Validar de nuevo en' : 'Reenviar en';
+  if (seconds < 3600) return `${prefix} ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.ceil((seconds % 3600) / 60);
+  // Round up rather than advertise that a server deadline expires early.
+  return `${prefix} ${hours + (minutes === 60 ? 1 : 0)} h${minutes > 0 && minutes < 60 ? ` ${minutes} min` : ''}`;
+}
+
 export function passwordRecoveryFailure(status, action = 'confirm') {
-  if (status === 429) return 'Demasiados intentos. Espera antes de volver a intentarlo.';
+  if (status === 429) return 'Demasiados intentos. Espera el plazo indicado antes de volver a intentarlo. Este límite sólo afecta a la recuperación, no al inicio de sesión.';
   if (status >= 500) return action === 'confirm'
     ? 'No pudimos confirmar el cambio. Prueba iniciar sesión con la nueva contraseña antes de repetir la solicitud.'
     : PASSWORD_RECOVERY_UNCONFIRMED;
