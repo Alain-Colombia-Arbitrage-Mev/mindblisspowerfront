@@ -320,6 +320,12 @@ export default {
       : resendUnconfiguredFixture ? incoming.pathname.slice('/__resend_unconfigured'.length) : incoming.pathname;
     const headers = new Headers(request.headers);
     headers.delete('x-forwarded-host');
+    // Browser-only local QA of this synthetic fixture. Preserve the same-origin
+    // rule: foreign origins are never rewritten. This file is not deployed.
+    if (['localhost', '127.0.0.1', '[::1]'].includes(incoming.hostname)) {
+      if (headers.get('origin') === incoming.origin) headers.set('origin', syntheticEnv.AUTH_PUBLIC_ORIGIN);
+      headers.set('cf-connecting-ip', '192.0.2.10');
+    }
     const input = new Request(`https://app.mindblisspower.com${pathname}${incoming.search}`, { method: request.method, headers, body: request.body });
     return worker.fetch(input, { ...env, ...syntheticEnv,
       BETTER_AUTH_REGISTRATION_SMS_REQUIRED: 'true', SENTDM_API_KEY: 'synthetic-never-call', SENTDM_OTP_TEMPLATE_ID: 'synthetic-never-call',

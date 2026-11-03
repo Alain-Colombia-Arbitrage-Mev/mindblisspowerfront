@@ -24,12 +24,13 @@ export function verifiedEmailSignIn(payload, expectedEmail) {
 }
 
 // Email ownership is not an approved member binding. Both sign-in methods must
-// consult the canonical session endpoint, never sign-in response fields.
+// consult canonical access, never sign-in response fields. This projection
+// deliberately excludes optional profile/referral enrichment from payments.
 /** @param {{signal?: AbortSignal}} [options] */
 export async function betterAuthAccess(fetchImpl = fetch, expectedEmail = '', options = {}) {
   const { signal } = options;
   try {
-    const response = await fetchImpl('/api/auth/session', {
+    const response = await fetchImpl('/api/auth/session?view=access', {
       credentials: 'same-origin', cache: 'no-store', redirect: 'error',
       signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(12000)]) : AbortSignal.timeout(12000),
     });

@@ -3,7 +3,24 @@
 Email verification proves mailbox ownership, not access to the member portal.
 Both password and email-OTP login must establish a fresh native Better Auth
 session before the BFF acknowledges success. The browser then checks the
-canonical `/api/auth/session` response before navigating to `/dashboard`.
+canonical `/api/auth/session?view=access` response before navigating to
+`/dashboard`. Registration uses the same access projection.
+
+## Access must not wait for profile enrichment
+
+The default session response can enrich name and referral code through the
+payments service. Previously a delayed payments response held the login's
+canonical lookup until its 12-second browser deadline, leaving a valid session
+on the verified-email screen. A payments failure was already ignored unless it
+explicitly denied access, so waiting for optional presentation data was not an
+authentication requirement.
+
+The Better Auth `view=access` projection checks the same fresh service JWT and
+canonical identity, including live restrictions when it is issued. It does not
+call payments. Default session consumers and the Cognito suspension gate keep
+their existing enriched response. No referral code is invented. An unavailable
+identity verifier still returns a private generic error; an invalid identity
+still cannot navigate. The dashboard also enforces its server-side JWT gate.
 
 ## Trust boundaries
 

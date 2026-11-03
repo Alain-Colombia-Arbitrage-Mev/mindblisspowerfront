@@ -83,7 +83,7 @@ for (const side of ['L', 'R']) test(`shared ${side} link survives registration, 
   assert.equal(confirmation.headers.getSetCookie().length, 1);
   assert.equal(verifiedEmailSignIn(confirmed, email), false, 'the registration ACK is not reusable as a login proof or account authority');
   const access = await betterAuthAccess(async (target, options) => {
-    assert.equal(target, '/api/auth/session');
+    assert.equal(target, '/api/auth/session?view=access');
     assert.equal(options.cache, 'no-store');
     assert.equal(signedIn, true);
     return Response.json({ authenticated: true, mode: 'better-auth', email });

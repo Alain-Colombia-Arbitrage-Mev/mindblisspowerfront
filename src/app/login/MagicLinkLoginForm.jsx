@@ -632,7 +632,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
   if (verifiedLogin) {
     const access = verifiedLogin.access;
     return (
-      <div className="space-y-4">
+      <div className="space-y-4" aria-busy={isLoading || Boolean(access.checking)}>
         <Message tone="info">
           <h2 ref={verifiedTitle} tabIndex={-1} className="text-base font-bold">Correo verificado correctamente</h2>
           <p className="mt-2 break-words font-normal">Confirmamos el correo {verifiedLogin.email}. Puedes continuar sin repetir este paso.</p>
@@ -643,9 +643,9 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
             ? 'Tu sesión tiene acceso al portal. Abriendo tu panel…'
             : access.notice || 'No pudimos comprobar todavía tu acceso a la red. Puedes revisarlo sin solicitar otro código.'}
         </p>
-        <p className="text-sm leading-6" style={{ color: "var(--vp-muted)" }}>Si tu cuenta anterior requiere revisión, la vinculación debe aprobarse antes de entrar. Verificar el correo no asigna por sí solo una posición en la red.</p>
+        <p className="text-sm leading-6" style={{ color: "var(--vp-muted)" }}>No necesitas registrarte de nuevo ni cambiar tu correo. Comprobamos tu sesión para abrir el panel; esto no modifica tu cuenta ni tu posición en la red.</p>
         <SecondaryButton disabled={isLoading || access.checking} onClick={continueVerifiedLogin} icon={<ArrowRight size={16} />}>
-          {isLoading || access.checking ? 'Comprobando acceso…' : access.ready ? 'Continuar al panel' : 'Revisar acceso'}
+          {isLoading || access.checking ? 'Comprobando acceso…' : 'Continuar al panel'}
         </SecondaryButton>
         <SecondaryButton disabled={isLoading || access.checking} onClick={useAnotherEmail} icon={<ArrowLeft size={15} />}>
           Usar otro correo

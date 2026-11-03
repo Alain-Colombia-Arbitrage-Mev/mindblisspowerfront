@@ -19,7 +19,8 @@ const SESSION_COOKIES = [
   "vp_cognito_code_challenge",
 ];
 
-export async function GET() {
+/** @param {Request} request */
+export async function GET(request) {
   let idToken;
   let claims;
   try {
@@ -40,9 +41,16 @@ export async function GET() {
     claims.nickname ||
     "";
 
+  const betterAuth = betterAuthEnabled();
+  const views = new URL(request.url).searchParams.getAll("view");
+  // Better Auth's freshly issued JWT already requires a verified, eligible
+  // canonical binding. Login readiness must not wait on optional display data.
+  // Keep default enrichment and Cognito's independent suspension veto intact.
+  const accessOnly = betterAuth && views.length === 1 && views[0] === "access";
+
   let realCode = "";
   let realName = "";
-  if (email) {
+  if (email && !accessOnly) {
     const ref = await callPayments(`/api/member/referral?email=${encodeURIComponent(email)}`);
     if (isSuspended(ref)) {
       return suspendedSessionResponse();
@@ -58,7 +66,7 @@ export async function GET() {
 
   return NextResponse.json({
     authenticated,
-    mode: betterAuthEnabled() ? "better-auth" : "cognito",
+    mode: betterAuth ? "better-auth" : "cognito",
     name: name || null,
     email: email || null,
     // Opaque, verified identity for namespacing tab-local checkout intents only.
@@ -71,7 +79,7 @@ export async function GET() {
     // (Un código inventado se ve válido pero no resuelve a ningún sponsor.)
     referralCode: realCode || null,
     isAdmin: false,
-  });
+  }, { headers: { 'Cache-Control': 'private, no-store' } });
 }
 
 function isSuspended(result) {
@@ -81,7 +89,7 @@ function isSuspended(result) {
 function suspendedSessionResponse() {
   const response = NextResponse.json(
     { authenticated: false, mode: "cognito", error: "account_suspended" },
-    { status: 403 }
+    { status: 403, headers: { 'Cache-Control': 'private, no-store' } }
   );
   for (const name of SESSION_COOKIES) clearCookie(response, name);
   return response;

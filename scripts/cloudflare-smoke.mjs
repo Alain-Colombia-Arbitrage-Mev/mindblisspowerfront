@@ -450,6 +450,23 @@ try {
   assert.equal(identity.referralCode, 'SYNTHETIC-MEMBER');
   assert.equal(identity.isAdmin, false, 'customer portal never grants an administrative role');
   probes++;
+  const beforeAccess = await (await fetch('http://127.0.0.1:8787/__synthetic_metrics')).json();
+  const accessSession = await fetch('http://127.0.0.1:8787/api/auth/session?view=access', {
+    headers: sessionHeaders, signal: AbortSignal.timeout(8000),
+  });
+  assert.equal(accessSession.status, 200);
+  const accessIdentity = await accessSession.json();
+  assert.equal(accessIdentity.authenticated, true);
+  assert.equal(accessIdentity.mode, 'better-auth');
+  assert.equal(accessIdentity.email, 'fixture@example.test');
+  assert.equal(accessIdentity.subject, identity.subject);
+  assert.equal(accessIdentity.referralCode, null, 'access does not invent a referral code');
+  assert.equal(accessIdentity.isAdmin, false);
+  assert.match(accessSession.headers.get('cache-control'), /private.*no-store/);
+  const afterAccess = await (await fetch('http://127.0.0.1:8787/__synthetic_metrics')).json();
+  assert.equal(afterAccess.verifiedReferrals, beforeAccess.verifiedReferrals, 'login access does not wait for payments enrichment');
+  assert.ok(afterAccess.tokens > beforeAccess.tokens, 'access still validates the current native session and service JWT');
+  probes++;
   for (const cookieValue of ['', '__Secure-better-auth.session_token=synthetic-tampered']) {
     const rejected = await fetch('http://127.0.0.1:8787/api/auth/session', {
       headers: { ...sessionHeaders, cookie: cookieValue }, signal: AbortSignal.timeout(8000),

@@ -332,7 +332,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
               : access.notice || 'Tu correo ya está verificado. Puedes comprobar el estado de tu acceso sin pedir otro código.'}</p>
             <p className="text-sm leading-7 text-[var(--vp-muted)]">Verificar tu correo no concede por sí solo acceso a saldos ni a cuentas antiguas de la red. Si tu vinculación requiere revisión, debe aprobarse antes de entrar.</p>
             {access.ready ? <Link href="/dashboard" onClick={event => { if (dashboardNavigation.current) event.preventDefault(); }} className="inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-[var(--vp-accent)] px-4 font-bold text-[var(--vp-shell)]">Continuar al panel</Link>
-              : <RegistrationButton type="button" onClick={recheckAccess} disabled={isLoading || access.checking} loading={loading === 'access'}>{access.checking ? 'Comprobando acceso…' : 'Revisar acceso'}</RegistrationButton>}
+              : <RegistrationButton type="button" onClick={recheckAccess} disabled={isLoading || access.checking} loading={loading === 'access'}>{access.checking ? 'Comprobando acceso…' : 'Continuar al panel'}</RegistrationButton>}
             <p className="text-sm leading-7 text-[var(--vp-muted)]">Puedes seguir entrando con códigos por correo, sin contraseña. Para crear tu primera contraseña o cambiarla, abre recuperación y verifica un nuevo código de recuperación; el código de registro no sirve para ese proceso.</p>
             <Link href="/forgot-password" className="inline-flex min-h-12 w-full items-center justify-center rounded-lg border border-[var(--vp-border)] px-4 font-semibold text-[var(--vp-text)]">Crear o cambiar contraseña (opcional)</Link>
           </div>

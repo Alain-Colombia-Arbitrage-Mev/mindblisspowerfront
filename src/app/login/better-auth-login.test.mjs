@@ -32,7 +32,7 @@ test('malformed canonical success responses are unavailable rather than an inven
 
 test('only the canonical verified session permits navigation and it is never cached', async () => {
   const result = await betterAuthAccess(async (path, options) => {
-    assert.equal(path, '/api/auth/session');
+    assert.equal(path, '/api/auth/session?view=access');
     assert.equal(options.credentials, 'same-origin');
     assert.equal(options.cache, 'no-store');
     assert.equal(options.redirect, 'error');

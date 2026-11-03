@@ -68,7 +68,7 @@ test('password login waits for canonical access before publishing one verified s
   });
   const harness = view(), pending = harness.submit();
   await checking.promise;
-  assert.deepEqual(calls.map(call => call.path), ['/api/auth/sign-in/email', '/api/auth/session']);
+  assert.deepEqual(calls.map(call => call.path), ['/api/auth/sign-in/email', '/api/auth/session?view=access']);
   assert.deepEqual(JSON.parse(calls[0].options.body), { email, password });
   assert.equal(harness.events.some(([name]) => ['verified', 'referral'].includes(name)), false);
   assert.equal(harness.form().props['aria-busy'], true);
@@ -135,7 +135,7 @@ test('unmount during canonical session lookup aborts its signal and ignores a la
 test('a disposed password form cannot overwrite the verified result of a newer form when replies arrive out of order', async t => {
   const first = deferred(); let signIns = 0;
   t.mock.method(globalThis, 'fetch', async path => {
-    if (path === '/api/auth/session') return Response.json(session);
+    if (path === '/api/auth/session?view=access') return Response.json(session);
     signIns++; return signIns === 1 ? first.promise : Response.json(proof);
   });
   const previous = view(), pending = previous.submit(); previous.unmount();
