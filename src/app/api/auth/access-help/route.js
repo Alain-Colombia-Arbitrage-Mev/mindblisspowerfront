@@ -1,3 +1,4 @@
+import { coreFetch } from '@/lib/cloudflare-runtime.mjs';
 import { NextResponse } from "next/server";
 
 import { authRateLimit } from "@/lib/auth-rate-limit";
@@ -26,7 +27,7 @@ export async function POST(request) {
   }
 
   try {
-    const resp = await fetch(`${base}/api/support/access-help`, {
+    const resp = await coreFetch(`${base}/api/support/access-help`, {
       method: "POST",
       headers: { "content-type": "application/json", "X-VP-Service-Token": token },
       body: JSON.stringify({

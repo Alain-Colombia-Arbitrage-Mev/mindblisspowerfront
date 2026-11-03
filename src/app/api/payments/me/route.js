@@ -1,4 +1,5 @@
-import { cookies } from "next/headers";
+import { coreFetch } from '@/lib/cloudflare-runtime.mjs';
+import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
 import { idTokenHeader } from "@/lib/admin-bff";
@@ -12,8 +13,7 @@ export const dynamic = "force-dynamic";
  * Valida la sesión Cognito y delega al servicio Go vp-payments.
  */
 export async function GET(request) {
-  const cookieStore = await cookies();
-  const idToken = cookieStore.get("vp_id_token")?.value;
+  const idToken = await rawIdToken();
   if (!idToken)
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
 
@@ -33,7 +33,7 @@ export async function GET(request) {
     const requestUrl = new URL(request.url);
     const fresh = requestUrl.searchParams.get("fresh") === "1";
     const upstreamUrl = `${base}/api/payments/me?email=${encodeURIComponent(email)}${fresh ? "&fresh=1" : ""}`;
-    const resp = await fetch(upstreamUrl, {
+    const resp = await coreFetch(upstreamUrl, {
       headers: { "X-VP-Service-Token": token, ...(await idTokenHeader()) },
       cache: "no-store",
       signal: AbortSignal.any([request.signal, AbortSignal.timeout(20_000)]),

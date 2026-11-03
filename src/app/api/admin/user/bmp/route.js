@@ -1,3 +1,4 @@
+import { coreFetch } from '@/lib/cloudflare-runtime.mjs';
 import { NextResponse } from "next/server";
 
 import { isAdminEmail, sessionEmail, withdrawalsConfig } from "@/lib/admin-bff";
@@ -26,7 +27,7 @@ export async function GET(request) {
   if (!base || !token) return NextResponse.json({ error: "withdrawals-unconfigured" }, { status: 503 });
 
   try {
-    const resp = await fetch(`${base}/api/payments/bmp-status?email=${encodeURIComponent(target)}`, {
+    const resp = await coreFetch(`${base}/api/payments/bmp-status?email=${encodeURIComponent(target)}`, {
       method: "GET",
       headers: { "X-VP-Service-Token": token },
       cache: "no-store",

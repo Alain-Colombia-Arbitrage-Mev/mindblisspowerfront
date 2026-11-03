@@ -7,7 +7,6 @@ const PAGES = [
   ["/dashboard/payments", "Pagos", "Finanzas"],
   ["/dashboard/withdrawals", "Billetera y retiros", "Finanzas"],
   ["/dashboard/coupons", "Cupones", "Mi cuenta"],
-  ["/dashboard/kyc", "Verificación de identidad", "Mi cuenta"],
   ["/dashboard/profile", "Mi perfil", "Mi cuenta"],
   ["/dashboard/ranks", "Rangos", "Mi red"],
   ["/dashboard/rank", "Rangos", "Mi red"],

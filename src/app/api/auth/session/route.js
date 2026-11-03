@@ -1,9 +1,10 @@
-import { cookies } from "next/headers";
+import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
 import { callPayments } from "@/lib/admin-bff";
 import { clearCookie } from "@/lib/cognito-session";
-import { verifyIdToken } from "@/lib/verify-id-token";
+import { verifyIdTokenForSession as verifyIdToken } from "@/lib/verify-id-token";
+import { betterAuthEnabled, AuthServiceUnavailable } from "@/lib/better-auth-bridge.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,13 +19,20 @@ const SESSION_COOKIES = [
   "vp_cognito_code_challenge",
 ];
 
-export async function GET() {
-  const cookieStore = await cookies();
-  const idToken = cookieStore.get("vp_id_token")?.value;
+/** @param {Request} request */
+export async function GET(request) {
+  let idToken;
+  let claims;
+  try {
+    idToken = await rawIdToken();
+    claims = (await verifyIdToken(idToken)) || {};
+  } catch (error) {
+    if (!(error instanceof AuthServiceUnavailable)) throw error;
+    return NextResponse.json({ error: 'authentication_unavailable' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
+  }
 
   // Claims VERIFICADOS (firma + iss + aud + token_use + exp). Un id token
   // forjado ya no produce sesión: claims = {} ⇒ authenticated=false.
-  const claims = (await verifyIdToken(idToken)) || {};
   const email = claims.email || null;
   const authenticated = Boolean(email);
   const tokenName =
@@ -33,9 +41,16 @@ export async function GET() {
     claims.nickname ||
     "";
 
+  const betterAuth = betterAuthEnabled();
+  const views = new URL(request.url).searchParams.getAll("view");
+  // Better Auth's freshly issued JWT already requires a verified, eligible
+  // canonical binding. Login readiness must not wait on optional display data.
+  // Keep default enrichment and Cognito's independent suspension veto intact.
+  const accessOnly = betterAuth && views.length === 1 && views[0] === "access";
+
   let realCode = "";
   let realName = "";
-  if (email) {
+  if (email && !accessOnly) {
     const ref = await callPayments(`/api/member/referral?email=${encodeURIComponent(email)}`);
     if (isSuspended(ref)) {
       return suspendedSessionResponse();
@@ -51,9 +66,12 @@ export async function GET() {
 
   return NextResponse.json({
     authenticated,
-    mode: "cognito",
+    mode: betterAuth ? "better-auth" : "cognito",
     name: name || null,
     email: email || null,
+    // Opaque, verified identity for namespacing tab-local checkout intents only.
+    // The checkout BFF still authorizes from its independently verified cookie.
+    subject: authenticated && typeof claims.sub === "string" ? claims.sub : null,
     givenName: claims.given_name || null,
     // Código REAL del afiliado (invitation_link o MP{id} canónico del backend).
     // NUNCA inventamos un código: si el miembro aún no está colocado en el árbol
@@ -61,7 +79,7 @@ export async function GET() {
     // (Un código inventado se ve válido pero no resuelve a ningún sponsor.)
     referralCode: realCode || null,
     isAdmin: false,
-  });
+  }, { headers: { 'Cache-Control': 'private, no-store' } });
 }
 
 function isSuspended(result) {
@@ -71,7 +89,7 @@ function isSuspended(result) {
 function suspendedSessionResponse() {
   const response = NextResponse.json(
     { authenticated: false, mode: "cognito", error: "account_suspended" },
-    { status: 403 }
+    { status: 403, headers: { 'Cache-Control': 'private, no-store' } }
   );
   for (const name of SESSION_COOKIES) clearCookie(response, name);
   return response;

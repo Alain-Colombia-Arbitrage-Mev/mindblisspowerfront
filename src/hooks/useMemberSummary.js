@@ -1,20 +1,33 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { readMemberJson, validMemberSummary } from "@/lib/member-read.mjs";
+import { createContext, createElement, useContext, useEffect, useMemo, useSyncExternalStore } from "react";
+import { createMemberSummaryResource } from "@/lib/member-summary-resource.mjs";
+
+const SummaryContext = createContext(null);
+const idle = { loading: true, error: "", data: null };
+const idleSnapshot = () => idle;
+const subscribeIdle = () => () => {};
+
+function useSummaryResource({ fresh, enabled = true }) {
+  const resource = useMemo(() => enabled ? createMemberSummaryResource({ fresh }) : null, [fresh, enabled]);
+  const state = useSyncExternalStore(resource?.subscribe || subscribeIdle, resource?.getSnapshot || idleSnapshot, idleSnapshot);
+  useEffect(() => {
+    if (!resource) return;
+    void resource.load();
+    return () => resource.cancel();
+  }, [resource]);
+  return useMemo(() => ({ state, reload: resource?.refresh }), [state, resource]);
+}
+
+/** Share a single fresh read only with consumers inside this mounted page. */
+export function MemberSummaryProvider({ children, fresh = false }) {
+  const value = useSummaryResource({ fresh });
+  return createElement(SummaryContext.Provider, { value }, children);
+}
 
 /** Bounded, validated reads. A refresh/unmount cancels its previous request. */
 export function useMemberSummary({ fresh = false } = {}) {
-  const [state, setState] = useState({ loading: true, error: "", data: null });
-  const [revision, setRevision] = useState(0);
-  const reload = useCallback(() => setRevision(current => current + 1), []);
-  useEffect(() => {
-    const controller = new AbortController();
-    setState({ loading: true, error: "", data: null });
-    readMemberJson(`/api/payments/me${fresh ? "?fresh=1" : ""}`, { signal: controller.signal, validate: validMemberSummary })
-      .then(data => { if (!controller.signal.aborted) setState({ loading: false, error: "", data }); })
-      .catch(error => { if (!controller.signal.aborted) setState({ loading: false, error: error.message, data: null }); });
-    return () => controller.abort();
-  }, [fresh, revision]);
-  return { state, reload };
+  const shared = useContext(SummaryContext);
+  const local = useSummaryResource({ fresh, enabled: shared === null });
+  return shared || local;
 }

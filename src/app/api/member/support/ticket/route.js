@@ -1,4 +1,5 @@
-import { cookies } from "next/headers";
+import { coreFetch } from '@/lib/cloudflare-runtime.mjs';
+import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
 import { verifyIdToken } from "@/lib/verify-id-token";
@@ -9,8 +10,7 @@ export const dynamic = "force-dynamic";
 // Soporte del miembro: POST crea un ticket. El backend deriva/verifica el email
 // del id token (resolveIdentity), aquí solo reenviamos subject + body.
 async function ctx() {
-  const cookieStore = await cookies();
-  const idToken = cookieStore.get("vp_id_token")?.value;
+  const idToken = await rawIdToken();
   if (!idToken) return { error: "unauthenticated", status: 401 };
   const id = await identityFromIdToken(idToken);
   if (!id.email) return { error: "session-invalid", status: 401 };
@@ -30,7 +30,7 @@ export async function POST(request) {
     return NextResponse.json({ error: "invalid_ticket" }, { status: 400 });
   }
   try {
-    const resp = await fetch(`${c.base}/api/support/ticket`, {
+    const resp = await coreFetch(`${c.base}/api/support/ticket`, {
       method: "POST",
       headers: { "content-type": "application/json", "X-VP-Service-Token": c.token, "X-VP-Id-Token": c.idToken },
       body: JSON.stringify({

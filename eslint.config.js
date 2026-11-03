@@ -6,7 +6,7 @@ import pluginUnusedImports from "eslint-plugin-unused-imports";
 
 export default [
   {
-    ignores: [".next/**", "dist/**", "out/**", ".claude-flow/**", ".superdesign/**"],
+    ignores: [".next/**", ".open-next/**", ".wrangler/**", "dist/**", "out/**", ".claude-flow/**", ".superdesign/**"],
   },
   {
     files: [

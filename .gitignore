@@ -33,6 +33,10 @@ dist-ssr
 
 # Next.js
 .next/
+.open-next/
+.wrangler/
+.dev.vars*
+worker-configuration.d.ts
 .codex-screenshots/
 base44/
 

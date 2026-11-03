@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 
 import { customerDomainDecision } from "@/lib/domain-routing";
+import { memberMutationError } from "@/lib/member-mutation-policy.mjs";
 
 export function proxy(request) {
+  const mutation = memberMutationError(request);
+  if (mutation) return NextResponse.json({ error: mutation.error }, { status: mutation.status, headers: { 'Cache-Control': 'private, no-store' } });
   const decision = customerDomainDecision({
     host: request.headers.get("x-forwarded-host") || request.headers.get("host"),
     pathname: request.nextUrl.pathname,
@@ -21,6 +24,9 @@ export function proxy(request) {
 
 export const config = {
   matcher: [
+    "/api/member/:path*",
+    "/api/payments/:path*",
+    "/api/network/:path*",
     "/api/admin/:path*",
     "/dashboard/admin/:path*",
     "/dashboard/command-center/:path*",

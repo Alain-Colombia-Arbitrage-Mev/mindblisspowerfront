@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Copy, Link as LinkIcon, Mail, MessageCircle, Send, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { buildReferralLinks } from '@/lib/referral-links.mjs';
+import { createClipboardFeedback } from '@/lib/member-view-effects.mjs';
 
 const SHARE_OPTIONS = [
   { id: 'link', icon: LinkIcon, label: 'Copiar Enlace', tone: 'accent' },
@@ -15,46 +17,39 @@ const toneStyles = {
   neutral: { background: 'var(--vp-surface-raised)', border: 'var(--vp-border)', color: 'var(--vp-text-soft)' },
 };
 
-export default function ReferralShareModal({ isOpen, onClose, code, link, side }) {
-  const [copied, setCopied] = useState(null);
+export default function ReferralShareModal({ isOpen, onClose, code, side }) {
+  const [copyFeedback, setCopyFeedback] = useState({ pending: '', copied: '', error: '' });
   const [sharing, setSharing] = useState(null);
+  const [shareError, setShareError] = useState('');
+  const clipboard = useRef(null);
+  const copied = copyFeedback.copied;
 
-  const referralLink = link || `https://app.mindblisspower.com/register?ref=${encodeURIComponent(code || '')}`;
+  useEffect(() => {
+    const active = createClipboardFeedback(setCopyFeedback);
+    clipboard.current = active;
+    return () => { active.dispose(); if (clipboard.current === active) clipboard.current = null; };
+  }, []);
+
+  const canonicalLinks = buildReferralLinks(code);
+  const referralLink = side === 'right' ? canonicalLinks.right : canonicalLinks.left;
   const sideLabel = side === 'right' ? 'derecha' : 'izquierda';
   const shareText = `Únete a mi red en Mindbliss Power por mi rama ${sideLabel}, usando mi código de referido: ${code}. ${referralLink}`;
 
   const handleShare = (type) => {
-    setSharing(type);
-
-    const shareActions = {
-      link: async () => {
-        try {
-          await navigator.clipboard.writeText(referralLink);
-          setCopied('link');
-          setTimeout(() => setCopied(null), 2500);
-        } finally {
-          setTimeout(() => setSharing(null), 300);
-        }
-      },
-      whatsapp: () => {
-        const msg = encodeURIComponent(shareText);
-        window.open(`https://wa.me/?text=${msg}`, '_blank');
-        setTimeout(() => setSharing(null), 300);
-      },
-      telegram: () => {
-        const msg = encodeURIComponent(shareText);
-        window.open(`https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${msg}`, '_blank');
-        setTimeout(() => setSharing(null), 300);
-      },
-      email: () => {
-        const subject = encodeURIComponent('Te invito a unirte a Mindbliss Power');
-        const body = encodeURIComponent(shareText);
-        window.open(`mailto:?subject=${subject}&body=${body}`, '_blank');
-        setTimeout(() => setSharing(null), 300);
-      },
+    if (!referralLink) return;
+    setShareError('');
+    if (type === 'link') return clipboard.current?.copy(referralLink, 'link');
+    const message = encodeURIComponent(shareText);
+    const destinations = {
+      whatsapp: `https://wa.me/?text=${message}`,
+      telegram: `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${message}`,
+      email: `mailto:?subject=${encodeURIComponent('Te invito a unirte a Mindbliss Power')}&body=${message}`,
     };
-
-    if (shareActions[type]) shareActions[type]();
+    if (!destinations[type]) return;
+    setSharing(type);
+    try { window.open(destinations[type], '_blank', 'noopener,noreferrer'); }
+    catch { setShareError('No se pudo abrir la aplicación para compartir. Puedes copiar el enlace manualmente.'); }
+    finally { setSharing(null); }
   };
 
   return (
@@ -120,11 +115,7 @@ export default function ReferralShareModal({ isOpen, onClose, code, link, side }
                 <p style={{ color: 'var(--vp-text)', fontSize: 20, fontWeight: 900, letterSpacing: '1px', margin: 0, flex: 1 }}>{code}</p>
                 <motion.button
                   aria-label="Copiar código"
-                  onClick={async () => {
-                    await navigator.clipboard.writeText(code).catch(() => {});
-                    setCopied('code');
-                    setTimeout(() => setCopied(null), 2500);
-                  }}
+                  onClick={() => clipboard.current?.copy(code, 'code')}
                   whileHover={{ y: -1 }}
                   whileTap={{ scale: 0.96 }}
                   className="rounded p-2"
@@ -144,13 +135,13 @@ export default function ReferralShareModal({ isOpen, onClose, code, link, side }
             <div className="mb-6 grid grid-cols-2 gap-2">
               {SHARE_OPTIONS.map((option) => {
                 const Icon = option.icon;
-                const isLoading = sharing === option.id;
+                const isLoading = sharing === option.id || copyFeedback.pending === option.id;
                 const tone = toneStyles[option.tone];
                 return (
                   <button
                     key={option.id}
                     onClick={() => handleShare(option.id)}
-                    disabled={isLoading}
+                    disabled={isLoading || !referralLink}
                     className="flex items-center gap-2 rounded-lg px-4 py-3 transition-all disabled:opacity-50"
                     style={{
                       background: tone.background,
@@ -161,11 +152,12 @@ export default function ReferralShareModal({ isOpen, onClose, code, link, side }
                     }}
                   >
                     <Icon size={14} />
-                    <span>{isLoading ? '...' : option.label}</span>
+                    <span>{isLoading ? '...' : copied === option.id ? 'Copiado' : option.label}</span>
                   </button>
                 );
               })}
             </div>
+            {copyFeedback.error || shareError ? <p role="alert" className="mb-4 text-xs" style={{ color: 'var(--vp-danger)' }}>{copyFeedback.error || shareError}</p> : null}
 
             <div className="rounded-lg p-3" style={{ background: 'var(--vp-surface-raised)', border: '1px solid var(--vp-border)' }}>
               <p style={{ color: 'var(--vp-text-soft)', fontSize: 11, lineHeight: 1.5, margin: 0 }}>

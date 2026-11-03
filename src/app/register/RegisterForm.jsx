@@ -1,0 +1,1040 @@
+"use client";
+
+import Link from "next/link";
+import { ArrowRight, Check, ClipboardCheck, Eye, EyeOff, LifeBuoy, Loader2, LockKeyhole, LogIn, Mail, UserPlus, UserRound } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import AuthShell from "../_components/AuthShell";
+import { isMicrosoftEmail, suggestEmailFix, useResendCooldown } from "@/lib/useResendCooldown";
+import { composePhone, formatLocalPhone, isValidE164 } from "@/lib/phone";
+import { checkPassword, isValidPassword } from "@/lib/password";
+import { bindReferralCodeToEmail, captureReferralFromUrl, normalizePlacementSide, normalizeReferralCode } from "@/lib/referral-attribution";
+
+// Registro MÍNIMO: solo lo esencial para crear la cuenta. El resto del perfil
+// (país, ciudad, documento, fecha, preferencias) se completa en el onboarding.
+const initialForm = {
+  fullName: "",
+  email: "",
+  password: "",
+  confirmPassword: "",
+  dialCode: "+57",
+  phone: "",
+  referralCode: "",
+  preferredSide: "",
+  acceptsPrivacy: false,
+};
+
+// Códigos de país (LatAm completo + US/ES y comunes). value = prefijo E.164.
+// Ordenados por relevancia de la base (LatAm primero).
+const dialCodes = [
+  ["+57", "🇨🇴 Colombia (+57)"],
+  ["+52", "🇲🇽 México (+52)"],
+  ["+1", "🇺🇸 EE.UU./Canadá (+1)"],
+  ["+51", "🇵🇪 Perú (+51)"],
+  ["+593", "🇪🇨 Ecuador (+593)"],
+  ["+58", "🇻🇪 Venezuela (+58)"],
+  ["+54", "🇦🇷 Argentina (+54)"],
+  ["+56", "🇨🇱 Chile (+56)"],
+  ["+591", "🇧🇴 Bolivia (+591)"],
+  ["+595", "🇵🇾 Paraguay (+595)"],
+  ["+598", "🇺🇾 Uruguay (+598)"],
+  ["+507", "🇵🇦 Panamá (+507)"],
+  ["+506", "🇨🇷 Costa Rica (+506)"],
+  ["+505", "🇳🇮 Nicaragua (+505)"],
+  ["+504", "🇭🇳 Honduras (+504)"],
+  ["+503", "🇸🇻 El Salvador (+503)"],
+  ["+502", "🇬🇹 Guatemala (+502)"],
+  ["+509", "🇭🇹 Haití (+509)"],
+  ["+1809", "🇩🇴 Rep. Dominicana (+1809)"],
+  ["+53", "🇨🇺 Cuba (+53)"],
+  ["+34", "🇪🇸 España (+34)"],
+  ["+55", "🇧🇷 Brasil (+55)"],
+  ["+1787", "🇵🇷 Puerto Rico (+1787)"],
+  ["+39", "🇮🇹 Italia (+39)"],
+  ["+33", "🇫🇷 Francia (+33)"],
+  ["+44", "🇬🇧 Reino Unido (+44)"],
+  ["+49", "🇩🇪 Alemania (+49)"],
+];
+
+const sideKpis = [
+  { value: "1 min", label: "registro" },
+  { value: "1", label: "perfil" },
+  { value: "100%", label: "personal" },
+];
+
+export default function RegisterForm() {
+  const router = useRouter();
+  const [form, setForm] = useState(initialForm);
+  const [errors, setErrors] = useState(/** @type {Record<string, string>} */ ({}));
+  const [success, setSuccess] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [confirmStep, setConfirmStep] = useState(false);
+  const [confirmCode, setConfirmCode] = useState("");
+  const [cognitoUsername, setCognitoUsername] = useState("");
+  const [banned, setBanned] = useState(false);
+  const [referralEmailLock, setReferralEmailLock] = useState("");
+  const resendCooldown = useResendCooldown(45);
+  // Guard síncrono anti doble-submit: evita un 2º SignUp que reenvía el código
+  // e invalida el primero (causa del "primer código inválido").
+  const submittingRef = useRef(false);
+  // Guard del auto-reenvío del link de reactivación (StrictMode monta 2 veces).
+  const resumedRef = useRef(false);
+  const otpSubmittingRef = useRef(false);
+
+  async function resumeRegistration(email) {
+    setForm((current) => ({ ...current, email }));
+    setConfirmStep(true);
+    setLoading(true);
+    try {
+      const response = await fetch("/api/auth/cognito/confirm-signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, resend: true }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (payload.alreadyConfirmed) {
+        router.push(`/login?email=${encodeURIComponent(email)}`);
+        return;
+      }
+      if (!response.ok || !payload.ok) {
+        setErrors({ form: payload.error || "No se pudo reenviar el código. Intenta con «Reenviar código»." });
+        if (response.status === 429) resendCooldown.start(payload.retryAfterSec || 60);
+      } else {
+        resendCooldown.start();
+        setSuccess(`Te enviamos un código nuevo a ${email} para activar tu cuenta. Si no aparece en 1–2 min, revisa la carpeta de spam / correo no deseado.`);
+      }
+    } catch {
+      setErrors({ form: "No se pudo conectar con el servicio de registro. Usa «Reenviar código»." });
+    }
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    const stored = readStoredJson("mp_registration_draft");
+    const legacyStored = readStoredJson("vp_registration_draft");
+    // ?email= viene del login cuando el usuario resultó ser nuevo: lo precargamos
+    // con precedencia sobre el borrador guardado (es el email que acaba de teclear).
+    let prefillEmail = "";
+    let resume = false;
+    let referralCode = "";
+    let preferredSide = "";
+    let loadedReferralEmailLock = "";
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const r = sp.get("ref");
+      if (r) {
+        const attribution = captureReferralFromUrl(window.location.search);
+        referralCode = attribution?.code || "";
+        preferredSide = normalizePlacementSide(attribution?.side);
+      }
+      prefillEmail = (sp.get("email") || "").trim().toLowerCase();
+      resume = sp.get("resume") === "1";
+    } catch (e) { /* ignore */ }
+    // ?resume=1&email=…: link de reactivación para cuentas creadas pero nunca
+    // confirmadas — salta directo al paso del código y lo reenvía en el acto
+    // (el BFF deriva el username determinístico desde el email).
+    if (resume && /^\S+@\S+\.\S+$/.test(prefillEmail) && !resumedRef.current) {
+      resumedRef.current = true;
+      resumeRegistration(prefillEmail);
+    }
+    const merged = { ...legacyStored, ...stored };
+    if (referralCode) {
+      merged.referralCode = normalizeReferralCode(referralCode);
+      merged.preferredSide = preferredSide;
+    } else {
+      const draftReferralCode = normalizeReferralCode(merged.referralCode || merged.ref);
+      const draftEmail = normalizeEmailValue(merged.email);
+      const prefillEmailNorm = normalizeEmailValue(prefillEmail);
+      if (draftReferralCode && draftEmail && (!prefillEmailNorm || prefillEmailNorm === draftEmail)) {
+        merged.referralCode = draftReferralCode;
+        merged.preferredSide = normalizePlacementSide(merged.preferredSide || merged.side);
+        loadedReferralEmailLock = draftEmail;
+      } else {
+        delete merged.referralCode;
+        delete merged.ref;
+        delete merged.preferredSide;
+        delete merged.side;
+      }
+    }
+    // El draft guarda phone en E.164 (+57300…) para la API; re-inyectarlo como
+    // número local hacía que composePhone duplicara el código de país
+    // (+57 + 573001234567). Restaurar el número local por separado.
+    if (merged.phoneLocal) {
+      merged.phone = merged.phoneLocal;
+    } else if (typeof merged.phone === "string" && merged.phone.startsWith("+")) {
+      const dc = dialCodes.find(([code]) => merged.phone.startsWith(code));
+      if (dc) {
+        merged.dialCode = dc[0];
+        merged.phone = merged.phone.slice(dc[0].length);
+      } else {
+        merged.phone = "";
+      }
+    }
+    delete merged.phoneLocal;
+    setReferralEmailLock(loadedReferralEmailLock);
+    setForm((current) => ({ ...current, ...merged, ...(prefillEmail ? { email: prefillEmail } : {}) }));
+  }, []);
+
+  function updateField(field, value) {
+    if (field === "email" && referralEmailLock && normalizeEmailValue(value) !== referralEmailLock) {
+      setForm((current) => ({ ...current, email: value, referralCode: "", preferredSide: "" }));
+      setReferralEmailLock("");
+    } else {
+      setForm((current) => ({ ...current, [field]: value }));
+    }
+    setErrors((current) => {
+      if (!current[field]) return current;
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  }
+
+  function validateForm() {
+    /** @type {Record<string, string>} */
+    const nextErrors = {};
+
+    if (!form.fullName.trim()) nextErrors.fullName = "El nombre es requerido.";
+    if (!form.email.trim()) {
+      nextErrors.email = "El email es requerido.";
+    } else if (!/^\S+@\S+\.\S+$/.test(form.email)) {
+      nextErrors.email = "Ingresa un email válido.";
+    }
+    if (!isValidPassword(form.password)) {
+      nextErrors.password = "La contraseña no cumple todos los requisitos (revisa la lista de abajo).";
+    }
+    if (form.confirmPassword !== form.password) {
+      nextErrors.confirmPassword = "Las contraseñas no coinciden.";
+    }
+    if (!form.phone.trim()) {
+      nextErrors.phone = "El teléfono es requerido.";
+    } else if (!isValidE164(composePhone(form.dialCode, form.phone))) {
+      nextErrors.phone = "Número inválido. Ingresa solo el número (sin el código de país).";
+    }
+    if (!form.acceptsPrivacy) nextErrors.acceptsPrivacy = "Debes autorizar el tratamiento de datos.";
+
+    return nextErrors;
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    if (submittingRef.current) return; // ya hay un registro en curso → no duplicar
+    setSuccess("");
+    const nextErrors = validateForm();
+    setErrors(nextErrors);
+
+    if (Object.keys(nextErrors).length > 0) return;
+
+    submittingRef.current = true;
+    setLoading(true);
+    const email = form.email.trim().toLowerCase();
+    const finalReferralCode =
+      form.referralCode && (!referralEmailLock || referralEmailLock === normalizeEmailValue(email))
+        ? normalizeReferralCode(form.referralCode)
+        : "";
+    const referral = finalReferralCode ? bindReferralCodeToEmail(email, finalReferralCode) : null;
+    const draft = {
+      fullName: form.fullName.trim(),
+      email,
+      phone: composePhone(form.dialCode, form.phone),
+      referralCode: normalizeReferralCode(referral?.code),
+      preferredSide: normalizePlacementSide(referral?.side || form.preferredSide),
+      acceptsPrivacy: form.acceptsPrivacy,
+      company: "Mindbliss Power",
+      createdAt: new Date().toISOString(),
+    };
+
+    try {
+      const response = await fetch("/api/auth/cognito/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...draft,
+          password: form.password,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+
+      if (payload.blacklisted) {
+        setBanned(true);
+        setLoading(false);
+        submittingRef.current = false;
+        return;
+      }
+
+      if (!response.ok || !payload.ok) {
+        if (isExistingAccountResponse(payload)) {
+          localStorage.removeItem("mp_registration_draft");
+          localStorage.removeItem("vp_registration_draft");
+          setSuccess("Ya existe una cuenta con ese email. Te llevamos al ingreso para pedir tu código de acceso.");
+          setLoading(false);
+          router.push(`/login?email=${encodeURIComponent(email)}`);
+          return;
+        }
+        setErrors({ form: payload.error || "No se pudo crear la cuenta." });
+        setLoading(false);
+        return;
+      }
+
+      // phoneLocal/dialCode por separado: el restore los usa para no duplicar
+      // el código de país (draft.phone es E.164, solo para la API).
+      const storedDraft = { ...draft, dialCode: form.dialCode, phoneLocal: form.phone.trim() };
+      localStorage.setItem("mp_registration_draft", JSON.stringify(storedDraft));
+      localStorage.setItem("vp_registration_draft", JSON.stringify(storedDraft));
+
+      if (payload.userConfirmed === false) {
+        setCognitoUsername(payload.username || "");
+        setConfirmStep(true);
+        resendCooldown.start();
+        setSuccess("Cuenta creada. Te enviamos un código por correo — ingrésalo abajo para activar tu cuenta. Si no aparece en 1–2 min, revisa la carpeta de spam / correo no deseado.");
+        setLoading(false);
+        return;
+      }
+
+      router.push("/onboarding?source=register");
+    } catch {
+      setErrors({ form: "No se pudo conectar con el servicio de registro." });
+      setLoading(false);
+    } finally {
+      submittingRef.current = false;
+    }
+  }
+
+  async function handleConfirm(event) {
+    event.preventDefault();
+    if (otpSubmittingRef.current || loading) return;
+    setErrors({});
+    setSuccess("");
+
+    if (!confirmCode.trim()) {
+      setErrors({ form: "Ingresa el código que recibiste por correo." });
+      return;
+    }
+
+    setLoading(true);
+    otpSubmittingRef.current = true;
+    const email = form.email.trim().toLowerCase();
+
+    try {
+      const response = await fetch("/api/auth/cognito/confirm-signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          username: cognitoUsername,
+          code: confirmCode.trim(),
+          referralCode: normalizeReferralCode(form.referralCode),
+          preferredSide: normalizePlacementSide(form.preferredSide),
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok || !payload.ok) {
+        setErrors({ form: payload.error || "No se pudo confirmar la cuenta." });
+        setLoading(false);
+        return;
+      }
+
+      // Cuenta confirmada → login automático con la contraseña del formulario.
+      const loginResponse = await fetch("/api/auth/cognito/password-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password: form.password }),
+      });
+      const loginPayload = await loginResponse.json().catch(() => ({}));
+
+      if (loginResponse.ok && loginPayload.ok) {
+        router.push("/onboarding?source=register");
+        return;
+      }
+
+      router.push(`/login?email=${encodeURIComponent(email)}`);
+    } catch {
+      setErrors({ form: "No se pudo conectar con el servicio de registro." });
+      setLoading(false);
+    } finally {
+      otpSubmittingRef.current = false;
+    }
+  }
+
+  async function handleResendCode() {
+    if (otpSubmittingRef.current || resendCooldown.active || loading) return;
+    otpSubmittingRef.current = true;
+    setErrors({});
+    setSuccess("");
+    setLoading(true);
+
+    try {
+      const response = await fetch("/api/auth/cognito/confirm-signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: form.email.trim().toLowerCase(), username: cognitoUsername, resend: true }),
+      });
+      const payload = await response.json().catch(() => ({}));
+
+      if (payload.alreadyConfirmed) {
+        router.push(`/login?email=${encodeURIComponent(form.email.trim().toLowerCase())}`);
+        return;
+      }
+
+      if (!response.ok || !payload.ok) {
+        setErrors({ form: payload.error || "No se pudo reenviar el código." });
+        if (response.status === 429) resendCooldown.start(payload.retryAfterSec || 60);
+      } else {
+        setConfirmCode("");
+        resendCooldown.start();
+        setSuccess("Código reenviado. Revisa tu correo (y la carpeta de spam).");
+      }
+    } catch {
+      setErrors({ form: "No se pudo conectar con el servicio de registro." });
+    } finally {
+      otpSubmittingRef.current = false;
+      setLoading(false);
+    }
+  }
+
+  async function handleRegistrationHelp() {
+    setErrors({});
+    setSuccess("");
+    const email = form.email.trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(email)) {
+      setErrors({ form: "Ingresa un email válido para solicitar ayuda." });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const phone = isValidE164(composePhone(form.dialCode, form.phone))
+        ? composePhone(form.dialCode, form.phone)
+        : `${form.dialCode} ${formatLocalPhone(form.phone)}`.trim();
+      const response = await fetch("/api/auth/access-help", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          phone,
+          reason: "signup_email_code_missing",
+          note: "Solicitud desde registro: no recibe el código de activación.",
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.ok) {
+        setErrors({ form: payload.error || "No se pudo registrar tu solicitud. Intenta de nuevo." });
+        return;
+      }
+      setSuccess("Listo. Registramos tu solicitud y soporte revisará la activación de tu cuenta.");
+    } catch {
+      setErrors({ form: "No se pudo conectar con el servicio de soporte." });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (banned) {
+    return <BannedModal />;
+  }
+
+  return (
+    <AuthShell
+      activePath="/register"
+      eyebrow="Nuevo miembro"
+      title="Bienvenido a Mindbliss Power."
+      description="Crea tu perfil personal para que el equipo pueda identificarte, contactarte y preparar tu primera experiencia dentro de la empresa."
+      sideKpis={sideKpis}
+      visualSrc="/mindbliss/mindbliss-01.avif"
+      visualAlt="Equipo Mindbliss creando una cuenta"
+    >
+      <section
+        className="w-full rounded-xl p-6 sm:p-8"
+        style={{
+          background: "var(--vp-surface)",
+          border: "1px solid var(--vp-border)",
+          boxShadow: "var(--vp-shadow)",
+        }}
+      >
+        <div className="mb-7 flex items-start gap-4">
+          <div
+            className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-lg"
+            style={{
+              background: "var(--vp-accent-muted)",
+              border: "1px solid var(--vp-accent-border)",
+              color: "var(--vp-accent)",
+            }}
+          >
+            <UserPlus size={22} />
+          </div>
+          <div>
+            <h2 className="auth-display text-2xl" style={{ color: "var(--vp-text)" }}>
+              Crear cuenta
+            </h2>
+            <p className="mt-2 text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
+              Crea tu acceso y completa la información base para la bienvenida.
+            </p>
+          </div>
+        </div>
+
+        {confirmStep ? (
+          <form className="space-y-5" onSubmit={handleConfirm}>
+            {success && (
+              <div
+                className="rounded-lg px-4 py-3 text-sm font-semibold"
+                style={{
+                  color: "var(--vp-accent)",
+                  background: "var(--vp-accent-muted)",
+                  border: "1px solid var(--vp-accent-border)",
+                }}
+              >
+                {success}
+              </div>
+            )}
+
+            {errors.form && (
+              <div
+                className="rounded-lg px-4 py-3 text-sm font-semibold"
+                style={{
+                  color: "var(--vp-danger)",
+                  background: "var(--vp-danger-muted)",
+                  border: "1px solid var(--vp-danger-border)",
+                }}
+              >
+                {errors.form}
+              </div>
+            )}
+
+            <Field
+              id="confirmCode"
+              label={`Código enviado a ${form.email}`}
+              value={confirmCode}
+              onChange={(event) => setConfirmCode(event.target.value.replace(/[\s-]+/g, ""))}
+              placeholder="········"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={8}
+              autoFocus
+              required
+            />
+
+            <p className="-mt-2 text-xs leading-5" style={{ color: isMicrosoftEmail(form.email) ? "var(--vp-amber, #d97706)" : "var(--vp-subtle)" }}>
+              {isMicrosoftEmail(form.email)
+                ? "Tu correo es de Microsoft (Hotmail/Outlook/Live): a veces demora o cae en «Correo no deseado». Revisa esa carpeta."
+                : "¿No llega en 1–2 min? Revisa la carpeta de spam / correo no deseado."}
+            </p>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex min-h-12 w-full items-center justify-center gap-2 rounded-lg px-5 py-3 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-60"
+              style={{
+                color: "var(--vp-shell)",
+                background: "var(--vp-accent)",
+                border: "1px solid var(--vp-accent-strong)",
+              }}
+            >
+              {loading ? <Loader2 className="animate-spin" size={16} /> : <ArrowRight size={16} />}
+              Confirmar cuenta
+            </button>
+
+            <button
+              type="button"
+              onClick={handleResendCode}
+              disabled={loading || resendCooldown.active}
+              className="block w-full text-center text-sm font-bold transition hover:opacity-80 disabled:opacity-50"
+              style={{ color: "var(--vp-muted)" }}
+            >
+              {resendCooldown.active ? resendCooldown.label : "Reenviar código"}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleRegistrationHelp}
+              disabled={loading}
+              className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg px-4 text-center text-xs font-black transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              style={{
+                color: "#000",
+                background: "var(--vp-accent, #ffc700)",
+                border: "1px solid var(--vp-accent, #ffc700)",
+              }}
+            >
+              {loading ? <Loader2 className="animate-spin" size={15} /> : <LifeBuoy size={15} />}
+              Sigo sin recibir el código — solicitar ayuda
+            </button>
+          </form>
+        ) : (
+        <form className="space-y-5" onSubmit={handleSubmit}>
+          <div className="grid gap-4">
+            <Field
+              id="fullName"
+              label="Nombre completo"
+              value={form.fullName}
+              onChange={(event) => updateField("fullName", event.target.value)}
+              error={errors.fullName}
+              icon={<UserRound size={17} />}
+              placeholder="Nombre y apellido"
+              autoComplete="name"
+              required
+            />
+            <div>
+              <Field
+                id="email"
+                label="Email"
+                type="email"
+                value={form.email}
+                onChange={(event) => updateField("email", event.target.value)}
+                error={errors.email}
+                icon={<Mail size={17} />}
+                placeholder="correo@dominio.com"
+                autoComplete="email"
+                required
+              />
+              {suggestEmailFix(form.email) && (
+                <button
+                  type="button"
+                  onClick={() => updateField("email", suggestEmailFix(form.email))}
+                  className="mt-2 text-left text-xs font-bold transition hover:opacity-80"
+                  style={{ color: "var(--vp-amber, #d97706)" }}
+                >
+                  ¿Quisiste decir {suggestEmailFix(form.email)}? Toca aquí para corregirlo.
+                </button>
+              )}
+            </div>
+            <PasswordField
+              id="password"
+              label="Contraseña"
+              value={form.password}
+              onChange={(event) => updateField("password", event.target.value)}
+              error={errors.password}
+              icon={<LockKeyhole size={17} />}
+              placeholder="Mínimo 8 caracteres"
+              showPassword={showPassword}
+              onTogglePassword={() => setShowPassword((current) => !current)}
+              autoComplete="new-password"
+              required
+            />
+            <PasswordField
+              id="confirmPassword"
+              label="Confirmar contraseña"
+              value={form.confirmPassword}
+              onChange={(event) => updateField("confirmPassword", event.target.value)}
+              error={errors.confirmPassword}
+              icon={<LockKeyhole size={17} />}
+              placeholder="Repite la contraseña"
+              showPassword={showPassword}
+              onTogglePassword={() => setShowPassword((current) => !current)}
+              autoComplete="new-password"
+              required
+            />
+            <div
+              className="rounded-lg px-3 py-3"
+              style={{
+                background: "var(--vp-surface-raised)",
+                border: "1px solid var(--vp-border)",
+              }}
+            >
+              <PasswordChecklist password={form.password} />
+            </div>
+          </div>
+
+          {form.referralCode && (
+            <div
+              className="flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-bold"
+              style={{
+                color: "var(--vp-text)",
+                background: "var(--vp-accent-muted)",
+                border: "1px solid var(--vp-accent-border)",
+              }}
+            >
+              <ClipboardCheck size={17} style={{ color: "var(--vp-accent)" }} />
+              <span className="min-w-0">
+                Referido aplicado: <span style={{ color: "var(--vp-accent)" }}>{form.referralCode}</span>
+                {form.preferredSide ? ` · Rama ${form.preferredSide === "L" ? "izquierda" : "derecha"}` : ""}
+              </span>
+            </div>
+          )}
+
+          <div
+            className="rounded-xl p-4"
+            style={{
+              background: "var(--vp-surface-raised)",
+              border: errors.phone ? "1px solid var(--vp-danger)" : "1px solid var(--vp-border)",
+            }}
+          >
+            <label className="block text-xs font-bold" htmlFor="phone" style={{ color: "var(--vp-muted)" }}>
+              Teléfono <span style={{ color: "var(--vp-subtle)" }}>· recibirás aquí tu código si el correo falla</span>
+            </label>
+            <div className="mt-3 grid gap-3">
+              <div>
+                <label className="mb-1.5 block text-[11px] font-bold uppercase" htmlFor="dialCode" style={{ color: "var(--vp-subtle)" }}>
+                  País / código
+                </label>
+                <select
+                  id="dialCode"
+                  aria-label="País / código"
+                  value={form.dialCode}
+                  onChange={(event) => updateField("dialCode", event.target.value)}
+                  className="min-h-12 w-full rounded-lg px-3 text-sm font-semibold outline-none"
+                  style={{ color: "var(--vp-text)", background: "var(--vp-surface)", border: "1px solid var(--vp-border)" }}
+                >
+                  {dialCodes.map(([value, label]) => (
+                    <option key={`${value}-${label}`} value={value}>{label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="min-w-0">
+                <label className="mb-1.5 block text-[11px] font-bold uppercase" htmlFor="phone" style={{ color: "var(--vp-subtle)" }}>
+                  Número local
+                </label>
+                <input
+                  id="phone"
+                  type="tel"
+                  inputMode="numeric"
+                  autoComplete="tel-national"
+                  value={formatLocalPhone(form.phone)}
+                  onChange={(event) => updateField("phone", event.target.value.replace(/\D/g, ""))}
+                  placeholder="304 657 200 91"
+                  className="min-h-12 w-full min-w-0 rounded-lg px-4 text-lg font-semibold outline-none"
+                  style={{
+                    color: "var(--vp-text)",
+                    background: "var(--vp-surface)",
+                    border: errors.phone ? "1px solid var(--vp-danger)" : "1px solid var(--vp-border)",
+                  }}
+                />
+              </div>
+            </div>
+            {errors.phone ? (
+              <p className="mt-2 text-xs font-semibold" style={{ color: "var(--vp-danger)" }}>{errors.phone}</p>
+            ) : form.phone.trim() ? (
+              <p className="mt-2 text-xs font-semibold leading-5" style={{ color: "var(--vp-accent)" }}>
+                Se guardará como {form.dialCode} {formatLocalPhone(form.phone)}.
+              </p>
+            ) : (
+              <p className="mt-2 text-xs leading-5" style={{ color: "var(--vp-subtle)" }}>
+                Escribe solo el número local; el código de país se agrega desde el selector.
+              </p>
+            )}
+          </div>
+
+          <CheckRow
+            checked={form.acceptsPrivacy}
+            onChange={(checked) => updateField("acceptsPrivacy", checked)}
+            label="Autorizo a Mindbliss Power a usar estos datos para crear y gestionar mi perfil de miembro."
+            error={errors.acceptsPrivacy}
+          />
+
+          {errors.form && (
+            <div
+              className="rounded-lg px-4 py-3 text-sm font-semibold"
+              style={{
+                color: "var(--vp-danger)",
+                background: "var(--vp-danger-muted)",
+                border: "1px solid var(--vp-danger-border)",
+              }}
+            >
+              {errors.form}
+            </div>
+          )}
+
+          {success && (
+            <div
+              className="rounded-lg px-4 py-3 text-sm font-semibold"
+              style={{
+                color: "var(--vp-accent)",
+                background: "var(--vp-accent-muted)",
+                border: "1px solid var(--vp-accent-border)",
+              }}
+            >
+              {success}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="flex min-h-12 w-full items-center justify-center gap-2 rounded-lg px-5 py-3 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-60"
+            style={{
+              color: "var(--vp-shell)",
+              background: "var(--vp-accent)",
+              border: "1px solid var(--vp-accent-strong)",
+            }}
+          >
+            {loading ? <Loader2 className="animate-spin" size={16} /> : <ArrowRight size={16} />}
+            Crear cuenta
+          </button>
+        </form>
+        )}
+
+        <div className="mt-6 grid gap-3 border-t pt-5 sm:grid-cols-2" style={{ borderColor: "var(--vp-border)" }}>
+          <Link
+            href={form.referralCode ? `/login?ref=${encodeURIComponent(form.referralCode)}${form.preferredSide ? `&side=${form.preferredSide}` : ""}` : "/login"}
+            className="flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition"
+            style={{
+              color: "var(--vp-text)",
+              background: "var(--vp-surface-raised)",
+              border: "1px solid var(--vp-border)",
+            }}
+          >
+            <LogIn size={16} />
+            Ya tengo cuenta
+          </Link>
+          <Link
+            href="/onboarding"
+            className="flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition"
+            style={{
+              color: "var(--vp-accent)",
+              background: "var(--vp-accent-muted)",
+              border: "1px solid var(--vp-accent-border)",
+            }}
+          >
+            <ClipboardCheck size={16} />
+            Completar perfil
+          </Link>
+        </div>
+      </section>
+    </AuthShell>
+  );
+}
+
+// BannedModal: pantalla de bloqueo cuando el candidato está en la lista negra.
+// Sin CTA de reintento — el registro no puede continuar.
+function BannedModal() {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-6"
+      style={{ background: "rgba(2,6,23,0.82)", backdropFilter: "blur(6px)" }}
+      role="alertdialog"
+      aria-modal="true"
+    >
+      <div
+        className="w-full max-w-md rounded-2xl p-8 text-center"
+        style={{ background: "var(--vp-surface)", border: "1px solid var(--vp-danger, #dc2626)", boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}
+      >
+        <div
+          className="mx-auto mb-5 inline-flex h-16 w-16 items-center justify-center rounded-full"
+          style={{ background: "rgba(220,38,38,0.12)" }}
+        >
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2.2" strokeLinecap="round">
+            <circle cx="12" cy="12" r="9" />
+            <line x1="5.6" y1="5.6" x2="18.4" y2="18.4" />
+          </svg>
+        </div>
+        <h2 className="m-0 text-xl font-bold" style={{ color: "var(--vp-text, #fff)" }}>
+          Registro no permitido
+        </h2>
+        <p className="mt-3 text-sm leading-relaxed" style={{ color: "var(--vp-muted, #94a3b8)" }}>
+          Has sido baneado de <strong>MindblissPower</strong>. El registro no puede continuar.
+        </p>
+        <p className="mt-4 text-xs" style={{ color: "var(--vp-subtle, #64748b)" }}>
+          Si crees que se trata de un error, escribe a soporte@mindblisspower.com.
+        </p>
+        <a
+          href="https://mindblisspower.com"
+          className="mt-6 inline-block rounded-lg px-5 py-2.5 text-sm font-semibold no-underline"
+          style={{ background: "var(--vp-border, #1e293b)", color: "var(--vp-text, #fff)" }}
+        >
+          Volver al inicio
+        </a>
+      </div>
+    </div>
+  );
+}
+
+// Checklist en vivo de la política de contraseña: cada requisito se pone verde
+// al cumplirse mientras el usuario escribe. Evita el rechazo tardío de Cognito.
+function PasswordChecklist({ password }) {
+  const { results } = checkPassword(password);
+  return (
+    <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2" aria-label="Requisitos de la contraseña">
+      {results.map((rule) => (
+        <li
+          key={rule.key}
+          className="flex min-h-5 items-center gap-2 text-xs font-semibold leading-5 transition-colors"
+          style={{ color: rule.met ? "var(--vp-accent)" : "var(--vp-subtle)" }}
+        >
+          <span
+            className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full"
+            style={{
+              background: rule.met ? "var(--vp-accent-muted)" : "transparent",
+              border: `1px solid ${rule.met ? "var(--vp-accent-border)" : "var(--vp-border)"}`,
+            }}
+          >
+            {rule.met ? <Check size={11} /> : null}
+          </span>
+          {rule.label}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function Field({ id, label, error = "", helper = "", icon = null, ...props }) {
+  const describedBy = error ? `${id}-error` : helper ? `${id}-helper` : undefined;
+  return (
+    <div className="min-w-0">
+      <label className="mb-2 block text-xs font-bold" htmlFor={id} style={{ color: "var(--vp-muted)" }}>
+        {label}
+      </label>
+      <div className="relative">
+        {icon ? (
+          <span
+            className="pointer-events-none absolute left-3 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center"
+            style={{ color: "var(--vp-subtle)" }}
+          >
+            {icon}
+          </span>
+        ) : null}
+        <input
+          id={id}
+          aria-invalid={Boolean(error)}
+          aria-describedby={describedBy}
+          className={`min-h-12 w-full rounded-lg ${icon ? "pl-11 pr-3" : "px-3"} text-base font-semibold outline-none transition`}
+          style={{
+            color: "var(--vp-text)",
+            background: "var(--vp-surface-raised)",
+            border: error ? "1px solid var(--vp-danger)" : "1px solid var(--vp-border)",
+          }}
+          {...props}
+        />
+      </div>
+      {error ? (
+        <p id={`${id}-error`} className="mt-2 text-xs font-semibold" style={{ color: "var(--vp-danger)" }}>
+          {error}
+        </p>
+      ) : helper ? (
+        <p id={`${id}-helper`} className="mt-2 text-xs leading-5" style={{ color: "var(--vp-subtle)" }}>
+          {helper}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function PasswordField({
+  id,
+  label,
+  error,
+  icon,
+  showPassword,
+  onTogglePassword,
+  ...props
+}) {
+  return (
+    <div className="min-w-0">
+      <label className="mb-2 block text-xs font-bold" htmlFor={id} style={{ color: "var(--vp-muted)" }}>
+        {label}
+      </label>
+      <div className="relative">
+        {icon ? (
+          <span
+            className="pointer-events-none absolute left-3 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center"
+            style={{ color: "var(--vp-subtle)" }}
+          >
+            {icon}
+          </span>
+        ) : null}
+        <input
+          id={id}
+          type={showPassword ? "text" : "password"}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? `${id}-error` : undefined}
+          className={`min-h-12 w-full rounded-lg ${icon ? "pl-11" : "pl-3"} pr-12 text-base font-semibold outline-none transition`}
+          style={{
+            color: "var(--vp-text)",
+            background: "var(--vp-surface-raised)",
+            border: error ? "1px solid var(--vp-danger)" : "1px solid var(--vp-border)",
+          }}
+          {...props}
+        />
+        <button
+          type="button"
+          aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+          onClick={onTogglePassword}
+          className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-md"
+          style={{ color: "var(--vp-muted)" }}
+        >
+          {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+        </button>
+      </div>
+      {error && (
+        <p id={`${id}-error`} className="mt-2 text-xs font-semibold" style={{ color: "var(--vp-danger)" }}>
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function SelectField({ id, label, options, ...props }) {
+  return (
+    <div>
+      <label className="mb-2 block text-xs font-bold" htmlFor={id} style={{ color: "var(--vp-muted)" }}>
+        {label}
+      </label>
+      <select
+        id={id}
+        className="min-h-12 w-full rounded-lg px-3 text-sm font-semibold outline-none"
+        style={{
+          color: "var(--vp-text)",
+          background: "var(--vp-surface-raised)",
+          border: "1px solid var(--vp-border)",
+        }}
+        {...props}
+      >
+        {options.map(([value, label]) => (
+          <option key={value} value={value}>
+            {label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function CheckRow({ checked, onChange, label, error }) {
+  return (
+    <div>
+      <label
+        className="flex cursor-pointer items-start gap-3 rounded-lg p-4 text-sm font-semibold leading-6"
+        style={{
+          color: "var(--vp-text-soft)",
+          background: checked ? "var(--vp-accent-muted)" : "var(--vp-surface-raised)",
+          border: checked ? "1px solid var(--vp-accent-border)" : "1px solid var(--vp-border)",
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(event) => onChange(event.target.checked)}
+          className="mt-1 h-4 w-4"
+          style={{ accentColor: "var(--vp-accent)" }}
+        />
+        <span>{label}</span>
+      </label>
+      {error && (
+        <p className="mt-2 text-xs font-semibold" style={{ color: "var(--vp-danger)" }}>
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function readStoredJson(key) {
+  try {
+    return JSON.parse(localStorage.getItem(key) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function normalizeEmailValue(value) {
+  const email = String(value || "").trim().toLowerCase();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "";
+}
+
+function isExistingAccountResponse(payload) {
+  if (!payload || typeof payload !== "object") return false;
+  if (payload.accountExists || payload.needsLogin) return true;
+  return /ya existe una cuenta|account with that email already exists|usernameexists/i.test(
+    String(payload.error || "")
+  );
+}

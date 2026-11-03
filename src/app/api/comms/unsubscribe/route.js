@@ -1,3 +1,4 @@
+import { coreFetch } from '@/lib/cloudflare-runtime.mjs';
 import { NextResponse } from "next/server";
 
 import { authRateLimit } from "@/lib/auth-rate-limit";
@@ -19,7 +20,7 @@ async function unsubscribe(request, token) {
   const base = process.env.VP_PAYMENTS_URL;
   const svc = process.env.PAYMENTS_SERVICE_TOKEN;
   if (!base || !svc) return NextResponse.json({ error: UNAVAILABLE }, { status: 503 });
-  const resp = await fetch(`${base}/api/comms/unsubscribe`, {
+  const resp = await coreFetch(`${base}/api/comms/unsubscribe`, {
     method: "POST",
     headers: { "content-type": "application/json", "X-VP-Service-Token": svc },
     body: JSON.stringify({ token }),

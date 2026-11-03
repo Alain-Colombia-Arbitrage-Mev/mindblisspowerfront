@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
 import { memberDb } from "@/lib/member-db";
@@ -21,8 +21,7 @@ export async function GET(request) {
   const depthLimit = parseDepth(params.get("depth"));
   const rowLimit = parseLimit(params.get("limit"), depthLimit === 0 ? 2000 : depthLimit <= 4 ? 64 : 1000);
   const queryLimit = rowLimit + 1;
-  const cookieStore = await cookies();
-  const idToken = cookieStore.get("vp_id_token")?.value;
+  const idToken = await rawIdToken();
 
   if (!idToken) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401, headers: { "Cache-Control": "private, no-store" } });

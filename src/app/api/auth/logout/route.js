@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 
 import { originUrl } from "@/lib/request-origin";
+import { betterAuthEnabled, proxyBetterAuth } from '@/lib/better-auth-bridge.mjs';
 
 export const runtime = "nodejs";
 
 export async function GET(request) {
+  if (betterAuthEnabled()) return NextResponse.json({ error: 'use_post_logout' }, { status: 405, headers: { Allow: 'POST' } });
   const response = NextResponse.redirect(originUrl(request, "/login"));
   [
     "vp_access_token",
@@ -23,4 +25,8 @@ export async function GET(request) {
     });
   });
   return response;
+}
+
+export async function POST(request) {
+  return proxyBetterAuth(request, 'sign-out');
 }

@@ -1,3 +1,4 @@
+import { coreFetch } from '@/lib/cloudflare-runtime.mjs';
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 
@@ -201,7 +202,7 @@ async function registrationPrecheck({ email, phone, fullName, birthDate, referra
   const token = process.env.PAYMENTS_SERVICE_TOKEN;
   if (!base || !token) return { unavailable: true };
   try {
-    const resp = await fetch(`${base}/api/registration/precheck`, {
+    const resp = await coreFetch(`${base}/api/registration/precheck`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-VP-Service-Token": token },
       body: JSON.stringify({ email, phone, name: fullName, birth_date: birthDate, referral_code: referralCode, preferred_side: preferredSide }),
@@ -221,7 +222,7 @@ async function recordRegistrationReferral({ email, referralCode, preferredSide }
   const token = process.env.PAYMENTS_SERVICE_TOKEN;
   if (!base || !token || !email || !referralCode) return { ok: false, status: 503, error: "unconfigured" };
   try {
-    const resp = await fetch(`${base}/api/registration/referral-attribution`, {
+    const resp = await coreFetch(`${base}/api/registration/referral-attribution`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-VP-Service-Token": token },
       body: JSON.stringify({ email, referral_code: referralCode, preferred_side: preferredSide }),

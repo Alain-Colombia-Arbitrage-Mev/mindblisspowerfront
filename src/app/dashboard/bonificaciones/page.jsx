@@ -1,4 +1,4 @@
-import { BonusesDashboardPage } from "../_components/ExecutiveDashboardPages";
+import { BonusesDashboardPage } from "../_components/executive-pages/BonusesDashboardPage";
 
 export default function BonusesPage() {
   return <BonusesDashboardPage />;

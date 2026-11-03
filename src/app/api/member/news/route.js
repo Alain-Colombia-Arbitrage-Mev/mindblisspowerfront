@@ -1,4 +1,5 @@
-import { cookies } from "next/headers";
+import { coreFetch } from '@/lib/cloudflare-runtime.mjs';
+import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
 import { verifyIdToken } from "@/lib/verify-id-token";
@@ -10,8 +11,7 @@ export const dynamic = "force-dynamic";
 // Reemplaza el array hardcodeado (que incluía datos bancarios OBSOLETOS: el
 // negocio cobra SOLO por Stripe). Espeja el patrón de member/profile.
 async function ctx() {
-  const cookieStore = await cookies();
-  const idToken = cookieStore.get("vp_id_token")?.value;
+  const idToken = await rawIdToken();
   if (!idToken) return { error: "unauthenticated", status: 401 };
   const payload = await verifyIdToken(idToken);
   if (!payload?.email) return { error: "session-invalid", status: 401 };
@@ -25,7 +25,7 @@ export async function GET() {
   const c = await ctx();
   if (c.error) return NextResponse.json({ error: c.error }, { status: c.status });
   try {
-    const resp = await fetch(`${c.base}/api/member/news`, {
+    const resp = await coreFetch(`${c.base}/api/member/news`, {
       headers: { "X-VP-Service-Token": c.token, "X-VP-Id-Token": c.idToken },
       cache: "no-store",
     });

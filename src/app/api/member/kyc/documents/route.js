@@ -1,4 +1,5 @@
-import { cookies } from "next/headers";
+import { coreFetch } from '@/lib/cloudflare-runtime.mjs';
+import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
 import { verifiedEmailFromIdToken } from "@/lib/verify-id-token";
@@ -8,8 +9,7 @@ export const dynamic = "force-dynamic";
 
 /** Lista los documentos KYC del miembro + su kyc_status global. */
 export async function GET() {
-  const cookieStore = await cookies();
-  const idToken = cookieStore.get("vp_id_token")?.value;
+  const idToken = await rawIdToken();
   if (!idToken) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
 
   const email = await verifiedEmailFromIdToken(idToken);
@@ -20,7 +20,7 @@ export async function GET() {
   if (!base || !token) return NextResponse.json({ error: "payments-unconfigured" }, { status: 503 });
 
   try {
-    const resp = await fetch(`${base}/api/member/kyc/documents?email=${encodeURIComponent(email)}`, {
+    const resp = await coreFetch(`${base}/api/member/kyc/documents?email=${encodeURIComponent(email)}`, {
       headers: { "X-VP-Service-Token": token, "X-VP-Id-Token": idToken },
       cache: "no-store",
     });

@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  CreditCard,
   LayoutDashboard,
   LogOut,
   Mail,
@@ -18,6 +17,7 @@ import SidebarNavGroup from "./SidebarNavGroup";
 import SidebarNavItem from "./SidebarNavItem";
 import SidebarUserCard from "./SidebarUserCard";
 import { matchesRoute } from "@/lib/member-navigation.mjs";
+import LogoutButton from "./LogoutButton";
 
 const NAV_ITEMS = [
   { icon: LayoutDashboard, label: "Resumen", href: "/dashboard", exact: true, also: ["/dashboard/home"] },
@@ -34,7 +34,6 @@ const NAV_ITEMS = [
   { icon: Package, label: "Membresías", href: "/dashboard/packages" },
   { icon: Ticket, label: "Cupones", href: "/dashboard/coupons" },
   { icon: Wallet, label: "Billetera y retiros", href: "/dashboard/withdrawals" },
-  { icon: CreditCard, label: "Verificación de identidad", href: "/dashboard/kyc" },
   { icon: User, label: "Mi perfil", href: "/dashboard/profile" },
   { icon: Medal, label: "Rangos", href: "/dashboard/rank", also: ["/dashboard/ranks"] },
   { icon: Network, label: "Mi red", href: "/dashboard/network", also: ["/dashboard/team"] },
@@ -75,14 +74,14 @@ export default function PanelSidebar({ pathname, member, onNavigate = undefined 
       </nav>
 
       <div className="border-t p-4" style={{ borderColor: "var(--vp-border)" }}>
-        <a
-          className="vp-sidebar-link"
-          href="/api/auth/logout"
+        <LogoutButton
+          className="vp-sidebar-link w-full"
+          errorPlacement="above"
           style={{ color: "#f87171" }}
         >
-          <LogOut size={16} />
+          <LogOut size={16} aria-hidden="true" />
           Cerrar sesión
-        </a>
+        </LogoutButton>
       </div>
     </div>
   );

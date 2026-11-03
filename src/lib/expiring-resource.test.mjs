@@ -109,3 +109,51 @@ test("invalidation during a pending load cannot restore the discarded cache", as
   await pending;
   assert.deepEqual(await resource.read(), { version: 2 });
 });
+
+test("a burst of forced refreshes shares one new request, with isolated result objects", async () => {
+  const refresh = deferred();
+  let calls = 0;
+  const resource = createExpiringResource(
+    () => ++calls === 1 ? { rows: [{ version: 1 }] } : refresh.promise,
+    { ttlMs: 1000 },
+  );
+  await resource.read();
+  const reads = [resource.read({ force: true }), resource.read({ force: true }), resource.read()];
+  await Promise.resolve();
+  assert.equal(calls, 2);
+  refresh.resolve({ rows: [{ version: 2 }] });
+  const results = await Promise.all(reads);
+  results[0].rows[0].version = 999;
+  assert.equal(results[1].rows[0].version, 2);
+  assert.equal(results[2].rows[0].version, 2);
+  assert.deepEqual(await resource.read(), { rows: [{ version: 2 }] });
+});
+
+test("failed refresh discards the previous completed value instead of silently reusing it", async () => {
+  let calls = 0;
+  const resource = createExpiringResource(
+    () => ++calls === 1 ? { version: 1 } : Promise.reject(new Error("denied")),
+    { ttlMs: 1000 },
+  );
+  await resource.read();
+  await assert.rejects(resource.read({ force: true }), /denied/);
+  await assert.rejects(resource.read(), /denied/);
+  assert.equal(calls, 3);
+});
+
+test("invalidation supersedes a forced pending load and cannot restore its result", async () => {
+  const discarded = deferred();
+  let calls = 0;
+  const resource = createExpiringResource(
+    () => ++calls === 2 ? discarded.promise : { version: calls },
+    { ttlMs: 1000 },
+  );
+  await resource.read();
+  const force = resource.read({ force: true });
+  await Promise.resolve();
+  resource.invalidate();
+  assert.deepEqual(await resource.read(), { version: 3 });
+  discarded.resolve({ version: 2 });
+  await force;
+  assert.deepEqual(await resource.read(), { version: 3 });
+});
