@@ -136,6 +136,43 @@ export async function proxyBetterAuthKeys(request, dependencies = {}) {
   } catch { return Response.json({ error: 'authentication_unavailable' }, { status: 503, headers: { 'Cache-Control': 'no-store' } }); }
 }
 
+async function confirmedSignInCookies(upstream, data, verified, request, origin, transport, env) {
+  if (upstream.status !== 200 || !/^application\/json(?:\s*;|$)/i.test(upstream.headers.get('content-type') || '')) {
+    throw new Error('invalid_sign_in_response');
+  }
+  const issued = upstream.headers.getSetCookie();
+  if (issued.length > 8) throw new Error('invalid_sign_in_cookies');
+  const cookies = issued.map(value => browserAuthCookie(value, env.NODE_ENV === 'production')).filter(Boolean);
+  const sessions = cookies.filter(value => /^(?:__Secure-)?better-auth\.session_token=[^;\s,]+;/.test(value));
+  if (sessions.length !== 1) throw new Error('missing_sign_in_session');
+  const maxAges = [...sessions[0].matchAll(/(?:^|;)\s*max-age=([^;]+)/ig)];
+  const expiries = [...sessions[0].matchAll(/(?:^|;)\s*expires=([^;]+)/ig)];
+  if (maxAges.length > 1 || expiries.length > 1
+    || (maxAges.length && (!/^\d+$/.test(maxAges[0][1]) || !Number.isSafeInteger(Number(maxAges[0][1])) || Number(maxAges[0][1]) <= 0))
+    || (!maxAges.length && expiries.length && !(Date.parse(expiries[0][1]) > Date.now()))) {
+    throw new Error('expired_sign_in_cookie');
+  }
+  // Prove only the just-issued native session. An old browser/session_data
+  // cookie, a verified-mailbox flag or a service JWT cannot replace this proof.
+  const cookie = betterAuthCookies(sessions[0].split(';')[0]);
+  const canonical = await fetchBetterAuth('/get-session', { cookie, origin, signal: request.signal }, transport);
+  const identity = await readAuthBody({ body: canonical.body, signal: request.signal });
+  if (canonical.status !== 200 || !/^application\/json(?:\s*;|$)/i.test(canonical.headers.get('content-type') || '')
+    || !identity || typeof identity !== 'object' || Array.isArray(identity) || identity.error || identity.code
+    || !identity.session || typeof identity.session !== 'object' || Array.isArray(identity.session)
+    || typeof identity.session.id !== 'string' || !identity.session.id.trim() || identity.session.id.length > 128
+    || identity.session.userId !== verified.id || identity.session.token !== data.token
+    || typeof identity.session.expiresAt !== 'string' || identity.session.expiresAt.length > 64
+    || !(Date.parse(identity.session.expiresAt) > Date.now())
+    || !identity.user || typeof identity.user !== 'object' || Array.isArray(identity.user)
+    || identity.user.id !== verified.id || typeof identity.user.email !== 'string'
+    || identity.user.email.trim().toLowerCase() !== verified.email.trim().toLowerCase()
+    || identity.user.emailVerified !== true || request.signal.aborted) {
+    throw new Error('invalid_sign_in_session');
+  }
+  return cookies;
+}
+
 export async function proxyBetterAuth(request, path, dependencies = {}) {
   const env = dependencies.env || runtimeEnvironment();
   const recovery = passwordRecoveryPaths.has(path);
@@ -159,9 +196,10 @@ export async function proxyBetterAuth(request, path, dependencies = {}) {
       if (prepared.error) return Response.json({ error: 'invalid_recovery_request', code: prepared.error }, { status: 400, headers: recoveryHeaders });
       body = prepared.body;
     }
+    const transport = { ...dependencies, clientIp: trustedAuthClientIp(request.headers, env) };
     const upstream = await fetchBetterAuth(`/${path}`, {
       method: "POST", body, origin: expectedOrigin, cookie: recovery ? '' : request.headers.get("cookie") || "", signal: request.signal,
-    }, { ...dependencies, clientIp: trustedAuthClientIp(request.headers, env) });
+    }, transport);
     // Do not relay upstream diagnostics, raw session tokens or set-auth-jwt.
     const data = await readAuthBody({ body: upstream.body, signal: request.signal });
     if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('invalid_auth_response');
@@ -175,14 +213,20 @@ export async function proxyBetterAuth(request, path, dependencies = {}) {
       // expose tokens or reflect account-existence hints from an upstream error.
       return response;
     }
-    const response = Response.json(upstream.ok ? authSuccess(path, data)
-      : { error: "authentication_failed", code: /^[A-Z_]{1,80}$/.test(data.code) ? data.code : undefined },
+    const result = upstream.ok ? authSuccess(path, data)
+      : { error: "authentication_failed", code: /^[A-Z_]{1,80}$/.test(data.code) ? data.code : undefined };
+    let cookies = [];
+    if (upstream.ok && ['sign-in/email', 'sign-in/email-otp'].includes(path)) {
+      const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+      if (!email || result.user.email.trim().toLowerCase() !== email) throw new Error('invalid_sign_in_owner');
+      cookies = await confirmedSignInCookies(upstream, data, result.user, request, expectedOrigin, transport, env);
+    } else if (upstream.ok) {
+      cookies = upstream.headers.getSetCookie().map(value => browserAuthCookie(value, env.NODE_ENV === 'production')).filter(Boolean);
+    }
+    const response = Response.json(result,
       { status: upstream.ok ? 200 : upstream.status >= 400 ? upstream.status : 502,
         headers: { "Cache-Control": "private, no-store" } });
-    for (const value of upstream.ok ? upstream.headers.getSetCookie() : []) {
-      const cookie = browserAuthCookie(value, env.NODE_ENV === 'production');
-      if (cookie) response.headers.append("set-cookie", cookie);
-    }
+    for (const cookie of cookies) response.headers.append("set-cookie", cookie);
     if (upstream.status === 429 && /^\d{1,5}$/.test(upstream.headers.get("retry-after") || "")) {
       response.headers.set("retry-after", upstream.headers.get("retry-after"));
     }

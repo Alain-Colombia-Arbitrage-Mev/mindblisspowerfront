@@ -450,7 +450,7 @@ try {
   assert.equal(identity.referralCode, 'SYNTHETIC-MEMBER');
   assert.equal(identity.isAdmin, false, 'customer portal never grants an administrative role');
   probes++;
-  for (const cookieValue of ['', '__Secure-better-auth.session_token=synthetic-tampered', '__Secure-better-auth.session_token=synthetic-wrong-audience']) {
+  for (const cookieValue of ['', '__Secure-better-auth.session_token=synthetic-tampered']) {
     const rejected = await fetch('http://127.0.0.1:8787/api/auth/session', {
       headers: { ...sessionHeaders, cookie: cookieValue }, signal: AbortSignal.timeout(8000),
     });
@@ -460,6 +460,15 @@ try {
     assert.equal(session.email, null);
     probes++;
   }
+  const wrongAudienceSession = await fetch('http://127.0.0.1:8787/api/auth/session', {
+    headers: { ...sessionHeaders, cookie: '__Secure-better-auth.session_token=synthetic-wrong-audience' },
+    signal: AbortSignal.timeout(8000),
+  });
+  assert.equal(wrongAudienceSession.status, 503, 'a service-signed JWT with mismatched audience is unavailable, never approved');
+  assert.deepEqual(await wrongAudienceSession.json(), { error: 'authentication_unavailable' });
+  assert.equal(wrongAudienceSession.headers.get('set-cookie'), null);
+  assert.match(wrongAudienceSession.headers.get('cache-control'), /private.*no-store/);
+  probes++;
   const logoutGet = await fetch('http://127.0.0.1:8787/api/auth/logout', {
     headers: sessionHeaders, redirect: 'manual', signal: AbortSignal.timeout(8000),
   });

@@ -147,12 +147,13 @@ test('a disposed password form cannot overwrite the verified result of a newer f
   current.unmount();
 });
 
-test('unbound access remains a reviewed-linking notice after valid password proof and never claims network access', async t => {
+test('anonymous access after valid password proof never invents a linking review or claims network access', async t => {
   t.mock.method(globalThis, 'fetch', async path => path === '/api/auth/sign-in/email' ? Response.json(proof)
-    : Response.json({ authenticated: false, state: 'review_required' }));
+    : Response.json({ authenticated: false, mode: 'better-auth', email: null, state: 'review_required' }));
   const harness = view(); await harness.submit();
   const verified = harness.events.find(([name]) => name === 'verified');
-  assert.equal(verified[2].ready, false); assert.match(verified[2].notice, /aprobación de vinculación/);
+  assert.equal(verified[2].ready, false); assert.match(verified[2].notice, /no pudimos confirmar una sesión/);
+  assert.doesNotMatch(verified[2].notice, /aprobación|vinculación|bloquead/);
   harness.unmount();
 });
 

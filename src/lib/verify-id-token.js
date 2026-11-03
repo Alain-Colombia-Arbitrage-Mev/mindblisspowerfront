@@ -12,8 +12,8 @@
  * cualquier fallo (incluida configuración ausente) devuelve null.
  */
 import { CognitoJwtVerifier } from "aws-jwt-verify";
-import { betterAuthEnabled } from "./better-auth-bridge.mjs";
-import { createBetterAuthVerifier, validBetterAuthClaims } from "./better-auth-token.mjs";
+import { betterAuthEnabled, AuthServiceUnavailable } from "./better-auth-bridge.mjs";
+import { createBetterAuthVerifier, validBetterAuthClaims, authVerificationDiagnostic } from "./better-auth-token.mjs";
 import { getCloudflareScope, runtimeEnvironment, coreFetch } from './cloudflare-runtime.mjs';
 
 let betterVerifier;
@@ -67,7 +67,8 @@ function getVerifier() {
  * @returns {Promise<Record<string, any> | null>} claims verificados con `email`
  *   normalizado, o null ante CUALQUIER fallo (fail-closed).
  */
-export async function verifyIdToken(token) {
+export async function verifyIdToken(token, { throwOnUnavailable = false } = {}) {
+  if (!token || typeof token !== 'string') return null;
   if (betterAuthEnabled()) {
     try {
       const scope = getCloudflareScope();
@@ -78,10 +79,21 @@ export async function verifyIdToken(token) {
       } else { betterVerifier ??= createBetterAuthVerifier(); verifier = betterVerifier; }
       const claims = await verifier.verify(token);
       return validBetterAuthClaims(claims) ? { ...claims, email: claims.email.trim().toLowerCase() } : null;
-    } catch { return null; }
+    } catch (error) {
+      const diagnostic = authVerificationDiagnostic(error);
+      console.warn(JSON.stringify({ event: 'auth_verification', ...diagnostic }));
+      if (throwOnUnavailable && diagnostic.status === 'unavailable') throw new AuthServiceUnavailable();
+      return null;
+    }
   }
   if (process.env.AUTH_PROVIDER && process.env.AUTH_PROVIDER !== "cognito") return null;
   return verifyIdTokenWith(getVerifier(), token);
+}
+
+/** Session readiness distinguishes infrastructure failure from invalid proof.
+ * Other consumers retain their existing fail-closed null contract. */
+export function verifyIdTokenForSession(token) {
+  return verifyIdToken(token, { throwOnUnavailable: true });
 }
 
 /**

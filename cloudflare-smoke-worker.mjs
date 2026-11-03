@@ -212,11 +212,18 @@ const syntheticEnv = {
       });
     }
     if (url.endsWith('/get-session')) {
-      if (options.method !== 'GET' || !validProxySignature(target, options, headers)
-        || headers.get('cookie') !== registrationCookie) throw new Error('invalid_registration_session_proof');
-      return Response.json({ session: { id: 'synthetic-registration-session', userId: 'synthetic-signup',
-        token: registrationToken, expiresAt: new Date(Date.now() + 300000).toISOString() },
-      user: { id: 'synthetic-signup', email: 'signup@example.test', emailVerified: true } });
+      if (options.method !== 'GET' || !validProxySignature(target, options, headers)) throw new Error('invalid_native_session_proof');
+      if (headers.get('cookie') === registrationCookie) {
+        return Response.json({ session: { id: 'synthetic-registration-session', userId: 'synthetic-signup',
+          token: registrationToken, expiresAt: new Date(Date.now() + 300000).toISOString() },
+        user: { id: 'synthetic-signup', email: 'signup@example.test', emailVerified: true } });
+      }
+      if (headers.get('cookie') === sessionCookie) {
+        return Response.json({ session: { id: 'synthetic-login-session', userId: 'synthetic',
+          token: 'must-not-leak', expiresAt: new Date(Date.now() + 300000).toISOString() },
+        user: { id: 'synthetic', email: 'fixture@example.test', emailVerified: true } });
+      }
+      throw new Error('invalid_native_session_cookie');
     }
     if (url.endsWith('/email-otp/request-password-reset') || url.endsWith('/email-otp/reset-password')) {
       if (!validProxySignature(target, options, headers) || headers.get('cookie')) throw new Error('invalid_recovery_signature_or_cookie');

@@ -199,7 +199,7 @@ test('old in-flight snapshot cannot replace a later response; rollback expires c
   const verifier = state.verifier();
   verifier.cacheJwks({ keys: [first.jwk] });
   await verifier.verify(token());
-  await assert.rejects(state.verifier().verify(token()), /must not fetch/);
+  await assert.rejects(state.verifier().verify(token()), { name: 'AuthVerificationUnavailable', phase: 'jwks' });
   state.advance(60_000);
   await assert.rejects(verifier.verify(token()), /auth_keys_expired/);
 });

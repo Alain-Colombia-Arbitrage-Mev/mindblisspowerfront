@@ -11,12 +11,22 @@ test('Better Auth password sign-in uses only the new same-origin endpoint and pr
   }
 });
 
-test('email sign-in never grants network access from unbound or malformed session states', async () => {
-  for (const identity of [{ authenticated: false, state: 'claim_required' }, { authenticated: false, state: 'review_required' },
-    { authenticated: 'true', mode: 'better-auth' }, { authenticated: true, mode: 'cognito' }, {}]) {
+test('anonymous canonical sessions do not invent manual approval, a ban or network permission', async () => {
+  for (const identity of [{ authenticated: false, mode: 'better-auth' },
+    { authenticated: false, mode: 'better-auth', state: 'claim_required' }, { authenticated: false, mode: 'better-auth', state: 'review_required' }]) {
     const result = await betterAuthAccess(async () => Response.json(identity));
     assert.equal(result.ready, false);
-    assert.ok(result.notice.includes('vinculación'));
+    assert.match(result.notice, /no pudimos confirmar una sesión/);
+    assert.doesNotMatch(result.notice, /aprobación|vinculación|bloquead|suspendid/);
+  }
+});
+
+test('malformed canonical success responses are unavailable rather than an invented approval requirement', async () => {
+  for (const identity of [{ authenticated: 'true', mode: 'better-auth' }, { authenticated: true, mode: 'cognito' }, {}, [], null,
+    { authenticated: false }, { authenticated: true, mode: 'better-auth' }, { authenticated: false, mode: 'better-auth', error: 'private' }]) {
+    const result = await betterAuthAccess(async () => Response.json(identity));
+    assert.equal(result.ready, false); assert.ok(result.error); assert.equal(result.notice, undefined);
+    assert.doesNotMatch(result.error, /private|aprobación|vinculación/);
   }
 });
 
@@ -26,7 +36,7 @@ test('only the canonical verified session permits navigation and it is never cac
     assert.equal(options.credentials, 'same-origin');
     assert.equal(options.cache, 'no-store');
     assert.equal(options.redirect, 'error');
-    return Response.json({ authenticated: true, mode: 'better-auth' });
+    return Response.json({ authenticated: true, mode: 'better-auth', email: 'member@example.test' });
   });
   assert.deepEqual(result, { ready: true });
   assert.ok((await betterAuthAccess(async () => new Response(null, { status: 503 }))).error);
@@ -63,7 +73,7 @@ test('email confirmation requires trusted sign-in proof for the same recipient, 
 });
 
 test('canonical access belongs to the just-verified recipient, not an older signed-in account', async () => {
-  for (const actual of ['other@example.test', undefined, null]) {
+  for (const actual of ['other@example.test']) {
     const result = await betterAuthAccess(async () => Response.json({ authenticated: true, mode: 'better-auth', email: actual }), 'member@example.test');
     assert.equal(result.ready, false);
     assert.match(result.error, /no corresponde al correo verificado/);

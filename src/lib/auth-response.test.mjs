@@ -4,7 +4,7 @@ import { authSuccess } from './auth-response.mjs';
 import { proxyBetterAuth, readAuthBody } from './better-auth-bridge.mjs';
 const env = { AUTH_PROVIDER: 'better-auth', NODE_ENV: 'production', BETTER_AUTH_BACKEND_URL: 'https://auth.example.test',
   AUTH_PUBLIC_ORIGIN: 'https://portal.example.test', AUTH_BFF_SHARED_SECRET: 'synthetic-proxy-secret-greater-than-thirty-two' };
-const request = (body = '{}') => new Request(env.AUTH_PUBLIC_ORIGIN + '/api/auth/sign-in/email', { method: 'POST',
+const request = (body = '{"email":"member@example.test"}') => new Request(env.AUTH_PUBLIC_ORIGIN + '/api/auth/sign-in/email', { method: 'POST',
   headers: { origin: env.AUTH_PUBLIC_ORIGIN, 'cf-connecting-ip': '192.0.2.10' }, body });
 
 test('auth operations only acknowledge their exact installed response contracts', () => {
@@ -28,9 +28,13 @@ test('sign-in requires a verified user and private session token without project
 
 test('only a validated sign-in projects email proof; send acknowledgements never do', async () => {
   for (const path of ['sign-in/email', 'sign-in/email-otp']) {
-    const result = await proxyBetterAuth(request(), path, { env, fetchImpl: async () => Response.json({ token: 'synthetic-private-token',
-      user: { id: 'synthetic', email: 'member@example.test', emailVerified: true, role: 'superadmin', person_id: 1 } },
-    { headers: { 'set-cookie': 'better-auth.session_token=synthetic-private-cookie; HttpOnly; Secure' } }) });
+    const result = await proxyBetterAuth(request(), path, { env, fetchImpl: async url => {
+      const user = { id: 'synthetic', email: 'member@example.test', emailVerified: true, role: 'superadmin', person_id: 1 };
+      if (url.endsWith('/get-session')) return Response.json({ user, session: { id: 'synthetic-session', userId: user.id,
+        token: 'synthetic-private-token', expiresAt: new Date(Date.now() + 60_000).toISOString() } });
+      return Response.json({ token: 'synthetic-private-token', user },
+        { headers: { 'set-cookie': 'better-auth.session_token=synthetic-private-cookie; HttpOnly; Secure' } });
+    } });
     assert.equal(result.status, 200);
     const payload = await result.json();
     assert.equal(payload.user.emailVerified, true);

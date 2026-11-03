@@ -117,7 +117,8 @@ for (const side of ['L', 'R']) test(`shared ${side} link survives registration, 
 test('referral hints cannot grant a verified mailbox network access or cross into another checkout owner', async () => {
   const access = await betterAuthAccess(async () => Response.json({ authenticated: false, mode: 'better-auth', email }), email);
   assert.equal(access.ready, false);
-  assert.match(access.notice, /aprobación/);
+  assert.match(access.notice, /no pudimos confirmar una sesión con acceso al portal/);
+  assert.doesNotMatch(access.notice, /aprobación|vinculación|bloquead/);
   const form = { provider: 'nowpayments', package_id: 1, purchase_subject: claims.sub, purchase_request_id: requestID,
     ref: 'MP9101', ref_email: email, preferred_side: 'R' };
   const unbound = await handleMembershipCheckout(request('/api/payments/checkout', form), {

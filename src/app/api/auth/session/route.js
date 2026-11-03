@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 import { callPayments } from "@/lib/admin-bff";
 import { clearCookie } from "@/lib/cognito-session";
-import { verifyIdToken } from "@/lib/verify-id-token";
+import { verifyIdTokenForSession as verifyIdToken } from "@/lib/verify-id-token";
 import { betterAuthEnabled, AuthServiceUnavailable } from "@/lib/better-auth-bridge.mjs";
 
 export const runtime = "nodejs";
@@ -21,14 +21,17 @@ const SESSION_COOKIES = [
 
 export async function GET() {
   let idToken;
-  try { idToken = await rawIdToken(); } catch (error) {
+  let claims;
+  try {
+    idToken = await rawIdToken();
+    claims = (await verifyIdToken(idToken)) || {};
+  } catch (error) {
     if (!(error instanceof AuthServiceUnavailable)) throw error;
     return NextResponse.json({ error: 'authentication_unavailable' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
   }
 
   // Claims VERIFICADOS (firma + iss + aud + token_use + exp). Un id token
   // forjado ya no produce sesión: claims = {} ⇒ authenticated=false.
-  const claims = (await verifyIdToken(idToken)) || {};
   const email = claims.email || null;
   const authenticated = Boolean(email);
   const tokenName =

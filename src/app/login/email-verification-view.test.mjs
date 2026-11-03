@@ -106,7 +106,7 @@ test('accepted OTP enters the panel immediately after matching canonical access,
   harness.unmount();
 });
 
-test('verified email remains distinct from legacy approval and a manual access review sends no code', async t => {
+test('verified email remains distinct from canonical access and a manual access review sends no code or invented approval claim', async t => {
   const destinations = browser(t), paths = [];
   t.mock.method(globalThis, 'fetch', async path => {
     paths.push(path);
@@ -115,7 +115,8 @@ test('verified email remains distinct from legacy approval and a manual access r
   });
   const harness = view(); await enterCode(harness);
   assert.match(html(harness), /Correo verificado correctamente/);
-  assert.match(html(harness), /revisión de identidad y aprobación de vinculación/);
+  assert.match(html(harness), /no pudimos confirmar una sesión con acceso al portal/);
+  assert.doesNotMatch(html(harness), /requiere revisión de identidad y aprobación de vinculación/);
   assert.match(html(harness), /Si tu cuenta anterior requiere revisión/);
   assert.doesNotMatch(html(harness), /Continuar al panel/);
   await find(harness.render(props), node => node?.props?.children === 'Revisar acceso').props.onClick();

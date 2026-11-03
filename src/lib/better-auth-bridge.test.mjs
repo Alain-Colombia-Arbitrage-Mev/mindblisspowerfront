@@ -62,7 +62,12 @@ test("proxy checks origin/path/body before transport, including private JWT endp
 
 test("proxy keeps HttpOnly cookies but never exposes JWT/session tokens or internal headers", async () => {
   let forwarded;
-  const response = await proxyBetterAuth(request(), "sign-in/email", { env, fetchImpl: async (url, options) => {
+  const requestBody = JSON.stringify({ email: 'user@example.test', password: 'Synthetic password 123' });
+  const response = await proxyBetterAuth(request(requestBody), "sign-in/email", { env, fetchImpl: async (url, options) => {
+    if (url.endsWith('/get-session')) return Response.json({
+      user: { id: 'synthetic-user', email: 'user@example.test', emailVerified: true },
+      session: { id: 'synthetic-session', userId: 'synthetic-user', token: 'private-session', expiresAt: new Date(Date.now() + 60_000).toISOString() },
+    });
     forwarded = { url, options };
     return Response.json({ token: "private-session", user: { id: "synthetic-user", email: "user@example.test", emailVerified: true, name: "Test", secret: "hidden" } }, {
       headers: { "set-cookie": `${cookie}; Secure; HttpOnly; Domain=.example.test`, "set-auth-jwt": "private-jwt" },
@@ -73,7 +78,7 @@ test("proxy keeps HttpOnly cookies but never exposes JWT/session tokens or inter
   assert.equal(forwarded.options.headers['x-vp-auth-client-ip'], '192.0.2.10');
   const hash = value => createHash('sha256').update(value).digest('hex');
   assert.equal(forwarded.options.headers['x-vp-auth-signature'], createHmac('sha256', env.AUTH_BFF_SHARED_SECRET)
-    .update(['POST', '/api/auth/sign-in/email', forwarded.options.headers['x-vp-auth-timestamp'], '192.0.2.10', hash(cookie), hash('{}')].join('\n')).digest('hex'));
+    .update(['POST', '/api/auth/sign-in/email', forwarded.options.headers['x-vp-auth-timestamp'], '192.0.2.10', hash(cookie), hash(requestBody)].join('\n')).digest('hex'));
   assert.equal(forwarded.options.cache, "no-store");
   assert.equal(forwarded.options.redirect, "manual");
   assert.equal(response.headers.get("set-auth-jwt"), null);
