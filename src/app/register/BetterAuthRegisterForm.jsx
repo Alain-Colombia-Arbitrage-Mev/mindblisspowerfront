@@ -8,6 +8,7 @@ import { useResendCooldown, suggestEmailFix } from '@/lib/useResendCooldown';
 import { bindReferralCodeToEmail } from '@/lib/referral-attribution';
 import { RegistrationButton, RegistrationField } from './RegistrationFields';
 import { betterAuthAccess } from '../login/better-auth-login.mjs';
+import { beginVerifiedReferralSync } from '@/lib/referral-sync.mjs';
 import ContactPhoneField from './ContactPhoneField';
 import { initialContactPhone, registrationContactValues } from './contact-phone-model.mjs';
 import { REGISTRATION_RESEND_SECONDS, consumeRegistrationPrefill, registrationEmail, registrationErrors, registrationFailure, registrationHints, registrationLoginUrl, registrationRetrySeconds, registrationAcknowledged, registrationPendingDelivery, registrationTimeoutMs } from './registration-model.mjs';
@@ -30,6 +31,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
   const mounted = useRef(false);
   const activeRequest = useRef(null);
   const requestGeneration = useRef(0);
+  const dashboardNavigation = useRef(false);
   const feedback = useRef(null);
   const codeInput = useRef(null);
   const title = useRef(null);
@@ -98,6 +100,17 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
     setLoading('');
   }
 
+  function enterVerifiedDashboard(operation, currentAccess) {
+    if (!currentRequest(operation) || dashboardNavigation.current || currentAccess.ready !== true
+      || currentAccess.checking || currentAccess.error) return;
+    // The canonical session has matched this verified email. Keep this tab's
+    // referral hint, never another tab's mutable global context.
+    if (hints.referralCode) bindReferralCodeToEmail(email, hints.referralCode, undefined, undefined, 'registration', hints.preferredSide);
+    if (hints.referralCode) void beginVerifiedReferralSync(email, hints.referralCode, hints.preferredSide);
+    dashboardNavigation.current = true;
+    window.location.assign('/dashboard');
+  }
+
   async function post(path, body, action, operation) {
     const response = await fetch(path, {
       method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error',
@@ -160,7 +173,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
 
   async function confirm(event) {
     event.preventDefault();
-    if (submitting.current || !mounted.current) return;
+    if (submitting.current || !mounted.current || dashboardNavigation.current) return;
     setErrors({});
     setNotice('');
     if (!/^\d{6}$/.test(code)) {
@@ -185,6 +198,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
       const currentAccess = await betterAuthAccess(fetch, email, { signal: operation.controller.signal });
       if (!currentRequest(operation)) return;
       setAccess({ ...currentAccess, checking: false });
+      enterVerifiedDashboard(operation, currentAccess);
     } catch {
       if (!currentRequest(operation)) return;
       setErrors({ form: registrationFailure(503, 'confirm') });
@@ -194,7 +208,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
   }
 
   async function recheckAccess() {
-    if (submitting.current || !mounted.current) return;
+    if (submitting.current || !mounted.current || dashboardNavigation.current) return;
     submitting.current = true;
     const operation = beginRequest();
     setLoading('access');
@@ -203,6 +217,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
       const currentAccess = await betterAuthAccess(fetch, email, { signal: operation.controller.signal });
       if (!currentRequest(operation)) return;
       setAccess({ ...currentAccess, checking: false });
+      enterVerifiedDashboard(operation, currentAccess);
     } finally {
       finishRequest(operation);
     }
@@ -238,7 +253,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
 
   return (
     <AuthShell activePath="/register" eyebrow="Nuevo miembro" title="Tu cuenta, con acceso seguro."
-      description="Crea tu acceso y verifica tu correo. Si ya perteneces a la red, tus posiciones y datos anteriores se conservan y su vinculación requiere revisión."
+      description="Crea tu acceso y verifica tu correo. Si ya perteneces a la red, tus posiciones y datos anteriores se conservan; si tu vinculación requiere revisión, deberás completarla antes de entrar."
       visualSrc="/mindbliss/mindbliss-01.avif" visualAlt="Equipo Mindbliss Power">
       <section className="rounded-xl border border-[var(--vp-border)] bg-[var(--vp-surface)] p-6 shadow-[var(--vp-shadow)] sm:p-8" aria-labelledby="registration-title" aria-busy={isLoading}>
         <div className="mb-6 flex items-start gap-3">
@@ -313,10 +328,10 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
             <p className="text-sm leading-7 text-[var(--vp-text)]">El correo está verificado. No necesitas solicitar otro código para revisar tu acceso.</p>
             {access.error ? <p role="alert" className="text-sm leading-6 text-[var(--vp-danger)]">{access.error}</p> : null}
             <p className="text-sm leading-7 text-[var(--vp-muted)]">{access.checking ? 'Comprobando tu sesión y tu acceso a la red…' : access.ready
-              ? 'Tu sesión tiene acceso al portal. Puedes continuar al panel.'
+              ? 'Tu sesión tiene acceso al portal. Abriendo tu panel…'
               : access.notice || 'Tu correo ya está verificado. Puedes comprobar el estado de tu acceso sin pedir otro código.'}</p>
-            <p className="text-sm leading-7 text-[var(--vp-muted)]">Verificar tu correo no concede acceso a saldos ni a cuentas antiguas de la red. La vinculación requiere aprobación.</p>
-            {access.ready ? <Link href="/dashboard" className="inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-[var(--vp-accent)] px-4 font-bold text-[var(--vp-shell)]">Continuar al panel</Link>
+            <p className="text-sm leading-7 text-[var(--vp-muted)]">Verificar tu correo no concede por sí solo acceso a saldos ni a cuentas antiguas de la red. Si tu vinculación requiere revisión, debe aprobarse antes de entrar.</p>
+            {access.ready ? <Link href="/dashboard" onClick={event => { if (dashboardNavigation.current) event.preventDefault(); }} className="inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-[var(--vp-accent)] px-4 font-bold text-[var(--vp-shell)]">Continuar al panel</Link>
               : <RegistrationButton type="button" onClick={recheckAccess} disabled={isLoading || access.checking} loading={loading === 'access'}>{access.checking ? 'Comprobando acceso…' : 'Revisar acceso'}</RegistrationButton>}
             <p className="text-sm leading-7 text-[var(--vp-muted)]">Puedes seguir entrando con códigos por correo, sin contraseña. Para crear tu primera contraseña o cambiarla, abre recuperación y verifica un nuevo código de recuperación; el código de registro no sirve para ese proceso.</p>
             <Link href="/forgot-password" className="inline-flex min-h-12 w-full items-center justify-center rounded-lg border border-[var(--vp-border)] px-4 font-semibold text-[var(--vp-text)]">Crear o cambiar contraseña (opcional)</Link>

@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 
 import { readRankCatalog } from "@/lib/rank-catalog.mjs";
+import { readMemberJson } from "@/lib/member-read.mjs";
+import { rankPagePresentation, validRankPosition } from './rank-page-model.mjs';
 
 import { Activity, BarChart3, CheckCircle2, DollarSign, Shield, TrendingUp, Trophy } from "lucide-react";
 
@@ -37,44 +39,36 @@ ranks: {
 export function RankDashboardPage() {
   // Rango REAL del miembro (mlm.affiliate.current_rank_id) + carrera de rangos
   // real (mlm.rank). Antes mostraba "Corona" hardcodeado para todos.
-  const [ranks, setRanks] = useState([]);
-  const [myRank, setMyRank] = useState(null); // {code,name,order} | null
-  const [loaded, setLoaded] = useState(false);
+  const [catalog, setCatalog] = useState({ loading: true, data: null, error: false });
+  const [position, setPosition] = useState({ loading: true, data: null, error: null });
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([
-      readRankCatalog(),
-      fetch("/api/member/tree?view=position", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
-    ])
-      .then(([rk, tree]) => {
-        if (cancelled) return;
-        if (rk?.ranks) setRanks(rk.ranks);
-        if (tree?.positioned && tree.me?.rank) setMyRank(tree.me.rank);
-      })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setLoaded(true); });
-    return () => { cancelled = true; };
+    const controller = new AbortController();
+    // Public definitions and the private member proof are independent. A
+    // catalog outage must not erase a confirmed rank or imply maximum rank.
+    void readRankCatalog()
+      .then(data => { if (!cancelled) setCatalog({ loading: false, data, error: false }); })
+      .catch(() => { if (!cancelled) setCatalog({ loading: false, data: null, error: true }); });
+    void readMemberJson('/api/member/tree?view=position', { signal: controller.signal, validate: validRankPosition })
+      .then(data => { if (!cancelled) setPosition({ loading: false, data, error: null }); })
+      .catch(error => {
+        if (!cancelled) setPosition({ loading: false, data: null, error: { status: error?.status } });
+      });
+    return () => { cancelled = true; controller.abort(); };
   }, []);
 
-  const money0 = (v) => `$${Number(v ?? 0).toLocaleString("en-US")}`;
-  const currentIdx = myRank ? ranks.findIndex((r) => r.code === myRank.code) : -1;
-  const next = currentIdx + 1 < ranks.length ? ranks[currentIdx + 1] : null;
+  const presentation = rankPagePresentation(catalog, position);
 
   const config = {
     ...moduleConfigs.ranks,
     metrics: [
-      { label: "Rango actual", value: loaded ? (myRank?.name || "Sin rango") : "—", detail: "según la red migrada", icon: Trophy, tone: "accent" },
-      { label: "Siguiente rango", value: next ? next.name_es : loaded ? "Máximo" : "—", detail: "en la carrera", icon: TrendingUp, tone: "success" },
-      { label: "Bono del siguiente", value: next ? money0(next.bonus_amount_usd) : "—", detail: "al calificar", icon: DollarSign, tone: "warning" },
-      { label: "Rangos en carrera", value: ranks.length ? String(ranks.length) : "—", detail: "catálogo oficial", icon: Shield, tone: "muted" },
+      { label: "Rango actual", ...presentation.current, icon: Trophy, tone: "accent" },
+      { label: "Siguiente rango", ...presentation.next, icon: TrendingUp, tone: "success" },
+      { label: "Bono del siguiente", ...presentation.bonus, icon: DollarSign, tone: "warning" },
+      { label: "Rangos en carrera", ...presentation.catalog, icon: Shield, tone: "muted" },
     ],
-    rows: ranks.map((r, i) => [
-      r.name_es,
-      i <= currentIdx ? (i === currentIdx ? "Actual" : "Alcanzado") : "Pendiente",
-      Number(r.required_points).toLocaleString("en-US"),
-      money0(r.bonus_amount_usd),
-    ]),
+    rows: presentation.rows,
   };
   return <ExecutiveModulePage config={config} />;
 }

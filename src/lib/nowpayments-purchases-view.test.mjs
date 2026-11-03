@@ -149,7 +149,7 @@ test('checkout retains a purchase UUID after an ambiguous failure, and a process
     setItem: (key, value) => { stored.set(key, value); }, removeItem: key => { stored.delete(key); } } };
   let code = 'upstream_unavailable';
   const Component = loadComponent('../app/dashboard/packages/ActivatePackageButton.jsx', { react: state.react,
-    'lucide-react': { ArrowRight: () => null, Loader2: () => null }, '@/lib/referral-attribution': { referralForCheckout: () => ({ code: '', email: '' }) },
+    'lucide-react': { ArrowRight: () => null, Loader2: () => null }, '@/lib/referral-sync.mjs': { verifiedReferralForCheckout: async () => ({ ok: true, code: '', email: '' }) },
     '@/lib/member-session-context': { useMemberSession: () => null },
     '@/lib/checkout-policy.mjs': checkoutPolicy, '@/lib/checkout-intent.mjs': checkoutIntent,
     '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' ') } });

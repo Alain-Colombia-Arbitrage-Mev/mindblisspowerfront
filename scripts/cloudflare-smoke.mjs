@@ -77,7 +77,7 @@ try {
       assert.match(body, /Usar mi contraseña/);
       assert.match(body, /Crear cuenta/);
       assert.match(body, /solicita un código con tu correo original/);
-      assert.match(body, /verificar el correo no las vincula automáticamente/);
+      assert.match(body, /si tu vinculación requiere revisión, debe aprobarse antes de entrar/);
       assert.doesNotMatch(body, /Recuperar contraseña/);
       assert.doesNotMatch(body, /SMS|WhatsApp|account\/security/);
       assert.doesNotMatch(body, /fonts\.googleapis|fonts\.gstatic|chatwoot|soporte\.mindbliss/i);
@@ -247,6 +247,29 @@ try {
   probes++;
   const cookie = confirmed.headers.get('set-cookie').split(';')[0];
   const sessionHeaders = { cookie, 'cf-connecting-ip': '192.0.2.10' };
+  const attributionPath = '/api/member/referral-attribution';
+  const noAttribution = await fetch(`http://127.0.0.1:8787${attributionPath}`, {
+    headers: { 'X-VP-Expected-Email': 'fixture@example.test' }, signal: AbortSignal.timeout(8000),
+  });
+  assert.equal(noAttribution.status, 401); assert.match(noAttribution.headers.get('cache-control'), /no-store/); probes++;
+  const wrongOwnerAttribution = await fetch(`http://127.0.0.1:8787${attributionPath}`, {
+    headers: { ...sessionHeaders, 'X-VP-Expected-Email': 'other@example.test' }, signal: AbortSignal.timeout(8000),
+  });
+  assert.equal(wrongOwnerAttribution.status, 409); probes++;
+  const attribution = await fetch(`http://127.0.0.1:8787${attributionPath}`, {
+    headers: { ...sessionHeaders, 'X-VP-Expected-Email': 'fixture@example.test' }, signal: AbortSignal.timeout(8000),
+  });
+  assert.equal(attribution.status, 200); assert.match(attribution.headers.get('cache-control'), /private.*no-store/);
+  assert.deepEqual(await attribution.json(), { ok: true, ref: '', preferred_side: '', positioned: false }); probes++;
+  const crossAttribution = await fetch(`http://127.0.0.1:8787${attributionPath}`, { method: 'POST',
+    headers: { ...authHeaders, ...sessionHeaders, origin: 'https://evil.example.test' },
+    body: JSON.stringify({ ref: 'SYNTHETIC-SPONSOR', preferred_side: 'R', expected_email: 'fixture@example.test' }), signal: AbortSignal.timeout(8000),
+  });
+  assert.equal(crossAttribution.status, 403); probes++;
+  const savedAttribution = await post(attributionPath,
+    { ref: 'SYNTHETIC-SPONSOR', preferred_side: 'R', expected_email: 'fixture@example.test' }, cookie);
+  assert.equal(savedAttribution.status, 200);
+  assert.deepEqual(await savedAttribution.json(), { ok: true, ref: 'SYNTHETIC-SPONSOR', preferred_side: 'R', positioned: false }); probes++;
   for (const path of ['/__overview_fixture/dashboard', '/__overview_fixture/dashboard/home']) {
     const overview = await fetch(`http://127.0.0.1:8787${path}`, {
       headers: sessionHeaders, redirect: 'manual', signal: AbortSignal.timeout(12000),

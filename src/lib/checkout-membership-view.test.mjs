@@ -24,7 +24,7 @@ function browserFixture(assign = () => {}, storage = memoryStorage()) {
     dispatchEvent: events.dispatchEvent.bind(events) };
 }
 function checkoutComponent({ provider, error = '', loading = false, session = null,
-  referralResolver = () => ({ code: '', email: '' }) } = {}) {
+  referralResolver = () => ({ code: '', email: '' }), referralResult } = {}) {
   const states = [loading, error, provider];
   const stateChanges = [];
   const mockedReact = { ...React, useState: initial => {
@@ -36,7 +36,7 @@ function checkoutComponent({ provider, error = '', loading = false, session = nu
   const code = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
   const module = { exports: {} };
   const mocks = { react: mockedReact, 'lucide-react': { ArrowRight: () => null, Loader2: () => null },
-    '@/lib/referral-attribution': { referralForCheckout: referralResolver },
+    '@/lib/referral-sync.mjs': { verifiedReferralForCheckout: async email => referralResult || ({ ok: true, ...referralResolver(email) }) },
     '@/lib/member-session-context': { useMemberSession: () => session }, '@/lib/checkout-policy.mjs': policy,
     '@/lib/checkout-intent.mjs': intentPolicy, '@/lib/utils': { cn } };
   new Function('require', 'module', 'exports', code)(id => Object.hasOwn(mocks, id) ? mocks[id] : require(id), module, module.exports);
@@ -61,6 +61,23 @@ test('membership selector keeps its design and NOWPayments while disabled Stripe
   assert.doesNotMatch(html, /Continuar al pago/);
   assert.match(html, /No es una recarga de saldo/); assert.doesNotMatch(html, /Activar membresía|pago completado/);
   assert.match(html, /<button[^>]*disabled=""/);
+});
+
+test('an unconfirmed referral or unavailable owner read stops before any invoice, with an actionable private error', async t => {
+  const previousWindow = globalThis.window;
+  globalThis.window = browserFixture(() => assert.fail('blocked preflight navigated'));
+  t.after(() => { if (previousWindow === undefined) delete globalThis.window; else globalThis.window = previousWindow; });
+  t.mock.method(globalThis, 'fetch', () => assert.fail('ambiguous referral reached checkout or provider'));
+  for (const error of ['pending', 'unavailable', 'unconfirmed']) {
+    const { Component, stateChanges } = checkoutComponent({ provider: 'nowpayments', session: { email: 'member@example.test', subject },
+      referralResult: { ok: false, error } });
+    await findElement(Component({ packageId: 7, nowpaymentsEnabled: true }), 'button').props.onClick();
+    const notice = stateChanges[1].at(-1);
+    assert.match(notice, /No se inició ningún cobro/);
+    assert.match(notice, error === 'pending' ? /Reintentar guardar enlace/ : error === 'unconfirmed' ? /Guardar este enlace como mi elección/ : /de forma segura/);
+    assert.deepEqual(stateChanges[0], [true, false]);
+    assert.equal(globalThis.window.sessionStorage.values.size, 0, 'no purchase intention was allocated before attribution was confirmed');
+  }
 });
 
 test('an explicitly enabled server prop can restore the Stripe choice, never a truthy public string', () => {
@@ -277,7 +294,7 @@ const newPurchaseButton = tree => elements(tree).find(element => element.type ==
 
 // One compiled component type, separate hook stores: catches accidental module-
 // global intention sharing while exercising the actual JSX and browser helpers.
-function checkoutRuntime() {
+function checkoutRuntime(resolveReferral = async () => ({ ok: true, code: '', email: '' })) {
   let current;
   const instances = [];
   const mockedReact = { ...React,
@@ -298,7 +315,7 @@ function checkoutRuntime() {
   const source = readFileSync(new URL('../app/dashboard/packages/ActivatePackageButton.jsx', import.meta.url), 'utf8');
   const code = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
   const module = { exports: {} }, mocks = { react: mockedReact, 'lucide-react': { ArrowRight: () => null, Loader2: () => null },
-    '@/lib/referral-attribution': { referralForCheckout: () => ({ code: '', email: '' }) },
+    '@/lib/referral-sync.mjs': { verifiedReferralForCheckout: resolveReferral },
     '@/lib/member-session-context': { useMemberSession: () => current.session },
     '@/lib/checkout-policy.mjs': policy, '@/lib/checkout-intent.mjs': intentPolicy, '@/lib/utils': { cn } };
   new Function('require', 'module', 'exports', code)(id => Object.hasOwn(mocks, id) ? mocks[id] : require(id), module, module.exports);
@@ -323,13 +340,51 @@ function checkoutRuntime() {
 async function withCheckoutBrowser(run, saved = memoryStorage()) {
   const originalWindow = globalThis.window, originalFetch = globalThis.fetch, runtimes = [];
   const browser = browserFixture(() => {}, saved); globalThis.window = browser;
-  const runtime = () => { const value = checkoutRuntime(); runtimes.push(value); return value; };
+  const runtime = (...args) => { const value = checkoutRuntime(...args); runtimes.push(value); return value; };
   try { await run({ browser, runtime }); }
   finally {
     for (const value of runtimes) value.cleanup(); globalThis.fetch = originalFetch;
     if (originalWindow === undefined) delete globalThis.window; else globalThis.window = originalWindow;
   }
 }
+
+test('unmount during referral preflight never creates an invoice or intention and ignores its late result', async () => {
+  await withCheckoutBrowser(async ({ browser, runtime }) => {
+    let complete, reads = 0;
+    globalThis.fetch = () => assert.fail('abandoned preflight reached checkout');
+    const component = runtime(() => { reads++; return new Promise(resolve => { complete = resolve; }); });
+    const view = component.create(); view.mount();
+    const click = payButton(view.tree()).props.onClick;
+    const pending = click(); await click();
+    assert.equal(reads, 1);
+    component.cleanup(); const state = JSON.stringify(view.states);
+    complete({ ok: true, code: 'Durable', email: 'member@example.test', side: 'R' });
+    await pending; await click();
+    assert.equal(reads, 1); assert.equal(JSON.stringify(view.states), state);
+    assert.equal(browser.sessionStorage.values.size, 0);
+  });
+});
+
+test('unmount aborts an already-submitted checkout and ignores its late hosted URL without creating another intent', async () => {
+  await withCheckoutBrowser(async ({ browser, runtime }) => {
+    let complete, signal, started;
+    const begun = new Promise(resolve => { started = resolve; });
+    let requests = 0, navigations = 0;
+    browser.location.assign = () => { navigations++; };
+    globalThis.fetch = async (_path, options) => {
+      requests++; signal = options.signal; started();
+      return new Promise(resolve => { complete = resolve; });
+    };
+    const component = runtime(), view = component.create(); view.mount();
+    const pending = payButton(view.tree()).props.onClick(); await begun;
+    component.cleanup(); const state = JSON.stringify(view.states);
+    assert.equal(signal.aborted, true);
+    complete(Response.json({ provider: 'nowpayments', url: 'https://nowpayments.io/payment/?iid=12345', checkout_environment: 'production', fulfillment_status: 'awaiting_payment' }));
+    await pending;
+    assert.equal(navigations, 0); assert.equal(requests, 1); assert.equal(JSON.stringify(view.states), state);
+    assert.equal(browser.sessionStorage.values.size, 1, 'ambiguous submitted intention stays available for explicit recovery');
+  });
+});
 
 test('explicit independent same-SKU purchases use two different persisted IDs, while ambiguous retries and a fresh component recover the first intention without creating another', async () => {
   await withCheckoutBrowser(async ({ browser, runtime }) => {

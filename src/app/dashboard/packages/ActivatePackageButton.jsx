@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { ArrowRight, Loader2 } from "lucide-react";
-import { referralForCheckout } from "@/lib/referral-attribution";
+import { verifiedReferralForCheckout } from '@/lib/referral-sync.mjs';
 import { useMemberSession } from "@/lib/member-session-context";
 import { checkoutErrorNotice, hostedCheckoutURL } from "@/lib/checkout-policy.mjs";
 import { clearCheckoutIntent, getOrCreateCheckoutIntent, readCheckoutIntent } from "@/lib/checkout-intent.mjs";
@@ -17,6 +17,8 @@ export default function ActivatePackageButton({ packageId, featured, stripeEnabl
   const [error, setError] = useState("");
   const [provider, setProvider] = useState(() => stripeEnabled === true ? "stripe" : "nowpayments");
   const pending = useRef(false);
+  const mounted = useRef(true);
+  const activeRequest = useRef(null);
   // A retry belongs to this exact intent. Independent purchases of the same
   // package are allowed, but must never arise from a timeout or page reload.
   const purchaseRequest = useRef(null);
@@ -25,6 +27,16 @@ export default function ActivatePackageButton({ packageId, featured, stripeEnabl
   const id = useId();
   const providerEnabled = provider === "stripe" ? stripeEnabled === true
     : provider === "nowpayments" && nowpaymentsEnabled === true;
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      activeRequest.current?.abort();
+      activeRequest.current = null;
+      pending.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     try {
@@ -59,7 +71,7 @@ export default function ActivatePackageButton({ packageId, featured, stripeEnabl
   }
 
   async function activate() {
-    if (pending.current) return;
+    if (pending.current || !mounted.current) return;
     if (provider === "stripe" && stripeEnabled !== true) {
       setError(checkoutErrorNotice("stripe_checkout_disabled", provider));
       return;
@@ -73,6 +85,8 @@ export default function ActivatePackageButton({ packageId, featured, stripeEnabl
       return;
     }
     pending.current = true;
+    const controller = new AbortController();
+    activeRequest.current = controller;
     setLoading(true);
     setError("");
     let requestSent = false;
@@ -87,11 +101,24 @@ export default function ActivatePackageButton({ packageId, featured, stripeEnabl
         session = typeof memberSession?.email === "string" && memberSession.email.trim()
           && (provider !== "nowpayments" || memberSession?.subject)
           ? memberSession
-          : await fetch("/api/auth/session", { cache: "no-store", signal: AbortSignal.timeout(8000) }).then((r) => (r.ok ? r.json() : null));
-        attribution = referralForCheckout(session?.email || "");
+          : await fetch("/api/auth/session", { cache: "no-store", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8000)]) }).then((r) => (r.ok ? r.json() : null));
       } catch {
         attribution = { code: "", email: "" };
       }
+      if (!mounted.current || activeRequest.current !== controller || controller.signal.aborted) return;
+      const referral = await verifiedReferralForCheckout(session?.email || '');
+      if (!mounted.current || activeRequest.current !== controller || controller.signal.aborted) return;
+      if (!referral.ok) {
+        setError(referral.error === 'pending'
+          ? 'Tu enlace de referido aún no quedó confirmado. Usa «Reintentar guardar enlace» en el aviso del panel antes de comprar. No se inició ningún cobro.'
+          : referral.error === 'unconfirmed'
+            ? 'El servidor no tiene confirmado tu enlace de referido. En el aviso del panel, revisa el referido y usa «Guardar este enlace como mi elección» antes de comprar. No se inició ningún cobro.'
+          : 'No pudimos comprobar tu enlace de referido de forma segura. Recarga el panel o inténtalo más tarde. No se inició ningún cobro.');
+        setLoading(false);
+        pending.current = false;
+        return;
+      }
+      attribution = referral;
       if (provider === "nowpayments") {
         const requestId = getOrCreateCheckoutIntent(window.sessionStorage, session?.subject, packageId, () => crypto.randomUUID());
         purchaseRequest.current = { subject: session.subject, requestId };
@@ -101,7 +128,7 @@ export default function ActivatePackageButton({ packageId, featured, stripeEnabl
       const resp = await fetch("/api/payments/checkout", {
         method: "POST",
         cache: "no-store",
-        signal: AbortSignal.timeout(20000),
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20000)]),
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           package_id: packageId,
@@ -116,6 +143,7 @@ export default function ActivatePackageButton({ packageId, featured, stripeEnabl
         }),
       });
       const data = await resp.json().catch(() => ({}));
+      if (!mounted.current || activeRequest.current !== controller || controller.signal.aborted) return;
       const url = hostedCheckoutURL(data.url, provider, data.checkout_environment);
       if (!resp.ok || !url || data.provider !== provider
           || (provider === "nowpayments" && !["review_required", "awaiting_payment"].includes(data.fulfillment_status))) {
@@ -127,6 +155,7 @@ export default function ActivatePackageButton({ packageId, featured, stripeEnabl
       }
       window.location.assign(url);
     } catch {
+      if (!mounted.current || activeRequest.current !== controller || controller.signal.aborted) return;
       setError(!requestSent && provider === "nowpayments"
         ? "No pudimos preparar una compra segura. Recarga la página o permite el almacenamiento de esta pestaña. No se inició ningún cobro."
         : checkoutErrorNotice("payments-unreachable", provider));

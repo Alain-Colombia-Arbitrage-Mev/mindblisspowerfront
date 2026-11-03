@@ -11,10 +11,11 @@ const icons = new Proxy({}, { get: () => () => null });
 const passwordView = () => null;
 function magicView(cooldown = () => ({ active: false, label: '', start() {} })) {
   return registrationViewHarness('../login/MagicLinkLoginForm.jsx', {
+    '@/lib/referral-sync.mjs': { beginVerifiedReferralSync: () => Promise.resolve({ ok: true }) },
     'lucide-react': icons,
     '@/lib/useResendCooldown': { useResendCooldown: cooldown, isMicrosoftEmail: () => false, suggestEmailFix: () => '' },
     '@/lib/password': { checkPassword: () => ({ results: [] }), isValidPassword: () => true },
-    '@/lib/referral-attribution': { bindReferralToEmail() {}, captureReferralFromUrl: () => null,
+    '@/lib/referral-attribution': { bindReferralCodeToEmail() {}, captureReferralFromUrl: () => null,
       normalizePlacementSide: side => ['L', 'R'].includes(side) ? side : '', normalizeReferralCode: value => value },
     '@/lib/email-otp-client.mjs': emailOtp,
     './BetterAuthPasswordLogin': { default: passwordView },
@@ -241,8 +242,8 @@ test('legacy-account guidance and its registration link are generic and availabl
     if (stage === 'request') assert.match(html, /Puedes entrar con un código al correo aunque no tengas contraseña/);
     assert.match(html, /solicita un código con tu correo original/);
     assert.match(html, /Tu cuenta y posición en la red se conservan/);
-    assert.match(html, /verificar el correo no las vincula automáticamente/);
-    assert.match(html, /la vinculación requiere revisión y aprobación/);
+    assert.match(html, /Tu cuenta y posición en la red se conservan/);
+    assert.match(html, /si tu vinculación requiere revisión, debe aprobarse antes de entrar/);
     assert.match(html, /Si todavía no tienes un acceso, utiliza Registro/);
     assert.doesNotMatch(html, /aún no creaste tu nuevo acceso, créalo en Registro/);
     const register = find(tree, node => node?.type === 'a' && node.props.children === 'Crear acceso en Registro');

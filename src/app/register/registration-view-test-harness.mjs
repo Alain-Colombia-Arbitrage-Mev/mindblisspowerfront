@@ -30,7 +30,7 @@ export function registrationViewHarness(filename, mocks) {
     const index = effectIndex++;
     const previous = effects[index];
     if (!previous || dependencies?.some((value, i) => value !== previous.dependencies[i])) queued.push(() => {
-      previous?.cleanup?.(); effects[index] = { dependencies, cleanup: effect() };
+      previous?.cleanup?.(); effects[index] = { dependencies, effect, cleanup: effect() };
     });
   } };
   const source = readFileSync(new URL(filename, import.meta.url), 'utf8');
@@ -47,7 +47,11 @@ export function registrationViewHarness(filename, mocks) {
     const tree = module.exports.default(props);
     while (queued.length) queued.shift()();
     return tree;
-  }, state, unmount() { for (const effect of effects) effect?.cleanup?.(); } };
+  }, state, replayEffects() {
+    // React StrictMode replays mounted effects before user interaction.
+    for (const entry of effects) entry?.cleanup?.();
+    for (const entry of effects) if (entry) entry.cleanup = entry.effect();
+  }, unmount() { for (const effect of effects) effect?.cleanup?.(); } };
 }
 
 export function findRegistrationNode(node, predicate) {

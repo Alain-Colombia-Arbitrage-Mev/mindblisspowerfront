@@ -7,6 +7,7 @@ import * as registration from '../register/registration-model.mjs';
 import * as emailOtp from '../../lib/email-otp-client.mjs';
 import { authSuccess } from '../../lib/auth-response.mjs';
 import * as auth from './better-auth-login.mjs';
+import * as referral from '../../lib/referral-attribution.js';
 
 const email = 'member@example.test';
 const props = { authMode: 'better-auth', initialEmail: email };
@@ -19,13 +20,14 @@ function browser(t) {
   t.after(() => { if (previous === undefined) delete globalThis.window; else globalThis.window = previous; });
   return destinations;
 }
-function view({ microsoft = false } = {}) {
+function view({ microsoft = false, attribution, sync = () => Promise.resolve({ ok: true }) } = {}) {
   return registrationViewHarness('../login/MagicLinkLoginForm.jsx', {
     'lucide-react': new Proxy({}, { get: () => () => null }),
     '@/lib/useResendCooldown': { useResendCooldown: () => ({ active: false, label: '', start() {} }), isMicrosoftEmail: () => microsoft, suggestEmailFix: () => '' },
     '@/lib/password': { checkPassword: () => ({ results: [] }), isValidPassword: () => true },
-    '@/lib/referral-attribution': { bindReferralToEmail() {}, captureReferralFromUrl: () => null, normalizePlacementSide: () => '', normalizeReferralCode: value => value },
+    '@/lib/referral-attribution': attribution || { bindReferralCodeToEmail() {}, captureReferralFromUrl: () => null, normalizePlacementSide: () => '', normalizeReferralCode: value => value },
     '@/lib/email-otp-client.mjs': emailOtp, './BetterAuthPasswordLogin': { default: () => null },
+    '@/lib/referral-sync.mjs': { beginVerifiedReferralSync: sync },
     './better-auth-login.mjs': auth, '../register/registration-model.mjs': registration,
   });
 }
@@ -76,7 +78,7 @@ test('rejected login OTP guidance cannot reflect provider diagnostics, delivery 
   harness.unmount();
 });
 
-test('accepted OTP displays durable accessible email confirmation before any user-initiated navigation', async t => {
+test('accepted OTP enters the panel immediately after matching canonical access, once across rerenders and repeated clicks', async t => {
   const destinations = browser(t), paths = [];
   t.mock.method(globalThis, 'fetch', async path => {
     paths.push(path);
@@ -85,6 +87,7 @@ test('accepted OTP displays durable accessible email confirmation before any use
   });
   const harness = view();
   assert.doesNotMatch(html(harness), /Correo verificado correctamente/);
+  harness.replayEffects();
   await enterCode(harness);
   for (let render = 0; render < 3; render++) {
     const rendered = html(harness);
@@ -93,7 +96,8 @@ test('accepted OTP displays durable accessible email confirmation before any use
     assert.match(rendered, /member@example\.test/);
     assert.match(rendered, /Continuar al panel/);
     assert.doesNotMatch(rendered, /id="login-code"|Reenviar|Enviar código/);
-    assert.deepEqual(destinations, []);
+    assert.match(rendered, /Abriendo tu panel/);
+    assert.deepEqual(destinations, ['/dashboard']);
   }
   assert.equal(paths.length, 3, 'rerendering never resends or rechecks automatically');
   await find(harness.render(props), node => node?.props?.children === 'Continuar al panel').props.onClick();
@@ -112,7 +116,7 @@ test('verified email remains distinct from legacy approval and a manual access r
   const harness = view(); await enterCode(harness);
   assert.match(html(harness), /Correo verificado correctamente/);
   assert.match(html(harness), /revisión de identidad y aprobación de vinculación/);
-  assert.match(html(harness), /no aprueba automáticamente/);
+  assert.match(html(harness), /Si tu cuenta anterior requiere revisión/);
   assert.doesNotMatch(html(harness), /Continuar al panel/);
   await find(harness.render(props), node => node?.props?.children === 'Revisar acceso').props.onClick();
   assert.equal(paths.filter(path => path.includes('send-verification')).length, 1);
@@ -158,8 +162,8 @@ test('send acknowledgements, rejected OTPs and malformed or mismatched proof nev
   assert.deepEqual(destinations, []);
 });
 
-test('password login uses the same verified confirmation contract without an immediate redirect or email send', async t => {
-  const destinations = browser(t), verified = [], referrals = [], paths = [];
+test('password login enters through the same parent callback only after matching canonical access, without an email send', async t => {
+  const destinations = browser(t), paths = [];
   let releaseSession, sessionStarted;
   const checkingSession = new Promise(resolve => { sessionStarted = resolve; });
   t.mock.method(globalThis, 'fetch', async path => {
@@ -170,28 +174,29 @@ test('password login uses the same verified confirmation contract without an imm
     }
     return Response.json(proof());
   });
+  const parent = view(), parentProps = { ...props, initialMode: 'password' };
+  const passwordProps = find(parent.render(parentProps), node => typeof node?.props?.onVerified === 'function').props;
   const harness = registrationViewHarness('../login/BetterAuthPasswordLogin.jsx', {
     'next/link': { default: ({ children, ...attributes }) => React.createElement('a', attributes, children) },
     '../register/RegistrationFields': { RegistrationField: registrationFieldStub, RegistrationButton: registrationButtonStub,
       RegistrationPassword: ({ visible: _visible, onToggle: _onToggle, ...attributes }) => registrationFieldStub(attributes) },
     './better-auth-login.mjs': auth, '../register/registration-model.mjs': registration,
   });
-  const passwordProps = { email, setEmail() {}, onBusy() {}, onError() {}, onNotice() {}, rememberReferral: recipient => referrals.push(recipient),
-    onVerified: (recipient, access) => verified.push({ recipient, access }) };
   harness.render(passwordProps); harness.state[0] = 'Synthetic Existing Password';
   const pending = submit(harness.render(passwordProps));
   await checkingSession;
-  assert.deepEqual(verified, [], 'the child keeps ownership of its pending canonical lookup instead of unmounting itself through its parent');
-  assert.deepEqual(referrals, [], 'referral callbacks also wait for the current canonical result');
+  assert.doesNotMatch(renderToStaticMarkup(parent.render(parentProps)), /Correo verificado correctamente/);
+  assert.deepEqual(destinations, [], 'native proof alone cannot enter before the current canonical session check');
   assert.equal(find(harness.render(passwordProps), node => node?.type === 'form').props['aria-busy'], true);
   releaseSession(Response.json({ authenticated: true, mode: 'better-auth', email }));
   await pending;
-  assert.deepEqual(verified, [{ recipient: email, access: { ready: true } }]);
-  assert.deepEqual(referrals, [email]);
+  assert.match(renderToStaticMarkup(parent.render(parentProps)), /Correo verificado correctamente/);
   assert.deepEqual(paths, ['/api/auth/sign-in/email', '/api/auth/session']);
   assert.equal(harness.state[0], '');
-  assert.deepEqual(destinations, []);
-  harness.unmount();
+  assert.deepEqual(destinations, ['/dashboard']);
+  passwordProps.onVerified(email, { ready: true });
+  assert.deepEqual(destinations, ['/dashboard'], 'a repeated completion callback cannot navigate twice');
+  harness.unmount(); parent.unmount();
 });
 
 test('an old canonical cookie for another email never makes the newly verified account ready', async t => {
@@ -240,9 +245,74 @@ test('a current explicit access review can proceed without sending or redeeming 
       : path === '/api/auth/session' ? { authenticated: ++checks > 1, mode: 'better-auth', email } : proof());
   });
   const harness = view(); await enterCode(harness);
-  await find(harness.render(props), node => node?.props?.children === 'Revisar acceso').props.onClick();
+  const review = find(harness.render(props), node => node?.props?.children === 'Revisar acceso').props.onClick;
+  await review(); await review();
   assert.deepEqual(destinations, ['/dashboard']);
   assert.deepEqual(paths, ['/api/auth/email-otp/send-verification-otp', '/api/auth/sign-in/email-otp', '/api/auth/session', '/api/auth/session']);
+  harness.unmount();
+});
+
+test('OTP proof waits for the current canonical response and an abandoned lookup cannot navigate or update state', async t => {
+  const destinations = browser(t), paths = [];
+  let release, signal, started;
+  const checking = new Promise(resolve => { started = resolve; });
+  t.mock.method(globalThis, 'fetch', async (path, options) => {
+    paths.push(path);
+    if (path === '/api/auth/session') {
+      signal = options.signal; started();
+      return new Promise(resolve => { release = resolve; });
+    }
+    return Response.json(path.endsWith('/send-verification-otp') ? { ok: true } : proof());
+  });
+  const harness = view();
+  const pending = enterCode(harness);
+  await checking;
+  assert.match(html(harness), /Comprobando tu acceso actual/);
+  assert.deepEqual(destinations, [], 'OTP ownership is not sufficient for dashboard entry');
+  harness.unmount(); const state = [...harness.state];
+  assert.equal(signal.aborted, true);
+  release(Response.json({ authenticated: true, mode: 'better-auth', email }));
+  await pending;
+  assert.deepEqual(harness.state, state);
+  assert.deepEqual(destinations, []);
+  assert.deepEqual(paths, ['/api/auth/email-otp/send-verification-otp', '/api/auth/sign-in/email-otp', '/api/auth/session']);
+});
+
+test('stale password completion and old review controls cannot navigate after the parent is abandoned or another email is selected', async t => {
+  const destinations = browser(t);
+  t.mock.method(globalThis, 'fetch', async path => Response.json(path.endsWith('/send-verification-otp') ? { ok: true }
+    : path === '/api/auth/session' ? { authenticated: false, mode: 'better-auth' } : proof()));
+  const harness = view(); await enterCode(harness);
+  const review = find(harness.render(props), node => node?.props?.children === 'Revisar acceso').props.onClick;
+  find(harness.render(props), node => node?.props?.children === 'Usar otro correo').props.onClick();
+  await review();
+  assert.deepEqual(destinations, []);
+  const password = view(), passwordProps = { ...props, initialMode: 'password' };
+  const complete = find(password.render(passwordProps), node => typeof node?.props?.onVerified === 'function').props.onVerified;
+  password.unmount(); const state = [...password.state];
+  complete(email, { ready: true });
+  assert.deepEqual(password.state, state);
+  assert.deepEqual(destinations, []);
+  harness.unmount();
+});
+
+test('automatic entry keeps this tab sponsor and branch bound to its own email despite another tab changing global referral context', async t => {
+  const destinations = browser(t), values = new Map();
+  const storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, String(value)), removeItem: key => values.delete(key) };
+  window.localStorage = storage;
+  window.location.search = '?ref=SponsorA&side=L';
+  t.mock.method(globalThis, 'fetch', async path => Response.json(path.endsWith('/send-verification-otp') ? { ok: true }
+    : path === '/api/auth/session' ? { authenticated: true, mode: 'better-auth', email } : proof()));
+  const saves = [];
+  const harness = view({ attribution: referral, sync: (...values) => { saves.push(values); return new Promise(() => {}); } });
+  harness.render(props); harness.render(props);
+  referral.captureReferralFromUrl('?ref=SponsorB&side=R', storage);
+  referral.bindReferralCodeToEmail('other@example.test', 'SponsorOther', storage, undefined, 'login', 'R');
+  await enterCode(harness);
+  assert.deepEqual(destinations, ['/dashboard']);
+  assert.deepEqual(saves, [[email, 'SponsorA', 'L']], 'a pending background save never delays entry or uses the other tab hint');
+  assert.deepEqual(referral.referralForCheckout(email, storage), { code: 'SponsorA', email, side: 'L' });
+  assert.deepEqual(referral.referralForCheckout('other@example.test', storage), { code: 'SponsorOther', email: 'other@example.test', side: 'R' });
   harness.unmount();
 });
 

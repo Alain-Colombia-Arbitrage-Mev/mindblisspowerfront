@@ -17,7 +17,8 @@ const modes = new Map([[sessionCookie, 'member'],
 const metrics = { tokens: 0, jwks: 0, verifiedReferrals: 0, sensitiveJwksHeaders: 0, registrations: 0, contactRegistrations: 0, phoneCalls: 0,
   stripeCheckoutCalls: 0, stripeResumeCalls: 0, nowpaymentsCheckoutCalls: 0, nowpaymentsCaptures: 0, nowpaymentsStatusReads: 0,
   nowpaymentsPurchaseReads: 0, nowpaymentsPurchaseResumes: 0, nowpaymentsPurchaseCancels: 0, signOutCalls: 0,
-  passwordRecoveryRequests: 0, passwordRecoveryResets: 0 };
+  passwordRecoveryRequests: 0, passwordRecoveryResets: 0, referralPreferenceReads: 0, referralPreferenceWrites: 0 };
+let referralPreference = { ok: true, ref: '', preferred_side: '', positioned: false };
 const receiptOrder = 'a02f5a55-5fa3-4239-845b-ac6b699110ee';
 const operationalOrder = 'a02f5a55-5fa3-4239-845b-ac6b699110ef';
 let capturedPaymentStatus = 'waiting';
@@ -68,6 +69,21 @@ const syntheticEnv = {
     privateCalls++;
     const target = new URL(url);
     const headers = new Headers(options.headers);
+    if (target.hostname === 'payments.core.internal' && target.pathname === '/api/payments/referral-attribution') {
+      if (headers.get('x-vp-service-token') !== 'synthetic-service-only'
+        || !await validForwardedIdentity(headers.get('x-vp-id-token') || '')) return Response.json({ error: 'unauthenticated' }, { status: 401 });
+      if (options.method === 'GET' && target.search === '?email=fixture%40example.test') {
+        metrics.referralPreferenceReads++;
+        return Response.json(referralPreference);
+      }
+      const body = JSON.parse(options.body || '{}');
+      if (options.method !== 'POST' || JSON.stringify(body) !== JSON.stringify({ email: 'fixture@example.test', ref: 'SYNTHETIC-SPONSOR', preferred_side: 'R' })) {
+        throw new Error('invalid_synthetic_referral_preference');
+      }
+      metrics.referralPreferenceWrites++;
+      referralPreference = { ok: true, ref: body.ref, preferred_side: body.preferred_side, positioned: false };
+      return Response.json(referralPreference);
+    }
     if (target.hostname === 'payments.core.internal' && target.pathname.startsWith('/api/payments/nowpayments/purchases')) {
       if (headers.get('x-vp-service-token') !== 'synthetic-service-only'
           || !await validForwardedIdentity(headers.get('x-vp-id-token') || '')) return Response.json({ error: 'unauthenticated' }, { status: 401 });

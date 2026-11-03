@@ -159,6 +159,21 @@ test('registration retains an explicit right branch even before visiting login a
   });
 });
 
+test('independent tabs bind their own explicit sponsor and branch even after another tab captures a different link', () => {
+  const storage = new MemoryStorage();
+  const firstTab = captureReferralFromUrl('?ref=FirstSponsor&side=R', storage, now);
+  const secondTab = captureReferralFromUrl('?ref=SecondSponsor&side=L', storage, now + 1);
+  bindReferralCodeToEmail('first@example.test', firstTab.code, storage, now + 2, 'login', firstTab.side);
+  bindReferralCodeToEmail('second@example.test', secondTab.code, storage, now + 3, 'login', secondTab.side);
+  assert.deepEqual(referralForCheckout('first@example.test', storage, now + 4), {
+    code: 'FirstSponsor', email: 'first@example.test', side: 'R',
+  });
+  assert.deepEqual(referralForCheckout('second@example.test', storage, now + 4), {
+    code: 'SecondSponsor', email: 'second@example.test', side: 'L',
+  });
+  assert.deepEqual(referralForCheckout('unrelated@example.test', storage, now + 4), { code: '', email: '' });
+});
+
 test('a newer explicit registration hint wins over a stale legacy draft without changing the draft or any other mailbox', () => {
   const oldDraft = JSON.stringify({ email: 'member@example.test', referralCode: 'OldSponsor', preferredSide: 'L', createdAt: new Date(now).toISOString() });
   const storage = new MemoryStorage({ mp_registration_draft: oldDraft });

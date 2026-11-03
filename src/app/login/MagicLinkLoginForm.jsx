@@ -18,11 +18,12 @@ import { useEffect, useRef, useState } from "react";
 
 import { isMicrosoftEmail, suggestEmailFix, useResendCooldown } from "@/lib/useResendCooldown";
 import { checkPassword, isValidPassword } from "@/lib/password";
-import { bindReferralToEmail, captureReferralFromUrl, normalizePlacementSide, normalizeReferralCode } from "@/lib/referral-attribution";
+import { bindReferralCodeToEmail, captureReferralFromUrl, normalizePlacementSide, normalizeReferralCode } from "@/lib/referral-attribution";
 import { otpRequest, otpFailureMessage, otpTimeoutMs, OTP_SEND_NOTICE, OTP_SEND_UNCONFIRMED_NOTICE } from "@/lib/email-otp-client.mjs";
 import BetterAuthPasswordLogin from './BetterAuthPasswordLogin';
 import { betterAuthAccess, verifiedEmailSignIn } from './better-auth-login.mjs';
 import { registrationRequired, registrationRedirect, registrationRetrySeconds, registrationUrl } from '../register/registration-model.mjs';
+import { beginVerifiedReferralSync } from '@/lib/referral-sync.mjs';
 
 const AUTH_STATE_MESSAGES = {
   "invalid-email": {
@@ -60,6 +61,9 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
   const [codeRecipient, setCodeRecipient] = useState("");
   const otpSubmittingRef = useRef(false);
   const otpRequestRef = useRef(null);
+  const mountedRef = useRef(false);
+  const verifiedLoginRef = useRef(null);
+  const dashboardNavigationRef = useRef(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [accessHelpPhone, setAccessHelpPhone] = useState("");
@@ -85,9 +89,15 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     }
   }, []);
 
-  useEffect(() => () => {
-    otpRequestRef.current?.abort();
-    otpRequestRef.current = null;
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      verifiedLoginRef.current = null;
+      otpRequestRef.current?.abort();
+      otpRequestRef.current = null;
+      otpSubmittingRef.current = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -95,32 +105,47 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
   }, [verifiedEmail]);
 
   function showVerifiedLogin(verifiedEmail, access) {
+    if (!mountedRef.current || dashboardNavigationRef.current) return;
     setError('');
     setNotice('');
     setLoginCode('');
-    setVerifiedLogin({ email: verifiedEmail, access });
+    const verified = { email: verifiedEmail, access };
+    verifiedLoginRef.current = verified;
+    setVerifiedLogin(verified);
+    enterVerifiedDashboard(verified);
+  }
+
+  function enterVerifiedDashboard(verified) {
+    if (!mountedRef.current || dashboardNavigationRef.current || verifiedLoginRef.current !== verified
+      || verified.access.ready !== true || verified.access.checking || verified.access.error) return;
+    // Only the current canonical lookup can reach here, after matching the
+    // verified recipient. Navigation itself never grants network permissions.
+    rememberReferralForEmail(verified.email);
+    if (referralCode) void beginVerifiedReferralSync(verified.email, referralCode, preferredSide);
+    dashboardNavigationRef.current = true;
+    window.location.assign('/dashboard');
   }
 
   async function continueVerifiedLogin() {
-    if (otpSubmittingRef.current || isLoading) return;
-    if (verifiedLogin.access.ready) {
-      // The initial check already proved this session; the destination enforces
-      // authorization again, without duplicating a successful session read.
-      window.location.assign('/dashboard');
+    if (!mountedRef.current || dashboardNavigationRef.current || otpSubmittingRef.current || isLoading) return;
+    const verified = verifiedLoginRef.current;
+    if (!verified) return;
+    if (verified.access.ready === true) {
+      enterVerifiedDashboard(verified);
       return;
     }
     otpSubmittingRef.current = true;
     const controller = new AbortController();
     otpRequestRef.current = controller;
-    const recipient = verifiedLogin.email;
+    const recipient = verified.email;
     setLoadingAction('access-check');
     try {
       // Recheck the current server session; the confirmation never grants a
       // network binding, role, rank or placement by itself.
       const access = await betterAuthAccess(fetch, recipient, { signal: controller.signal });
-      if (controller.signal.aborted || otpRequestRef.current !== controller) return;
-      if (access.ready) window.location.assign('/dashboard');
-      else setVerifiedLogin(current => current?.email === recipient ? { ...current, access } : current);
+      if (controller.signal.aborted || otpRequestRef.current !== controller
+        || verifiedLoginRef.current !== verified) return;
+      showVerifiedLogin(recipient, access);
     } finally {
       if (otpRequestRef.current === controller) {
         otpRequestRef.current = null;
@@ -131,7 +156,8 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
   }
 
   function useAnotherEmail() {
-    if (isLoading) return;
+    if (isLoading || dashboardNavigationRef.current) return;
+    verifiedLoginRef.current = null;
     setVerifiedLogin(null);
     setEmail('');
     setCodeRecipient('');
@@ -157,7 +183,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
 
   function rememberReferralForEmail(normalizedEmail) {
     if (!referralCode) return;
-    bindReferralToEmail(normalizedEmail);
+    bindReferralCodeToEmail(normalizedEmail, referralCode, undefined, undefined, 'login', preferredSide);
   }
 
   function continueToRegistration(normalizedEmail) {
@@ -614,10 +640,10 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
         {access.error ? <Message tone="danger">{access.error}</Message> : null}
         <p className="text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
           {access.checking ? 'Comprobando tu acceso actual a la red…' : access.ready
-            ? 'Tu sesión tiene acceso al portal. Pulsa Continuar para abrir el panel.'
+            ? 'Tu sesión tiene acceso al portal. Abriendo tu panel…'
             : access.notice || 'No pudimos comprobar todavía tu acceso a la red. Puedes revisarlo sin solicitar otro código.'}
         </p>
-        <p className="text-sm leading-6" style={{ color: "var(--vp-muted)" }}>Verificar el correo no aprueba automáticamente la vinculación a una cuenta anterior ni asigna una posición en la red.</p>
+        <p className="text-sm leading-6" style={{ color: "var(--vp-muted)" }}>Si tu cuenta anterior requiere revisión, la vinculación debe aprobarse antes de entrar. Verificar el correo no asigna por sí solo una posición en la red.</p>
         <SecondaryButton disabled={isLoading || access.checking} onClick={continueVerifiedLogin} icon={<ArrowRight size={16} />}>
           {isLoading || access.checking ? 'Comprobando acceso…' : access.ready ? 'Continuar al panel' : 'Revisar acceso'}
         </SecondaryButton>
@@ -812,7 +838,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
         </form>
       )}
       {emailOtpOnly ? <div className="space-y-2 border-t pt-4 text-sm leading-6" style={{ borderColor: "var(--vp-border)", color: "var(--vp-muted)" }}>
-        <p className="m-0">Si ya pertenecías a la red, solicita un código con tu correo original. Tu cuenta y posición en la red se conservan; verificar el correo no las vincula automáticamente y la vinculación requiere revisión y aprobación. Si todavía no tienes un acceso, utiliza Registro.</p>
+        <p className="m-0">Si ya pertenecías a la red, solicita un código con tu correo original. Tu cuenta y posición en la red se conservan; si tu vinculación requiere revisión, debe aprobarse antes de entrar. Si todavía no tienes un acceso, utiliza Registro.</p>
         <a className="font-bold no-underline" style={{ color: "var(--vp-text-soft)" }} href={registrationUrl(codeStep === "confirm" ? codeRecipient : email, referralCode, preferredSide)}>Crear acceso en Registro</a>
       </div> : null}
     </div>

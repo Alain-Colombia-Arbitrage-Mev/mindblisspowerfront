@@ -20,6 +20,7 @@ export default async function LoginPage({ searchParams }) {
   const initialSide = sp.side === "L" || sp.side === "R" ? sp.side : "";
   const emailOtpOnly = betterAuthEnabled();
   const initialMode = sp.mode === 'password' ? 'password' : 'code';
+  const formContext = JSON.stringify([emailOtpOnly ? 'better-auth' : 'cognito', initialEmail, initialRef, initialSide, initialMode]);
 
   return (
     <AuthShell
@@ -48,7 +49,7 @@ export default async function LoginPage({ searchParams }) {
           boxShadow: "var(--vp-shadow)",
         }}
       >
-        <MagicLinkLoginForm authMode={emailOtpOnly ? "better-auth" : "cognito"} authState={authState} initialEmail={initialEmail} initialRef={initialRef} initialSide={initialSide} initialMode={initialMode} />
+        <MagicLinkLoginForm key={formContext} authMode={emailOtpOnly ? "better-auth" : "cognito"} authState={authState} initialEmail={initialEmail} initialRef={initialRef} initialSide={initialSide} initialMode={initialMode} />
 
         <div className="mt-6 flex flex-wrap items-center justify-center gap-3 border-t pt-5 text-sm" style={{ borderColor: "var(--vp-border)" }}>
           <Link href={registrationUrl(initialEmail, initialRef, initialSide)} className="inline-flex min-h-11 items-center font-bold transition hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--vp-accent)]" style={{ color: "var(--vp-text-soft)" }}>
