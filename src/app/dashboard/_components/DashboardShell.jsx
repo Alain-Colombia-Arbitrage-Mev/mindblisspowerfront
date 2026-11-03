@@ -22,17 +22,49 @@ export default function DashboardShell({ authMode: _authMode, children }) {
   const referralSubmitting = useRef(false);
   const closeMenu = useCallback(() => setMobileMenuOpen(false), []);
 
+  function showReferralResult(recipient, result) {
+    const visit = pendingVerifiedReferral(recipient);
+    const confirmed = result?.ok === true && (result.positioned || (result.ref
+      && (!visit || (result.ref === visit.ref && result.preferred_side === visit.preferred_side))));
+    let notice = '', choice = null;
+    if (!confirmed && visit) {
+      notice = 'No pudimos confirmar que tu enlace de referido quedó guardado. Reintenta antes de comprar; no se ha cambiado tu posición en la red.';
+    } else if (result?.ok !== true) {
+      notice = 'No pudimos confirmar el guardado de tu enlace de referido. Intenta más tarde antes de comprar. Tu posición en la red no se ha cambiado.';
+    } else if (!result.positioned && !result.ref) {
+      choice = browserReferralChoice(recipient);
+      if (choice) notice = 'Hay un enlace guardado sólo en este dispositivo, sin confirmar en el servidor. Puedes elegirlo de nuevo antes de comprar; no se guardará automáticamente ni cambiará una posición existente.';
+    }
+    setReferralChoice(choice);
+    setReferralNotice(notice);
+    return Boolean(visit && !confirmed);
+  }
+
   useEffect(() => {
     setMobileMenuOpen(false);
   }, [pathname]);
 
   useEffect(() => {
     let cancelled = false;
-    const view = { email: '' };
+    const view = { email: '', revision: 0, timer: null };
     referralView.current = view;
+    const checkReferral = (recipient, allowRecheck = true) => {
+      const revision = ++view.revision;
+      void readVerifiedReferral(recipient).then(result => {
+        if (cancelled || referralView.current !== view || view.email !== recipient || view.revision !== revision) return;
+        const pending = showReferralResult(recipient, result);
+        // A keepalive save may still belong to the previous document. One
+        // bounded GET after its request window reconciles that race, not a poll.
+        if (pending && allowRecheck) view.timer = setTimeout(() => {
+          view.timer = null;
+          if (!cancelled && referralView.current === view && view.email === recipient && view.revision === revision)
+            checkReferral(recipient, false);
+        }, 5000);
+      });
+    };
     const loadSession = () => {
       fetch("/api/auth/session", { cache: "no-store" })
-        .then((r) => r.json())
+        .then((r) => r.ok ? r.json() : null)
         .then((d) => {
           if (cancelled) return;
           if (d?.name || d?.email)
@@ -45,18 +77,7 @@ export default function DashboardShell({ authMode: _authMode, children }) {
           if (d?.authenticated === true && d?.mode === 'better-auth' && typeof d.email === 'string') {
             const recipient = d.email.trim().toLowerCase();
             view.email = recipient;
-            void readVerifiedReferral(recipient).then(result => {
-              if (cancelled || referralView.current !== view || view.email !== recipient) return;
-              if (!result.positioned && pendingVerifiedReferral(recipient)) {
-                setReferralNotice('No pudimos confirmar que tu enlace de referido quedó guardado. Reintenta antes de comprar; no se ha cambiado tu posición en la red.');
-              } else if (result.ok && !result.positioned && !result.ref) {
-                const choice = browserReferralChoice(recipient);
-                if (choice) {
-                  setReferralChoice(choice);
-                  setReferralNotice('Hay un enlace guardado sólo en este dispositivo, sin confirmar en el servidor. Puedes elegirlo de nuevo antes de comprar; no se guardará automáticamente ni cambiará una posición existente.');
-                }
-              }
-            });
+            checkReferral(recipient);
           }
         })
         .catch(() => {});
@@ -76,6 +97,7 @@ export default function DashboardShell({ authMode: _authMode, children }) {
     window.addEventListener("vp:profile-updated", onProfileUpdated);
     return () => {
       cancelled = true;
+      clearTimeout(view.timer);
       if (referralView.current === view) referralView.current = null;
       window.removeEventListener("vp:profile-updated", onProfileUpdated);
     };
@@ -85,12 +107,14 @@ export default function DashboardShell({ authMode: _authMode, children }) {
     const view = referralView.current;
     if (!view?.email || referralSubmitting.current) return;
     referralSubmitting.current = true;
+    view.revision++;
+    clearTimeout(view.timer);
+    view.timer = null;
     setReferralSaving(true);
     try {
       const result = await (referralChoice ? chooseBrowserReferral(view.email, referralChoice) : retryVerifiedReferral(view.email));
       if (referralView.current !== view) return;
-      setReferralNotice(result.ok ? '' : 'No pudimos confirmar el guardado de tu enlace de referido. Intenta más tarde antes de comprar. Tu posición en la red no se ha cambiado.');
-      if (result.ok) setReferralChoice(null);
+      showReferralResult(view.email, result);
     } finally {
       referralSubmitting.current = false;
       if (referralView.current === view) setReferralSaving(false);

@@ -113,6 +113,62 @@ test('parallel dashboard reads are singleflight and malformed, failed or mismatc
   assert.equal(pendingVerifiedReferral(email, { browser: owner }).ref, 'Wanted');
 });
 
+test('a checkout read started before a confirmed write cannot authorize an older durable referral', async () => {
+  const owner = browser(), stale = pending(); let reads = 0;
+  bindReferralCodeToEmail(email, 'CurrentVisit', owner.localStorage, undefined, 'login', 'L');
+  await beginVerifiedReferralSync(email, 'CurrentVisit', 'L', { browser: owner, fetchImpl: async () => Response.json({}, { status: 503 }) });
+  const checkout = verifiedReferralForCheckout(email, { browser: owner, fetchImpl: async () => {
+    reads++;
+    return reads === 1 ? stale.promise : Response.json(serverHint('CurrentVisit', 'L'));
+  } });
+  assert.equal(reads, 1);
+  assert.equal((await retryVerifiedReferral(email, { browser: owner, fetchImpl: async () => Response.json(serverHint('CurrentVisit', 'L')) })).ok, true);
+  stale.resolve(Response.json(serverHint('OlderDurable', 'R')));
+  assert.deepEqual(await checkout, { ok: true, code: 'CurrentVisit', email, side: 'L' });
+  assert.equal(reads, 2, 'one fresh GET replaces the reply that predates the completed write');
+});
+
+test('reads observe an already-started verified save without resending it, even when tab storage is denied', async () => {
+  for (const denied of [false, true]) {
+    const owner = browser(), transport = pending(), methods = [];
+    if (denied) owner.sessionStorage = { getItem() { throw new Error('denied'); }, setItem() { throw new Error('denied'); } };
+    bindReferralCodeToEmail(email, 'CurrentVisit', owner.localStorage, undefined, 'login', 'L');
+    const saving = beginVerifiedReferralSync(email, 'CurrentVisit', 'L', { browser: owner, fetchImpl: async (_path, input) => {
+      methods.push(input.method); return transport.promise;
+    } });
+    const checkout = verifiedReferralForCheckout(email, { browser: owner, fetchImpl: async (_path, input) => {
+      methods.push(input.method || 'GET'); return Response.json(serverHint('CurrentVisit', 'L'));
+    } });
+    assert.deepEqual(methods, ['POST'], 'a read waits for the existing request rather than racing or replaying it');
+    transport.resolve(Response.json(serverHint('CurrentVisit', 'L'))); await saving;
+    assert.deepEqual(await checkout, { ok: true, code: 'CurrentVisit', email, side: 'L' });
+    assert.deepEqual(methods, ['POST', 'GET']);
+  }
+});
+
+test('singleflight never shares an owner lookup between different browser contexts', async () => {
+  const firstBrowser = browser(), secondBrowser = browser(), firstReply = pending(), secondReply = pending();
+  let firstReads = 0, secondReads = 0;
+  const first = readVerifiedReferral(email, { browser: firstBrowser, fetchImpl: async () => { firstReads++; return firstReply.promise; } });
+  const second = readVerifiedReferral(email, { browser: secondBrowser, fetchImpl: async () => { secondReads++; return secondReply.promise; } });
+  assert.equal(firstReads, 1); assert.equal(secondReads, 1);
+  firstReply.resolve(Response.json(serverHint('FirstBrowser', 'L')));
+  secondReply.resolve(Response.json(serverHint('SecondBrowser', 'R')));
+  assert.deepEqual(await first, serverHint('FirstBrowser', 'L'));
+  assert.deepEqual(await second, serverHint('SecondBrowser', 'R'));
+});
+
+test('repeated concurrent verified changes fail closed after one fresh GET instead of looping or accepting a stale snapshot', async () => {
+  const owner = browser(); let reads = 0;
+  const result = await verifiedReferralForCheckout(email, { browser: owner, fetchImpl: async () => {
+    reads++;
+    await beginVerifiedReferralSync(email, `Visit${reads}`, 'L', { browser: owner, fetchImpl: async () => Response.json(serverHint(`Visit${reads}`, 'L')) });
+    return Response.json(serverHint('OlderDurable', 'R'));
+  } });
+  assert.deepEqual(result, { ok: false, error: 'unavailable' });
+  assert.equal(reads, 2);
+});
+
 test('expired or unavailable tab markers retain the browser backup as a visible fresh choice, never an automatic replay or silent default', async () => {
   for (const unavailable of [false, true]) {
     const owner = browser(), calls = [];

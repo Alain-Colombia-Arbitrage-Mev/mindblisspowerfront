@@ -2,10 +2,14 @@ import { normalizeReferralCode, normalizeReferralEmail, normalizePlacementSide, 
 
 const key = 'mp_ref_verified_visit.v1';
 const ttl = 30 * 60 * 1000;
-const reads = new Map();
-const writes = new Map();
+const scopes = new WeakMap();
 const endpoint = '/api/member/referral-attribution';
 const browserDefault = () => typeof window === 'undefined' ? undefined : window;
+function syncState(browser) {
+  const scope = browser && typeof browser === 'object' ? browser : globalThis;
+  if (!scopes.has(scope)) scopes.set(scope, { reads: new Map(), writes: new Map(), revision: 0 });
+  return scopes.get(scope);
+}
 function validResponse(body) {
   return body && typeof body === 'object' && !Array.isArray(body)
     && Object.keys(body).every(key => ['ok', 'ref', 'preferred_side', 'positioned'].includes(key))
@@ -34,8 +38,10 @@ function clearVisit(visit, browser) {
 const matches = (result, visit) => result.positioned || (result.ref === visit.ref && result.preferred_side === visit.preferred_side);
 
 async function postVisit(visit, { browser = browserDefault(), fetchImpl = fetch } = {}) {
+  const state = syncState(browser), { writes } = state;
   const flight = `${visit.email}:${visit.id}`;
   if (writes.has(flight)) return writes.get(flight);
+  state.revision++;
   const completion = (async () => {
     try {
       const response = await fetchImpl(endpoint, { method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error',
@@ -48,7 +54,9 @@ async function postVisit(visit, { browser = browserDefault(), fetchImpl = fetch 
     } catch { return { ok: false }; }
   })();
   writes.set(flight, completion);
-  try { return await completion; } finally { if (writes.get(flight) === completion) writes.delete(flight); }
+  try { return await completion; } finally {
+    if (writes.get(flight) === completion) { writes.delete(flight); state.revision++; }
+  }
 }
 
 // Called only after verified proof plus the matching canonical session. This is
@@ -96,16 +104,27 @@ export async function readVerifiedReferral(email, options = {}) {
   const normalized = normalizeReferralEmail(email);
   if (!normalized) return { ok: false };
   const browser = options.browser || browserDefault(), fetchImpl = options.fetchImpl || fetch;
+  const state = syncState(browser), { reads } = state;
   if (reads.has(normalized)) return reads.get(normalized);
   const completion = (async () => {
     try {
-      const response = await fetchImpl(endpoint, { credentials: 'same-origin', cache: 'no-store', redirect: 'error',
-        signal: AbortSignal.timeout(8000), headers: { 'X-VP-Expected-Email': normalized } });
-      const body = await response.json().catch(() => null);
-      if (!response.ok || !validResponse(body)) return { ok: false };
-      const visit = currentVisit(normalized, browser);
-      if (visit && matches(body, visit)) clearVisit(visit, browser);
-      return body;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        // Observe an already-started write, never start/replay one from a GET.
+        const pending = [...state.writes].filter(([flight]) => flight.startsWith(`${normalized}:`)).map(([, write]) => write);
+        if (pending.length) await Promise.all(pending);
+        const revision = state.revision, visitId = currentVisit(normalized, browser)?.id;
+        const response = await fetchImpl(endpoint, { credentials: 'same-origin', cache: 'no-store', redirect: 'error',
+          signal: AbortSignal.timeout(8000), headers: { 'X-VP-Expected-Email': normalized } });
+        const body = await response.json().catch(() => null);
+        if (!response.ok || !validResponse(body)) return { ok: false };
+        const visit = currentVisit(normalized, browser);
+        // A late GET must not supersede a write that completed while it was
+        // in flight, or clear the marker of a different verified visit.
+        if (revision !== state.revision || visitId !== visit?.id) continue;
+        if (visit && matches(body, visit)) clearVisit(visit, browser);
+        return body;
+      }
+      return { ok: false };
     } catch { return { ok: false }; }
   })();
   reads.set(normalized, completion);
