@@ -23,6 +23,39 @@ try {
   assert.ok(ready, `workerd was not ready: ${logs}`);
   let probes = 0;
   let staticChunk;
+  const resendMetricsBefore = await (await fetch('http://127.0.0.1:8787/__synthetic_metrics')).json();
+  const resendPayload = JSON.stringify({ type: 'email.delivered', created_at: new Date().toISOString(), data: {
+    email_id: '00000000-0000-4000-8000-000000000073', from: 'otp@mindblisspower.com',
+    to: ['synthetic-sensitive-recipient@example.test'], subject: 'Synthetic private subject',
+  } });
+  const resendTimestamp = String(Math.floor(Date.now() / 1000));
+  const resendID = 'msg_synthetic_smoke_resend';
+  const resendSignature = createHmac('sha256', Buffer.from('synthetic-resend-webhook-secret-32'))
+    .update(`${resendID}.${resendTimestamp}.${resendPayload}`).digest('base64');
+  const resendHeaders = { 'content-type': 'application/json', 'svix-id': resendID,
+    'svix-timestamp': resendTimestamp, 'svix-signature': `v1,${resendSignature}` };
+  for (const [path, init, expected] of [
+    ['/api/webhooks/resend', { method: 'POST', headers: resendHeaders, body: resendPayload }, 200],
+    ['/api/webhooks/resend', { method: 'POST', headers: resendHeaders, body: resendPayload }, 200],
+    ['/api/webhooks/resend', { method: 'POST', headers: { 'content-type': 'application/json' }, body: resendPayload }, 401],
+    ['/api/webhooks/resend', {}, 405],
+    ['/api/webhooks/resend?extra=1', { method: 'POST', headers: resendHeaders, body: resendPayload }, 400],
+    ['/api/webhooks/resend/extra', { method: 'POST', headers: resendHeaders, body: resendPayload }, 404],
+    ['/__resend_disabled/api/webhooks/resend', { method: 'POST', headers: resendHeaders, body: resendPayload }, 503],
+    ['/__resend_unconfigured/api/webhooks/resend', { method: 'POST', headers: resendHeaders, body: resendPayload }, 503],
+  ]) {
+    const response = await fetch(`http://127.0.0.1:8787${path}`, { ...init, redirect: 'manual', signal: AbortSignal.timeout(8000) });
+    assert.equal(response.status, expected, `Resend ${path}`);
+    const body = await response.text();
+    if (expected === 200) assert.deepEqual(JSON.parse(body), { received: true, mode: 'notification_only' });
+    assert.equal(response.headers.get('cache-control'), 'private, no-store');
+    assert.equal(response.headers.get('cloudflare-cdn-cache-control'), 'no-store');
+    assert.equal(response.headers.get('set-cookie'), null);
+    assert.doesNotMatch(body, /synthetic-sensitive-recipient|private subject|msg_synthetic_smoke_resend/);
+    probes++;
+  }
+  const resendMetricsAfter = await (await fetch('http://127.0.0.1:8787/__synthetic_metrics')).json();
+  assert.deepEqual(resendMetricsAfter, resendMetricsBefore, 'Resend notifications never contact private API, SQL or payment services');
   const cases = [
     ['/health', {}, 200], ['/login', {}, 200], ['/api/member/tree', {}, 401],
     ['/__overview_fixture/dashboard', {}, 307],

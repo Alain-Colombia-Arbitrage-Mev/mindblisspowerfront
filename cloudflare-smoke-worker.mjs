@@ -241,6 +241,8 @@ const syntheticEnv = {
   BETTER_AUTH_JWKS_URL: 'https://auth.core.internal/api/auth/jwks',
   VP_PAYMENTS_URL: 'https://payments.core.internal', PAYMENTS_SERVICE_TOKEN: 'synthetic-service-only',
   STRIPE_CHECKOUT_ENABLED: 'false', NOWPAYMENTS_MEMBERSHIPS_ENABLED: 'true', NOWPAYMENTS_WEBHOOK_ENABLED: 'true',
+  RESEND_WEBHOOK_ENABLED: 'true',
+  RESEND_WEBHOOK_SECRET: `whsec_${Buffer.from('synthetic-resend-webhook-secret-32').toString('base64')}`,
 };
 export default {
   async fetch(request, env, ctx) {
@@ -274,14 +276,20 @@ export default {
     // Obsolete flags must not re-enable registration SMS, even with credentials.
     const staleSmsFixture = incoming.pathname.startsWith('/__stale_sms/');
     const nowDisabledFixture = incoming.pathname.startsWith('/__now_disabled/');
+    const resendDisabledFixture = incoming.pathname.startsWith('/__resend_disabled/');
+    const resendUnconfiguredFixture = incoming.pathname.startsWith('/__resend_unconfigured/');
     const pathname = staleSmsFixture ? incoming.pathname.slice('/__stale_sms'.length)
-      : nowDisabledFixture ? incoming.pathname.slice('/__now_disabled'.length) : incoming.pathname;
+      : nowDisabledFixture ? incoming.pathname.slice('/__now_disabled'.length)
+      : resendDisabledFixture ? incoming.pathname.slice('/__resend_disabled'.length)
+      : resendUnconfiguredFixture ? incoming.pathname.slice('/__resend_unconfigured'.length) : incoming.pathname;
     const headers = new Headers(request.headers);
     headers.delete('x-forwarded-host');
     const input = new Request(`https://app.mindblisspower.com${pathname}${incoming.search}`, { method: request.method, headers, body: request.body });
     return worker.fetch(input, { ...env, ...syntheticEnv,
       BETTER_AUTH_REGISTRATION_SMS_REQUIRED: 'true', SENTDM_API_KEY: 'synthetic-never-call', SENTDM_OTP_TEMPLATE_ID: 'synthetic-never-call',
       ...(nowDisabledFixture ? { NOWPAYMENTS_MEMBERSHIPS_ENABLED: 'false' } : {}),
+      ...(resendDisabledFixture ? { RESEND_WEBHOOK_ENABLED: 'false' } : {}),
+      ...(resendUnconfiguredFixture ? { RESEND_WEBHOOK_SECRET: undefined } : {}),
       ...(incoming.pathname.startsWith('/__disabled/') ? { CLOUDFLARE_DEPLOYMENT_READY: 'false' } : {}),
     }, ctx);
   },
