@@ -82,14 +82,15 @@ function dom() {
   document.documentElement = document.appendChild(document.createElement('html'));
   document.body = document.documentElement.appendChild(document.createElement('body'));
   document.activeElement = document.body;
-  const destinations = [];
+  const destinations = [], navigationMethods = [];
   const window = {
     document, Node: HostNode, HTMLElement: HostNode, HTMLIFrameElement: class {},
-    location: { search: '', assign: path => destinations.push(path), replace: path => destinations.push(path) },
+    location: { search: '', assign: path => { navigationMethods.push('assign'); destinations.push(path); },
+      replace: path => { navigationMethods.push('replace'); destinations.push(path); } },
     addEventListener() {}, removeEventListener() {}, getSelection: () => null,
   };
   document.defaultView = window;
-  return { window, document, destinations, container: document.body.appendChild(document.createElement('main')) };
+  return { window, document, destinations, navigationMethods, container: document.body.appendChild(document.createElement('main')) };
 }
 function nodes(root, predicate) {
   return [root, ...root.childNodes.flatMap(child => nodes(child, () => true))].filter(predicate);
@@ -173,59 +174,58 @@ function response(path, session = { authenticated: true, mode: 'better-auth', em
   assert.fail(`Unexpected offline request: ${path}`);
 }
 
-test('real React StrictMode preserves mounted/ref state and navigates once after delayed canonical success', async t => {
+test('real React StrictMode navigates once after delayed fresh native POST proof with no session preflight', async t => {
   const started = deferred(), released = deferred();
   const ui = await view(t, path => {
-    if (path === '/api/auth/session?view=access') { started.resolve(); return released.promise; }
+    if (path === '/api/auth/sign-in/email-otp') { started.resolve(); return released.promise; }
     return response(path);
   });
   await ui.send(); await ui.code();
   let pending;
   await act(async () => {
     const form = nodes(ui.container, node => node.nodeName === 'FORM')[0];
-    pending = props(form).onSubmit(event);
-    await started.promise;
+    pending = props(form).onSubmit(event); await started.promise;
   });
-  assert.match(ui.container.textContent, /Correo verificado correctamente/);
-  assert.match(ui.container.textContent, /Comprobando acceso/);
+  assert.doesNotMatch(ui.container.textContent, /Correo verificado correctamente/);
   assert.deepEqual(ui.destinations, []);
-  await act(async () => { released.resolve(response('/api/auth/session?view=access')); await pending; });
+  await act(async () => { released.resolve(Response.json(proof())); await pending; });
+  assert.match(ui.container.textContent, /Correo verificado correctamente/);
   assert.deepEqual(ui.destinations, ['/dashboard']);
-  await act(async () => props(ui.button('Continuar al panel')).onClick());
-  assert.deepEqual(ui.destinations, ['/dashboard']);
+  assert.deepEqual(ui.navigationMethods, ['replace']);
+  assert.equal(nodes(ui.container, node => node.nodeName === 'A' && node.getAttribute('href') === '/dashboard').length, 1);
+  assert.equal(ui.paths.some(path => path.startsWith('/api/auth/session')), false);
   assert.equal(ui.paths.filter(path => path === '/api/auth/sign-in/email-otp').length, 1);
 });
 
-test('a genuine access-only authorization outage remains closed but a manual recheck recovers without another OTP', async t => {
-  let checks = 0;
-  const ui = await view(t, path => path === '/api/auth/session?view=access' && checks++ === 0
+test('real React rejects a failed sign-in POST and permits an explicit retry without resending its OTP', async t => {
+  let confirmations = 0;
+  const ui = await view(t, path => path === '/api/auth/sign-in/email-otp' && confirmations++ === 0
     ? Response.json({ error: 'unavailable' }, { status: 503 }) : response(path));
   await ui.send(); await ui.code(); await ui.confirm();
-  assert.match(ui.container.textContent, /Correo verificado correctamente/);
-  assert.match(ui.container.textContent, /servicio de autorización no está disponible/);
-  assert.ok(ui.button('Continuar al panel'));
-  assert.deepEqual(ui.destinations, [], 'an unavailable canonical authorization lookup cannot confer access');
-  await act(async () => props(ui.button('Continuar al panel')).onClick());
+  assert.doesNotMatch(ui.container.textContent, /Correo verificado correctamente/);
+  assert.deepEqual(ui.destinations, []);
+  assert.equal(nodes(ui.container, node => node.nodeName === 'A' && node.getAttribute('href') === '/dashboard').length, 0);
+  await ui.confirm();
   assert.deepEqual(ui.destinations, ['/dashboard']);
   assert.equal(ui.paths.filter(path => path.endsWith('/send-verification-otp')).length, 1);
-  assert.equal(ui.paths.filter(path => path === '/api/auth/sign-in/email-otp').length, 1);
+  assert.equal(ui.paths.filter(path => path === '/api/auth/sign-in/email-otp').length, 2);
+  assert.equal(ui.paths.some(path => path.startsWith('/api/auth/session')), false);
 });
 
-test('payment-summary failure cannot block real React navigation through the independent canonical access view', async t => {
-  const ui = await view(t, path => path === '/api/auth/session'
-    ? Response.json({ error: 'synthetic_payment_summary_unavailable' }, { status: 503 }) : response(path));
+test('payment or access-summary failure cannot block React navigation to the server gate after fresh proof', async t => {
+  const ui = await view(t, path => path.startsWith('/api/auth/session')
+    ? Response.json({ error: 'synthetic_summary_unavailable' }, { status: 503 }) : response(path));
   await ui.send(); await ui.code(); await ui.confirm();
   assert.deepEqual(ui.destinations, ['/dashboard']);
-  assert.equal(ui.paths.includes('/api/auth/session'), false, 'login never requests the financial/default session view');
-  assert.equal(ui.paths.filter(path => path === '/api/auth/session?view=access').length, 1);
-  assert.doesNotMatch(ui.container.textContent, /synthetic_payment_summary_unavailable/);
+  assert.equal(ui.paths.some(path => path.startsWith('/api/auth/session')), false, 'no session GET is a client navigation prerequisite');
+  assert.doesNotMatch(ui.container.textContent, /synthetic_summary_unavailable|Revisar acceso/);
 });
 
-test('real React unmount cancels a delayed session lookup and suppresses stale navigation', async t => {
+test('real React unmount cancels a delayed sign-in POST and suppresses stale navigation', async t => {
   const started = deferred(), released = deferred();
   let requestSignal;
   const ui = await view(t, (path, options) => {
-    if (path === '/api/auth/session?view=access') { requestSignal = options.signal; started.resolve(); return released.promise; }
+    if (path === '/api/auth/sign-in/email-otp') { requestSignal = options.signal; started.resolve(); return released.promise; }
     return response(path);
   });
   await ui.send(); await ui.code();
@@ -236,8 +236,9 @@ test('real React unmount cancels a delayed session lookup and suppresses stale n
   });
   await ui.unmount();
   assert.equal(requestSignal.aborted, true);
-  released.resolve(response('/api/auth/session?view=access')); await pending;
+  released.resolve(Response.json(proof())); await pending;
   assert.deepEqual(ui.destinations, []);
+  assert.equal(ui.paths.some(path => path.startsWith('/api/auth/session')), false);
 });
 
 test('real referral storage denial and unavailable referral sync do not block canonical dashboard navigation', async t => {
@@ -248,15 +249,15 @@ test('real referral storage denial and unavailable referral sync do not block ca
   assert.doesNotMatch(ui.container.textContent, /No se pudo conectar/);
 });
 
-test('anonymous or mismatched canonical identity cannot be turned into ready access by React rerenders', async t => {
-  for (const session of [{ authenticated: false, mode: 'better-auth' },
-    { authenticated: true, mode: 'better-auth', email: 'different@example.test' }]) {
-    const ui = await view(t, path => response(path, session));
+test('real React rejects send acknowledgements, unverified and mismatched POST proofs without navigation', async t => {
+  for (const payload of [{ ok: true },
+    { ...proof(), user: { ...proof().user, emailVerified: false } },
+    { ...proof(), user: { ...proof().user, email: 'different@example.test' } }]) {
+    const ui = await view(t, path => path === '/api/auth/sign-in/email-otp' ? Response.json(payload) : response(path));
     await ui.send(); await ui.code(); await ui.confirm();
-    assert.match(ui.container.textContent, /Continuar al panel/);
+    assert.doesNotMatch(ui.container.textContent, /Correo verificado correctamente/);
     assert.deepEqual(ui.destinations, []);
-    await act(async () => props(ui.button('Continuar al panel')).onClick());
-    assert.deepEqual(ui.destinations, []);
+    assert.equal(ui.paths.some(path => path.startsWith('/api/auth/session')), false);
     await ui.unmount();
   }
 });

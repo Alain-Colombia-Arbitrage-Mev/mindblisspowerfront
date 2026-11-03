@@ -82,13 +82,7 @@ for (const side of ['L', 'R']) test(`shared ${side} link survives registration, 
   assert.equal(confirmed.authenticated, undefined);
   assert.equal(confirmation.headers.getSetCookie().length, 1);
   assert.equal(verifiedEmailSignIn(confirmed, email), false, 'the registration ACK is not reusable as a login proof or account authority');
-  const access = await betterAuthAccess(async (target, options) => {
-    assert.equal(target, '/api/auth/session?view=access');
-    assert.equal(options.cache, 'no-store');
-    assert.equal(signedIn, true);
-    return Response.json({ authenticated: true, mode: 'better-auth', email });
-  }, email);
-  assert.equal(access.ready, true);
+  assert.equal(signedIn, true, 'the BFF proved a new native session; later server gates still decide network access');
 
   // Another visitor's capture must not replace this registered email's hint.
   captureReferralFromUrl('?ref=MP9999&side=L&email=other%40example.test', storage, now + 1);

@@ -10,7 +10,6 @@ const email = 'member@example.test';
 const password = ' Raw synthetic password ';
 const event = { preventDefault() {} };
 const proof = { ok: true, user: { id: 'synthetic', email, emailVerified: true } };
-const session = { authenticated: true, mode: 'better-auth', email };
 const deferred = () => {
   let resolve;
   const promise = new Promise(done => { resolve = done; });
@@ -59,25 +58,25 @@ test('passwordless members get an explicit recovery path using the original emai
   harness.unmount();
 });
 
-test('password login waits for canonical access before publishing one verified screen and preserves the exact password', async t => {
-  const calls = [], check = deferred(), checking = deferred();
+test('password login publishes only fresh POST session proof, preserves the exact password and never requests a session preflight', async t => {
+  const calls = [], reply = deferred();
   t.mock.method(globalThis, 'fetch', async (path, options) => {
     calls.push({ path, options });
-    if (path === '/api/auth/sign-in/email') return Response.json(proof);
-    checking.resolve(); return check.promise;
+    assert.equal(path, '/api/auth/sign-in/email');
+    return reply.promise;
   });
   const harness = view(), pending = harness.submit();
-  await checking.promise;
-  assert.deepEqual(calls.map(call => call.path), ['/api/auth/sign-in/email', '/api/auth/session?view=access']);
+  assert.deepEqual(calls.map(call => call.path), ['/api/auth/sign-in/email']);
   assert.deepEqual(JSON.parse(calls[0].options.body), { email, password });
   assert.equal(harness.events.some(([name]) => ['verified', 'referral'].includes(name)), false);
   assert.equal(harness.form().props['aria-busy'], true);
-  check.resolve(Response.json(session)); await pending;
+  reply.resolve(Response.json(proof)); await pending;
   assert.deepEqual(harness.events.filter(([name]) => ['verified', 'referral'].includes(name)), [
-    ['referral', email], ['verified', email, { ready: true }],
+    ['referral', email], ['verified', email],
   ]);
   assert.equal(harness.state[0], '');
   assert.equal(harness.form().props['aria-busy'], false);
+  assert.equal(calls.length, 1);
   for (const { options } of calls) {
     assert.equal(options.credentials, 'same-origin'); assert.equal(options.cache, 'no-store');
     assert.equal(options.redirect, 'error'); assert.equal(options.signal.aborted, false);
@@ -118,24 +117,25 @@ test('unmount during response decoding suppresses late verification, referral an
   assert.deepEqual(harness.state, state); assert.deepEqual(harness.events, events);
 });
 
-test('unmount during canonical session lookup aborts its signal and ignores a late authenticated result', async t => {
-  const check = deferred(), checking = deferred(), calls = [];
+test('a password POST outage never publishes verified success, and an explicit retry needs no OTP or session GET', async t => {
+  const calls = [];
   t.mock.method(globalThis, 'fetch', async (path, options) => {
     calls.push({ path, options });
-    if (path === '/api/auth/sign-in/email') return Response.json(proof);
-    checking.resolve(); return check.promise;
+    assert.equal(path, '/api/auth/sign-in/email');
+    return calls.length === 1 ? Response.json({ error: 'unavailable' }, { status: 503 }) : Response.json(proof);
   });
-  const harness = view(), pending = harness.submit(); await checking.promise;
-  harness.unmount(); const state = [...harness.state], events = [...harness.events];
-  assert.equal(calls[1].options.signal.aborted, true);
-  check.resolve(Response.json(session)); await pending;
-  assert.equal(calls.length, 2); assert.deepEqual(harness.state, state); assert.deepEqual(harness.events, events);
+  const harness = view(); await harness.submit();
+  assert.equal(harness.events.some(([name]) => ['verified', 'referral'].includes(name)), false);
+  await harness.submit();
+  assert.deepEqual(harness.events.filter(([name]) => name === 'verified'), [['verified', email]]);
+  assert.equal(calls.length, 2);
+  harness.unmount();
 });
 
 test('a disposed password form cannot overwrite the verified result of a newer form when replies arrive out of order', async t => {
   const first = deferred(); let signIns = 0;
   t.mock.method(globalThis, 'fetch', async path => {
-    if (path === '/api/auth/session?view=access') return Response.json(session);
+    assert.equal(path, '/api/auth/sign-in/email');
     signIns++; return signIns === 1 ? first.promise : Response.json(proof);
   });
   const previous = view(), pending = previous.submit(); previous.unmount();
@@ -143,17 +143,21 @@ test('a disposed password form cannot overwrite the verified result of a newer f
   const current = view(); await current.submit();
   first.resolve(Response.json(proof)); await pending;
   assert.deepEqual(previous.events, before); assert.deepEqual(previous.state, state);
-  assert.deepEqual(current.events.filter(([name]) => name === 'verified'), [['verified', email, { ready: true }]]);
+  assert.deepEqual(current.events.filter(([name]) => name === 'verified'), [['verified', email]]);
   current.unmount();
 });
 
-test('anonymous access after valid password proof never invents a linking review or claims network access', async t => {
-  t.mock.method(globalThis, 'fetch', async path => path === '/api/auth/sign-in/email' ? Response.json(proof)
-    : Response.json({ authenticated: false, mode: 'better-auth', email: null, state: 'review_required' }));
+test('fresh password session proof reaches its continuation without consulting a legacy or unavailable session summary', async t => {
+  const paths = [];
+  t.mock.method(globalThis, 'fetch', async path => {
+    paths.push(path);
+    return path === '/api/auth/sign-in/email' ? Response.json(proof)
+      : Response.json({ authenticated: false, mode: 'better-auth', state: 'review_required' }, { status: 503 });
+  });
   const harness = view(); await harness.submit();
-  const verified = harness.events.find(([name]) => name === 'verified');
-  assert.equal(verified[2].ready, false); assert.match(verified[2].notice, /no pudimos confirmar una sesión/);
-  assert.doesNotMatch(verified[2].notice, /aprobación|vinculación|bloquead/);
+  assert.deepEqual(paths, ['/api/auth/sign-in/email']);
+  assert.deepEqual(harness.events.filter(([name]) => name === 'verified'), [['verified', email]]);
+  assert.equal(harness.events.some(([name, value]) => name === 'notice' && /revisión|aprobación|vinculación/.test(value)), false);
   harness.unmount();
 });
 

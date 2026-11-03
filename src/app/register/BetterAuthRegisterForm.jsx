@@ -7,7 +7,6 @@ import AuthShell from '../_components/AuthShell';
 import { useResendCooldown, suggestEmailFix } from '@/lib/useResendCooldown';
 import { bindReferralCodeToEmail } from '@/lib/referral-attribution';
 import { RegistrationButton, RegistrationField } from './RegistrationFields';
-import { betterAuthAccess } from '../login/better-auth-login.mjs';
 import { beginVerifiedReferralSync } from '@/lib/referral-sync.mjs';
 import ContactPhoneField from './ContactPhoneField';
 import { initialContactPhone, registrationContactValues } from './contact-phone-model.mjs';
@@ -26,7 +25,6 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState('');
   const [code, setCode] = useState('');
-  const [access, setAccess] = useState(/** @type {{ ready: boolean, checking: boolean, error?: string, notice?: string }} */ ({ ready: false, checking: false }));
   const submitting = useRef(false);
   const mounted = useRef(false);
   const activeRequest = useRef(null);
@@ -100,15 +98,20 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
     setLoading('');
   }
 
-  function enterVerifiedDashboard(operation, currentAccess) {
-    if (!currentRequest(operation) || dashboardNavigation.current || currentAccess.ready !== true
-      || currentAccess.checking || currentAccess.error) return;
-    // The canonical session has matched this verified email. Keep this tab's
-    // referral hint, never another tab's mutable global context.
-    if (hints.referralCode) bindReferralCodeToEmail(email, hints.referralCode, undefined, undefined, 'registration', hints.preferredSide);
-    if (hints.referralCode) void beginVerifiedReferralSync(email, hints.referralCode, hints.preferredSide);
+  function enterVerifiedDashboard(operation) {
+    if (!currentRequest(operation) || dashboardNavigation.current) return;
+    // The BFF proved the new native session; the dashboard enforces access.
+    // Optional attribution cannot delay the navigation or grant permissions.
+    try {
+      if (hints.referralCode) bindReferralCodeToEmail(email, hints.referralCode, undefined, undefined, 'registration', hints.preferredSide);
+      if (hints.referralCode) void beginVerifiedReferralSync(email, hints.referralCode, hints.preferredSide);
+    } catch { /* Server referral persistence independently verifies ownership. */ }
     dashboardNavigation.current = true;
-    window.location.assign('/dashboard');
+    try {
+      window.location.replace('/dashboard');
+    } catch {
+      setErrors({ form: 'Tu correo está verificado. Abre el panel con el enlace de abajo para continuar.' });
+    }
   }
 
   async function post(path, body, action, operation) {
@@ -194,30 +197,10 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
       }
       setCode('');
       setStep('verified');
-      setAccess({ ready: false, checking: true });
-      const currentAccess = await betterAuthAccess(fetch, email, { signal: operation.controller.signal });
-      if (!currentRequest(operation)) return;
-      setAccess({ ...currentAccess, checking: false });
-      enterVerifiedDashboard(operation, currentAccess);
+      enterVerifiedDashboard(operation);
     } catch {
       if (!currentRequest(operation)) return;
       setErrors({ form: registrationFailure(503, 'confirm') });
-    } finally {
-      finishRequest(operation);
-    }
-  }
-
-  async function recheckAccess() {
-    if (submitting.current || !mounted.current || dashboardNavigation.current) return;
-    submitting.current = true;
-    const operation = beginRequest();
-    setLoading('access');
-    setAccess({ ready: false, checking: true });
-    try {
-      const currentAccess = await betterAuthAccess(fetch, email, { signal: operation.controller.signal });
-      if (!currentRequest(operation)) return;
-      setAccess({ ...currentAccess, checking: false });
-      enterVerifiedDashboard(operation, currentAccess);
     } finally {
       finishRequest(operation);
     }
@@ -325,14 +308,11 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
           </form>
         ) : (
           <div className="space-y-5" role="status" aria-live="polite" aria-atomic="true">
-            <p className="text-sm leading-7 text-[var(--vp-text)]">El correo está verificado. No necesitas solicitar otro código para revisar tu acceso.</p>
-            {access.error ? <p role="alert" className="text-sm leading-6 text-[var(--vp-danger)]">{access.error}</p> : null}
-            <p className="text-sm leading-7 text-[var(--vp-muted)]">{access.checking ? 'Comprobando tu sesión y tu acceso a la red…' : access.ready
-              ? 'Tu sesión tiene acceso al portal. Abriendo tu panel…'
-              : access.notice || 'Tu correo ya está verificado. Puedes comprobar el estado de tu acceso sin pedir otro código.'}</p>
+            <p className="text-sm leading-7 text-[var(--vp-text)]">El correo está verificado. No necesitas solicitar otro código para continuar.</p>
+            {errors.form ? <p role="alert" className="text-sm leading-6 text-[var(--vp-danger)]">{errors.form}</p> : null}
+            <p className="text-sm leading-7 text-[var(--vp-muted)]">Abriendo tu panel… El servidor comprobará tu sesión y tu acceso a la red. Si no se abre automáticamente, usa «Continuar al panel».</p>
             <p className="text-sm leading-7 text-[var(--vp-muted)]">Verificar tu correo no concede por sí solo acceso a saldos ni a cuentas antiguas de la red. Si tu vinculación requiere revisión, debe aprobarse antes de entrar.</p>
-            {access.ready ? <Link href="/dashboard" onClick={event => { if (dashboardNavigation.current) event.preventDefault(); }} className="inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-[var(--vp-accent)] px-4 font-bold text-[var(--vp-shell)]">Continuar al panel</Link>
-              : <RegistrationButton type="button" onClick={recheckAccess} disabled={isLoading || access.checking} loading={loading === 'access'}>{access.checking ? 'Comprobando acceso…' : 'Continuar al panel'}</RegistrationButton>}
+            <a href="/dashboard" className="inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-[var(--vp-accent)] px-4 font-bold text-[var(--vp-shell)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--vp-accent)]">Continuar al panel</a>
             <p className="text-sm leading-7 text-[var(--vp-muted)]">Puedes seguir entrando con códigos por correo, sin contraseña. Para crear tu primera contraseña o cambiarla, abre recuperación y verifica un nuevo código de recuperación; el código de registro no sirve para ese proceso.</p>
             <Link href="/forgot-password" className="inline-flex min-h-12 w-full items-center justify-center rounded-lg border border-[var(--vp-border)] px-4 font-semibold text-[var(--vp-text)]">Crear o cambiar contraseña (opcional)</Link>
           </div>

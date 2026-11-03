@@ -271,6 +271,49 @@ try {
   probes++;
   const cookie = confirmed.headers.get('set-cookie').split(';')[0];
   const sessionHeaders = { cookie, 'cf-connecting-ip': '192.0.2.10' };
+  // Exercise the compiled Server Component gate itself, not a client session
+  // preflight. Only this synthetic fixture supplies the catalog; authentication
+  // still obtains a fresh native service JWT and verifies its real RSA signature.
+  for (const [fixtureCookie, outcome] of [
+    [cookie, 'dashboard'],
+    ['', 'anonymous'],
+    ['__Secure-better-auth.session_token=synthetic-tampered', 'anonymous'],
+    ['__Secure-better-auth.session_token=synthetic-wrong-audience', 'MBP-LOGIN-VERIFY'],
+    ['__Secure-better-auth.session_token=synthetic-token-unavailable', 'MBP-LOGIN-SERVICE'],
+  ]) {
+    const dashboard = await fetch('http://127.0.0.1:8787/dashboard', {
+      headers: { ...sessionHeaders, cookie: fixtureCookie }, redirect: 'manual', signal: AbortSignal.timeout(12000),
+    });
+    const html = await dashboard.text();
+    assert.equal(dashboard.headers.get('cache-control'), 'private, no-store');
+    assert.equal(dashboard.headers.get('cdn-cache-control'), 'no-store');
+    assert.equal(dashboard.headers.get('cloudflare-cdn-cache-control'), 'no-store');
+    assert.equal(dashboard.headers.get('set-cookie'), null, 'the SSR gate does not replace or clear native cookies');
+    if (outcome === 'dashboard') {
+      assert.equal(dashboard.status, 200);
+      assert.match(html, /class="vp-dashboard-shell"/);
+      assert.match(html, /id="member-main"/);
+      assert.match(html, />Plan Fixture 1</);
+      assert.doesNotMatch(html, /MBP-LOGIN-(?:SERVICE|VERIFY)/);
+    } else {
+      assert.doesNotMatch(html, /class="vp-dashboard-shell"|id="member-main"|>Plan Fixture 1</,
+        'invalid or unavailable identities never receive the dashboard shell or rendered private child');
+      if (outcome === 'anonymous') {
+        assert.equal(dashboard.status, 307);
+        const location = new URL(dashboard.headers.get('location'), 'https://app.mindblisspower.com');
+        assert.equal(location.pathname + location.search, '/login?auth=session-not-established');
+      } else {
+        assert.equal(dashboard.status, 200, 'an auth infrastructure outage presents the static retry view, not a login loop');
+        assert.equal(dashboard.headers.get('location'), null);
+        assert.ok(html.includes(outcome), 'support reference identifies the unavailable stage without internal diagnostics');
+        assert.match(html, /role="alert"/);
+        assert.match(html, /href="\/dashboard"[^>]*>Reintentar abrir el panel</);
+        assert.match(html, /href="\/login"[^>]*>Volver al acceso</);
+        assert.doesNotMatch(html, /fixture@example\.test|synthetic-wrong-audience|synthetic-token-unavailable|synthetic-member|synthetic-private-context|member-services/);
+      }
+    }
+    probes++;
+  }
   const attributionPath = '/api/member/referral-attribution';
   const noAttribution = await fetch(`http://127.0.0.1:8787${attributionPath}`, {
     headers: { 'X-VP-Expected-Email': 'fixture@example.test' }, signal: AbortSignal.timeout(8000),

@@ -16,7 +16,7 @@ const submit = tree => find(tree, node => node?.type === 'form').props.onSubmit(
 const html = harness => renderToStaticMarkup(harness.render(props));
 function browser(t) {
   const previous = globalThis.window, destinations = [];
-  globalThis.window = { location: { search: '?verified=true&registered=1', assign: href => destinations.push(href) } };
+  globalThis.window = { location: { search: '?verified=true&registered=1', assign: href => destinations.push(href), replace: href => destinations.push(href) } };
   t.after(() => { if (previous === undefined) delete globalThis.window; else globalThis.window = previous; });
   return destinations;
 }
@@ -78,70 +78,57 @@ test('rejected login OTP guidance cannot reflect provider diagnostics, delivery 
   harness.unmount();
 });
 
-test('accepted OTP enters the panel immediately after matching canonical access, once across rerenders and repeated clicks', async t => {
+test('fresh BFF-proven OTP session starts one hard dashboard navigation without a client session preflight', async t => {
   const destinations = browser(t), paths = [];
   t.mock.method(globalThis, 'fetch', async path => {
     paths.push(path);
-    return Response.json(path.endsWith('/send-verification-otp') ? { ok: true }
-      : path === '/api/auth/session?view=access' ? { authenticated: true, mode: 'better-auth', email } : proof());
+    assert.ok(!path.startsWith('/api/auth/session'), 'server dashboard, not a client preflight, owns authorization');
+    return Response.json(path.endsWith('/send-verification-otp') ? { ok: true } : proof());
   });
   const harness = view();
-  assert.doesNotMatch(html(harness), /Correo verificado correctamente/);
   harness.replayEffects();
   await enterCode(harness);
   for (let render = 0; render < 3; render++) {
     const rendered = html(harness);
     assert.match(rendered, /Correo verificado correctamente/);
     assert.match(rendered, /role="status"[^>]*aria-live="polite"[^>]*aria-atomic="true"/);
-    assert.match(rendered, /member@example\.test/);
-    assert.match(rendered, /Continuar al panel/);
-    assert.doesNotMatch(rendered, /id="login-code"|Reenviar|Enviar código/);
     assert.match(rendered, /Abriendo tu panel/);
+    assert.doesNotMatch(rendered, /id="login-code"|Reenviar|Enviar código|Revisar acceso/);
+    assert.equal(find(harness.render(props), node => node?.type === 'a' && node?.props?.href === '/dashboard').props.href, '/dashboard');
     assert.deepEqual(destinations, ['/dashboard']);
   }
-  assert.equal(paths.length, 3, 'rerendering never resends or rechecks automatically');
-  await find(harness.render(props), node => node?.props?.children === 'Continuar al panel').props.onClick();
-  assert.deepEqual(destinations, ['/dashboard']);
-  assert.deepEqual(paths, ['/api/auth/email-otp/send-verification-otp', '/api/auth/sign-in/email-otp', '/api/auth/session?view=access']);
+  assert.deepEqual(paths, ['/api/auth/email-otp/send-verification-otp', '/api/auth/sign-in/email-otp']);
   harness.unmount();
 });
 
-test('verified email remains distinct from canonical access and a manual access review sends no code or invented approval claim', async t => {
+test('a dashboard continuation is a real same-origin anchor and never claims a network grant or manual review', async t => {
   const destinations = browser(t), paths = [];
   t.mock.method(globalThis, 'fetch', async path => {
     paths.push(path);
-    return Response.json(path.endsWith('/send-verification-otp') ? { ok: true }
-      : path === '/api/auth/session?view=access' ? { authenticated: false, mode: 'better-auth', state: 'claim_required' } : proof());
+    return Response.json(path.endsWith('/send-verification-otp') ? { ok: true } : proof());
   });
   const harness = view(); await enterCode(harness);
-  assert.match(html(harness), /Correo verificado correctamente/);
-  assert.match(html(harness), /no pudimos confirmar una sesión con acceso al portal/);
-  assert.doesNotMatch(html(harness), /requiere revisión de identidad y aprobación de vinculación/);
-  assert.match(html(harness), /No necesitas registrarte de nuevo ni cambiar tu correo/);
-  assert.doesNotMatch(html(harness), /Si tu cuenta anterior requiere revisión|Abriendo tu panel/);
-  await find(harness.render(props), node => node?.props?.children === 'Continuar al panel').props.onClick();
-  assert.equal(paths.filter(path => path.includes('send-verification')).length, 1);
-  assert.equal(paths.filter(path => path === '/api/auth/sign-in/email-otp').length, 1);
-  assert.deepEqual(destinations, []);
-  const count = paths.length;
-  find(harness.render(props), node => node?.props?.children === 'Usar otro correo').props.onClick();
-  assert.doesNotMatch(html(harness), /Correo verificado correctamente/);
-  assert.equal(paths.length, count, 'changing the local form does not send an email or log out');
-  assert.ok(find(harness.render(props), node => node?.type === 'form'));
+  const rendered = html(harness);
+  assert.match(rendered, /Correo verificado correctamente/);
+  assert.doesNotMatch(rendered, /Revisar acceso|Si tu cuenta anterior requiere revisión|cuenta aprobada|saldo disponible/);
+  const continuation = find(harness.render(props), node => node?.type === 'a' && node?.props?.href === '/dashboard');
+  assert.equal(continuation.props.href, '/dashboard');
+  assert.deepEqual(destinations, ['/dashboard']);
+  assert.deepEqual(paths, ['/api/auth/email-otp/send-verification-otp', '/api/auth/sign-in/email-otp']);
   harness.unmount();
 });
 
-test('a failed network-authorization check cannot erase proven email ownership or approve network access', async t => {
-  const destinations = browser(t);
-  t.mock.method(globalThis, 'fetch', async path => path === '/api/auth/session?view=access'
-    ? Response.json({ error: 'unavailable' }, { status: 503 })
-    : Response.json(path.endsWith('/send-verification-otp') ? { ok: true } : proof()));
+test('unavailable session summaries cannot hold a newly established native session on a client review screen', async t => {
+  const destinations = browser(t), paths = [];
+  t.mock.method(globalThis, 'fetch', async path => {
+    paths.push(path);
+    if (path.startsWith('/api/auth/session')) return Response.json({ error: 'unavailable' }, { status: 503 });
+    return Response.json(path.endsWith('/send-verification-otp') ? { ok: true } : proof());
+  });
   const harness = view(); await enterCode(harness);
   assert.match(html(harness), /Correo verificado correctamente/);
-  assert.match(html(harness), /servicio de autorización no está disponible/);
-  assert.match(html(harness), /Continuar al panel/);
-  assert.doesNotMatch(html(harness), /Abriendo tu panel/);
-  assert.deepEqual(destinations, []);
+  assert.equal(paths.some(path => path.startsWith('/api/auth/session')), false);
+  assert.deepEqual(destinations, ['/dashboard'], 'navigation reaches the server gate; it grants no account or financial permissions');
   harness.unmount();
 });
 
@@ -163,17 +150,13 @@ test('send acknowledgements, rejected OTPs and malformed or mismatched proof nev
   assert.deepEqual(destinations, []);
 });
 
-test('password login enters through the same parent callback only after matching canonical access, without an email send', async t => {
+test('password login publishes fresh native proof to the parent and navigates without a client session request or email send', async t => {
   const destinations = browser(t), paths = [];
-  let releaseSession, sessionStarted;
-  const checkingSession = new Promise(resolve => { sessionStarted = resolve; });
+  let release, started;
+  const waiting = new Promise(resolve => { started = resolve; });
   t.mock.method(globalThis, 'fetch', async path => {
-    paths.push(path);
-    if (path === '/api/auth/session?view=access') {
-      sessionStarted();
-      return new Promise(resolve => { releaseSession = resolve; });
-    }
-    return Response.json(proof());
+    paths.push(path); assert.equal(path, '/api/auth/sign-in/email');
+    started(); return new Promise(resolve => { release = resolve; });
   });
   const parent = view(), parentProps = { ...props, initialMode: 'password' };
   const passwordProps = find(parent.render(parentProps), node => typeof node?.props?.onVerified === 'function').props;
@@ -184,117 +167,98 @@ test('password login enters through the same parent callback only after matching
     './better-auth-login.mjs': auth, '../register/registration-model.mjs': registration,
   });
   harness.render(passwordProps); harness.state[0] = 'Synthetic Existing Password';
-  const pending = submit(harness.render(passwordProps));
-  await checkingSession;
+  const pending = submit(harness.render(passwordProps)); await waiting;
+  assert.deepEqual(destinations, []);
   assert.doesNotMatch(renderToStaticMarkup(parent.render(parentProps)), /Correo verificado correctamente/);
-  assert.deepEqual(destinations, [], 'native proof alone cannot enter before the current canonical session check');
-  assert.equal(find(harness.render(passwordProps), node => node?.type === 'form').props['aria-busy'], true);
-  releaseSession(Response.json({ authenticated: true, mode: 'better-auth', email }));
-  await pending;
+  release(Response.json(proof())); await pending;
   assert.match(renderToStaticMarkup(parent.render(parentProps)), /Correo verificado correctamente/);
-  assert.deepEqual(paths, ['/api/auth/sign-in/email', '/api/auth/session?view=access']);
+  assert.deepEqual(paths, ['/api/auth/sign-in/email']);
   assert.equal(harness.state[0], '');
   assert.deepEqual(destinations, ['/dashboard']);
-  passwordProps.onVerified(email, { ready: true });
-  assert.deepEqual(destinations, ['/dashboard'], 'a repeated completion callback cannot navigate twice');
+  passwordProps.onVerified(email);
+  assert.deepEqual(destinations, ['/dashboard']);
   harness.unmount(); parent.unmount();
 });
 
-test('an old canonical cookie for another email never makes the newly verified account ready', async t => {
-  const destinations = browser(t);
-  t.mock.method(globalThis, 'fetch', async path => Response.json(path.endsWith('/send-verification-otp') ? { ok: true }
-    : path === '/api/auth/session?view=access' ? { authenticated: true, mode: 'better-auth', email: 'previous@example.test' } : proof()));
+test('an OTP proof belonging to another email cannot start dashboard navigation or a session lookup', async t => {
+  const destinations = browser(t), paths = [];
+  t.mock.method(globalThis, 'fetch', async path => {
+    paths.push(path);
+    return Response.json(path.endsWith('/send-verification-otp') ? { ok: true }
+      : { ...proof(), user: { ...proof().user, email: 'previous@example.test' } });
+  });
   const harness = view(); await enterCode(harness);
-  assert.match(html(harness), /Correo verificado correctamente/);
-  assert.match(html(harness), /La sesión actual no corresponde al correo verificado/);
-  assert.doesNotMatch(html(harness), /Abriendo tu panel|previous@example\.test/);
+  assert.doesNotMatch(html(harness), /Correo verificado correctamente|Continuar al panel|previous@example\.test/);
+  assert.equal(paths.some(path => path.startsWith('/api/auth/session')), false);
   assert.deepEqual(destinations, []);
   harness.unmount();
 });
 
-test('manual access review is duplicate-locked, aborts on unmount and ignores a late canonical result or error', async t => {
+test('OTP confirmation is duplicate-locked, aborts on unmount and ignores late native proof or error', async t => {
   const destinations = browser(t);
-  for (const result of [Response.json({ authenticated: true, mode: 'better-auth', email }),
-    Response.json({ error: 'synthetic-private-error' }, { status: 503 })]) {
-    let checks = 0, release, signal;
+  for (const result of [Response.json(proof()), Response.json({ error: 'synthetic-private-error' }, { status: 503 })]) {
+    let release, signal, calls = 0;
     t.mock.method(globalThis, 'fetch', async (path, options) => {
-      if (path === '/api/auth/session?view=access') {
-        if (++checks === 1) return Response.json({ authenticated: false, mode: 'better-auth', state: 'review_required' });
-        signal = options.signal;
-        return new Promise(resolve => { release = resolve; });
-      }
-      return Response.json(path.endsWith('/send-verification-otp') ? { ok: true } : proof());
+      if (path.endsWith('/send-verification-otp')) return Response.json({ ok: true });
+      assert.equal(path, '/api/auth/sign-in/email-otp');
+      calls++; signal = options.signal;
+      return new Promise(resolve => { release = resolve; });
     });
-    const harness = view(); await enterCode(harness);
-    const click = find(harness.render(props), node => node?.props?.children === 'Continuar al panel').props.onClick;
-    const pending = click(); await click();
-    assert.equal(checks, 2, 'the initial check and one explicit review are the only session requests');
+    const harness = view(); await submit(harness.render(props));
+    find(harness.render(props), node => node?.props?.id === 'login-code').props.onChange('001234');
+    const click = find(harness.render(props), node => node?.type === 'form').props.onSubmit;
+    const pending = click({ preventDefault() {} }); await click({ preventDefault() {} });
+    assert.equal(calls, 1);
     harness.unmount(); const state = [...harness.state];
     assert.equal(signal.aborted, true);
     release(result); await pending;
     assert.deepEqual(harness.state, state);
-    assert.deepEqual(destinations, [], 'an abandoned form cannot navigate after a late review');
+    assert.deepEqual(destinations, []);
   }
 });
 
-test('a current explicit access review can proceed without sending or redeeming another OTP', async t => {
+test('an accepted OTP cannot trigger a second redemption or send when the verified screen renders again', async t => {
   const destinations = browser(t), paths = [];
-  let checks = 0;
   t.mock.method(globalThis, 'fetch', async path => {
     paths.push(path);
-    return Response.json(path.endsWith('/send-verification-otp') ? { ok: true }
-      : path === '/api/auth/session?view=access' ? { authenticated: ++checks > 1, mode: 'better-auth', email } : proof());
-  });
-  const harness = view(); await enterCode(harness);
-  const review = find(harness.render(props), node => node?.props?.children === 'Continuar al panel').props.onClick;
-  await review(); await review();
-  assert.deepEqual(destinations, ['/dashboard']);
-  assert.deepEqual(paths, ['/api/auth/email-otp/send-verification-otp', '/api/auth/sign-in/email-otp', '/api/auth/session?view=access', '/api/auth/session?view=access']);
-  harness.unmount();
-});
-
-test('OTP proof waits for the current canonical response and an abandoned lookup cannot navigate or update state', async t => {
-  const destinations = browser(t), paths = [];
-  let release, signal, started;
-  const checking = new Promise(resolve => { started = resolve; });
-  t.mock.method(globalThis, 'fetch', async (path, options) => {
-    paths.push(path);
-    if (path === '/api/auth/session?view=access') {
-      signal = options.signal; started();
-      return new Promise(resolve => { release = resolve; });
-    }
     return Response.json(path.endsWith('/send-verification-otp') ? { ok: true } : proof());
   });
-  const harness = view();
-  const pending = enterCode(harness);
-  await checking;
-  assert.match(html(harness), /Comprobando tu acceso actual/);
-  assert.deepEqual(destinations, [], 'OTP ownership is not sufficient for dashboard entry');
-  harness.unmount(); const state = [...harness.state];
-  assert.equal(signal.aborted, true);
-  release(Response.json({ authenticated: true, mode: 'better-auth', email }));
-  await pending;
-  assert.deepEqual(harness.state, state);
-  assert.deepEqual(destinations, []);
-  assert.deepEqual(paths, ['/api/auth/email-otp/send-verification-otp', '/api/auth/sign-in/email-otp', '/api/auth/session?view=access']);
+  const harness = view(); await enterCode(harness);
+  for (let index = 0; index < 5; index++) harness.render(props);
+  assert.deepEqual(destinations, ['/dashboard']);
+  assert.deepEqual(paths, ['/api/auth/email-otp/send-verification-otp', '/api/auth/sign-in/email-otp']);
+  assert.equal(find(harness.render(props), node => node?.type === 'a' && node?.props?.href === '/dashboard').props.href, '/dashboard');
+  harness.unmount();
 });
 
-test('stale password completion and old review controls cannot navigate after the parent is abandoned or another email is selected', async t => {
+test('a disposed OTP form ignores a late decoded POST proof without navigating, resending or updating state', async t => {
+  const destinations = browser(t), paths = [];
+  let release, signal, started;
+  const decoding = new Promise(resolve => { started = resolve; });
+  t.mock.method(globalThis, 'fetch', async (path, options) => {
+    paths.push(path);
+    if (path.endsWith('/send-verification-otp')) return Response.json({ ok: true });
+    signal = options.signal;
+    return { ok: true, status: 200, json() { started(); return new Promise(resolve => { release = resolve; }); } };
+  });
+  const harness = view(), pending = enterCode(harness); await decoding;
+  assert.deepEqual(destinations, []);
+  harness.unmount(); const state = [...harness.state];
+  assert.equal(signal.aborted, true);
+  release(proof()); await pending;
+  assert.deepEqual(harness.state, state);
+  assert.deepEqual(destinations, []);
+  assert.deepEqual(paths, ['/api/auth/email-otp/send-verification-otp', '/api/auth/sign-in/email-otp']);
+});
+
+test('a stale password completion cannot navigate after its parent has been unmounted', t => {
   const destinations = browser(t);
-  t.mock.method(globalThis, 'fetch', async path => Response.json(path.endsWith('/send-verification-otp') ? { ok: true }
-    : path === '/api/auth/session?view=access' ? { authenticated: false, mode: 'better-auth' } : proof()));
-  const harness = view(); await enterCode(harness);
-  const review = find(harness.render(props), node => node?.props?.children === 'Continuar al panel').props.onClick;
-  find(harness.render(props), node => node?.props?.children === 'Usar otro correo').props.onClick();
-  await review();
+  const parent = view(), parentProps = { ...props, initialMode: 'password' };
+  const complete = find(parent.render(parentProps), node => typeof node?.props?.onVerified === 'function').props.onVerified;
+  parent.unmount(); const state = [...parent.state];
+  complete(email);
+  assert.deepEqual(parent.state, state);
   assert.deepEqual(destinations, []);
-  const password = view(), passwordProps = { ...props, initialMode: 'password' };
-  const complete = find(password.render(passwordProps), node => typeof node?.props?.onVerified === 'function').props.onVerified;
-  password.unmount(); const state = [...password.state];
-  complete(email, { ready: true });
-  assert.deepEqual(password.state, state);
-  assert.deepEqual(destinations, []);
-  harness.unmount();
 });
 
 test('automatic entry keeps this tab sponsor and branch bound to its own email despite another tab changing global referral context', async t => {

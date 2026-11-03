@@ -13,7 +13,8 @@ const registrationCookie = '__Secure-better-auth.session_token=synthetic.registr
 const registrationToken = 'synthetic-registration-token';
 const modes = new Map([[sessionCookie, 'member'],
   ['__Secure-better-auth.session_token=synthetic-tampered', 'tampered'],
-  ['__Secure-better-auth.session_token=synthetic-wrong-audience', 'wrong-audience']]);
+  ['__Secure-better-auth.session_token=synthetic-wrong-audience', 'wrong-audience'],
+  ['__Secure-better-auth.session_token=synthetic-token-unavailable', 'token-unavailable']]);
 const metrics = { tokens: 0, jwks: 0, verifiedReferrals: 0, sensitiveJwksHeaders: 0, registrations: 0, contactRegistrations: 0, phoneCalls: 0,
   stripeCheckoutCalls: 0, stripeResumeCalls: 0, nowpaymentsCheckoutCalls: 0, nowpaymentsCaptures: 0, nowpaymentsStatusReads: 0,
   nowpaymentsPurchaseReads: 0, nowpaymentsPurchaseResumes: 0, nowpaymentsPurchaseCancels: 0, signOutCalls: 0,
@@ -175,6 +176,7 @@ const syntheticEnv = {
       const signature = createHmac('sha256', secret).update(['GET', '/api/auth/token', timestamp, ip, hash(cookie), hash('')].join('\n')).digest('hex');
       if (!mode || ip !== '192.0.2.10' || Math.abs(Number(timestamp) - Date.now() / 1000) > 30
         || headers.get('x-vp-auth-signature') !== signature) return Response.json({ error: 'synthetic-session-rejected' }, { status: 401 });
+      if (mode === 'token-unavailable') return Response.json({ error: 'synthetic-token-unavailable' }, { status: 503 });
       return Response.json({ token: await signedJwt(mode) });
     }
     if (target.hostname === 'auth.core.internal' && target.pathname === '/api/auth/jwks') {
@@ -283,16 +285,24 @@ export default {
   async fetch(request, env, ctx) {
     const incoming = new URL(request.url);
     if (incoming.pathname === '/__synthetic_metrics') return Response.json({ privateCalls, ...metrics });
+    const headers = new Headers(request.headers);
+    headers.delete('x-forwarded-host');
+    // Browser-only local QA applies to both compiled-page and API fixtures.
+    // Preserve the same-origin rule: foreign origins are never rewritten.
+    // This file is not deployed and never changes the production trust policy.
+    if (['localhost', '127.0.0.1', '[::1]'].includes(incoming.hostname)) {
+      if (headers.get('origin') === incoming.origin) headers.set('origin', syntheticEnv.AUTH_PUBLIC_ORIGIN);
+      headers.set('cf-connecting-ip', '192.0.2.10');
+    }
     // Exercise the actual built Server Component with request-local, synthetic
     // catalog data. This file is never imported by the production Worker and
     // no fixture, credential, DB connection or override enters its bundle.
-    if (['/__overview_fixture/dashboard', '/__overview_fixture/dashboard/home', '/__overview_fixture/dashboard/kyc',
+    if (['/dashboard', '/__overview_fixture/dashboard', '/__overview_fixture/dashboard/home', '/__overview_fixture/dashboard/kyc',
       '/__overview_fixture/dashboard/packages', '/__overview_fixture/dashboard/packages-enabled'].includes(incoming.pathname)) {
-      const headers = new Headers(request.headers);
-      headers.delete('x-forwarded-host');
       const membershipFixture = incoming.pathname.includes('/packages');
       const membershipEnabled = incoming.pathname.endsWith('/packages-enabled');
-      const pathname = membershipFixture ? '/dashboard/packages?plan=1' : incoming.pathname.slice('/__overview_fixture'.length);
+      const pathname = membershipFixture ? '/dashboard/packages?plan=1'
+        : incoming.pathname === '/dashboard' ? incoming.pathname : incoming.pathname.slice('/__overview_fixture'.length);
       const input = new Request(`https://app.mindblisspower.com${pathname}`, {
         method: request.method, headers,
       });
@@ -318,14 +328,6 @@ export default {
       : nowDisabledFixture ? incoming.pathname.slice('/__now_disabled'.length)
       : resendDisabledFixture ? incoming.pathname.slice('/__resend_disabled'.length)
       : resendUnconfiguredFixture ? incoming.pathname.slice('/__resend_unconfigured'.length) : incoming.pathname;
-    const headers = new Headers(request.headers);
-    headers.delete('x-forwarded-host');
-    // Browser-only local QA of this synthetic fixture. Preserve the same-origin
-    // rule: foreign origins are never rewritten. This file is not deployed.
-    if (['localhost', '127.0.0.1', '[::1]'].includes(incoming.hostname)) {
-      if (headers.get('origin') === incoming.origin) headers.set('origin', syntheticEnv.AUTH_PUBLIC_ORIGIN);
-      headers.set('cf-connecting-ip', '192.0.2.10');
-    }
     const input = new Request(`https://app.mindblisspower.com${pathname}${incoming.search}`, { method: request.method, headers, body: request.body });
     return worker.fetch(input, { ...env, ...syntheticEnv,
       BETTER_AUTH_REGISTRATION_SMS_REQUIRED: 'true', SENTDM_API_KEY: 'synthetic-never-call', SENTDM_OTP_TEMPLATE_ID: 'synthetic-never-call',

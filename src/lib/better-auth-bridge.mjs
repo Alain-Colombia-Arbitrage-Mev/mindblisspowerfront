@@ -103,14 +103,34 @@ export async function fetchBetterAuth(path, { cookie = "", method = "GET", body,
 // Session-authorized JWT stays on the server. It is not a replacement browser cookie.
 export async function betterAuthServiceToken(cookie, dependencies = {}) {
   if (!betterAuthCookies(cookie)) return "";
+  let stage = 'transport';
+  /** @type {number | 'unavailable'} */
+  let status = 'unavailable';
+  const observe = () => {
+    // Only fixed stages and bounded HTTP integers leave this request. Logging
+    // must never expose token/context data or change the existing auth result.
+    try { console.warn(JSON.stringify({ event: 'auth_service_token', stage, status })); } catch { /* best effort */ }
+  };
   try {
     const response = await fetchBetterAuth("/token", { cookie }, dependencies);
-    if ([401, 403].includes(response.status)) return "";
-    if (!response.ok) throw new AuthServiceUnavailable();
+    if ([401, 403].includes(response.status)) {
+      stage = 'endpoint'; status = response.status; observe();
+      return "";
+    }
+    if (!response.ok) {
+      stage = 'endpoint';
+      status = Number.isInteger(response.status) && response.status >= 100 && response.status <= 599 ? response.status : 'unavailable';
+      throw new AuthServiceUnavailable();
+    }
+    stage = 'response';
     const payload = await readAuthBody({ body: response.body, signal: AbortSignal.timeout(8000) });
     if (!payload || typeof payload.token !== 'string' || !payload.token || payload.token.length > 16000) throw new AuthServiceUnavailable();
     return payload.token;
-  } catch { throw new AuthServiceUnavailable(); }
+  } catch (error) {
+    if (error?.name === 'AbortError' || error?.name === 'TimeoutError') { stage = 'transport'; status = 'unavailable'; }
+    observe();
+    throw new AuthServiceUnavailable();
+  }
 }
 
 export const browserAuthPaths = new Set([

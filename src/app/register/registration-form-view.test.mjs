@@ -40,10 +40,9 @@ function enterValid(harness, values = valid) {
 const submit = tree => find(tree, node => node?.type === 'form').props.onSubmit({ preventDefault() {} });
 const signupAck = () => Response.json({ ok: true, mode: 'better-auth', email: valid.email, userConfirmed: false, requiresConfirmation: true, resendAfter: 300 });
 const confirmationAck = () => Response.json({ ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: false, sessionEstablished: true });
-const canonicalAccess = (ready = true, email = valid.email) => Response.json({ authenticated: ready, mode: 'better-auth', email });
 function browser(t) {
   const previous = globalThis.window, destinations = [];
-  globalThis.window = { location: { assign: href => destinations.push(href) } };
+  globalThis.window = { location: { assign: href => destinations.push(href), replace: href => destinations.push(href) } };
   t.after(() => { if (previous === undefined) delete globalThis.window; else globalThis.window = previous; });
   return destinations;
 }
@@ -223,16 +222,12 @@ test('invalid optional contacts stop signup instead of dropping or silently alte
   }
 });
 
-test('passwordless signup immediately enters once after OTP proof and matching canonical access without sending a second code', async t => {
+test('passwordless registration hands off once after fresh native session proof without any session GET or second code', async t => {
   const destinations = browser(t), paths = [];
   t.mock.method(globalThis, 'fetch', async (path, options) => {
     paths.push(path);
     if (path === '/api/auth/register') return signupAck();
-    if (path === '/api/auth/session?view=access') {
-      assert.equal(options.cache, 'no-store'); assert.equal(options.credentials, 'same-origin');
-      assert.equal(options.body, undefined);
-      return canonicalAccess();
-    }
+    assert.equal(path, '/api/auth/register/confirm');
     assert.deepEqual(JSON.parse(options.body), { email: valid.email, code: '001234' });
     return confirmationAck();
   });
@@ -240,25 +235,17 @@ test('passwordless signup immediately enters once after OTP proof and matching c
   await submit(enterValid(harness));
   let tree = harness.render(props);
   assert.match(renderToStaticMarkup(tree), /Verifica tu correo/);
+  assert.deepEqual(destinations, [], 'signup acknowledgement is not proof of a native session');
   find(tree, node => node?.props?.id === 'code').props.onChange({ target: { value: '001234' } });
   await submit(harness.render(props));
   tree = harness.render(props);
-  assert.deepEqual(paths, ['/api/auth/register', '/api/auth/register/confirm', '/api/auth/session?view=access']);
-  assert.match(renderToStaticMarkup(tree), /El correo está verificado/);
+  assert.deepEqual(paths, ['/api/auth/register', '/api/auth/register/confirm']);
   assert.match(renderToStaticMarkup(tree), /Correo verificado correctamente/);
   assert.match(renderToStaticMarkup(tree), /role="status" aria-live="polite" aria-atomic="true"/);
-  assert.match(renderToStaticMarkup(tree), /No necesitas solicitar otro código/);
-  assert.match(renderToStaticMarkup(tree), /Tu sesión tiene acceso al portal/);
-  assert.match(renderToStaticMarkup(tree), /Crear o cambiar contraseña \(opcional\)/);
-  assert.doesNotMatch(renderToStaticMarkup(tree), /contraseña (?:guardada|creada correctamente)|tu nueva contraseña está/);
-  assert.doesNotMatch(renderToStaticMarkup(tree), /Entra con la contraseña que creaste|Ir al acceso con código|Entrar con contraseña/);
-  assert.match(renderToStaticMarkup(tree), /Si tu vinculación requiere revisión, debe aprobarse/);
+  assert.doesNotMatch(renderToStaticMarkup(tree), /Revisar acceso|cuenta aprobada|saldo disponible|Tu sesión tiene acceso al portal/);
   const continuation = find(tree, node => node?.props?.children === 'Continuar al panel');
   assert.equal(continuation.props.href, '/dashboard');
   assert.deepEqual(destinations, ['/dashboard']);
-  let prevented = false;
-  continuation.props.onClick({ preventDefault() { prevented = true; } });
-  assert.equal(prevented, true, 'a repeated fallback click cannot dispatch a second navigation');
   for (let render = 0; render < 3; render++) harness.render(props);
   assert.deepEqual(destinations, ['/dashboard']);
   assert.equal(find(tree, node => node?.props?.children === 'Crear o cambiar contraseña (opcional)').props.href, '/forgot-password');
@@ -268,37 +255,21 @@ test('passwordless signup immediately enters once after OTP proof and matching c
   assert.match(renderToStaticMarkup(tree), /el código de registro no sirve para ese proceso/);
 });
 
-test('a verified session without approved network access, a mismatched session or an outage never grants the dashboard and can be rechecked without another OTP', async t => {
+test('registration confirmation without the exact fresh-session acknowledgement never navigates or consults a session summary', async t => {
   const destinations = browser(t);
-  for (const firstSession of [() => canonicalAccess(false), () => canonicalAccess(true, 'different@example.test'),
-    () => Response.json({ error: 'authorization_unavailable' }, { status: 503 })]) {
-    const previousNavigations = destinations.length;
-    const paths = []; let reads = 0;
-    t.mock.method(globalThis, 'fetch', async (path, options) => {
-      paths.push(path);
-      if (path === '/api/auth/register/confirm') return confirmationAck();
-      assert.equal(path, '/api/auth/session?view=access');
-      assert.equal(options.body, undefined);
-      return reads++ === 0 ? firstSession() : canonicalAccess();
-    });
-    const harness = view(), resume = { initialSearch: `email=${encodeURIComponent(valid.email)}&resume=1` };
-    let tree = harness.render(resume);
+  for (const payload of [{ ok: true }, { ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: true, sessionEstablished: false },
+    { ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: false },
+    { ok: true, mode: 'better-auth', userConfirmed: false, needsLogin: false, sessionEstablished: true },
+    { ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: false, sessionEstablished: true, role: 'admin' }]) {
+    const paths = [];
+    t.mock.method(globalThis, 'fetch', async path => { paths.push(path); return Response.json(payload); });
+    const harness = view(), resume = { initialSearch: 'email=' + encodeURIComponent(valid.email) + '&resume=1' };
+    const tree = harness.render(resume);
     find(tree, node => node?.props?.id === 'code').props.onChange({ target: { value: '001234' } });
     await submit(harness.render(resume));
-    tree = harness.render(resume);
-    assert.match(renderToStaticMarkup(tree), /Correo verificado correctamente/);
-    assert.match(renderToStaticMarkup(tree), /Si tu vinculación requiere revisión, debe aprobarse/);
-    const recheck = find(tree, node => node?.props?.children === 'Continuar al panel');
-    assert.equal(recheck.props.href, undefined, 'the continuation is a guarded recheck, not a dashboard link');
-    assert.equal(typeof recheck.props.onClick, 'function');
-    assert.equal(find(tree, node => node?.props?.id === 'code'), undefined);
-    assert.equal(destinations.length, previousNavigations, 'an unbound, mismatched or unavailable session never enters');
-    await find(tree, node => node?.props?.children === 'Continuar al panel').props.onClick();
-    tree = harness.render(resume);
-    assert.equal(find(tree, node => node?.props?.children === 'Continuar al panel').props.href, '/dashboard');
-    assert.equal(destinations.length, previousNavigations + 1);
-    assert.equal(destinations.at(-1), '/dashboard');
-    assert.deepEqual(paths, ['/api/auth/register/confirm', '/api/auth/session?view=access', '/api/auth/session?view=access']);
+    assert.doesNotMatch(renderToStaticMarkup(harness.render(resume)), /Correo verificado correctamente|Continuar al panel/);
+    assert.deepEqual(destinations, []);
+    assert.deepEqual(paths, ['/api/auth/register/confirm']);
     harness.unmount();
   }
 });
@@ -322,56 +293,48 @@ test('confirmation503 is unconfirmed and offers explicit login without a canonic
   harness.unmount();
 });
 
-test('leaving after confirmation while canonical access is pending aborts the read and suppresses stale authorization without retrying OTP', async t => {
-  const destinations = browser(t);
+test('leaving while registration confirmation POST is pending aborts and ignores late native-session proof without another code', async t => {
+  const destinations = browser(t), paths = [];
   let complete, signal, started;
-  const begun = new Promise(resolve => { started = resolve; }), paths = [];
+  const begun = new Promise(resolve => { started = resolve; });
   t.mock.method(globalThis, 'fetch', async (path, options) => {
-    paths.push(path);
-    if (path === '/api/auth/register/confirm') return confirmationAck();
+    paths.push(path); assert.equal(path, '/api/auth/register/confirm');
     signal = options.signal; started();
     return new Promise(resolve => { complete = resolve; });
   });
-  const harness = view(), resume = { initialSearch: `email=${encodeURIComponent(valid.email)}&resume=1` };
-  let tree = harness.render(resume);
+  const harness = view(), resume = { initialSearch: 'email=' + encodeURIComponent(valid.email) + '&resume=1' };
+  const tree = harness.render(resume);
   find(tree, node => node?.props?.id === 'code').props.onChange({ target: { value: '001234' } });
-  const pending = submit(harness.render(resume));
-  await begun;
-  assert.deepEqual(destinations, [], 'proof alone must wait for canonical authorization');
-  assert.match(renderToStaticMarkup(harness.render(resume)), /Comprobando tu sesión y tu acceso/);
-  harness.unmount();
-  const previous = JSON.stringify(harness.state);
+  const pending = submit(harness.render(resume)); await begun;
+  assert.deepEqual(destinations, []);
+  harness.unmount(); const previous = JSON.stringify(harness.state);
   assert.equal(signal.aborted, true);
-  complete(canonicalAccess());
-  await pending;
+  complete(confirmationAck()); await pending;
   assert.equal(JSON.stringify(harness.state), previous);
-  assert.deepEqual(paths, ['/api/auth/register/confirm', '/api/auth/session?view=access']);
+  assert.deepEqual(paths, ['/api/auth/register/confirm']);
   assert.deepEqual(destinations, []);
 });
 
-test('manual registration access review is duplicate-locked and a ready result after unmount cannot enter', async t => {
+test('registration confirmation is duplicate-locked and a late rejected transport cannot update an abandoned form', async t => {
   const destinations = browser(t), paths = [];
-  let release, signal, reads = 0;
+  let reject, signal;
   t.mock.method(globalThis, 'fetch', async (path, options) => {
-    paths.push(path);
-    if (path === '/api/auth/register/confirm') return confirmationAck();
-    if (++reads === 1) return canonicalAccess(false);
+    paths.push(path); assert.equal(path, '/api/auth/register/confirm');
     signal = options.signal;
-    return new Promise(resolve => { release = resolve; });
+    return new Promise((_resolve, fail) => { reject = fail; });
   });
-  const harness = view(), resume = { initialSearch: `email=${encodeURIComponent(valid.email)}&resume=1` };
-  let tree = harness.render(resume);
+  const harness = view(), resume = { initialSearch: 'email=' + encodeURIComponent(valid.email) + '&resume=1' };
+  const tree = harness.render(resume);
   find(tree, node => node?.props?.id === 'code').props.onChange({ target: { value: '001234' } });
-  await submit(harness.render(resume));
-  const review = find(harness.render(resume), node => node?.props?.children === 'Continuar al panel').props.onClick;
-  const pending = review(); await review();
-  assert.equal(reads, 2);
+  const handler = find(harness.render(resume), node => node?.type === 'form').props.onSubmit;
+  const pending = handler({ preventDefault() {} }); await handler({ preventDefault() {} });
+  assert.equal(paths.length, 1);
   harness.unmount(); const state = JSON.stringify(harness.state);
   assert.equal(signal.aborted, true);
-  release(canonicalAccess()); await pending; await review();
+  reject(new Error('synthetic private transport failure')); await pending;
   assert.equal(JSON.stringify(harness.state), state);
   assert.deepEqual(destinations, []);
-  assert.deepEqual(paths, ['/api/auth/register/confirm', '/api/auth/session?view=access', '/api/auth/session?view=access']);
+  assert.deepEqual(paths, ['/api/auth/register/confirm']);
 });
 
 test('resumed registration preserves its local sponsor and branch before automatic entry without claiming another email hint', async t => {
@@ -380,7 +343,7 @@ test('resumed registration preserves its local sponsor and branch before automat
   window.localStorage = storage;
   referral.captureReferralFromUrl('?ref=GlobalSponsor&side=R', storage);
   referral.bindReferralCodeToEmail('other@example.test', 'OtherSponsor', storage, undefined, 'registration', 'R');
-  t.mock.method(globalThis, 'fetch', async path => path === '/api/auth/session?view=access' ? canonicalAccess() : confirmationAck());
+  t.mock.method(globalThis, 'fetch', async path => { assert.equal(path, '/api/auth/register/confirm'); return confirmationAck(); });
   const saves = [];
   const harness = view(undefined, referral, undefined, (...values) => { saves.push(values); return new Promise(() => {}); });
   const resume = { initialSearch: `email=${encodeURIComponent(valid.email)}&resume=1&ref=LocalSponsor&side=L` };
@@ -489,29 +452,27 @@ test('unconfirmed and mismatched delivery failures do not claim a pending regist
   }
 });
 
-test('registration sends wait30 seconds and confirmation waits20 for its two private proofs before the separate12-second access read', async t => {
-  const destinations = browser(t);
-  const deadlines = [], paths = [];
+test('registration send and confirmation retain their deadlines without adding a client session preflight', async t => {
+  const destinations = browser(t), deadlines = [], paths = [];
   const timeout = AbortSignal.timeout.bind(AbortSignal);
   t.mock.method(AbortSignal, 'timeout', milliseconds => { deadlines.push(milliseconds); return timeout(milliseconds); });
   t.mock.method(globalThis, 'fetch', async (path, options) => {
     paths.push(path);
     if (path === '/api/auth/register') return signupAck();
-    if (path === '/api/auth/session?view=access') return canonicalAccess();
+    assert.equal(path, '/api/auth/register/confirm');
     return Response.json(JSON.parse(options.body).resend === true
       ? { ok: true, mode: 'better-auth', resendAfter: 300 }
       : { ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: false, sessionEstablished: true });
   });
-  const harness = view();
-  await submit(enterValid(harness));
+  const harness = view(); await submit(enterValid(harness));
   let tree = harness.render(props);
   await find(tree, node => node?.props?.children === 'Solicitar otro código').props.onClick();
   tree = harness.render(props);
   find(tree, node => node?.props?.id === 'code').props.onChange({ target: { value: '001234' } });
   await submit(harness.render(props));
-  assert.deepEqual(deadlines, [30000, 30000, 20000, 12000]);
-  assert.deepEqual(paths, ['/api/auth/register', '/api/auth/register/confirm', '/api/auth/register/confirm', '/api/auth/session?view=access']);
-  assert.equal(emailOtp.otpTimeoutMs('confirm'), 12000, 'login OTP exchange keeps its original deadline');
+  assert.deepEqual(deadlines, [30000, 30000, 20000]);
+  assert.deepEqual(paths, ['/api/auth/register', '/api/auth/register/confirm', '/api/auth/register/confirm']);
+  assert.equal(emailOtp.otpTimeoutMs('confirm'), 12000);
   assert.deepEqual(destinations, ['/dashboard']);
 });
 

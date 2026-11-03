@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import { generateKeyPairSync, sign, createHash, createHmac } from "node:crypto";
 import { betterAuthConfig, betterAuthCookies, betterAuthServiceToken, betterAuthTimeoutMs, fetchBetterAuth, browserAuthCookie, proxyBetterAuth, proxyBetterAuthKeys, trustedAuthClientIp } from "./better-auth-bridge.mjs";
 import { createBetterAuthVerifier, validBetterAuthClaims } from "./better-auth-token.mjs";
@@ -118,6 +119,104 @@ test("service JWT is obtained server-side only using the filtered session cookie
   assert.equal(await betterAuthServiceToken(cookie, { env, clientIp: '192.0.2.10', fetchImpl: async () => new Response(null, { status: 401 }) }), '');
   const failure = await proxyBetterAuth(request(), "sign-in/email", { env, fetchImpl: async () => { throw Error("private-token-url"); } });
   assert.deepEqual(await failure.json(), { error: "authentication_unavailable" });
+});
+
+test('service-token observations are silent for missing cookies and successful token responses', async t => {
+  const logs = [];
+  t.mock.method(console, 'warn', value => logs.push(JSON.parse(value)));
+  let calls = 0;
+  const dependencies = { env, clientIp: '192.0.2.10', fetchImpl: async () => { calls++; return Response.json({ token: 'synthetic-private-jwt' }); } };
+  assert.equal(await betterAuthServiceToken('unrelated=synthetic-private-cookie', dependencies), '');
+  assert.equal(calls, 0);
+  assert.equal(await betterAuthServiceToken(cookie, dependencies), 'synthetic-private-jwt');
+  assert.equal(calls, 1);
+  assert.deepEqual(logs, []);
+});
+
+test('service-token endpoint failures observe one bounded HTTP status and preserve anonymous versus unavailable contracts', async t => {
+  const logs = [];
+  t.mock.method(console, 'warn', value => logs.push(JSON.parse(value)));
+  const statuses = [401, 403, 302, 404, 429, 500, 503, 0, -1, 600, NaN, 'synthetic-private@example.test'];
+  for (const status of statuses) {
+    logs.length = 0;
+    let calls = 0;
+    const dependencies = { env, clientIp: '192.0.2.10', fetchImpl: async () => {
+      calls++;
+      return { status, ok: false, body: new ReadableStream({ start(controller) {
+        controller.enqueue(new TextEncoder().encode('synthetic-private@example.test cookie secret jwt'));
+        controller.close();
+      } }) };
+    } };
+    if ([401, 403].includes(status)) assert.equal(await betterAuthServiceToken(cookie, dependencies), '');
+    else await assert.rejects(betterAuthServiceToken(cookie, dependencies), { name: 'AuthServiceUnavailable', message: 'authentication_unavailable' });
+    assert.equal(calls, 1, 'observing a failure never repeats token issuance');
+    assert.deepEqual(logs, [{ event: 'auth_service_token', stage: 'endpoint',
+      status: Number.isInteger(status) && status >= 100 && status <= 599 ? status : 'unavailable' }]);
+    assert.doesNotMatch(JSON.stringify(logs), /synthetic-private|@|cookie|secret|message|stack/);
+  }
+});
+
+test('malformed service-token responses expose only the response enum, never body contents or token material', async t => {
+  const logs = [];
+  t.mock.method(console, 'warn', value => logs.push(JSON.parse(value)));
+  for (const response of [() => new Response('synthetic-private@example.test jwt secret cookie'),
+    () => Response.json({ email: 'synthetic-private@example.test', token: null }),
+    () => Response.json({ token: '' }), () => Response.json({ token: 'x'.repeat(16001) }),
+    () => Response.json([]), () => new Response(null)]) {
+    logs.length = 0;
+    let calls = 0;
+    await assert.rejects(betterAuthServiceToken(cookie, { env, clientIp: '192.0.2.10', fetchImpl: async () => { calls++; return response(); } }),
+      { name: 'AuthServiceUnavailable', message: 'authentication_unavailable' });
+    assert.equal(calls, 1);
+    assert.deepEqual(logs, [{ event: 'auth_service_token', stage: 'response', status: 'unavailable' }]);
+    assert.doesNotMatch(JSON.stringify(logs), /synthetic-private|@|cookie|secret|message|stack/);
+  }
+});
+
+test('service-token transport, configuration and cancellation failures log only safe transport enums once', async t => {
+  const logs = [];
+  t.mock.method(console, 'warn', value => logs.push(JSON.parse(value)));
+  for (const failure of [new Error('synthetic-private@example.test secret cookie jwt'),
+    new DOMException('synthetic-private@example.test cookie jwt', 'AbortError'),
+    new DOMException('synthetic-private@example.test cookie jwt', 'TimeoutError')]) {
+    logs.length = 0;
+    let calls = 0;
+    await assert.rejects(betterAuthServiceToken(cookie, { env, clientIp: '192.0.2.10', fetchImpl: async () => { calls++; throw failure; } }),
+      { name: 'AuthServiceUnavailable', message: 'authentication_unavailable' });
+    assert.equal(calls, 1);
+    assert.deepEqual(logs, [{ event: 'auth_service_token', stage: 'transport', status: 'unavailable' }]);
+    assert.doesNotMatch(JSON.stringify(logs), /synthetic-private|@|cookie|secret|message|stack/);
+  }
+  logs.length = 0;
+  await assert.rejects(betterAuthServiceToken(cookie, { env: { ...env, AUTH_BFF_SHARED_SECRET: '' }, clientIp: '192.0.2.10',
+    fetchImpl: () => assert.fail('invalid configuration must not fetch') }), { name: 'AuthServiceUnavailable' });
+  assert.deepEqual(logs, [{ event: 'auth_service_token', stage: 'transport', status: 'unavailable' }]);
+});
+
+test('a service-token body timeout remains a transport failure without echoing stream diagnostics', async t => {
+  const logs = [];
+  t.mock.method(console, 'warn', value => logs.push(JSON.parse(value)));
+  await assert.rejects(betterAuthServiceToken(cookie, { env, clientIp: '192.0.2.10', fetchImpl: async () => new Response(new ReadableStream({
+    start(controller) { controller.error(new DOMException('synthetic-private@example.test jwt', 'TimeoutError')); },
+  })) }), { name: 'AuthServiceUnavailable', message: 'authentication_unavailable' });
+  assert.deepEqual(logs, [{ event: 'auth_service_token', stage: 'transport', status: 'unavailable' }]);
+});
+
+test('an unavailable diagnostic sink never changes the service-token authentication result', async t => {
+  t.mock.method(console, 'warn', () => { throw new Error('synthetic logging unavailable'); });
+  for (const status of [401, 403, 503]) {
+    const dependencies = { env, clientIp: '192.0.2.10', fetchImpl: async () => new Response(null, { status }) };
+    if (status === 503) await assert.rejects(betterAuthServiceToken(cookie, dependencies), { name: 'AuthServiceUnavailable', message: 'authentication_unavailable' });
+    else assert.equal(await betterAuthServiceToken(cookie, dependencies), '');
+  }
+});
+
+test('service-token logging source projects only static event, stage and bounded status fields', () => {
+  const source = readFileSync(new URL('./better-auth-bridge.mjs', import.meta.url), 'utf8');
+  const helper = source.slice(source.indexOf('export async function betterAuthServiceToken('), source.indexOf('export const browserAuthPaths'));
+  assert.match(helper, /event:\s*['"]auth_service_token['"]/);
+  assert.doesNotMatch(helper, /(?:error|response|payload|dependencies)\?*\.(?:message|stack|headers)|console\.(?:error|debug|log)\(/);
+  assert.doesNotMatch(helper, /JSON\.stringify\((?:error|response|payload|dependencies)\)/);
 });
 
 test("Better Auth signature, audience, verification and five-minute lifetime are enforced", async () => {

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { RegistrationButton, RegistrationField, RegistrationPassword } from '../register/RegistrationFields';
-import { betterAuthPasswordRequest, betterAuthPasswordFailure, betterAuthAccess, verifiedEmailSignIn } from './better-auth-login.mjs';
+import { betterAuthPasswordRequest, betterAuthPasswordFailure, verifiedEmailSignIn } from './better-auth-login.mjs';
 import { registrationRequired, registrationRedirect, registrationUrl } from '../register/registration-model.mjs';
 
 export default function BetterAuthPasswordLogin({ email, setEmail, onBusy, onError, onNotice, onVerified, onRegistrationRequired = undefined, rememberReferral, registrationHref = '' }) {
@@ -69,12 +69,10 @@ export default function BetterAuthPasswordLogin({ email, setEmail, onBusy, onErr
         return;
       }
       setPassword('');
-      const access = await betterAuthAccess(fetch, contract.body.email, { signal: controller.signal });
-      if (controller.signal.aborted || pending.current !== controller) return;
-      rememberReferral(contract.body.email);
-      // Keep this form mounted until its canonical check completes. Rendering
-      // the parent's verified screen first would dispose its request owner.
-      onVerified(contract.body.email, access);
+      // Native-session proof is complete; authorization belongs to the server
+      // dashboard gate, not another client preflight that can strand sign-in.
+      try { rememberReferral(contract.body.email); } catch { /* Optional hint. */ }
+      onVerified(contract.body.email);
     } catch {
       if (controller.signal.aborted || pending.current !== controller) return;
       onError('No pudimos conectar con el servicio de acceso. Intenta otra vez.');

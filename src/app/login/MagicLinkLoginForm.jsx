@@ -21,11 +21,15 @@ import { checkPassword, isValidPassword } from "@/lib/password";
 import { bindReferralCodeToEmail, captureReferralFromUrl, normalizePlacementSide, normalizeReferralCode } from "@/lib/referral-attribution";
 import { otpRequest, otpFailureMessage, otpTimeoutMs, OTP_SEND_NOTICE, OTP_SEND_UNCONFIRMED_NOTICE } from "@/lib/email-otp-client.mjs";
 import BetterAuthPasswordLogin from './BetterAuthPasswordLogin';
-import { betterAuthAccess, verifiedEmailSignIn } from './better-auth-login.mjs';
+import { verifiedEmailSignIn } from './better-auth-login.mjs';
 import { registrationRequired, registrationRedirect, registrationRetrySeconds, registrationUrl } from '../register/registration-model.mjs';
 import { beginVerifiedReferralSync } from '@/lib/referral-sync.mjs';
 
 const AUTH_STATE_MESSAGES = {
+  "session-not-established": {
+    tone: "info",
+    text: "El servidor no pudo confirmar una sesión con acceso. Vuelve a entrar con el mismo correo. Si se repite, contacta al soporte con la referencia MBP-LOGIN-SESSION.",
+  },
   "invalid-email": {
     tone: "danger",
     text: "Ingresa un email válido para continuar.",
@@ -104,68 +108,32 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     if (verifiedEmail) verifiedTitle.current?.focus();
   }, [verifiedEmail]);
 
-  function showVerifiedLogin(verifiedEmail, access) {
+  function showVerifiedLogin(verifiedEmail) {
     if (!mountedRef.current || dashboardNavigationRef.current) return;
     setError('');
     setNotice('');
     setLoginCode('');
-    const verified = { email: verifiedEmail, access };
+    const verified = { email: verifiedEmail };
     verifiedLoginRef.current = verified;
     setVerifiedLogin(verified);
     enterVerifiedDashboard(verified);
   }
 
   function enterVerifiedDashboard(verified) {
-    if (!mountedRef.current || dashboardNavigationRef.current || verifiedLoginRef.current !== verified
-      || verified.access.ready !== true || verified.access.checking || verified.access.error) return;
-    // Only the current canonical lookup can reach here, after matching the
-    // verified recipient. Navigation itself never grants network permissions.
-    rememberReferralForEmail(verified.email);
-    if (referralCode) void beginVerifiedReferralSync(verified.email, referralCode, preferredSide);
-    dashboardNavigationRef.current = true;
-    window.location.assign('/dashboard');
-  }
-
-  async function continueVerifiedLogin() {
-    if (!mountedRef.current || dashboardNavigationRef.current || otpSubmittingRef.current || isLoading) return;
-    const verified = verifiedLoginRef.current;
-    if (!verified) return;
-    if (verified.access.ready === true) {
-      enterVerifiedDashboard(verified);
-      return;
-    }
-    otpSubmittingRef.current = true;
-    const controller = new AbortController();
-    otpRequestRef.current = controller;
-    const recipient = verified.email;
-    setLoadingAction('access-check');
+    if (!mountedRef.current || dashboardNavigationRef.current || verifiedLoginRef.current !== verified) return;
+    // The BFF proved the newly issued native session and its verified owner.
+    // Navigate, not authorize: the dashboard and every API enforce live access.
+    // Optional browser storage/referral sync must not strand a valid sign-in.
     try {
-      // Recheck the current server session; the confirmation never grants a
-      // network binding, role, rank or placement by itself.
-      const access = await betterAuthAccess(fetch, recipient, { signal: controller.signal });
-      if (controller.signal.aborted || otpRequestRef.current !== controller
-        || verifiedLoginRef.current !== verified) return;
-      showVerifiedLogin(recipient, access);
-    } finally {
-      if (otpRequestRef.current === controller) {
-        otpRequestRef.current = null;
-        otpSubmittingRef.current = false;
-        if (!controller.signal.aborted) setLoadingAction('');
-      }
+      rememberReferralForEmail(verified.email);
+      if (referralCode) void beginVerifiedReferralSync(verified.email, referralCode, preferredSide);
+    } catch { /* The server independently authorizes referral persistence. */ }
+    dashboardNavigationRef.current = true;
+    try {
+      window.location.replace('/dashboard');
+    } catch {
+      setError('Tu correo está verificado. Abre el panel con el enlace de abajo para continuar.');
     }
-  }
-
-  function useAnotherEmail() {
-    if (isLoading || dashboardNavigationRef.current) return;
-    verifiedLoginRef.current = null;
-    setVerifiedLogin(null);
-    setEmail('');
-    setCodeRecipient('');
-    setLoginCode('');
-    setCodeStep('request');
-    setMode('code');
-    setError('');
-    setNotice('');
   }
 
   function normalizeEmail() {
@@ -471,12 +439,8 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
           setError(otpFailureMessage(response.status, 'confirm'));
           return;
         }
-        // A verified mailbox is not an approved network identity. Never assign
-        // a person, rank, placement or role from the sign-in response.
-        showVerifiedLogin(normalizedEmail, { ready: false, checking: true });
-        const access = await betterAuthAccess(fetch, normalizedEmail, { signal: controller.signal });
-        if (controller.signal.aborted || otpRequestRef.current !== controller) return;
-        showVerifiedLogin(normalizedEmail, access);
+        // Fresh native proof permits the handoff, not network permissions.
+        showVerifiedLogin(normalizedEmail);
         return;
       }
 
@@ -630,26 +594,23 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
   }
 
   if (verifiedLogin) {
-    const access = verifiedLogin.access;
     return (
-      <div className="space-y-4" aria-busy={isLoading || Boolean(access.checking)}>
+      <div className="space-y-4" aria-busy={isLoading}>
         <Message tone="info">
           <h2 ref={verifiedTitle} tabIndex={-1} className="text-base font-bold">Correo verificado correctamente</h2>
           <p className="mt-2 break-words font-normal">Confirmamos el correo {verifiedLogin.email}. Puedes continuar sin repetir este paso.</p>
         </Message>
-        {access.error ? <Message tone="danger">{access.error}</Message> : null}
+        {error ? <Message tone="info">{error}</Message> : null}
         <p className="text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
-          {access.checking ? 'Comprobando tu acceso actual a la red…' : access.ready
-            ? 'Tu sesión tiene acceso al portal. Abriendo tu panel…'
-            : access.notice || 'No pudimos comprobar todavía tu acceso a la red. Puedes revisarlo sin solicitar otro código.'}
+          Abriendo tu panel… El servidor comprobará tu sesión y tu acceso a la red.
         </p>
-        <p className="text-sm leading-6" style={{ color: "var(--vp-muted)" }}>No necesitas registrarte de nuevo ni cambiar tu correo. Comprobamos tu sesión para abrir el panel; esto no modifica tu cuenta ni tu posición en la red.</p>
-        <SecondaryButton disabled={isLoading || access.checking} onClick={continueVerifiedLogin} icon={<ArrowRight size={16} />}>
-          {isLoading || access.checking ? 'Comprobando acceso…' : 'Continuar al panel'}
-        </SecondaryButton>
-        <SecondaryButton disabled={isLoading || access.checking} onClick={useAnotherEmail} icon={<ArrowLeft size={15} />}>
-          Usar otro correo
-        </SecondaryButton>
+        <p className="text-sm leading-6" style={{ color: "var(--vp-muted)" }}>Si no se abre automáticamente, usa «Continuar al panel». No necesitas registrarte de nuevo ni cambiar tu correo; esto no modifica tu cuenta ni tu posición en la red.</p>
+        <a href="/dashboard" className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[var(--vp-border)] bg-[var(--vp-surface-raised)] px-3 text-center text-xs font-black text-[var(--vp-text-soft)] transition hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--vp-accent)]">
+          <ArrowRight size={16} aria-hidden="true" />Continuar al panel
+        </a>
+        <a href="/login" className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[var(--vp-border)] bg-[var(--vp-surface-raised)] px-3 text-center text-xs font-black text-[var(--vp-text-soft)] transition hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--vp-accent)]">
+          <ArrowLeft size={15} aria-hidden="true" />Volver al acceso
+        </a>
       </div>
     );
   }
