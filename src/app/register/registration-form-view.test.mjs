@@ -76,6 +76,24 @@ test('registration guidance explains the manual email-first steps and optional p
   harness.unmount();
 });
 
+test('registration top navigation preserves the current local sponsor, branch and edited recipient in both directions without an API or global-storage read', t => {
+  t.mock.method(globalThis, 'fetch', () => assert.fail('navigation must not register or send an OTP'));
+  const harness = view(), context = { initialSearch: 'ref=Sponsor%26A%23%3F%2B&side=R' };
+  let tree = harness.render(context);
+  find(tree, node => node?.props?.id === 'email').props.onChange({ target: { value: ' MEMBER@EXAMPLE.TEST ' } });
+  tree = harness.render(context);
+  for (const [prop, path] of [['loginHref', '/login'], ['registrationHref', '/register']]) {
+    const url = new URL(tree.props[prop], 'https://portal.example.test');
+    assert.equal(url.pathname, path); assert.equal(url.origin, 'https://portal.example.test');
+    assert.equal(url.searchParams.get('ref'), 'Sponsor&A#?+'); assert.equal(url.searchParams.get('side'), 'R');
+    assert.equal(url.searchParams.get('email'), valid.email);
+    assert.equal(url.searchParams.has('resume'), false);
+  }
+  assert.equal(find(tree, node => node?.props?.id === 'acceptsPrivacy').props.checked, false);
+  assert.equal(find(tree, node => node?.props?.id === 'code'), undefined);
+  harness.unmount();
+});
+
 test('optional contacts remain available inside a native disclosure closed by default without changing consent or values', () => {
   const harness = view(), tree = enterValid(harness, { ...valid,
     contactPhone: { country: 'CO', national: '3001234567' }, contactWhatsapp: { country: 'ES', national: '612345678' } });

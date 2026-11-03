@@ -56,6 +56,30 @@ try {
   }
   const resendMetricsAfter = await (await fetch('http://127.0.0.1:8787/__synthetic_metrics')).json();
   assert.deepEqual(resendMetricsAfter, resendMetricsBefore, 'Resend notifications never contact private API, SQL or payment services');
+  for (const [path, destination] of [
+    ['/?ref=SYNTHETIC-SPONSOR&side=L', '/register?ref=SYNTHETIC-SPONSOR&side=L'],
+    ['/?ref=SYNTHETIC-SPONSOR&side=R&email=private%40example.test&next=https%3A%2F%2Fevil.example.test', '/register?ref=SYNTHETIC-SPONSOR&side=R'],
+    ['/', '/dashboard'],
+  ]) {
+    const response = await fetch(`http://127.0.0.1:8787${path}`, { redirect: 'manual', signal: AbortSignal.timeout(8000) });
+    assert.equal(response.status, 307, 'the built homepage routes legacy referral links before dashboard authorization');
+    const target = new URL(response.headers.get('location'), 'https://app.mindblisspower.com');
+    assert.equal(target.pathname + target.search, destination);
+    assert.match(response.headers.get('cache-control'), /private.*no-store/);
+    assert.equal(response.headers.get('set-cookie'), null);
+    probes++;
+  }
+  for (const path of ['/register?ref=SYNTHETIC-SPONSOR&side=R','/login?ref=SYNTHETIC-SPONSOR&side=R']) {
+    const response = await fetch(`http://127.0.0.1:8787${path}`, { redirect: 'manual', signal: AbortSignal.timeout(8000) });
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    const hrefs = [...html.matchAll(/href="([^"]+)"/g)].map(match => match[1].replaceAll('&amp;', '&'));
+    assert.ok(hrefs.includes('/register?ref=SYNTHETIC-SPONSOR&side=R'), 'the built registration tab preserves the referral');
+    assert.ok(hrefs.includes('/login?mode=code&ref=SYNTHETIC-SPONSOR&side=R'), 'the built access tab preserves the referral');
+    assert.match(response.headers.get('cache-control'), /private.*no-store/);
+    assert.equal(response.headers.get('set-cookie'), null);
+    probes++;
+  }
   const cases = [
     ['/health', {}, 200], ['/login', {}, 200], ['/api/member/tree', {}, 401],
     ['/__overview_fixture/dashboard', {}, 307],

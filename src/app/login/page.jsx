@@ -2,7 +2,7 @@ import Link from "next/link";
 import AuthShell from "../_components/AuthShell";
 import MagicLinkLoginForm from "./MagicLinkLoginForm";
 import { betterAuthEnabled } from "@/lib/better-auth-bridge.mjs";
-import { registrationUrl } from '../register/registration-model.mjs';
+import { registrationLoginUrl, registrationUrl } from '../register/registration-model.mjs';
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +25,8 @@ export default async function LoginPage({ searchParams }) {
   return (
     <AuthShell
       activePath="/login"
+      loginHref={registrationLoginUrl(initialEmail, initialRef, initialSide)}
+      registrationHref={registrationUrl(initialEmail, initialRef, initialSide)}
       eyebrow="Acceso"
       title="Tu equipo ya está adentro."
       description="Entra con un código a tu correo, sin recordar una contraseña. Si ya tienes contraseña de acceso, también puedes utilizarla."

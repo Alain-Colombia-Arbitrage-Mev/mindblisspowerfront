@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 import { registrationViewHarness, findRegistrationNode as find, registrationFieldStub, registrationButtonStub } from '../register/registration-view-test-harness.mjs';
 import * as recovery from './password-recovery-model.mjs';
+import { registrationLoginUrl, registrationUrl } from '../register/registration-model.mjs';
 
 const email = 'member@example.test';
 const props = { initialEmail: ' MEMBER@EXAMPLE.TEST ' };
@@ -389,7 +390,7 @@ test('the actual login page exposes recovery in both modes without putting a pri
     const page = loadPage('../login/page.jsx', {
       'next/link': { default: link }, '../_components/AuthShell': { default: ({ children }) => React.createElement('main', null, children) },
       './MagicLinkLoginForm': { default: () => null }, '@/lib/better-auth-bridge.mjs': { betterAuthEnabled: () => enabled },
-      '../register/registration-model.mjs': { registrationUrl: () => '/register' },
+      '../register/registration-model.mjs': { registrationLoginUrl, registrationUrl },
     });
     const tree = await page({ searchParams: Promise.resolve({ email, mode: 'password' }) });
     const recoveryLink = find(tree, node => node?.props?.href === '/forgot-password');

@@ -3,7 +3,7 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import React from 'react';
 import ts from 'typescript';
-import { registrationUrl } from '../register/registration-model.mjs';
+import { registrationLoginUrl, registrationUrl } from '../register/registration-model.mjs';
 
 function page(enabled = true) {
   const compiled = ts.transpileModule(readFileSync(new URL('./page.jsx', import.meta.url), 'utf8'), {
@@ -13,7 +13,7 @@ function page(enabled = true) {
   const element = (type, props, key) => React.createElement(type, { ...props, key });
   const mocks = { 'next/link': { default: () => null }, '../_components/AuthShell': { default: () => null },
     './MagicLinkLoginForm': { default: Form }, '@/lib/better-auth-bridge.mjs': { betterAuthEnabled: () => enabled },
-    '../register/registration-model.mjs': { registrationUrl }, 'react/jsx-runtime': { jsx: element, jsxs: element } };
+    '../register/registration-model.mjs': { registrationLoginUrl, registrationUrl }, 'react/jsx-runtime': { jsx: element, jsxs: element } };
   const module = { exports: {} };
   new Function('require', 'module', 'exports', compiled)(name => {
     assert.ok(Object.hasOwn(mocks, name), `Unexpected login page dependency: ${name}`); return mocks[name];
@@ -22,7 +22,8 @@ function page(enabled = true) {
     if (node?.type === Form) return node;
     return React.Children.toArray(node?.props?.children).map(form).find(Boolean);
   }
-  return { async render(params = {}) { return form(await module.exports.default({ searchParams: Promise.resolve(params) })); } };
+  return { async render(params = {}) { return form(await module.exports.default({ searchParams: Promise.resolve(params) })); },
+    renderTree(params = {}) { return module.exports.default({ searchParams: Promise.resolve(params) }); } };
 }
 
 test('the real login page remounts the form for a changed referral, side, recipient or mode without any request', async t => {
@@ -50,4 +51,17 @@ test('unrelated, privileged and duplicate-shaped query values cannot alter the a
   const invalid = await app.render({ email: ['a@example.test', 'b@example.test'], ref: {}, side: true, mode: ['password'] });
   assert.equal(invalid.props.initialEmail, ''); assert.equal(invalid.props.initialRef, ''); assert.equal(invalid.props.initialSide, '');
   assert.equal(invalid.props.initialMode, 'code');
+});
+
+test('the login server page passes the same current referral and side to both top navigation actions without trusting redirects or roles', async t => {
+  t.mock.method(globalThis, 'fetch', () => assert.fail('auth navigation must not send messages or read a session'));
+  const app = page(), output = await app.renderTree({ email: ' MEMBER@EXAMPLE.TEST ', ref: 'Sponsor&A#?+', side: 'R',
+    next: 'https://attacker.test', role: 'admin' });
+  for (const [prop, path] of [['loginHref', '/login'], ['registrationHref', '/register']]) {
+    const url = new URL(output.props[prop], 'https://portal.example.test');
+    assert.equal(url.origin, 'https://portal.example.test'); assert.equal(url.pathname, path);
+    assert.equal(url.searchParams.get('ref'), 'Sponsor&A#?+'); assert.equal(url.searchParams.get('side'), 'R');
+    assert.equal(url.searchParams.get('email'), 'member@example.test');
+    assert.equal(url.searchParams.has('next'), false); assert.equal(url.searchParams.has('role'), false);
+  }
 });

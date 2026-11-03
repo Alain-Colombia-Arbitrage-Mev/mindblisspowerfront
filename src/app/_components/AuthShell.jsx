@@ -23,6 +23,8 @@ export default function AuthShell({
   visualSrc = "/mindbliss/mindbliss-02.avif",
   visualAlt = "",
   visualPosition = "center",
+  loginHref = "/login",
+  registrationHref = "/register",
 }) {
   return (
     <main className="auth-mono min-h-dvh lg:grid lg:grid-cols-[minmax(420px,46%)_minmax(0,1fr)]">
@@ -120,7 +122,7 @@ export default function AuthShell({
             return (
               <Link
                 key={item.href}
-                href={item.href}
+                href={item.href === "/login" ? loginHref : item.href === "/register" ? registrationHref : item.href}
                 aria-current={active ? "page" : undefined}
                 className="border-b-2 pb-2 text-[11px] font-black uppercase tracking-[0.2em] transition"
                 style={{
