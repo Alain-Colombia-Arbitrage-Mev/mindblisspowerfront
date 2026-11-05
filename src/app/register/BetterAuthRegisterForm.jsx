@@ -155,7 +155,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
         setCode('');
         setStep('confirm');
         cooldown.start(registrationRetrySeconds(response, payload));
-        setErrors({ form: 'Tu registro quedó pendiente de verificar el correo, pero no pudimos enviar el código. No crees otra cuenta. Espera a que termine el contador y usa «Solicitar otro código». El reenvío es manual.' });
+        setErrors({ form: 'Tu registro quedó pendiente de verificar el correo, pero no pudimos confirmar el envío. Revisa tu bandeja y spam; si recibes un código vigente, introdúcelo aquí. No crees otra cuenta. Espera a que termine el contador y usa «Solicitar otro código». El reenvío es manual.' });
         return;
       }
       if (!response.ok || !registrationAcknowledged('register', payload, email)) {

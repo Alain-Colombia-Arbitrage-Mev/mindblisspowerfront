@@ -1,5 +1,6 @@
 // Browser-only request contracts. Authentication stays in HttpOnly cookies;
 // neither session tokens nor service JWTs are returned or stored here.
+import { authRetryAfterSeconds } from './auth-retry-after.mjs';
 export function otpRequest(provider, action, email, code = '') {
   const normalizedEmail = String(email).trim().toLowerCase();
   if (normalizedEmail.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
@@ -26,10 +27,7 @@ export function otpFailureMessage(status, action) {
 // Code redemption and requesting another email have independent budgets. Only
 // a server 429 pauses redemption; preserve the code and never retry or resend.
 export function otpConfirmationRetrySeconds(response, now = Date.now()) {
-  const header = response.headers?.get('retry-after') || '';
-  const seconds = /^\d{1,10}$/.test(header) ? Number(header)
-    : /^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), /.test(header) ? (Date.parse(header) - now) / 1000 : NaN;
-  return Number.isFinite(seconds) && seconds > 0 ? Math.min(86400, Math.ceil(seconds)) : 60;
+  return authRetryAfterSeconds(response.headers?.get('retry-after'), 60, now);
 }
 
 // Give the single delivery request room to finish; never automatically resend

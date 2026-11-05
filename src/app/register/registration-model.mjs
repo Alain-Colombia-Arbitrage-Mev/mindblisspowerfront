@@ -1,4 +1,5 @@
 import { referralLinkCode } from '../../lib/referral-links.mjs';
+import { parseAuthRetryAfter } from '../../lib/auth-retry-after.mjs';
 
 export const REGISTRATION_RESEND_SECONDS = 300;
 // Registration confirmation includes native OTP verification and a separate
@@ -93,11 +94,10 @@ export function registrationHints(search) {
 }
 
 // Retry-After may be longer than our resend budget, but never shorten it.
-export function registrationRetrySeconds(response, payload = {}) {
-  const supplied = Number(response.headers?.get('retry-after') || payload.retryAfterSec || payload.retryAfter || payload.resendAfter);
-  return Number.isFinite(supplied) && supplied > 0
-    ? Math.max(REGISTRATION_RESEND_SECONDS, Math.min(86400, Math.ceil(supplied)))
-    : REGISTRATION_RESEND_SECONDS;
+export function registrationRetrySeconds(response, payload = {}, now = Date.now()) {
+  const waits = [response.headers?.get('retry-after'), payload.retryAfterSec, payload.retryAfter, payload.resendAfter]
+    .map(value => parseAuthRetryAfter(value, now)).filter(value => value !== null);
+  return Math.max(REGISTRATION_RESEND_SECONDS, ...waits);
 }
 
 export function registrationFailure(status, action = 'register', code = '') {
