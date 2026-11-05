@@ -14,7 +14,8 @@ const safeErrors = new Set(['buyer_not_found', 'invalid_referral_code', 'invalid
   'upstream_unavailable', 'nowpayments_checkout_unavailable', 'membership_purchase_already_processed', 'invalid_purchase_request_id', 'purchase_request_conflict']);
 const validAmount = value => typeof value === 'string' && /^(?:0|[1-9]\d{0,11})\.\d{2}$/.test(value);
 const minorUnits = value => BigInt(value.replace('.', ''));
-const nowPortalOrigins = new Set(['https://mindblisspower.com', 'https://app.mindblisspower.com']);
+const nowPortalOrigins = new Set(['https://mindblisspower.com', 'https://app.mindblisspower.com',
+  'https://mindbliss-portal-rewon.devfidubit.workers.dev']);
 
 async function readJSON(body, signal, limit = 16384) {
   const reader = body?.getReader();

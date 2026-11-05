@@ -57,8 +57,8 @@ test('membership checkout forwards verified JWT and catalog ID, never client mon
   assert.deepEqual(await response.json(), { ...payload, checkout_environment: 'production' });
 });
 
-test('NOW return-origin metadata comes only from exact server-configured main or app, never browser URLs or headers', async () => {
-  for (const origin of ['https://mindblisspower.com', 'https://app.mindblisspower.com']) {
+test('NOW return-origin metadata comes only from exact server-configured portals, never browser URLs or headers', async () => {
+  for (const origin of ['https://mindblisspower.com', 'https://app.mindblisspower.com', 'https://mindbliss-portal-rewon.devfidubit.workers.dev']) {
     const req = new Request(`${origin}/api/payments/checkout`, { method: 'POST', headers: {
       origin, 'content-type': 'application/json', 'X-VP-Portal-Origin': 'https://evil.example.test',
       'x-forwarded-host': 'evil.example.test', 'x-forwarded-proto': 'http',
@@ -80,7 +80,9 @@ test('NOW return-origin metadata comes only from exact server-configured main or
 
 test('unsupported server origins cannot become a NOW return header and Stripe never receives that capability', async () => {
   for (const origin of ['https://portal.example.test', 'https://admin.mindblisspower.com',
-    'https://app.mindblisspower.com/', 'https://app.mindblisspower.com:8443', 'https://app.mindblisspower.com.evil.example.test']) {
+    'https://app.mindblisspower.com/', 'https://app.mindblisspower.com:8443', 'https://app.mindblisspower.com.evil.example.test',
+    'https://mindbliss-portal-production.devfidubit.workers.dev', 'https://other.devfidubit.workers.dev',
+    'https://mindbliss-portal-rewon.devfidubit.workers.dev.evil.example.test']) {
     const req = new Request('https://portal.example.test/api/payments/checkout', { method: 'POST', headers: {
       origin, 'content-type': 'application/json', 'X-VP-Portal-Origin': 'https://app.mindblisspower.com',
     }, body: JSON.stringify(form) });

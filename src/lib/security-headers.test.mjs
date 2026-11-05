@@ -60,7 +60,7 @@ test('uploaded static files get the same safe policy without wildcard cache rule
 
 test('every explicit edge response passes request context through the security wrapper', () => {
   const source = readFileSync(new URL('../../cloudflare-worker.mjs', import.meta.url), 'utf8');
-  assert.match(source, /privateCloudflareResponse\(await handleResendWebhook\(request, \{ env \}\), request\)/);
+  assert.match(source, /privateCloudflareResponse\(await handleResendWebhook\(request, \{ env: requestEnv \}\), request\)/);
   assert.match(source, /privateCloudflareResponse\(blocked, request\)/);
   assert.match(source, /handler\.fetch\), request\)/);
 });

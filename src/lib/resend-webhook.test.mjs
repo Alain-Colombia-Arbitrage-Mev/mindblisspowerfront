@@ -6,6 +6,7 @@ import ts from 'typescript';
 import { handleResendWebhook, resendWebhookNamespace, RESEND_DELIVERY_TYPES, RESEND_WEBHOOK_MAX_BYTES,
   RESEND_WEBHOOK_TIMEOUT_MS } from './resend-webhook.mjs';
 import * as runtime from './cloudflare-runtime.mjs';
+import * as origins from './portal-request-origin.mjs';
 import * as guard from './cloudflare-portal-guard.mjs';
 import * as webhook from './resend-webhook.mjs';
 
@@ -318,6 +319,7 @@ test('Worker intercepts canonical, encoded and suffix namespace requests before 
     './.open-next/worker.js': { default: { fetch() { assert.fail('notification reached Next'); } } },
     './src/lib/cloudflare-runtime.mjs': { ...runtime, runCloudflareRequest() { assert.fail('notification created a scoped Next/DB request'); } },
     './src/lib/cloudflare-portal-guard.mjs': guard,
+    './src/lib/portal-request-origin.mjs': origins,
     './src/lib/resend-webhook.mjs': { ...webhook, handleResendWebhook: (request, { env }) => run(request, { env }) },
   }).default;
   const response = await worker.fetch(request(), configuration, {}); await ack(response);

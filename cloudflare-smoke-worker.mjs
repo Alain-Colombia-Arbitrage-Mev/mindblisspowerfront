@@ -328,14 +328,18 @@ export default {
     const resendUnconfiguredFixture = incoming.pathname.startsWith('/__resend_unconfigured/');
     const traceFixture = incoming.pathname.startsWith('/__resend_trace/');
     const traceUnavailableFixture = incoming.pathname.startsWith('/__resend_trace_unavailable/');
+    const alternateFixture = incoming.pathname.startsWith('/__alternate/');
     const pathname = staleSmsFixture ? incoming.pathname.slice('/__stale_sms'.length)
       : nowDisabledFixture ? incoming.pathname.slice('/__now_disabled'.length)
       : resendDisabledFixture ? incoming.pathname.slice('/__resend_disabled'.length)
       : resendUnconfiguredFixture ? incoming.pathname.slice('/__resend_unconfigured'.length)
       : traceFixture ? incoming.pathname.slice('/__resend_trace'.length)
-      : traceUnavailableFixture ? incoming.pathname.slice('/__resend_trace_unavailable'.length) : incoming.pathname;
-    const input = new Request(`https://app.mindblisspower.com${pathname}${incoming.search}`, { method: request.method, headers, body: request.body });
+      : traceUnavailableFixture ? incoming.pathname.slice('/__resend_trace_unavailable'.length)
+      : alternateFixture ? incoming.pathname.slice('/__alternate'.length) : incoming.pathname;
+    const inputOrigin = alternateFixture ? 'https://mindbliss-portal-rewon.devfidubit.workers.dev' : 'https://app.mindblisspower.com';
+    const input = new Request(`${inputOrigin}${pathname}${incoming.search}`, { method: request.method, headers, body: request.body });
     return worker.fetch(input, { ...env, ...syntheticEnv,
+      ...(alternateFixture ? { AUTH_ALTERNATE_ORIGIN: inputOrigin } : {}),
       BETTER_AUTH_REGISTRATION_SMS_REQUIRED: 'true', SENTDM_API_KEY: 'synthetic-never-call', SENTDM_OTP_TEMPLATE_ID: 'synthetic-never-call',
       ...(nowDisabledFixture ? { NOWPAYMENTS_MEMBERSHIPS_ENABLED: 'false' } : {}),
       ...(resendDisabledFixture ? { RESEND_WEBHOOK_ENABLED: 'false' } : {}),

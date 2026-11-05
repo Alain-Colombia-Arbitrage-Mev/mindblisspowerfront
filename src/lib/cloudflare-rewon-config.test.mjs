@@ -11,10 +11,13 @@ test('rewon is an isolated production Worker with only the exact app custom doma
   assert.equal(rewon.name, 'mindbliss-portal-rewon');
   assert.notEqual(rewon.name, config.env.production.name);
   assert.notEqual(rewon.name, config.env.staging.name);
-  assert.equal(rewon.workers_dev, false);
+  assert.equal(rewon.workers_dev, true);
   assert.equal(rewon.preview_urls, false);
   assert.deepEqual(rewon.routes, [{ pattern: 'app.mindblisspower.com', custom_domain: true }]);
   assert.equal(rewon.vars.AUTH_PUBLIC_ORIGIN, 'https://app.mindblisspower.com');
+  assert.equal(rewon.vars.AUTH_ALTERNATE_ORIGIN, 'https://mindbliss-portal-rewon.devfidubit.workers.dev');
+  assert.equal(config.env.production.vars.AUTH_ALTERNATE_ORIGIN, undefined);
+  assert.equal(config.env.staging.vars.AUTH_ALTERNATE_ORIGIN, undefined);
   assert.deepEqual(config.env.production.routes, [{ pattern: 'mindblisspower.com', custom_domain: true }]);
   assert.deepEqual(config.env.staging.routes, []);
   assert.equal(config.env.production.vars.AUTH_PUBLIC_ORIGIN, 'https://mindblisspower.com');

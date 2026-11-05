@@ -23,6 +23,19 @@ try {
   assert.ok(ready, `workerd was not ready: ${logs}`);
   let probes = 0;
   let staticChunk;
+  for (const [path, init, expected] of [
+    ['/login', {}, 200], ['/register', {}, 200], ['/forgot-password', {}, 200], ['/api/auth/session', {}, 200],
+    ['/api/member/tree', {}, 401], ['/api/admin/users', {}, 404], ['/%61pi/admin/users', {}, 404],
+    ['/api/payments/checkout', { method: 'POST', headers: { origin: 'https://app.mindblisspower.com', 'content-type': 'application/json' }, body: '{}' }, 403],
+    ['/api/auth/logout', { method: 'POST', headers: { origin: 'https://app.mindblisspower.com', 'content-type': 'application/json' }, body: '{}' }, 403],
+  ]) {
+    const response = await fetch(`http://127.0.0.1:8787/__alternate${path}`, { ...init, redirect: 'manual', signal: AbortSignal.timeout(8000) });
+    assert.equal(response.status, expected, `temporary alias ${path}`);
+    assert.equal(response.headers.get('strict-transport-security'), 'max-age=86400');
+    assert.equal(response.headers.get('cache-control'), 'private, no-store');
+    assert.equal(response.headers.get('x-frame-options'), 'DENY');
+    await response.body?.cancel(); probes++;
+  }
   const resendMetricsBefore = await (await fetch('http://127.0.0.1:8787/__synthetic_metrics')).json();
   const resendPayload = JSON.stringify({ type: 'email.delivered', created_at: new Date().toISOString(), data: {
     email_id: '00000000-0000-4000-8000-000000000073', from: 'otp@mindblisspower.com',

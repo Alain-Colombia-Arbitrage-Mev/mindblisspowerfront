@@ -4,7 +4,8 @@
 // containing URLs/user data are sent to an external collector).
 export const DOCUMENT_CSP = "base-uri 'self'; object-src 'none'; frame-ancestors 'none'";
 export const CANDIDATE_CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self'; frame-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'";
-const productionHosts = new Set(['mindblisspower.com', 'admin.mindblisspower.com', 'app.mindblisspower.com']);
+const productionHosts = new Set(['mindblisspower.com', 'admin.mindblisspower.com', 'app.mindblisspower.com',
+  'mindbliss-portal-rewon.devfidubit.workers.dev']);
 
 export function applySecurityHeaders(headers, request) {
   headers.set('Content-Security-Policy', DOCUMENT_CSP);

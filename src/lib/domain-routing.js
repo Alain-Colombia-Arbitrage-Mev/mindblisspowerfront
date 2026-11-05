@@ -1,5 +1,6 @@
 export const CUSTOMER_APP_HOST = "app.mindblisspower.com";
 export const CUSTOMER_PUBLIC_HOST = "mindblisspower.com";
+export const CUSTOMER_TEMPORARY_HOST = "mindbliss-portal-rewon.devfidubit.workers.dev";
 export const ADMIN_APP_HOST = "admin.mindblisspower.com";
 
 const ADMIN_PAGE_REDIRECTS = [
@@ -15,7 +16,8 @@ export function normalizeHost(host) {
 
 export function isCustomerAppHost(host) {
   const normalized = normalizeHost(host);
-  return normalized === CUSTOMER_APP_HOST || normalized === CUSTOMER_PUBLIC_HOST || normalized.endsWith(".sslip.io");
+  return normalized === CUSTOMER_APP_HOST || normalized === CUSTOMER_PUBLIC_HOST
+    || normalized === CUSTOMER_TEMPORARY_HOST || normalized.endsWith(".sslip.io");
 }
 
 // Admission only: do not rewrite requests. Normalize before classifying so an
