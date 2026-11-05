@@ -9,8 +9,7 @@ export function referralPublicOrigin(env = {}) {
   if (url.protocol !== 'https:' || url.username || url.password || url.port || url.pathname !== '/' || url.search || url.hash) {
     throw new Error('invalid_referral_origin');
   }
-  // Compatibility with old deployments that still expose the retired alias.
-  return url.origin === 'https://app.mindblisspower.com' ? REFERRAL_PUBLIC_ORIGIN : url.origin;
+  return url.origin;
 }
 
 export function referralLinkCode(value) {

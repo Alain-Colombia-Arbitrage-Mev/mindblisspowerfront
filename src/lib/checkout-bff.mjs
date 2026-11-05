@@ -14,6 +14,7 @@ const safeErrors = new Set(['buyer_not_found', 'invalid_referral_code', 'invalid
   'upstream_unavailable', 'nowpayments_checkout_unavailable', 'membership_purchase_already_processed', 'invalid_purchase_request_id', 'purchase_request_conflict']);
 const validAmount = value => typeof value === 'string' && /^(?:0|[1-9]\d{0,11})\.\d{2}$/.test(value);
 const minorUnits = value => BigInt(value.replace('.', ''));
+const nowPortalOrigins = new Set(['https://mindblisspower.com', 'https://app.mindblisspower.com']);
 
 async function readJSON(body, signal, limit = 16384) {
   const reader = body?.getReader();
@@ -76,10 +77,14 @@ export async function handleMembershipCheckout(request, { env, identity, fetchIm
   const purchaseRequestId = provider === 'nowpayments' ? nowpaymentsOrderId(body.purchase_request_id) : '';
   if (provider === 'nowpayments' && !purchaseRequestId) return reply({ error: 'invalid_purchase_request_id' }, 400);
   if (!env.VP_PAYMENTS_URL || !env.PAYMENTS_SERVICE_TOKEN) return reply({ error: 'payments-unconfigured' }, 503);
+  // Private return-portal capability: exact server configuration only. Never
+  // forward a browser header/body URL or change an existing backend default.
+  const portalOrigin = provider === 'nowpayments' && nowPortalOrigins.has(env.AUTH_PUBLIC_ORIGIN) ? env.AUTH_PUBLIC_ORIGIN : '';
   try {
     const upstream = await fetchImpl(`${env.VP_PAYMENTS_URL}/api/payments/checkout`, {
       method: 'POST', redirect: 'manual', cache: 'no-store', signal,
-      headers: { 'content-type': 'application/json', 'X-VP-Service-Token': env.PAYMENTS_SERVICE_TOKEN, 'X-VP-Id-Token': verified.token },
+      headers: { 'content-type': 'application/json', 'X-VP-Service-Token': env.PAYMENTS_SERVICE_TOKEN, 'X-VP-Id-Token': verified.token,
+        ...(portalOrigin ? { 'X-VP-Portal-Origin': portalOrigin } : {}) },
       body: JSON.stringify({ provider, email, package_id: packageId, ref, preferred_side: ref ? side : '',
         ...(provider === 'nowpayments' ? { purchase_request_id: purchaseRequestId } : {}),
         name: typeof claims.name === 'string' ? claims.name.trim().slice(0, 120) : '',

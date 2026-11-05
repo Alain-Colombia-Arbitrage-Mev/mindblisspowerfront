@@ -4,8 +4,6 @@ import { customerDomainDecision } from "@/lib/domain-routing";
 import { memberMutationError } from "@/lib/member-mutation-policy.mjs";
 
 export function proxy(request) {
-  const mutation = memberMutationError(request);
-  if (mutation) return NextResponse.json({ error: mutation.error }, { status: mutation.status, headers: { 'Cache-Control': 'private, no-store' } });
   const decision = customerDomainDecision({
     host: request.headers.get("x-forwarded-host") || request.headers.get("host"),
     pathname: request.nextUrl.pathname,
@@ -19,18 +17,13 @@ export function proxy(request) {
     return NextResponse.redirect(decision.location, 308);
   }
 
+  const mutation = memberMutationError(request);
+  if (mutation) return NextResponse.json({ error: mutation.error }, { status: mutation.status, headers: { 'Cache-Control': 'private, no-store' } });
+
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: [
-    "/api/member/:path*",
-    "/api/payments/:path*",
-    "/api/network/:path*",
-    "/api/admin/:path*",
-    "/dashboard/admin/:path*",
-    "/dashboard/command-center/:path*",
-    "/dashboard/ai/:path*",
-    "/dashboard/ai-analysis/:path*",
-  ],
+  // Raw encoded segments must also reach admission; no session/DB work here.
+  matcher: ["/((?!_next/static|_next/image|fonts/|mindbliss/|favicon.ico).*)"],
 };

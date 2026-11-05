@@ -57,6 +57,51 @@ test('membership checkout forwards verified JWT and catalog ID, never client mon
   assert.deepEqual(await response.json(), { ...payload, checkout_environment: 'production' });
 });
 
+test('NOW return-origin metadata comes only from exact server-configured main or app, never browser URLs or headers', async () => {
+  for (const origin of ['https://mindblisspower.com', 'https://app.mindblisspower.com']) {
+    const req = new Request(`${origin}/api/payments/checkout`, { method: 'POST', headers: {
+      origin, 'content-type': 'application/json', 'X-VP-Portal-Origin': 'https://evil.example.test',
+      'x-forwarded-host': 'evil.example.test', 'x-forwarded-proto': 'http',
+    }, body: JSON.stringify({ ...form, portal_origin: 'https://evil.example.test',
+      AUTH_PUBLIC_ORIGIN: 'https://admin.mindblisspower.com', success_url: 'https://evil.example.test/success', cancel_url: 'https://evil.example.test/cancel' }) });
+    let calls = 0;
+    const response = await run(req, { env: { ...env, AUTH_PUBLIC_ORIGIN: origin }, fetchImpl: async (_target, options) => {
+      calls++;
+      assert.equal(new Headers(options.headers).get('X-VP-Portal-Origin'), origin);
+      assert.doesNotMatch(options.body, /portal_origin|AUTH_PUBLIC_ORIGIN|success_url|cancel_url|evil\.example|admin\.mindblisspower/);
+      assert.equal(JSON.parse(options.body).purchase_request_id, purchaseRequestId);
+      return Response.json(payload);
+    } });
+    assert.equal(calls, 1); assert.equal(response.status, 200);
+    assert.equal(response.headers.get('X-VP-Portal-Origin'), null);
+    assert.equal(response.headers.get('cache-control'), 'private, no-store');
+  }
+});
+
+test('unsupported server origins cannot become a NOW return header and Stripe never receives that capability', async () => {
+  for (const origin of ['https://portal.example.test', 'https://admin.mindblisspower.com',
+    'https://app.mindblisspower.com/', 'https://app.mindblisspower.com:8443', 'https://app.mindblisspower.com.evil.example.test']) {
+    const req = new Request('https://portal.example.test/api/payments/checkout', { method: 'POST', headers: {
+      origin, 'content-type': 'application/json', 'X-VP-Portal-Origin': 'https://app.mindblisspower.com',
+    }, body: JSON.stringify(form) });
+    const response = await run(req, { env: { ...env, AUTH_PUBLIC_ORIGIN: origin }, fetchImpl: async (_target, options) => {
+      assert.equal(new Headers(options.headers).has('X-VP-Portal-Origin'), false);
+      return Response.json(payload);
+    } });
+    assert.equal(response.status, 200, 'unconfigured secondary portals preserve the pre-existing backend default, never a caller return destination');
+  }
+  const origin = 'https://app.mindblisspower.com';
+  const response = await run(new Request(`${origin}/api/payments/checkout`, { method: 'POST', headers: {
+    origin, 'content-type': 'application/json', 'X-VP-Portal-Origin': origin,
+  }, body: JSON.stringify({ package_id: 1, provider: 'stripe' }) }), {
+    env: { ...env, AUTH_PUBLIC_ORIGIN: origin, STRIPE_CHECKOUT_ENABLED: 'true' }, fetchImpl: async (_target, options) => {
+      assert.equal(new Headers(options.headers).has('X-VP-Portal-Origin'), false);
+      return Response.json({ url: 'https://checkout.stripe.com/c/pay/cs_live_Synthetic123', total_usd: '100.00', fee_usd: '0.00' });
+    },
+  });
+  assert.equal(response.status, 200);
+});
+
 test('operational NOW checkout accepts awaiting payment only with zero added fee and retains exact server total', async () => {
   const operational = { ...payload, total_usd: '100.00', fee_usd: '0.00', fulfillment_status: 'awaiting_payment' };
   let calls = 0;

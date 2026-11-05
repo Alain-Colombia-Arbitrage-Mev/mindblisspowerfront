@@ -1,3 +1,5 @@
+import { browserRequestDeadline } from '../../lib/browser-request-deadline.mjs';
+
 export function betterAuthPasswordRequest(email, password) {
   const normalizedEmail = String(email || '').trim().toLowerCase();
   if (normalizedEmail.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) throw new Error('invalid_email');
@@ -29,10 +31,11 @@ export function verifiedEmailSignIn(payload, expectedEmail) {
 /** @param {{signal?: AbortSignal}} [options] */
 export async function betterAuthAccess(fetchImpl = fetch, expectedEmail = '', options = {}) {
   const { signal } = options;
+  const deadline = browserRequestDeadline(signal, 12000);
   try {
     const response = await fetchImpl('/api/auth/session?view=access', {
       credentials: 'same-origin', cache: 'no-store', redirect: 'error',
-      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(12000)]) : AbortSignal.timeout(12000),
+      signal: deadline.signal,
     });
     const identity = await response.json().catch(() => ({}));
     if (!response.ok) return { ready: false, error: 'El servicio de autorización no está disponible. Intenta más tarde.' };
@@ -53,5 +56,5 @@ export async function betterAuthAccess(fetchImpl = fetch, expectedEmail = '', op
     return { ready: false, notice: 'Tu correo está verificado, pero no pudimos confirmar una sesión con acceso al portal. Puedes revisar el acceso otra vez; si continúa sin sesión, vuelve a iniciar sesión con el mismo correo.' };
   } catch {
     return { ready: false, error: 'No pudimos comprobar tu acceso a la red. Revisa tu conexión e inténtalo otra vez.' };
-  }
+  } finally { deadline.dispose(); }
 }

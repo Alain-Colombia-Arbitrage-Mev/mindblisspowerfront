@@ -56,6 +56,22 @@ try {
   }
   const resendMetricsAfter = await (await fetch('http://127.0.0.1:8787/__synthetic_metrics')).json();
   assert.deepEqual(resendMetricsAfter, resendMetricsBefore, 'Resend notifications never contact private API, SQL or payment services');
+  for (const [path, signature, status] of [
+    ['/__resend_trace/api/webhooks/resend', resendSignature, 200],
+    ['/__resend_trace/api/webhooks/resend', resendSignature, 200],
+    ['/__resend_trace/api/webhooks/resend', 'invalid', 401],
+    ['/__resend_trace_unavailable/api/webhooks/resend', resendSignature, 503],
+  ]) {
+    const response = await fetch(`http://127.0.0.1:8787${path}`, { method: 'POST',
+      headers: { ...resendHeaders, 'svix-signature': `v1,${signature}` }, body: resendPayload, signal: AbortSignal.timeout(8000) });
+    assert.equal(response.status, status); const body = await response.text();
+    if (status === 200) assert.deepEqual(JSON.parse(body), { received: true, mode: 'recorded' });
+    assert.doesNotMatch(body, /synthetic-sensitive|private subject|msg_synthetic/);
+    probes++;
+  }
+  const traced = await (await fetch('http://127.0.0.1:8787/__synthetic_metrics')).json();
+  assert.equal(traced.traceCalls, 2); assert.equal(traced.traceEvents, 1);
+  assert.equal(traced.privateCalls, resendMetricsBefore.privateCalls, 'durable email metadata never calls auth, DB or Payments');
   for (const [path, destination] of [
     ['/?ref=SYNTHETIC-SPONSOR&side=L', '/register?ref=SYNTHETIC-SPONSOR&side=L'],
     ['/?ref=SYNTHETIC-SPONSOR&side=R&email=private%40example.test&next=https%3A%2F%2Fevil.example.test', '/register?ref=SYNTHETIC-SPONSOR&side=R'],

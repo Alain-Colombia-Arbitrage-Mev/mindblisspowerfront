@@ -19,7 +19,7 @@ import { useEffect, useRef, useState } from "react";
 import { isMicrosoftEmail, suggestEmailFix, useResendCooldown } from "@/lib/useResendCooldown";
 import { checkPassword, isValidPassword } from "@/lib/password";
 import { bindReferralCodeToEmail, captureReferralFromUrl, normalizePlacementSide, normalizeReferralCode } from "@/lib/referral-attribution";
-import { otpRequest, otpFailureMessage, otpTimeoutMs, OTP_SEND_NOTICE, OTP_SEND_UNCONFIRMED_NOTICE } from "@/lib/email-otp-client.mjs";
+import { otpRequest, otpFailureMessage, otpTimeoutMs, otpConfirmationRetrySeconds, OTP_SEND_NOTICE, OTP_SEND_UNCONFIRMED_NOTICE } from "@/lib/email-otp-client.mjs";
 import BetterAuthPasswordLogin from './BetterAuthPasswordLogin';
 import { verifiedEmailSignIn } from './better-auth-login.mjs';
 import { registrationRequired, registrationRedirect, registrationRetrySeconds, registrationUrl } from '../register/registration-model.mjs';
@@ -80,6 +80,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
   const [verifiedLogin, setVerifiedLogin] = useState(null);
   const verifiedTitle = useRef(null);
   const codeCooldown = useResendCooldown(emailOtpOnly ? 300 : 45, `${authMode}:sign-in:${(codeStep === 'confirm' ? codeRecipient : email).trim().toLowerCase()}`);
+  const confirmationCooldown = useResendCooldown(60, `${authMode}:sign-in-confirm:${codeRecipient.trim().toLowerCase()}`);
   const resetCooldown = useResendCooldown(45);
 
   const authMessage = getAuthStateMessage(authState);
@@ -233,7 +234,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
             // Keep a place to enter it without retrying or claiming a delivery.
             setCodeStep("confirm");
             setCodeRecipient(normalizedEmail);
-            setLoginCode("");
+            if (!resend) setLoginCode("");
             codeCooldown.start(registrationRetrySeconds(response, payload));
             setError(response.status === 429
               ? `${otpFailureMessage(429, 'send')} ${OTP_SEND_UNCONFIRMED_NOTICE}`
@@ -302,7 +303,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
       if (emailOtpOnly) {
         setCodeStep("confirm");
         setCodeRecipient(normalizedEmail);
-        setLoginCode("");
+        if (!resend) setLoginCode("");
         codeCooldown.start(300);
         setError(OTP_SEND_UNCONFIRMED_NOTICE);
       } else {
@@ -406,7 +407,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
 
   async function confirmLoginCode(event) {
     event.preventDefault();
-    if (otpSubmittingRef.current || isLoading) return;
+    if (otpSubmittingRef.current || isLoading || (emailOtpOnly && confirmationCooldown.active)) return;
     setError("");
     setNotice("");
     const normalizedEmail = codeRecipient;
@@ -440,7 +441,8 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
 
       if (emailOtpOnly) {
         if (!response.ok || !verifiedEmailSignIn(payload, normalizedEmail)) {
-          setError(otpFailureMessage(response.status, 'confirm'));
+          if (response.status === 429) confirmationCooldown.start(otpConfirmationRetrySeconds(response));
+          setError(otpFailureMessage(response.ok ? 502 : response.status, 'confirm'));
           return;
         }
         // Fresh native proof permits the handoff, not network permissions.
@@ -691,8 +693,8 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
                 setError("");
               }}
             />
-            <PrimaryButton disabled={isLoading} loading={loadingAction === "code-confirm"} icon={<ArrowRight size={16} />}>
-              Entrar con código
+            <PrimaryButton disabled={isLoading || (emailOtpOnly && confirmationCooldown.active)} loading={loadingAction === "code-confirm"} icon={<ArrowRight size={16} />}>
+              {emailOtpOnly && confirmationCooldown.active ? confirmationCooldown.label.replace(/^Reenviar/, 'Validar de nuevo') : 'Entrar con código'}
             </PrimaryButton>
 
             <p className="text-sm leading-6" style={{ color: 'var(--vp-muted)' }}>Después de leer el correo, vuelve a esta misma pestaña para escribir el código y abrir tu panel.</p>

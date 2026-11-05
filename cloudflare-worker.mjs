@@ -8,14 +8,14 @@ export default {
   async fetch(request, env, ctx) {
     if (!cloudflareReadiness(env)) return privateCloudflareResponse(Response.json({ error: 'deployment_not_ready' }, {
       status: 503, headers: { 'Cache-Control': 'private, no-store' },
-    }));
-    if (new URL(request.url).origin !== env.AUTH_PUBLIC_ORIGIN) return privateCloudflareResponse(Response.json({ error: 'invalid_host' }, { status: 421, headers: { 'Cache-Control': 'private, no-store' } }));
+    }), request);
+    if (new URL(request.url).origin !== env.AUTH_PUBLIC_ORIGIN) return privateCloudflareResponse(Response.json({ error: 'invalid_host' }, { status: 421, headers: { 'Cache-Control': 'private, no-store' } }), request);
     if (resendWebhookNamespace(new URL(request.url).pathname)) {
-      return privateCloudflareResponse(await handleResendWebhook(request, { env }));
+      return privateCloudflareResponse(await handleResendWebhook(request, { env }), request);
     }
     request = cloudflarePortalRequest(request);
     const blocked = cloudflarePortalGuard(request, env);
-    if (blocked) return privateCloudflareResponse(blocked);
-    return privateCloudflareResponse(await runCloudflareRequest(request, env, ctx, handler.fetch));
+    if (blocked) return privateCloudflareResponse(blocked, request);
+    return privateCloudflareResponse(await runCloudflareRequest(request, env, ctx, handler.fetch), request);
   },
 };

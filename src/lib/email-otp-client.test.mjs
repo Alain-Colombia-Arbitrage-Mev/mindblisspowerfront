@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { otpRequest, otpFailureMessage, otpTimeoutMs, OTP_SEND_NOTICE, OTP_SEND_UNCONFIRMED_NOTICE } from './email-otp-client.mjs';
+import { otpRequest, otpFailureMessage, otpTimeoutMs, otpConfirmationRetrySeconds, OTP_SEND_NOTICE, OTP_SEND_UNCONFIRMED_NOTICE } from './email-otp-client.mjs';
 
 test('Better Auth uses only the same-origin sign-in OTP contract', () => {
   assert.deepEqual(otpRequest('better-auth', 'send', ' Member+1@Example.test '), {
@@ -59,4 +59,12 @@ test('login limit messages require manual waiting without fabricated times or re
     assert.doesNotMatch(otpFailureMessage(status, 'confirm'), /te quedan|intentos restantes|24 horas|5 solicitudes|10 intentos|correo verificado|cuenta bloqueada/);
   }
   assert.match(otpFailureMessage(400, 'confirm'), /código de acceso más reciente/);
+});
+
+test('OTP redemption honors numeric or HTTP-date server waits separately from email resend without trusting body hints', () => {
+  const now = Date.UTC(2026, 10, 4, 12);
+  for (const [header, expected] of [['83', 83], ['9999999999', 86400], ['-1', 60], ['0', 60], ['1e2', 60], ['private', 60], ['', 60],
+    [new Date(now + 90000).toUTCString(), 90], [new Date(now - 1000).toUTCString(), 60]]) {
+    assert.equal(otpConfirmationRetrySeconds(new Response(null, { status: 429, headers: { 'retry-after': header } }), now), expected);
+  }
 });

@@ -1,3 +1,5 @@
+import { browserRequestDeadline } from '../../../lib/browser-request-deadline.mjs';
+
 export const SMS_CONSENT_VERSION = 'sms-auth-v1';
 export const SMS_RESEND_SECONDS = 60;
 
@@ -66,7 +68,9 @@ export function phoneOptInFailure(status, action = 'status') {
 /** @param {string} action @param {Record<string, unknown>} input @param {{fetchImpl?: typeof fetch, signal?: AbortSignal}} options */
 export async function requestPhoneOptIn(action, input = {}, { fetchImpl = fetch, signal } = {}) {
   const contract = phoneOptInRequest(action, input);
-  const deadline = signal ? AbortSignal.any([signal, AbortSignal.timeout(12000)]) : AbortSignal.timeout(12000);
+  const requestDeadline = browserRequestDeadline(signal, 12000);
+  const deadline = requestDeadline.signal;
+  try {
   const response = await fetchImpl(contract.path, {
     method: contract.method, credentials: 'same-origin', cache: 'no-store', redirect: 'error', signal: deadline,
     ...(contract.body ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(contract.body) } : {}),
@@ -97,4 +101,5 @@ export async function requestPhoneOptIn(action, input = {}, { fetchImpl = fetch,
     deadline.removeEventListener('abort', aborted);
     reader.releaseLock();
   }
+  } finally { requestDeadline.dispose(); }
 }

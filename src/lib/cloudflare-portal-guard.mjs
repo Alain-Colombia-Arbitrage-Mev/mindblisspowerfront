@@ -1,11 +1,12 @@
-import { customerDomainDecision } from './domain-routing.js';
+import { customerDomainDecision, normalizedApplicationPath } from './domain-routing.js';
 import { memberMutationError } from './member-mutation-policy.mjs';
+import { applySecurityHeaders } from './security-headers.mjs';
 
 // Public, uploaded assets are served before this Worker. Every response which
 // reaches application code (including errors and static-looking API paths) must
 // stay out of browser/shared caches. Do not rely on an upstream default header.
-export function privateCloudflareResponse(response) {
-  const headers = new Headers(response.headers);
+export function privateCloudflareResponse(response, request) {
+  const headers = applySecurityHeaders(new Headers(response.headers), request);
   headers.set('Cache-Control', 'private, no-store');
   headers.set('CDN-Cache-Control', 'no-store');
   headers.set('Cloudflare-CDN-Cache-Control', 'no-store');
@@ -27,26 +28,27 @@ export function cloudflarePortalRequest(request) {
 
 // Same matcher as src/proxy.js. Only the isolated Workers build omits that file.
 export function portalProxyMatches(pathname) {
-  return /^\/api\/(?:member|payments|network|admin)(?:\/|$)/.test(pathname)
-    || /^\/dashboard\/(?:admin|command-center|ai|ai-analysis)(?:\/|$)/.test(pathname);
+  const path = normalizedApplicationPath(pathname);
+  return path === null || /^\/api\/(?:member|payments|network|admin)(?:\/|$)/i.test(path)
+    || /^\/dashboard\/(?:admin|command-center|ai|ai-analysis)(?:\/|$)/.test(path);
 }
 
 export function cloudflarePortalGuard(request, env) {
   const url = new URL(request.url);
   // A cutover must not leave the legacy provider's more-specific routes live.
-  let decodedPath = url.pathname;
-  try { for (let index = 0; index < 2; index++) decodedPath = decodeURIComponent(decodedPath); } catch {
+  const decodedPath = normalizedApplicationPath(url.pathname);
+  if (decodedPath === null) {
     return Response.json({ error: 'invalid_path' }, { status: 400, headers: { 'Cache-Control': 'private, no-store' } });
   }
   if (env.AUTH_PROVIDER === 'better-auth' && /^\/api\/auth\/cognito(?:\/|$)/.test(decodedPath)) {
     return Response.json({ error: 'not_found' }, { status: 404, headers: { 'Cache-Control': 'private, no-store' } });
   }
   if (!portalProxyMatches(url.pathname)) return null;
-  const mutation = memberMutationError(request, env);
-  if (mutation) return Response.json({ error: mutation.error }, { status: mutation.status, headers: { 'Cache-Control': 'private, no-store' } });
   // Cloudflare terminates TLS: never trust a browser-supplied forwarded host.
   const decision = customerDomainDecision({ host: url.host, pathname: url.pathname });
   if (decision.type === 'notFound') return Response.json({ error: 'not_found' }, { status: 404 });
   if (decision.type === 'redirect') return Response.redirect(decision.location, 308);
+  const mutation = memberMutationError(request, env);
+  if (mutation) return Response.json({ error: mutation.error }, { status: mutation.status, headers: { 'Cache-Control': 'private, no-store' } });
   return null;
 }

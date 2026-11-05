@@ -2,13 +2,17 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildReferralLinks, referralBrowserOrigin, referralLinkCode, referralLinksFrom, referralPublicOrigin } from './referral-links.mjs';
 
-test('share URLs use the current canonical portal origin and never default to the retired app alias', () => {
+test('share URLs keep the exact configured portal origin without changing the default main portal', () => {
   assert.equal(referralPublicOrigin(), 'https://mindblisspower.com');
-  assert.equal(referralPublicOrigin({ REFERRAL_BASE_URL: 'https://app.mindblisspower.com' }), 'https://mindblisspower.com');
+  assert.equal(referralPublicOrigin({ REFERRAL_BASE_URL: 'https://app.mindblisspower.com' }), 'https://app.mindblisspower.com');
   assert.equal(referralPublicOrigin({ AUTH_PUBLIC_ORIGIN: 'https://portal.example.test', REFERRAL_BASE_URL: 'https://app.mindblisspower.com' }), 'https://portal.example.test');
   assert.deepEqual(buildReferralLinks('Diamond1'), {
     left: 'https://mindblisspower.com/register?ref=Diamond1&side=L',
     right: 'https://mindblisspower.com/register?ref=Diamond1&side=R',
+  });
+  assert.deepEqual(buildReferralLinks('Diamond1', referralPublicOrigin({ AUTH_PUBLIC_ORIGIN: 'https://app.mindblisspower.com' })), {
+    left: 'https://app.mindblisspower.com/register?ref=Diamond1&side=L',
+    right: 'https://app.mindblisspower.com/register?ref=Diamond1&side=R',
   });
 });
 
@@ -40,12 +44,19 @@ test('old or arbitrary returned links are rebuilt from the real code without the
   assert.deepEqual(referralLinksFrom({ positioned: false, code: 'MP50793' }), { left: '', right: '' });
 });
 
-test('a mounted alternate configured portal keeps its own origin while the old app alias canonicalizes', t => {
+test('a mounted portal keeps its own exact origin, including app, when rebuilding untrusted API links', t => {
   const previous = globalThis.window;
   t.after(() => { if (previous === undefined) delete globalThis.window; else globalThis.window = previous; });
   globalThis.window = { location: { origin: 'https://preview.example.test' } };
   assert.equal(referralBrowserOrigin(), 'https://preview.example.test');
   assert.equal(new URL(buildReferralLinks('OpaqueCode').right).origin, 'https://preview.example.test');
   globalThis.window.location.origin = 'https://app.mindblisspower.com';
-  assert.equal(referralBrowserOrigin(), 'https://mindblisspower.com');
+  assert.equal(referralBrowserOrigin(), 'https://app.mindblisspower.com');
+  const links = referralLinksFrom({ positioned: true, code: 'OpaqueCode',
+    link: 'https://mindblisspower.com/register?ref=wrong&email=private%40example.test&next=https%3A%2F%2Fevil.example.test' });
+  for (const [key, side] of [['left', 'L'], ['right', 'R']]) {
+    const url = new URL(links[key]);
+    assert.equal(url.origin, 'https://app.mindblisspower.com');
+    assert.deepEqual([...url.searchParams], [['ref', 'OpaqueCode'], ['side', side]]);
+  }
 });

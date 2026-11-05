@@ -9,6 +9,7 @@ import * as policy from './checkout-policy.mjs';
 import { cn } from './utils.js';
 import { handleMembershipCheckout } from './checkout-bff.mjs';
 import * as intentPolicy from './checkout-intent.mjs';
+import * as deadline from './browser-request-deadline.mjs';
 
 const require = createRequire(import.meta.url);
 const subject = 'synthetic-verified-owner';
@@ -38,7 +39,7 @@ function checkoutComponent({ provider, error = '', loading = false, session = nu
   const mocks = { react: mockedReact, 'lucide-react': { ArrowRight: () => null, Loader2: () => null },
     '@/lib/referral-sync.mjs': { verifiedReferralForCheckout: async email => referralResult || ({ ok: true, ...referralResolver(email) }) },
     '@/lib/member-session-context': { useMemberSession: () => session }, '@/lib/checkout-policy.mjs': policy,
-    '@/lib/checkout-intent.mjs': intentPolicy, '@/lib/utils': { cn } };
+    '@/lib/checkout-intent.mjs': intentPolicy, '@/lib/utils': { cn }, '@/lib/browser-request-deadline.mjs': deadline };
   new Function('require', 'module', 'exports', code)(id => Object.hasOwn(mocks, id) ? mocks[id] : require(id), module, module.exports);
   return { Component: module.exports.default, stateChanges };
 }
@@ -123,7 +124,7 @@ test('the actual operational membership click handler sends chosen provider once
   const navigations = []; let checkouts = 0;
   globalThis.window = browserFixture(url => navigations.push(url));
   globalThis.fetch = async (url, options) => {
-    if (url === '/api/auth/session') return Response.json({ authenticated: true, subject, email: 'member@example.test' });
+    if (url === '/api/auth/session?view=access') return Response.json({ authenticated: true, subject, email: 'member@example.test' });
     assert.equal(url, '/api/payments/checkout'); checkouts++;
     assert.equal(options.cache, 'no-store'); assert.ok(options.signal instanceof AbortSignal);
     const body = JSON.parse(options.body);
@@ -153,7 +154,7 @@ test('ready shell context removes a sequential session GET while a cold context 
       const { Component } = checkoutComponent({ provider: 'nowpayments', session,
         referralResolver: email => { emails.push(email); return { code: 'SYNTHETIC-REFERRAL', email, side: 'R' }; } });
       globalThis.fetch = async (target, options) => {
-        if (target === '/api/auth/session') {
+        if (target === '/api/auth/session?view=access') {
           sessionReads++; elapsedMs += 800; return Response.json({ authenticated: true, subject, email: 'member@example.test' });
         }
         assert.equal(target, '/api/payments/checkout'); checkouts++; elapsedMs += 250;
@@ -186,6 +187,63 @@ test('ready shell context removes a sequential session GET while a cold context 
   }
 });
 
+test('cold checkout reads canonical access without waiting on optional referral display enrichment', async t => {
+  const previousWindow = globalThis.window, calls = [], navigations = [];
+  globalThis.window = browserFixture(url => navigations.push(url));
+  t.after(() => { if (previousWindow === undefined) delete globalThis.window; else globalThis.window = previousWindow; });
+  t.mock.method(globalThis, 'fetch', async (target, options) => {
+    calls.push(target);
+    if (target === '/api/auth/session?view=access') {
+      assert.equal(options.cache, 'no-store'); assert.ok(options.signal instanceof AbortSignal);
+      return Response.json({ authenticated: true, mode: 'better-auth', subject, email: 'member@example.test' });
+    }
+    // The full session projection depends on a separate, optional payments
+    // display read. A failed display enrichment must not erase valid access.
+    if (target === '/api/auth/session') return Response.json({ error: 'optional_display_unavailable' }, { status: 503 });
+    assert.equal(target, '/api/payments/checkout');
+    const body = JSON.parse(options.body);
+    assert.equal(body.ref, 'ConfirmedSponsor'); assert.equal(body.preferred_side, 'R');
+    assert.equal(body.ref_email, 'member@example.test'); assert.equal(body.purchase_subject, subject);
+    return Response.json({ provider: 'nowpayments', url: 'https://nowpayments.io/payment/?iid=12345',
+      fulfillment_status: 'awaiting_payment', checkout_environment: 'production' });
+  });
+  const { Component, stateChanges } = checkoutComponent({ provider: 'nowpayments',
+    referralResolver: email => email === 'member@example.test'
+      ? { code: 'ConfirmedSponsor', email, side: 'R' } : { ok: false, error: 'unavailable' } });
+  await findElement(Component({ packageId: 7, nowpaymentsEnabled: true }), 'button').props.onClick();
+  assert.deepEqual(calls, ['/api/auth/session?view=access', '/api/payments/checkout']);
+  assert.deepEqual(navigations, ['https://nowpayments.io/payment/?iid=12345']);
+  assert.deepEqual(stateChanges[1], ['']);
+});
+
+test('both cold and mounted checkout paths remain usable on mobile without AbortSignal.any/timeout', async t => {
+  for (const name of ['any', 'timeout']) {
+    const descriptor = Object.getOwnPropertyDescriptor(AbortSignal, name);
+    Object.defineProperty(AbortSignal, name, { configurable: true, value: undefined });
+    t.after(() => Object.defineProperty(AbortSignal, name, descriptor));
+  }
+  const originalWindow = globalThis.window;
+  t.after(() => { if (originalWindow === undefined) delete globalThis.window; else globalThis.window = originalWindow; });
+  const calls = [], navigations = [];
+  globalThis.window = browserFixture(url => navigations.push(url));
+  t.mock.method(globalThis, 'fetch', async (url, init) => {
+    calls.push([url, init]); assert.ok(init.signal instanceof AbortSignal);
+    if (url === '/api/auth/session?view=access') return Response.json({ authenticated: true, subject, email: 'member@example.test' });
+    assert.equal(url, '/api/payments/checkout');
+    return Response.json({ provider: 'nowpayments', url: 'https://nowpayments.io/payment/?iid=12345',
+      checkout_environment: 'production', fulfillment_status: 'awaiting_payment' });
+  });
+  for (const session of [null, { subject, email: 'member@example.test' }]) {
+    const { Component } = checkoutComponent({ provider: 'nowpayments', session });
+    await findElement(Component({ packageId: 7, nowpaymentsEnabled: true }), 'button').props.onClick();
+  }
+  assert.deepEqual(calls.map(([url]) => url), ['/api/auth/session?view=access', '/api/payments/checkout', '/api/payments/checkout']);
+  assert.deepEqual(navigations, ['https://nowpayments.io/payment/?iid=12345', 'https://nowpayments.io/payment/?iid=12345']);
+  const bodies = calls.filter(([url]) => url === '/api/payments/checkout').map(([, init]) => JSON.parse(init.body));
+  assert.equal(bodies[0].purchase_request_id, bodies[1].purchase_request_id, 'the same tab intent is never replaced by a compatibility fallback');
+  assert.equal(bodies[0].purchase_subject, subject);
+});
+
 test('a successful HTTP response with wrong-provider or malicious URL never navigates', async () => {
   const originalFetch = globalThis.fetch; const originalWindow = globalThis.window;
   globalThis.window = browserFixture(() => assert.fail('untrusted checkout navigation'));
@@ -195,7 +253,7 @@ test('a successful HTTP response with wrong-provider or malicious URL never navi
       { provider: 'nowpayments', url: 'https://nowpayments.io/payment/?iid=1', fulfillment_status: 'activated' },
       { provider: 'nowpayments', url: 'https://nowpayments.io/payment/?iid=1' }]) {
       const { Component, stateChanges } = checkoutComponent({ provider: 'nowpayments' });
-      globalThis.fetch = async url => Response.json(url === '/api/auth/session' ? { authenticated: true, subject, email: 'member@example.test' } : result);
+      globalThis.fetch = async url => Response.json(url === '/api/auth/session?view=access' ? { authenticated: true, subject, email: 'member@example.test' } : result);
       const button = findElement(Component({ packageId: 7, nowpaymentsEnabled: true }), 'button');
       await button.props.onClick();
       assert.equal(stateChanges[0].at(-1), false); assert.match(stateChanges[1].at(-1), /historial/);
@@ -257,7 +315,7 @@ test('the real checkout click presents safe failure references in the existing a
       ['private postgres://operator:password@host', /Referencia: checkout_unknown/]]) {
       let checkouts = 0;
       globalThis.fetch = async url => {
-        if (url === '/api/auth/session') return Response.json({ authenticated: true, subject, email: 'member@example.test' });
+        if (url === '/api/auth/session?view=access') return Response.json({ authenticated: true, subject, email: 'member@example.test' });
         checkouts++; return Response.json({ error: code, diagnostics: 'private-token' }, { status: 503 });
       };
       const { Component, stateChanges } = checkoutComponent({ provider: 'nowpayments' });
@@ -273,7 +331,7 @@ test('the real checkout click presents safe failure references in the existing a
     }
     let checkouts = 0;
     globalThis.fetch = async url => {
-      if (url === '/api/auth/session') return Response.json({ authenticated: true, subject, email: 'member@example.test' });
+      if (url === '/api/auth/session?view=access') return Response.json({ authenticated: true, subject, email: 'member@example.test' });
       checkouts++; throw new Error('private transport exception');
     };
     const { Component, stateChanges } = checkoutComponent({ provider: 'nowpayments' });
@@ -317,7 +375,8 @@ function checkoutRuntime(resolveReferral = async () => ({ ok: true, code: '', em
   const module = { exports: {} }, mocks = { react: mockedReact, 'lucide-react': { ArrowRight: () => null, Loader2: () => null },
     '@/lib/referral-sync.mjs': { verifiedReferralForCheckout: resolveReferral },
     '@/lib/member-session-context': { useMemberSession: () => current.session },
-    '@/lib/checkout-policy.mjs': policy, '@/lib/checkout-intent.mjs': intentPolicy, '@/lib/utils': { cn } };
+    '@/lib/checkout-policy.mjs': policy, '@/lib/checkout-intent.mjs': intentPolicy, '@/lib/utils': { cn },
+    '@/lib/browser-request-deadline.mjs': deadline };
   new Function('require', 'module', 'exports', code)(id => Object.hasOwn(mocks, id) ? mocks[id] : require(id), module, module.exports);
   return {
     create(packageId = 7, session = { subject, email: 'member@example.test' }) {
@@ -466,7 +525,7 @@ test('unavailable identity or browser persistence fails before checkout, and a f
   }
   await withCheckoutBrowser(async ({ runtime }) => {
     let sessionReads = 0;
-    globalThis.fetch = async target => { assert.equal(target, '/api/auth/session'); sessionReads++; return Response.json({ authenticated: false, email: 'member@example.test' }); };
+    globalThis.fetch = async target => { assert.equal(target, '/api/auth/session?view=access'); sessionReads++; return Response.json({ authenticated: false, email: 'member@example.test' }); };
     const view = runtime().create(7, { email: 'member@example.test' }); view.mount(); await payButton(view.tree()).props.onClick();
     assert.equal(sessionReads, 1); assert.match(renderToStaticMarkup(view.tree()), /No se inició ningún cobro/);
   });

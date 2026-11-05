@@ -1,5 +1,6 @@
 import { hostedCheckoutURL } from './checkout-policy.mjs';
 import { nowpaymentsOrderId } from './nowpayments-receipt.mjs';
+import { browserRequestDeadline } from './browser-request-deadline.mjs';
 
 const money = value => typeof value === 'string' && /^(?:0|[1-9]\d{0,11})\.\d{2}$/.test(value);
 const time = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value) && Number.isFinite(Date.parse(value));
@@ -66,9 +67,11 @@ const path = '/api/payments/nowpayments/purchases';
  * @param {{signal?: AbortSignal, fetchImpl?: typeof fetch}} [options] */
 async function transport(action, orderId, { signal, fetchImpl = fetch } = {}) {
   if (action && !nowpaymentsOrderId(orderId)) throw new Error('invalid_order');
+  const deadline = browserRequestDeadline(signal, 12000);
+  try {
   const response = await fetchImpl(`${path}${action ? `/${action}` : ''}`, {
     method: action ? 'POST' : 'GET', credentials: 'same-origin', cache: 'no-store', redirect: 'error',
-    signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(12000)]),
+    signal: deadline.signal,
     ...(action ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify({ order_id: orderId }) } : {}),
   });
   const value = await response.json().catch(() => null);
@@ -77,6 +80,7 @@ async function transport(action, orderId, { signal, fetchImpl = fetch } = {}) {
     : action === 'resume' ? nowpaymentsResume(value, orderId, value?.checkout_environment || 'production') : nowpaymentsPurchases(value);
   if (!projected) throw new Error('Invalid purchase response');
   return projected;
+  } finally { deadline.dispose(); }
 }
 export const readNOWPaymentsPurchases = options => transport('', '', options);
 export const resumeNOWPaymentsPurchase = (orderId, options) => transport('resume', orderId, options);

@@ -109,3 +109,22 @@ test('Better Auth cutover rejects legacy Cognito without contacting its provider
   }
   assert.equal(cloudflarePortalGuard(request('/api/auth/sign-in/email-otp'), { AUTH_PROVIDER: 'better-auth' }), null);
 });
+
+test('public apex never forwards admin aliases, including encoded paths and sibling-site POST forms', () => {
+  for (const path of ['/api/admin/withdrawals/action', '/%61pi/%61dmin/users', '/api%2Fadmin/users', '/api/%2561dmin/users', '//api//admin/users']) {
+    assert.equal(portalProxyMatches(path), true);
+    for (const method of ['GET', 'POST']) {
+      const req = new Request(`https://mindblisspower.com${path}`, { method, headers: {
+        origin: 'https://sibling.mindblisspower.com', 'content-type': 'text/plain', 'sec-fetch-site': 'same-site',
+      } });
+      assert.equal(cloudflarePortalGuard(req, { AUTH_PUBLIC_ORIGIN: 'https://mindblisspower.com' }).status, 404);
+    }
+  }
+  const valid = new Request('https://admin.mindblisspower.com/api/admin/users', { method: 'POST', headers: {
+    origin: 'https://admin.mindblisspower.com', 'content-type': 'application/json', 'sec-fetch-site': 'same-origin',
+  } });
+  assert.equal(cloudflarePortalGuard(valid, { AUTH_PUBLIC_ORIGIN: 'https://admin.mindblisspower.com' }), null);
+  for (const path of ['/api/auth/sign-in/email-otp', '/api/webhooks/resend', '/api/webhooks/nowpayments']) {
+    assert.equal(cloudflarePortalGuard(new Request(`https://mindblisspower.com${path}`), { AUTH_PROVIDER: 'better-auth' }), null);
+  }
+});

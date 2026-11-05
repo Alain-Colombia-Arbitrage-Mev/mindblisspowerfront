@@ -23,6 +23,15 @@ export function otpFailureMessage(status, action) {
   return action === 'confirm' ? 'Código inválido o expirado. Usa el código de acceso más reciente; si venció o agotó sus intentos, espera el contador antes de solicitar otro.' : 'No se pudo solicitar el código. Revisa el correo original y vuelve a intentarlo cuando termine el contador, si aparece.';
 }
 
+// Code redemption and requesting another email have independent budgets. Only
+// a server 429 pauses redemption; preserve the code and never retry or resend.
+export function otpConfirmationRetrySeconds(response, now = Date.now()) {
+  const header = response.headers?.get('retry-after') || '';
+  const seconds = /^\d{1,10}$/.test(header) ? Number(header)
+    : /^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), /.test(header) ? (Date.parse(header) - now) / 1000 : NaN;
+  return Number.isFinite(seconds) && seconds > 0 ? Math.min(86400, Math.ceil(seconds)) : 60;
+}
+
 // Give the single delivery request room to finish; never automatically resend
 // after a timeout. Exchanging a received code retains its shorter deadline.
 export function otpTimeoutMs(action) {

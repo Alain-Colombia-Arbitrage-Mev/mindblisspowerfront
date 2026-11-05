@@ -1,6 +1,7 @@
 import { lstatSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { applySecurityHeaders } from '../src/lib/security-headers.mjs';
 
 export const MAX_STATIC_CACHE_RULES = 100;
 export const MAX_STATIC_CACHE_HEADER_LINE = 2000;
@@ -60,9 +61,11 @@ function policyFor(path) {
 export function generateStaticCacheHeaders(assetPaths) {
   if (!Array.isArray(assetPaths)) fail('invalid_asset_manifest');
   const rules = [];
+  const security = [...applySecurityHeaders(new Headers()).entries()]
+    .map(([name, value]) => '  ' + name + ': ' + value).join('\n');
   for (const path of [...new Set(assetPaths)].sort()) {
     const cacheControl = policyFor(path);
-    if (cacheControl) rules.push('/' + path + '\n  Cache-Control: ' + cacheControl + '\n  X-Content-Type-Options: nosniff');
+    if (cacheControl) rules.push('/' + path + '\n  Cache-Control: ' + cacheControl + '\n' + security);
   }
   if (rules.length > MAX_STATIC_CACHE_RULES) fail('rule_limit_exceeded_' + rules.length + '_maximum_' + MAX_STATIC_CACHE_RULES);
   const output = '# Generated from existing public build assets only. Do not edit.\n\n' + rules.join('\n\n') + '\n';
