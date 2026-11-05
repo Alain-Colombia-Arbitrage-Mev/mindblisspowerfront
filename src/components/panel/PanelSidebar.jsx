@@ -7,7 +7,6 @@ import {
   Medal,
   Network,
   Package,
-  Ticket,
   User,
   Wallet,
 } from "lucide-react";
@@ -32,7 +31,6 @@ const NAV_ITEMS = [
     ],
   },
   { icon: Package, label: "Membresías", href: "/dashboard/packages" },
-  { icon: Ticket, label: "Cupones", href: "/dashboard/coupons" },
   { icon: Wallet, label: "Billetera y retiros", href: "/dashboard/withdrawals" },
   { icon: User, label: "Mi perfil", href: "/dashboard/profile" },
   { icon: Medal, label: "Rangos", href: "/dashboard/rank", also: ["/dashboard/ranks"] },

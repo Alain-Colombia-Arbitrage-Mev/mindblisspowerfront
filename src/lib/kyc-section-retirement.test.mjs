@@ -32,22 +32,43 @@ function moduleAt(relative, mocks = {}) {
   return module.exports;
 }
 
-test("actual member sidebar removes identity verification while preserving account, plans, network and support navigation", () => {
+test("actual member sidebar removes identity verification and coupons while preserving account, plans, network and support navigation", () => {
   const { default: Sidebar } = moduleAt("../components/panel/PanelSidebar.jsx");
   const html = renderToStaticMarkup(React.createElement(Sidebar, {
     pathname: "/dashboard/communications/news",
     member: { name: "Test Member", email: "member@example.test" },
   }));
-  assert.doesNotMatch(html, /\/dashboard\/kyc|Verificación de identidad|KYC|Identidad verificada/);
+  assert.doesNotMatch(html, /\/dashboard\/kyc|Verificación de identidad|KYC|Identidad verificada|\/dashboard\/coupons|Cupones/);
   for (const href of ["/dashboard", "/dashboard/communications", "/dashboard/communications/news",
     "/dashboard/support", "/dashboard/communications/testimonials", "/dashboard/packages",
-    "/dashboard/coupons", "/dashboard/withdrawals", "/dashboard/profile", "/dashboard/rank", "/dashboard/network"]) {
+    "/dashboard/withdrawals", "/dashboard/profile", "/dashboard/rank", "/dashboard/network"]) {
     assert.ok(html.includes(`href="${href}"`), `missing retained destination ${href}`);
   }
   assert.match(html, /<button[^>]*type="button"[^>]*aria-label="Cerrar sesión"/);
   assert.doesNotMatch(html, /href="\/api\/auth\/logout"/);
   assert.match(html, /aria-label="Navegación del miembro"/);
   assert.match(html, /href="\/dashboard\/communications\/news"[^>]*aria-current="page"/);
+});
+
+test("retired coupons have no navigation title and bookmarks redirect to overview without network or mutations", () => {
+  assert.deepEqual(memberPageFor("/dashboard/coupons"), { title: "Mi cuenta", section: "Mindbliss Power" });
+  const navigation = readFileSync(new URL("./member-navigation.mjs", import.meta.url), "utf8");
+  assert.doesNotMatch(navigation, /\/dashboard\/coupons|Cupones/);
+  const destination = [];
+  const redirectSignal = new Error("synthetic-next-redirect");
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = () => assert.fail("retired coupon route performed network I/O");
+  try {
+    const { default: Page } = moduleAt("../app/dashboard/coupons/page.jsx", {
+      "next/navigation": { redirect: path => { destination.push(path); throw redirectSignal; } },
+    });
+    assert.throws(() => Page(), error => error === redirectSignal);
+    assert.deepEqual(destination, ["/dashboard"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  const page = readFileSync(new URL("../app/dashboard/coupons/page.jsx", import.meta.url), "utf8");
+  assert.doesNotMatch(page, /["']use client["']|useEffect|setInterval|\bfetch\s*\(|EmptyStateCard|POST/);
 });
 
 test("retired KYC route has no remaining navigation title or false verified state", () => {
