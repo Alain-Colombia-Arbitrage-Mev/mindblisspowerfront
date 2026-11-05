@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 
 import PanelFooter from "@/components/panel/PanelFooter";
 import NOWPaymentsBalances from "@/components/panel/NOWPaymentsBalances";
+import ManualMembershipBalances from "@/components/panel/ManualMembershipBalances";
 import EarningsCard from "./EarningsCard";
 import ReferralLinkCard from "./ReferralLinkCard";
 import PositionSnapshotCard from "./PositionSnapshotCard";
@@ -116,6 +117,7 @@ export default function OverviewDashboard({ plans = null }) {
       </div>
 
       {summaryStatus === "ready" && <NOWPaymentsBalances data={summary?.nowpayments} />}
+      {summaryStatus === "ready" && <ManualMembershipBalances data={summary?.manual_memberships} />}
 
       <ReferralLinkCard />
 

@@ -49,6 +49,7 @@ function payments(state, reload = () => {}) {
     './StripeSalesHistory': { default: () => null }, './WithdrawalRequest': { default: () => null },
     './NOWPaymentsPurchases': { default: () => null },
     '@/components/panel/NOWPaymentsBalances': { default: () => null },
+    '@/components/panel/ManualMembershipBalances': { default: () => null },
   });
 }
 

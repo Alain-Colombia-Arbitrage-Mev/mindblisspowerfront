@@ -6,6 +6,7 @@ import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import ts from 'typescript';
 import * as balances from './nowpayments-balances.mjs';
+import * as origins from './compensation-origin.mjs';
 import {validMemberSummary} from './member-read.mjs';
 
 const model = () => ({read_model_status:'operational',withdrawals_enabled:false,
@@ -21,6 +22,7 @@ const module={exports:{}};
 const icons=new Proxy({}, {get:()=>()=>React.createElement('svg',{'aria-hidden':'true'})});
 const cssModule={default:new Proxy({}, {get:(_target,key)=>String(key)})};
 new Function('require','module','exports',code)(id=>id==='@/lib/nowpayments-balances.mjs'?balances
+ :id==='@/lib/compensation-origin.mjs'?origins
  :id==='lucide-react'?icons:id.endsWith('.module.css')?cssModule:id==='@/lib/utils'?{cn:(...values)=>values.filter(Boolean).join(' ')}:require(id),module,module.exports);
 const View=module.exports.default;
 const render=data=>renderToStaticMarkup(React.createElement(View,{data}));

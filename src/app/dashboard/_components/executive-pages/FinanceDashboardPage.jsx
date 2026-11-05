@@ -10,6 +10,7 @@ import { formatPaymentMoney as money, formatPaymentDate as fmtMoneyDate, withdra
 
 import StripeSalesHistory from "../../packages/StripeSalesHistory";
 import NOWPaymentsBalances from "@/components/panel/NOWPaymentsBalances";
+import ManualMembershipBalances from "@/components/panel/ManualMembershipBalances";
 
 import { Activity, AlertTriangle, ArrowDownToLine, CreditCard, DollarSign, Download, Loader2, TrendingUp, UserPlus, Wallet } from "lucide-react";
 
@@ -141,6 +142,7 @@ function FinanceContent({ data, onDone }) {
       </div>}
 
       <NOWPaymentsBalances data={data.nowpayments} />
+      <ManualMembershipBalances data={data.manual_memberships} />
 
       <div className="grid gap-6 lg:grid-cols-[390px_minmax(0,1fr)]">
         <WithdrawPanel data={data} onDone={onDone} />

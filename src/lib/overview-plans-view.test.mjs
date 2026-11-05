@@ -120,6 +120,7 @@ test("actual summary places the plans slot after the referral and before seconda
     "next/navigation": { useRouter: () => ({ push() { throw new Error("Unexpected transition during render"); } }) },
     "@/components/panel/PanelFooter": { default: marker("footer") },
     "@/components/panel/NOWPaymentsBalances": { default: marker("NOWPaymentsBalances") },
+    "@/components/panel/ManualMembershipBalances": { default: marker("ManualMembershipBalances") },
     "@/lib/member-read.mjs": { readMemberParts: () => { throw new Error("Unexpected request"); }, validMemberTree: () => true, validMemberSummary: () => true },
     "@/lib/payment-display.mjs": { formatPaymentMoney: () => "not-called" },
   };

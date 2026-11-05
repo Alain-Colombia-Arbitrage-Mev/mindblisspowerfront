@@ -2,6 +2,7 @@ import { Wallet, Clock3, TrendingUp, Info, LockKeyhole, ChevronDown, CalendarDay
 import { nowpaymentsBalanceView, nowpaymentsMoney as money, nowpaymentsDate as date,
   nowpaymentsCommissionStatus, nowpaymentsMembershipStatus } from '@/lib/nowpayments-balances.mjs';
 import styles from './nowpayments-balances.module.css';
+import { compensationOriginLabel } from '@/lib/compensation-origin.mjs';
 
 /** Presentation only: values, eligibility and dates always come from the server. */
 export default function NOWPaymentsBalances({ data }) {
@@ -64,9 +65,9 @@ export default function NOWPaymentsBalances({ data }) {
       <DetailHeading title="Detalle de comisiones" />
       <div className={styles.tableWrap}><table className={styles.table}>
         <caption className="sr-only">Comisiones NOWPayments, fechas de Bogotá y retenciones informadas por el servidor.</caption>
-        <thead><tr><th scope="col">Comisión calculada</th><th scope="col">Crédito líquido</th><th scope="col">Generación (Bogotá)</th><th scope="col">Vencimiento (Bogotá)</th><th scope="col">Estado</th><th scope="col">Retenido por financiación</th></tr></thead>
+        <thead><tr><th scope="col">Comisión calculada</th><th scope="col">Origen de la venta</th><th scope="col">Crédito líquido</th><th scope="col">Generación (Bogotá)</th><th scope="col">Vencimiento (Bogotá)</th><th scope="col">Estado</th><th scope="col">Retenido por financiación</th></tr></thead>
         <tbody>{commissionItems.map((item, index) => <tr key={index}>
-          <td data-label="Comisión calculada" className={styles.amount}>{money(item.amount_usd)}</td><td data-label="Crédito líquido">{money(item.liquid_credited_usd)}</td><td data-label="Generación (Bogotá)">{date(item.generated_at)}</td><td data-label="Vencimiento (Bogotá)">{date(item.available_at)}</td><td data-label="Estado"><span className={styles.status}>{nowpaymentsCommissionStatus(item.status)}</span></td><td data-label="Retenido por financiación">{money(item.funding_held_usd)}</td>
+          <td data-label="Comisión calculada" className={styles.amount}>{money(item.amount_usd)}</td><td data-label="Origen de la venta">{compensationOriginLabel(item.source_provider)}</td><td data-label="Crédito líquido">{money(item.liquid_credited_usd)}</td><td data-label="Generación (Bogotá)">{date(item.generated_at)}</td><td data-label="Vencimiento (Bogotá)">{date(item.available_at)}</td><td data-label="Estado"><span className={styles.status}>{nowpaymentsCommissionStatus(item.status)}</span></td><td data-label="Retenido por financiación">{money(item.funding_held_usd)}</td>
         </tr>)}</tbody>
       </table></div>
     </div>}

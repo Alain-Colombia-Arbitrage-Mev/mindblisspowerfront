@@ -8,6 +8,7 @@ import styles from "./payments-summary.module.css";
 import StripeSalesHistory from "./StripeSalesHistory";
 import WithdrawalRequest from "./WithdrawalRequest";
 import NOWPaymentsBalances from "@/components/panel/NOWPaymentsBalances";
+import ManualMembershipBalances from "@/components/panel/ManualMembershipBalances";
 import NOWPaymentsPurchases from "./NOWPaymentsPurchases";
 
 const PAY_STATUS = {
@@ -62,6 +63,7 @@ function PaymentsSummary({ state, load }) {
       )}
 
       <NOWPaymentsBalances data={d.nowpayments} />
+      <ManualMembershipBalances data={d.manual_memberships} />
       <WithdrawalRequest data={d} onDone={load} />
 
       {recovered && <StripeSalesHistory sales={d.stripe_sales} />}
