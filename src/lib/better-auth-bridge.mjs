@@ -4,6 +4,7 @@ import { isIP } from 'node:net';
 import { authSuccess } from './auth-response.mjs';
 import { passwordRecoveryPaths, passwordRecoveryInput, passwordRecoveryAcknowledged, passwordRecoveryError } from './password-recovery-policy.mjs';
 import { coreFetch, runtimeEnvironment } from './cloudflare-runtime.mjs';
+import { authRetryAfterSeconds } from './auth-retry-after.mjs';
 
 export function trustedAuthClientIp(headers, env = runtimeEnvironment()) {
   const header = env.AUTH_CLIENT_IP_HEADER || 'cf-connecting-ip';
@@ -69,6 +70,24 @@ export async function readAuthBody(request) {
   for (const chunk of chunks) { combined.set(chunk, offset); offset += chunk.byteLength; }
   return JSON.parse(new TextDecoder().decode(combined));
   } finally { signal.removeEventListener('abort', aborted); reader.releaseLock(); }
+}
+
+// A WAF can return HTML (or malformed JSON) with HTTP 429. Its status and wait
+// remain authoritative, but none of its body or cookies may reach the browser.
+export async function readAuthUpstreamBody(upstream, signal) {
+  const limited = upstream.status === 429;
+  if (limited && !/^application\/json(?:\s*;|$)/i.test(upstream.headers.get('content-type') || '')) {
+    try { void upstream.body?.cancel().catch(() => {}); } catch { /* best effort, never await an untrusted body */ }
+    return {};
+  }
+  try {
+    const data = await readAuthBody({ body: upstream.body, signal: signal || AbortSignal.timeout(8000) });
+    if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('invalid_auth_response');
+    return data;
+  } catch (error) {
+    if (limited) return {};
+    throw error;
+  }
 }
 
 // Email delivery includes Container startup, PostgreSQL and the provider's 8s
@@ -221,14 +240,19 @@ export async function proxyBetterAuth(request, path, dependencies = {}) {
       method: "POST", body, origin: expectedOrigin, cookie: recovery ? '' : request.headers.get("cookie") || "", signal: request.signal,
     }, transport);
     // Do not relay upstream diagnostics, raw session tokens or set-auth-jwt.
-    const data = await readAuthBody({ body: upstream.body, signal: request.signal });
-    if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('invalid_auth_response');
+    const data = await readAuthUpstreamBody(upstream, request.signal);
+    if (upstream.status === 429) {
+      return Response.json({ error: 'authentication_failed', code: recovery ? passwordRecoveryError(data)
+        : /^[A-Z_]{1,80}$/.test(data.code) ? data.code : undefined }, {
+        status: 429, headers: { ...recoveryHeaders,
+          'Retry-After': String(authRetryAfterSeconds(upstream.headers.get('retry-after'), emailDeliveryPaths.has(`/${path}`) ? 300 : 60)) },
+      });
+    }
     if (recovery) {
       if (!/^application\/json(?:\s*;|$)/i.test(upstream.headers.get('content-type') || '')
         || upstream.status < 200 || upstream.status >= 500 || (upstream.ok && (upstream.status !== 200 || !passwordRecoveryAcknowledged(data)))) throw new Error('invalid_auth_response');
       const response = Response.json(upstream.ok ? { ok: true } : { error: 'authentication_failed', code: passwordRecoveryError(data) },
         { status: upstream.ok ? 200 : [400, 401, 403, 404, 422, 429].includes(upstream.status) ? upstream.status : 503, headers: recoveryHeaders });
-      if (upstream.status === 429 && /^\d{1,5}$/.test(upstream.headers.get('retry-after') || '')) response.headers.set('retry-after', upstream.headers.get('retry-after'));
       // Recovery is not sign-in. Never install even a valid-looking auth cookie,
       // expose tokens or reflect account-existence hints from an upstream error.
       return response;
@@ -247,8 +271,8 @@ export async function proxyBetterAuth(request, path, dependencies = {}) {
       { status: upstream.ok ? 200 : upstream.status >= 400 ? upstream.status : 502,
         headers: { "Cache-Control": "private, no-store" } });
     for (const cookie of cookies) response.headers.append("set-cookie", cookie);
-    if (upstream.status === 429 && /^\d{1,5}$/.test(upstream.headers.get("retry-after") || "")) {
-      response.headers.set("retry-after", upstream.headers.get("retry-after"));
+    if (upstream.status === 503 && data.code === 'AUTH_EMAIL_DELIVERY_UNAVAILABLE') {
+      response.headers.set('retry-after', String(Math.max(300, authRetryAfterSeconds(upstream.headers.get('retry-after')))));
     }
     return response;
   } catch { return Response.json({ error: "authentication_unavailable" }, { status: 503, headers: { "Cache-Control": "private, no-store" } }); }

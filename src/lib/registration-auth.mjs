@@ -1,9 +1,10 @@
 // Signup is independent of the disabled legacy provider and financial services.
 import { randomBytes } from 'node:crypto';
-import { betterAuthEnabled, fetchBetterAuth, readAuthBody, trustedAuthClientIp, browserAuthCookie, betterAuthCookies } from './better-auth-bridge.mjs';
+import { betterAuthEnabled, fetchBetterAuth, readAuthBody, readAuthUpstreamBody, trustedAuthClientIp, browserAuthCookie, betterAuthCookies } from './better-auth-bridge.mjs';
 import { authSuccess } from './auth-response.mjs';
 import { runtimeEnvironment } from './cloudflare-runtime.mjs';
 import { registrationContact } from './registration-contacts.mjs';
+import { authRetryAfterSeconds } from './auth-retry-after.mjs';
 
 const headers = { 'Cache-Control': 'private, no-store' };
 const emailValue = value => typeof value === 'string' ? value.trim().toLowerCase() : '';
@@ -39,22 +40,21 @@ function registrationInput(body) {
 
 async function upstreamResult(upstream, signal) {
   // A deadline covers the body too; a stalled JSON stream cannot hold a Worker.
-  const payload = await readAuthBody({ body: upstream.body, signal: signal
-    ? AbortSignal.any([signal, AbortSignal.timeout(8000)]) : AbortSignal.timeout(8000) });
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('invalid_auth_response');
-  return payload;
+  return readAuthUpstreamBody(upstream, signal);
 }
 
 function upstreamError(upstream, payload, pendingEmail = '') {
   const code = typeof payload.code === 'string' && /^[A-Z_]{1,80}$/.test(payload.code) ? payload.code : '';
-  if (upstream.status === 503 && code === 'AUTH_EMAIL_DELIVERY_UNAVAILABLE') return reply({
-    error: 'No pudimos enviar el código de verificación. Espera cinco minutos antes de solicitar otro.',
-    code: 'EMAIL_DELIVERY_UNAVAILABLE', retryAfter: 300,
-    ...(pendingEmail ? { registrationPending: true, email: pendingEmail, requiresConfirmation: true } : {}),
-  }, 503, { 'Retry-After': '300' });
+  if (upstream.status === 503 && code === 'AUTH_EMAIL_DELIVERY_UNAVAILABLE') {
+    const retryAfter = Math.max(300, authRetryAfterSeconds(upstream.headers.get('retry-after')));
+    return reply({
+      error: 'No pudimos confirmar el envío. Revisa tu bandeja y spam; si recibes un código vigente, puedes introducirlo. Espera el contador antes de solicitar otro manualmente.',
+      code: 'EMAIL_DELIVERY_UNAVAILABLE', retryAfter,
+      ...(pendingEmail ? { registrationPending: true, email: pendingEmail, requiresConfirmation: true } : {}),
+    }, 503, { 'Retry-After': String(retryAfter) });
+  }
   if (upstream.status === 429) {
-    const raw = upstream.headers.get('retry-after');
-    const retryAfter = /^\d{1,5}$/.test(raw || '') ? Math.max(1, Number(raw)) : 300;
+    const retryAfter = authRetryAfterSeconds(upstream.headers.get('retry-after'));
     return reply({ error: 'Espera antes de solicitar otro código. Revisa también spam y promociones.', retryAfter, code: 'RATE_LIMITED' }, 429, { 'Retry-After': String(retryAfter) });
   }
   if ([400, 409, 422].includes(upstream.status) && ['USER_ALREADY_EXISTS', 'EMAIL_ALREADY_EXISTS', 'USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL'].includes(code)) return reply({

@@ -119,6 +119,7 @@ test('real email-login send and explicit resend handlers get 30 seconds but veri
 test('ambiguous send failures keep a bound code-entry step with a safe cooldown and never retry or claim delivery', async t => {
   const destinations = browser(t);
   for (const response of [Response.json({ error: 'authentication_unavailable', email: 'other@example.test' }, { status: 503 }),
+    Response.json({ error: 'authentication_failed', code: 'AUTH_EMAIL_DELIVERY_UNAVAILABLE' }, { status: 503 }),
     Response.json({ error: 'upstream_unavailable' }, { status: 502 }), Response.json({}),
     new Response('not-json', { status: 200 })]) {
     let calls = 0, seconds = 0;
@@ -180,6 +181,33 @@ test('definite invalid/origin rejections never claim an accepted send or switch 
     assert.doesNotMatch(renderToStaticMarkup(tree), /private-details|Si tu cuenta está habilitada/);
     harness.unmount();
   }
+});
+
+test('HTTP-date 429 and delivery-ambiguous 503 keep code entry, the full resend wait and manual-only recovery', async t => {
+  const destinations = browser(t), now = Date.parse('Thu, 05 Nov 2026 12:00:00 GMT');
+  t.mock.method(Date, 'now', () => now);
+  for (const [status, code, type] of [[429, 'REGISTRATION_REQUIRED', 'text/html'], [503, 'AUTH_EMAIL_DELIVERY_UNAVAILABLE', 'application/json']]) {
+    let calls = 0, seconds = 0;
+    t.mock.method(globalThis, 'fetch', async () => {
+      calls++;
+      return new Response(type === 'text/html' ? '<html>private-WAF-message</html>' : JSON.stringify({ code, message: 'private-provider-detail' }),
+        { status, headers: { 'content-type': type, 'retry-after': 'Thu, 05 Nov 2026 12:15:00 GMT' } });
+    });
+    const harness = magicView(() => ({ active: seconds > 0, label: `Reenviar en ${seconds}`, start(value) { seconds = value; } }));
+    const props = { authMode: 'better-auth', initialEmail: 'member@example.test' };
+    await find(harness.render(props), node => node?.type === 'form').props.onSubmit({ preventDefault() {} });
+    let tree = harness.render(props);
+    assert.match(renderToStaticMarkup(tree), /No pudimos confirmar el envío/);
+    assert.doesNotMatch(renderToStaticMarkup(tree), /private-WAF|private-provider|Te enviamos|Si tu cuenta está habilitada/);
+    find(tree, node => node?.props?.id === 'login-code').props.onChange('001234');
+    tree = harness.render(props);
+    assert.equal(find(tree, node => node?.props?.id === 'login-code').props.value, '001234');
+    assert.equal(seconds, 900);
+    await find(tree, node => node?.props?.children === `Reenviar en ${seconds}`).props.onClick({ preventDefault() {} });
+    assert.equal(calls, 1, 'no send is repeated automatically or during the server wait');
+    harness.unmount();
+  }
+  assert.deepEqual(destinations, [], 'only the exact registration decision, never a 429/503, may redirect');
 });
 
 test('double Enter makes only one send and retries stay bound to the original recipient despite an edited hidden state', async t => {

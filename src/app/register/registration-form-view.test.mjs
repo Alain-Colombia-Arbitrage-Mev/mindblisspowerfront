@@ -412,7 +412,7 @@ test('an existing registration resumes email confirmation without collecting or 
   assert.doesNotMatch(html, /Contacto opcional|contactPhone|contactWhatsapp|SMS/);
 });
 
-test('confirmed signup delivery failure resumes pending verification without another signup, automatic email or any registration password', async t => {
+test('uncertain signup delivery resumes pending verification without another signup, automatic email or any registration password', async t => {
   const paths = [], waits = [];
   const cooldown = { active: false, label: 'Reenviar en 5:00', start(seconds) { waits.push(seconds); this.active = true; } };
   t.mock.method(globalThis, 'fetch', async path => {
@@ -428,7 +428,8 @@ test('confirmed signup delivery failure resumes pending verification without ano
   assert.equal(Object.hasOwn(harness.state[1], 'password'), false);
   assert.equal(Object.hasOwn(harness.state[1], 'confirmPassword'), false);
   assert.match(html, /Paso 2 de 2/);
-  assert.match(html, /no pudimos enviar el código/);
+  assert.match(html, /no pudimos confirmar el envío/);
+  assert.match(html, /si recibes un código vigente, introdúcelo aquí/);
   assert.match(html, /No crees otra cuenta/);
   assert.match(html, /El reenvío es manual/);
   assert.doesNotMatch(html, /El correo está verificado|recibirás un código|código enviado/);
