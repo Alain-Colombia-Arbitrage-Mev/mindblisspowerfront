@@ -7,6 +7,7 @@ import { useMemberSession } from "@/lib/member-session-context";
 import { checkoutErrorNotice, hostedCheckoutURL } from "@/lib/checkout-policy.mjs";
 import { clearCheckoutIntent, getOrCreateCheckoutIntent, readCheckoutIntent } from "@/lib/checkout-intent.mjs";
 import { cn } from "@/lib/utils";
+import { browserRequestDeadline } from '@/lib/browser-request-deadline.mjs';
 
 /**
  * El proveedor cobra una membresía; regresar al portal no confirma su activación.
@@ -99,10 +100,18 @@ export default function ActivatePackageButton({ packageId, featured, stripeEnabl
         // only for an email-bound referral hint; the BFF still verifies the
         // live cookie/JWT and matches ref_email to its authoritative identity.
         // Preserve the cold-start fallback instead of dropping attribution.
-        session = typeof memberSession?.email === "string" && memberSession.email.trim()
-          && (provider !== "nowpayments" || memberSession?.subject)
-          ? memberSession
-          : await fetch("/api/auth/session", { cache: "no-store", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8000)]) }).then((r) => (r.ok ? r.json() : null));
+        if (typeof memberSession?.email === "string" && memberSession.email.trim()
+            && (provider !== "nowpayments" || memberSession?.subject)) session = memberSession;
+        else {
+          const deadline = browserRequestDeadline(controller.signal, 15000);
+          try {
+            // Checkout needs only canonical identity. Optional display/referral
+            // enrichment can be slower than this deadline and must not turn a
+            // valid session into an unavailable attribution preflight.
+            const response = await fetch('/api/auth/session?view=access', { cache: 'no-store', signal: deadline.signal });
+            session = response.ok ? await response.json() : null;
+          } finally { deadline.dispose(); }
+        }
       } catch {
         attribution = { code: "", email: "" };
       }
@@ -126,10 +135,13 @@ export default function ActivatePackageButton({ packageId, featured, stripeEnabl
         setPrepared(true);
       }
       requestSent = true;
-      const resp = await fetch("/api/payments/checkout", {
+      const deadline = browserRequestDeadline(controller.signal, 20000);
+      let resp, data;
+      try {
+      resp = await fetch("/api/payments/checkout", {
         method: "POST",
         cache: "no-store",
-        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20000)]),
+        signal: deadline.signal,
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           package_id: packageId,
@@ -143,7 +155,8 @@ export default function ActivatePackageButton({ packageId, featured, stripeEnabl
           } : {}),
         }),
       });
-      const data = await resp.json().catch(() => ({}));
+      data = await resp.json().catch(() => ({}));
+      } finally { deadline.dispose(); }
       if (!mounted.current || activeRequest.current !== controller || controller.signal.aborted) return;
       const url = hostedCheckoutURL(data.url, provider, data.checkout_environment);
       if (!resp.ok || !url || data.provider !== provider

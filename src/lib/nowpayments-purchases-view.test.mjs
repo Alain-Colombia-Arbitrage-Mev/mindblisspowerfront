@@ -11,6 +11,7 @@ import * as balances from './nowpayments-balances.mjs';
 import * as checkoutPolicy from './checkout-policy.mjs';
 import * as purchaseCheck from './nowpayments-purchase-check.mjs';
 import * as checkoutIntent from './checkout-intent.mjs';
+import * as deadline from './browser-request-deadline.mjs';
 
 const require = createRequire(import.meta.url), orderId = 'a02f5a55-5fa3-4239-845b-ac6b699110ee', secondId = 'a02f5a55-5fa3-4239-845b-ac6b699110ef';
 const icons = new Proxy({}, { get: () => () => React.createElement('svg', { 'aria-hidden': 'true' }) });
@@ -39,7 +40,8 @@ function loadComponent(relative, mocks) {
   const code = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
   const module = { exports: {} };
   new Function('require', 'module', 'exports', code)(id => Object.hasOwn(mocks, id) ? mocks[id] : id === 'lucide-react' ? icons
-    : id.endsWith('.module.css') ? cssModule : id === '@/lib/utils' ? { cn: (...values) => values.filter(Boolean).join(' ') } : require(id), module, module.exports);
+    : id.endsWith('.module.css') ? cssModule : id === '@/lib/browser-request-deadline.mjs' ? deadline
+      : id === '@/lib/utils' ? { cn: (...values) => values.filter(Boolean).join(' ') } : require(id), module, module.exports);
   return module.exports.default;
 }
 function nodes(tree) { return tree && typeof tree === 'object' ? [tree, ...React.Children.toArray(tree.props?.children).flatMap(nodes)] : []; }
@@ -155,7 +157,7 @@ test('checkout retains a purchase UUID after an ambiguous failure, and a process
     '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' ') } });
   const tree = () => { state.reset(); return Component({ packageId: 1, nowpaymentsEnabled: true }); };
   globalThis.fetch = async (target, options) => {
-    if (target === '/api/auth/session') return Response.json({ authenticated: true, subject: 'synthetic-verified-owner', email: 'member@example.test' });
+    if (target === '/api/auth/session?view=access') return Response.json({ authenticated: true, subject: 'synthetic-verified-owner', email: 'member@example.test' });
     assert.equal(target, '/api/payments/checkout'); bodies.push(JSON.parse(options.body)); return Response.json({ error: code }, { status: 409 });
   };
   const primary = value => nodes(value).find(node => node.type === 'button' && node.props.onClick?.name === 'activate');

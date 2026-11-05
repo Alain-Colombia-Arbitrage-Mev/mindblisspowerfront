@@ -48,6 +48,17 @@ test("catalog coalesces browser reads without retaining personal response fields
   assert.equal(calls, 3);
 });
 
+test('rank definitions remain available on mobile without AbortSignal.timeout/any', async t => {
+  for (const name of ['any', 'timeout']) {
+    const descriptor = Object.getOwnPropertyDescriptor(AbortSignal, name);
+    Object.defineProperty(AbortSignal, name, { configurable: true, value: undefined });
+    t.after(() => Object.defineProperty(AbortSignal, name, descriptor));
+  }
+  let calls = 0;
+  mockBrowser(t, async (_url, init) => { calls++; assert.ok(init.signal instanceof AbortSignal); return Response.json({ ranks: [rank()] }); });
+  assert.deepEqual(await readRankCatalog(), { ranks: [rank()] }); assert.equal(calls, 1);
+});
+
 test("five visits within five minutes use one GET; expiry reads fresh without caching personal fields", async (t) => {
   let calls = 0;
   let previousPolicyCalls = 0;

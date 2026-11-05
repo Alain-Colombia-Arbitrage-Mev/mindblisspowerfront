@@ -1,3 +1,5 @@
+import { browserRequestDeadline } from './browser-request-deadline.mjs';
+
 export function nowpaymentsOrderId(value) {
   return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value)
     && value !== '00000000-0000-0000-0000-000000000000' ? value : '';
@@ -27,8 +29,10 @@ export const activatedNOWPaymentsMembership = (value, orderId) => nowpaymentsRec
  * @param {{signal?: AbortSignal, fetchImpl?: typeof fetch}} [options] */
 export async function readNOWPaymentsReceipt(orderId, { signal, fetchImpl = fetch } = {}) {
   if (!nowpaymentsOrderId(orderId)) throw Object.assign(new Error('Invalid order'), { status: 400 });
+  const deadline = browserRequestDeadline(signal, 10000);
+  try {
   const response = await fetchImpl(`/api/payments/nowpayments/status?order_id=${orderId}`, {
-    credentials: 'same-origin', cache: 'no-store', redirect: 'error', signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(10000)]),
+    credentials: 'same-origin', cache: 'no-store', redirect: 'error', signal: deadline.signal,
   });
   if (!response.ok) {
     void response.body?.cancel().catch(() => {});
@@ -40,6 +44,7 @@ export async function readNOWPaymentsReceipt(orderId, { signal, fetchImpl = fetc
   const receipt = nowpaymentsReceiptStatus(value, orderId);
   if (!receipt) throw Object.assign(new Error('Invalid payment confirmation'), { status: 502 });
   return receipt;
+  } finally { deadline.dispose(); }
 }
 
 /** Bounded, non-overlapping polling; focus never bypasses backoff or deadline. */

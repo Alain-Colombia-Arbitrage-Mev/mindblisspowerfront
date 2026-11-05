@@ -7,6 +7,7 @@ import { useMemberSession } from "@/lib/member-session-context";
 import { formatPaymentMoney as money } from "@/lib/payment-display.mjs";
 
 import { requestProfile } from "../../profile/profile-model.mjs";
+import { browserRequestDeadline } from '@/lib/browser-request-deadline.mjs';
 
 import { Copy, CreditCard, KeyRound, Loader2, Send, Shield, ShieldCheck, User } from "lucide-react";
 
@@ -58,12 +59,13 @@ export function ProfileDashboardPage({ authMode = 'cognito' }) {
     profileMounted.current = true;
     let cancelled = false;
     const controller = new AbortController();
-    fetch("/api/payments/me", { cache: "no-store", credentials: 'same-origin', redirect: 'error', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12000)]) })
+    const deadline = browserRequestDeadline(controller.signal, 12000);
+    fetch("/api/payments/me", { cache: "no-store", credentials: 'same-origin', redirect: 'error', signal: deadline.signal })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => { if (!cancelled && d && !d.error) setSummary(d); })
-      .catch(() => {});
+      .catch(() => {}).finally(() => deadline.dispose());
     void loadProfile();
-    return () => { cancelled = true; profileMounted.current = false; controller.abort(); profileController.current?.abort(); savingController.current?.abort(); };
+    return () => { cancelled = true; profileMounted.current = false; controller.abort(); deadline.dispose(); profileController.current?.abort(); savingController.current?.abort(); };
   }, [loadProfile]);
 
   const setField = (k) => (e) => { if (profileState !== 'ready' || savingRef.current) return; editedRef.current = true; setForm((f) => ({ ...f, [k]: e.target.value })); };

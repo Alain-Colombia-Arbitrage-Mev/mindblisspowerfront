@@ -5,6 +5,7 @@ import { cookies, headers } from "next/headers";
 import { verifyIdToken } from "./verify-id-token";
 import { betterAuthEnabled, betterAuthServiceToken, trustedAuthClientIp, AuthServiceUnavailable } from "./better-auth-bridge.mjs";
 import { coreFetch, runtimeEnvironment } from './cloudflare-runtime.mjs';
+import { boundedServiceRequest } from './private-service-request.mjs';
 
 // Next's request-local cookie object is the key; never cache across sessions.
 const requestTokens = new WeakMap();
@@ -65,21 +66,19 @@ export function paymentsConfig() {
 /**
  * Llama al servicio Go con el token de servicio.
  * @param {string} path
- * @param {{method?: string, body?: unknown}} [options]
+ * @param {{method?: string, body?: unknown, signal?: AbortSignal}} [options]
  */
-export async function callPayments(path, { method = "GET", body } = {}) {
+export async function callPayments(path, { method = "GET", body, signal } = {}) {
   const { base, token } = paymentsConfig();
   if (!base || !token) return { ok: false, status: 503, data: { error: "payments-unconfigured" } };
   const idHeader = await idTokenHeader();
   try {
-    const resp = await coreFetch(`${base}${path}`, {
+    return await boundedServiceRequest(`${base}${path}`, {
       method,
       headers: { "X-VP-Service-Token": token, ...idHeader, ...(body ? { "content-type": "application/json" } : {}) },
       body: body ? JSON.stringify(body) : undefined,
-      cache: "no-store",
-    });
-    const data = await resp.json().catch(() => ({}));
-    return { ok: resp.ok, status: resp.status, data };
+      signal,
+    }, coreFetch);
   } catch {
     return { ok: false, status: 502, data: { error: "payments-unreachable" } };
   }
@@ -94,21 +93,19 @@ export function withdrawalsConfig() {
 /**
  * Llama a vp-withdrawals con el token de servicio (retiros + BMP).
  * @param {string} path
- * @param {{method?: string, body?: unknown}} [options]
+ * @param {{method?: string, body?: unknown, signal?: AbortSignal}} [options]
  */
-export async function callWithdrawals(path, { method = "GET", body } = {}) {
+export async function callWithdrawals(path, { method = "GET", body, signal } = {}) {
   const { base, token } = withdrawalsConfig();
   if (!base || !token) return { ok: false, status: 503, data: { error: "withdrawals-unconfigured" } };
   const idHeader = await idTokenHeader();
   try {
-    const resp = await coreFetch(`${base}${path}`, {
+    return await boundedServiceRequest(`${base}${path}`, {
       method,
       headers: { "X-VP-Service-Token": token, ...idHeader, ...(body ? { "content-type": "application/json" } : {}) },
       body: body ? JSON.stringify(body) : undefined,
-      cache: "no-store",
-    });
-    const data = await resp.json().catch(() => ({}));
-    return { ok: resp.ok, status: resp.status, data };
+      signal,
+    }, coreFetch);
   } catch {
     return { ok: false, status: 502, data: { error: "withdrawals-unreachable" } };
   }

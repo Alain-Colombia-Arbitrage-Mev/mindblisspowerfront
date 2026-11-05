@@ -8,11 +8,23 @@ const request = (method = 'POST', extra = {}, path = '/api/member/profile') => n
 });
 test('member/payment mutation origin and JSON checks reject sibling-site forms before transport', () => {
   assert.equal(memberMutationError(request(), env), null);
-  for (const path of ['/api/member/profile', '/api/payments/withdraw', '/api/network/analyze']) {
+  for (const path of ['/api/member/profile', '/api/payments/withdraw', '/api/network/analyze', '/api/admin/withdrawals/action', '/%61pi/%61dmin/users']) {
     assert.equal(memberMutationError(request('POST', { origin: 'https://sibling.example.test', 'sec-fetch-site': 'same-site' }, path), env).status, 403);
     assert.equal(memberMutationError(request('POST', { 'content-type': 'text/plain' }, path), env).status, 415);
     assert.equal(memberMutationError(request('POST', { origin: '' }, path), env).status, 403);
   }
   assert.equal(memberMutationError(request('GET'), env), null);
   assert.equal(memberMutationError(request('POST', {}, '/api/other'), env), null);
+});
+
+test('admin mutations retain exact origin, JSON and fetch-site admission on admin and local development hosts', () => {
+  for (const origin of ['https://admin.mindblisspower.com', 'http://localhost:3000']) {
+    const make = headers => new Request(`${origin}/api/admin/plan/decide`, { method: 'POST',
+      headers: { origin, 'content-type': 'application/json', 'sec-fetch-site': 'same-origin', ...headers } });
+    const configured = { AUTH_PUBLIC_ORIGIN: origin };
+    assert.equal(memberMutationError(make({}), configured), null);
+    assert.equal(memberMutationError(make({ origin: 'https://mindblisspower.com' }), configured).status, 403);
+    assert.equal(memberMutationError(make({ 'content-type': 'text/plain' }), configured).status, 415);
+    assert.equal(memberMutationError(make({ 'sec-fetch-site': 'same-site' }), configured).status, 403);
+  }
 });

@@ -258,6 +258,40 @@ test('only reviewed sender and UUID metadata reach diagnostics; signed unrelated
   await ack(await run(request(), { report() { throw new Error('private logging-sink detail'); } }));
 });
 
+test('enabled delivery trace persists only signed HMAC metadata and acknowledges only a durable success', async () => {
+  const traces = [];
+  const currentRaw = JSON.stringify({ ...event, created_at: new Date(now()).toISOString() });
+  const configuration = { ...env, RESEND_TRACE_ENABLED: 'true', AUTH_BFF_SHARED_SECRET: 'synthetic-private-trace-secret-32-characters',
+    CORE_EMAIL_TELEMETRY: { async recordDelivery(value) { traces.push(value); return { recorded: true }; } } };
+  const response = await run(request(currentRaw), { env: configuration });
+  assert.equal(response.status, 200); assert.deepEqual(await response.json(), { received: true, mode: 'recorded' });
+  assert.equal(traces.length, 1);
+  assert.deepEqual(traces[0], { version: 1,
+    id: createHmac('sha256', configuration.AUTH_BFF_SHARED_SECRET).update(`otp-trace:webhook\0${id}`).digest('hex'),
+    occurred_at: new Date(now()).toISOString(), event_type: 'email.delivered',
+    message_ref: createHmac('sha256', configuration.AUTH_BFF_SHARED_SECRET).update(`otp-trace:message\0${event.data.email_id}`).digest('hex') });
+  assert.doesNotMatch(JSON.stringify(traces), /012345|private|example\.test|00000000|otp@|msg_/);
+  assert.equal((await run(request(raw, { signature: 'v1,' + Buffer.alloc(32).toString('base64') }), { env: configuration })).status, 401);
+  assert.equal(traces.length, 1, 'invalid signatures must not touch the durable sink');
+  const again = await run(request(currentRaw), { env: configuration });
+  assert.equal(again.status, 200); assert.deepEqual(traces[0], traces[1], 'stable event key allows Core deduplication');
+});
+
+test('enabled telemetry never claims durable processing after an unavailable or malformed acknowledgement', async () => {
+  const base = { ...env, RESEND_TRACE_ENABLED: 'true', AUTH_BFF_SHARED_SECRET: 'synthetic-private-trace-secret-32-characters' };
+  const currentRaw = JSON.stringify({ ...event, created_at: new Date(now()).toISOString() });
+  for (const sink of [undefined, { async recordDelivery() { throw Error('private sink error'); } },
+    { async recordDelivery() { return { recorded: false }; } }, { async recordDelivery() { return { recorded: true, private: 'value' }; } }]) {
+    const response = await run(request(currentRaw), { env: { ...base, CORE_EMAIL_TELEMETRY: sink } });
+    assert.equal(response.status, 503); assert.deepEqual(await response.json(), { error: 'email_callback_unavailable' });
+    assert.equal(response.headers.get('set-cookie'), null);
+  }
+  const configuration = { ...base, CORE_EMAIL_TELEMETRY: { recordDelivery() { assert.fail('expired metadata persisted'); } } };
+  const old = JSON.stringify(documentedDelivery('email.delivered'));
+  const response = await run(request(old), { env: configuration });
+  assert.equal(response.status, 200); assert.deepEqual(await response.json(), { received: true, mode: 'outside_retention' });
+});
+
 function loadModule(filename, mocks) {
   const source = readFileSync(new URL(filename, import.meta.url), 'utf8');
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;

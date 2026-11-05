@@ -6,6 +6,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 import * as paymentDisplay from '../../../../lib/payment-display.mjs';
+import * as deadline from '../../../../lib/browser-request-deadline.mjs';
 
 const require = createRequire(import.meta.url);
 const pageNames = [
@@ -35,6 +36,7 @@ function loadPages({ summary = { loading: true, data: null, error: '' }, health 
     '@/lib/member-session-context': { useMemberSession: () => session },
     '@/hooks/useMemberSummary': { useMemberSummary: () => ({ state: summary, reload: () => {} }) },
     '@/lib/payment-display.mjs': paymentDisplay,
+    '@/lib/browser-request-deadline.mjs': deadline,
     '@/lib/member-read.mjs': { isRecoverySummary: data => data?.recovery_mode === true },
     '@/lib/useNetworkHealth': { useNetworkHealth: () => health },
     '@/lib/useSustainability': { useSustainability: () => ({ loading: false, data: null, error: '' }) },

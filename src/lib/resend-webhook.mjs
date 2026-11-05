@@ -1,5 +1,6 @@
 import { timingSafeEqual } from 'node:crypto';
 import { runtimeEnvironment } from './cloudflare-runtime.mjs';
+import { persistResendDelivery } from './resend-delivery-trace.mjs';
 
 export const RESEND_WEBHOOK_PATH = '/api/webhooks/resend';
 export const RESEND_WEBHOOK_MAX_BYTES = 65536;
@@ -93,8 +94,8 @@ function senderMailbox(value) {
   return (displayed ? displayed[1] : trimmed).trim().toLowerCase();
 }
 
-/** Public, signed notification ingress. No account, session, database, external
- * fetch, delivery guarantee or durable/exactly-once processing follows an ACK.
+/** Public, signed notification ingress. No account, session or identity proof
+ * follows an ACK. Optional durable metadata is a separate private capability.
  * @param {Request} request
  * @param {{env?: Record<string, any>, now?: () => number, report?: (event: {event: string, type: string}) => void}} [dependencies]
  */
@@ -146,8 +147,14 @@ export async function handleResendWebhook(request, { env = runtimeEnvironment(),
   if (typeof payload.data.email_id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(payload.data.email_id)) {
     return reply(400, { error: 'invalid_callback_request' });
   }
-  // Replay/retries are harmless: this is optional, non-durable telemetry only.
+  let mode = 'notification_only';
+  if (env.RESEND_TRACE_ENABLED === 'true') {
+    try {
+      mode = await persistResendDelivery({ env, type: payload.type, emailId: payload.data.email_id,
+        webhookId: proof.id, occurredAt: payload.created_at, now: now(), signal });
+    } catch { return unavailable(); } // A failed durable write must be retried by Resend.
+  }
   // Never log the payload, sender, recipients, subject, provider ID or signature.
   try { report({ event: 'resend_delivery_event', type: payload.type }); } catch { /* No durable side effect was promised. */ }
-  return acknowledged();
+  return reply(200, { received: true, mode });
 }

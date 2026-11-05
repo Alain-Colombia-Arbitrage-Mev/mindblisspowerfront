@@ -5,6 +5,8 @@ import { getCloudflareScope, runCloudflareRequest } from './src/lib/cloudflare-r
 import { cloudflarePortalGuard, privateCloudflareResponse } from './src/lib/cloudflare-portal-guard.mjs';
 import { createHash, createHmac } from 'node:crypto';
 let privateCalls = 0;
+const traceEvents = new Set();
+let traceCalls = 0;
 const secret = 'synthetic-private-context-not-a-real-secret-longer-than-32';
 const issuer = 'https://portal.example.test';
 const audience = 'member-services';
@@ -284,7 +286,7 @@ const syntheticEnv = {
 export default {
   async fetch(request, env, ctx) {
     const incoming = new URL(request.url);
-    if (incoming.pathname === '/__synthetic_metrics') return Response.json({ privateCalls, ...metrics });
+    if (incoming.pathname === '/__synthetic_metrics') return Response.json({ privateCalls, traceCalls, traceEvents: traceEvents.size, ...metrics });
     const headers = new Headers(request.headers);
     headers.delete('x-forwarded-host');
     // Browser-only local QA applies to both compiled-page and API fixtures.
@@ -324,16 +326,28 @@ export default {
     const nowDisabledFixture = incoming.pathname.startsWith('/__now_disabled/');
     const resendDisabledFixture = incoming.pathname.startsWith('/__resend_disabled/');
     const resendUnconfiguredFixture = incoming.pathname.startsWith('/__resend_unconfigured/');
+    const traceFixture = incoming.pathname.startsWith('/__resend_trace/');
+    const traceUnavailableFixture = incoming.pathname.startsWith('/__resend_trace_unavailable/');
     const pathname = staleSmsFixture ? incoming.pathname.slice('/__stale_sms'.length)
       : nowDisabledFixture ? incoming.pathname.slice('/__now_disabled'.length)
       : resendDisabledFixture ? incoming.pathname.slice('/__resend_disabled'.length)
-      : resendUnconfiguredFixture ? incoming.pathname.slice('/__resend_unconfigured'.length) : incoming.pathname;
+      : resendUnconfiguredFixture ? incoming.pathname.slice('/__resend_unconfigured'.length)
+      : traceFixture ? incoming.pathname.slice('/__resend_trace'.length)
+      : traceUnavailableFixture ? incoming.pathname.slice('/__resend_trace_unavailable'.length) : incoming.pathname;
     const input = new Request(`https://app.mindblisspower.com${pathname}${incoming.search}`, { method: request.method, headers, body: request.body });
     return worker.fetch(input, { ...env, ...syntheticEnv,
       BETTER_AUTH_REGISTRATION_SMS_REQUIRED: 'true', SENTDM_API_KEY: 'synthetic-never-call', SENTDM_OTP_TEMPLATE_ID: 'synthetic-never-call',
       ...(nowDisabledFixture ? { NOWPAYMENTS_MEMBERSHIPS_ENABLED: 'false' } : {}),
       ...(resendDisabledFixture ? { RESEND_WEBHOOK_ENABLED: 'false' } : {}),
       ...(resendUnconfiguredFixture ? { RESEND_WEBHOOK_SECRET: undefined } : {}),
+      ...((traceFixture || traceUnavailableFixture) ? { RESEND_TRACE_ENABLED: 'true', CORE_EMAIL_TELEMETRY: traceUnavailableFixture ? undefined : {
+        async recordDelivery(event) {
+          if (Object.keys(event).sort().join(',') !== 'event_type,id,message_ref,occurred_at,version'
+            || event.version !== 1 || !/^[a-f0-9]{64}$/.test(event.id) || !/^[a-f0-9]{64}$/.test(event.message_ref)
+            || event.event_type !== 'email.delivered') throw Error('invalid_synthetic_delivery_metadata');
+          traceCalls++; traceEvents.add(event.id); return { recorded: true };
+        },
+      } } : {}),
       ...(incoming.pathname.startsWith('/__disabled/') ? { CLOUDFLARE_DEPLOYMENT_READY: 'false' } : {}),
     }, ctx);
   },

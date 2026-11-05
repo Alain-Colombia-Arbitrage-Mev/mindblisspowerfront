@@ -20,10 +20,17 @@ function browser(t) {
   t.after(() => { if (previous === undefined) delete globalThis.window; else globalThis.window = previous; });
   return destinations;
 }
-function view({ microsoft = false, attribution, sync = () => Promise.resolve({ ok: true }) } = {}) {
+function view({ microsoft = false, attribution, sync = () => Promise.resolve({ ok: true }), cooldowns } = {}) {
   return registrationViewHarness('../login/MagicLinkLoginForm.jsx', {
     'lucide-react': new Proxy({}, { get: () => () => null }),
-    '@/lib/useResendCooldown': { useResendCooldown: () => ({ active: false, label: '', start() {} }), isMicrosoftEmail: () => microsoft, suggestEmailFix: () => '' },
+    '@/lib/useResendCooldown': { useResendCooldown: (_seconds, scope = '') => {
+      if (!cooldowns) return { active: false, label: '', start() {} };
+      const key = scope.includes(':sign-in-confirm:') ? 'confirm' : scope.includes(':sign-in:') ? 'send' : 'other';
+      if (!cooldowns.has(key)) cooldowns.set(key, { active: false, label: '', start(seconds) {
+        this.active = true; this.seconds = seconds; this.label = `Reenviar en ${seconds}s`;
+      } });
+      return cooldowns.get(key);
+    }, isMicrosoftEmail: () => microsoft, suggestEmailFix: () => '' },
     '@/lib/password': { checkPassword: () => ({ results: [] }), isValidPassword: () => true },
     '@/lib/referral-attribution': attribution || { bindReferralCodeToEmail() {}, captureReferralFromUrl: () => null, normalizePlacementSide: () => '', normalizeReferralCode: value => value },
     '@/lib/email-otp-client.mjs': emailOtp, './BetterAuthPasswordLogin': { default: () => null },
@@ -296,4 +303,58 @@ test('Microsoft delivery help preserves the original account and distinguishes t
   assert.match(markup, /aria-describedby="login-code-helper"/);
   assert.match(markup, /maxLength="6"/);
   assert.equal(calls, 1); harness.unmount();
+});
+
+test('edge HTML 429 and service 503 preserve code entry, neutral guidance and a manual resend wait without registration redirects', async t => {
+  const destinations = browser(t);
+  for (const status of [429, 503]) {
+    const cooldowns = new Map(), calls = [];
+    t.mock.method(globalThis, 'fetch', async path => { calls.push(path); return new Response('<html>private recipient REGISTRATION_REQUIRED</html>', {
+      status, headers: { 'Content-Type': 'text/html', 'Retry-After': '621' },
+    }); });
+    const harness = view({ cooldowns }); await submit(harness.render(props));
+    const markup = html(harness);
+    assert.match(markup, /No pudimos confirmar el envío/); assert.doesNotMatch(markup, /private recipient|<html>|Correo verificado correctamente/);
+    assert.ok(find(harness.render(props), node => node?.props?.id === 'login-code'));
+    assert.equal(cooldowns.get('send').seconds, 621); assert.equal(cooldowns.get('confirm').active, false);
+    for (let count = 0; count < 3; count++) harness.render(props);
+    const resend = find(harness.render(props), node => node?.props?.onClick && node?.props?.children === 'Reenviar en 621s');
+    assert.equal(resend.props.disabled, true); await resend.props.onClick({ preventDefault() {} });
+    assert.deepEqual(calls, ['/api/auth/email-otp/send-verification-otp']); assert.deepEqual(destinations, []);
+    harness.unmount();
+  }
+});
+
+test('a limited redemption preserves the received OTP and pauses only validation until explicit retry', async t => {
+  const destinations = browser(t), cooldowns = new Map(), paths = [];
+  t.mock.method(globalThis, 'fetch', async path => {
+    paths.push(path);
+    return path.endsWith('/send-verification-otp') ? Response.json({ ok: true })
+      : new Response('<html>private WAF detail</html>', { status: 429, headers: { 'Retry-After': '83', 'Content-Type': 'text/html' } });
+  });
+  const harness = view({ cooldowns }); await enterCode(harness);
+  assert.equal(cooldowns.get('confirm').seconds, 83);
+  assert.equal(find(harness.render(props), node => node?.props?.id === 'login-code').props.value, '001234');
+  assert.match(html(harness), /Demasiados intentos/); assert.doesNotMatch(html(harness), /private WAF|inválido o expirado/);
+  assert.ok(find(harness.render(props), node => node?.props?.children === 'Validar de nuevo en 83s').props.disabled);
+  await submit(harness.render(props)); assert.equal(paths.length, 2);
+  cooldowns.get('confirm').active = false;
+  t.mock.method(globalThis, 'fetch', async path => { paths.push(path); return Response.json({ error: 'private provider detail' }, { status: 503 }); });
+  await submit(harness.render(props)); assert.equal(paths.length, 3);
+  assert.match(html(harness), /servicio de acceso no está disponible/); assert.doesNotMatch(html(harness), /private provider|inválido o expirado/);
+  assert.equal(find(harness.render(props), node => node?.props?.id === 'login-code').props.value, '001234');
+  assert.deepEqual(destinations, []); harness.unmount();
+});
+
+test('uncertain resend cannot erase an entered code or cause another email until the user chooses it after the wait', async t => {
+  browser(t); const cooldowns = new Map(), paths = [];
+  t.mock.method(globalThis, 'fetch', async path => { paths.push(path); return paths.length === 1 ? Response.json({ ok: true })
+    : new Response('private edge detail', { status: 429, headers: { 'Retry-After': '621' } }); });
+  const harness = view({ cooldowns }); await submit(harness.render(props));
+  find(harness.render(props), node => node?.props?.id === 'login-code').props.onChange('001234');
+  cooldowns.get('send').active = false;
+  const resend = find(harness.render(props), node => node?.props?.onClick && node?.props?.children === 'Reenviar');
+  await resend.props.onClick({ preventDefault() {} });
+  assert.equal(paths.length, 2); assert.equal(find(harness.render(props), node => node?.props?.id === 'login-code').props.value, '001234');
+  assert.equal(cooldowns.get('send').seconds, 621); harness.unmount();
 });

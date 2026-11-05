@@ -1,4 +1,5 @@
 import { createExpiringResource } from "./expiring-resource.mjs";
+import { browserRequestDeadline } from './browser-request-deadline.mjs';
 
 export const RANK_CATALOG_TTL_MS = 300_000;
 
@@ -28,15 +29,18 @@ function sanitizedRanks(data) {
 }
 
 async function loadRanks() {
+  const deadline = browserRequestDeadline(undefined, 15000);
+  try {
   const response = await fetch("/api/member/ranks", {
     cache: "no-store",
     credentials: "same-origin",
     redirect: "error",
-    signal: AbortSignal.timeout(15_000),
+    signal: deadline.signal,
   });
   if (!response.ok) throw new Error(`rank-catalog-${response.status}`);
   const data = await response.json();
   return { ranks: sanitizedRanks(data) };
+  } finally { deadline.dispose(); }
 }
 
 // Only the non-personal rank catalog is retained, never a member's rank or wallet.
