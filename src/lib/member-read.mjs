@@ -42,6 +42,7 @@ function messageFor(status, code) {
   if (status === 401) return "Tu sesion expiro. Vuelve a iniciar sesion.";
   if (status === 403) return code === "account_suspended" ? "Esta cuenta tiene el acceso a la red restringido." : "No tienes permiso para consultar estos datos.";
   if (status === 429) return "Demasiadas consultas. Intenta de nuevo mas tarde.";
+  if (status === 503 && code === "authentication_unavailable") return "El servicio de acceso no está disponible temporalmente. Reintenta la consulta en unos instantes.";
   if (status === 503) return "El servicio no esta disponible o no esta configurado.";
   return "No se pudieron consultar los datos. Intenta de nuevo.";
 }
@@ -62,6 +63,7 @@ export async function readMemberJson(url, { signal, validate = () => true, timeo
       const retry = Number(response.headers.get("retry-after") || data?.retryAfterSec);
       throw Object.assign(new Error(messageFor(response.status, data?.error)), {
         status: response.status, retryAfterMs: Number.isFinite(retry) && retry > 0 ? Math.min(retry, 86400) * 1000 : 0,
+        ...(response.status === 503 && data?.error === "authentication_unavailable" ? { code: "authentication_unavailable" } : {}),
       });
     }
     if (!data || typeof data !== "object" || Array.isArray(data) || data.error || !validate(data)) {

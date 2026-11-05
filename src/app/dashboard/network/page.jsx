@@ -65,7 +65,7 @@ function paymentStatusCopy(status, active) {
   const map = {
     created: {
       title: "Checkout iniciado, falta confirmación de pago",
-      detail: "Cuando Stripe confirme el pago, el backend podrá activar la membresía y colocar la cuenta en el árbol.",
+      detail: "Cuando se confirme el pago, el backend podrá activar la membresía y colocar la cuenta en el árbol.",
       tone: "var(--vp-amber)",
     },
     paid: {
@@ -146,6 +146,14 @@ function ReadIssues({ state, onRetry }) {
   </div>;
 }
 
+function networkReadFailure(previous, error) {
+  const next = treeRefreshFailure(previous, error.status, error.message);
+  if (next.refreshError && error.status === 503 && error.code === "authentication_unavailable") {
+    return { ...next, refreshError: `${error.message} Se conserva la última lectura sin actualizar.` };
+  }
+  return next;
+}
+
 export default function NetworkPage() {
   const searchParams = useSearchParams();
   const requestedTab = searchParams.get("tab");
@@ -166,13 +174,13 @@ export default function NetworkPage() {
   useEffect(() => {
     warmNetworkView(initialTab.current);
     const current = createMemberNetworkReader({
-      onStart: full => setState(prev => ({ ...prev, loading: !prev.data, refreshing: Boolean(prev.data), error: "", refreshError: "",
+      onStart: full => setState(prev => ({ ...prev, loading: !prev.data, refreshing: Boolean(prev.data), error: "", errorStatus: 0, refreshError: "",
         ...(full ? { summary: null, referral: null, summaryError: null, referralError: null } : {}), syncing: false })),
       onPart: (key, result) => setState(prev => key === "tree"
-        ? result.error ? treeRefreshFailure(prev, result.error.status, result.error.message)
-          : { ...prev, loading: false, refreshing: false, error: "", refreshError: "", data: result.data }
+        ? result.error ? networkReadFailure(prev, result.error)
+          : { ...prev, loading: false, refreshing: false, error: "", errorStatus: 0, refreshError: "", data: result.data }
         : { ...prev, [key]: result.data || null, [`${key}Error`]: result.error || null }),
-      onDenied: error => setState(prev => treeRefreshFailure(prev, error.status, error.message)),
+      onDenied: error => setState(prev => networkReadFailure(prev, error)),
       onSync: syncing => setState(prev => ({ ...prev, syncing })),
     });
     reader.current = current;
@@ -210,7 +218,7 @@ export default function NetworkPage() {
     return (
       <div className="p-6">
         <StatusCard>
-          <span className="text-sm font-semibold" style={{ color: "var(--vp-muted)" }}>
+          <span role="alert" className="text-sm font-semibold" style={{ color: "var(--vp-muted)" }}>
             {state.error === "account_suspended" ? "Esta cuenta tiene el acceso a la red restringido."
               : state.error === "tree-unavailable"
               ? "El árbol estará disponible cuando finalice la migración."

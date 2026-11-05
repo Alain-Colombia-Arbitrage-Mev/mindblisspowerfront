@@ -5,6 +5,7 @@ import test from 'node:test';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
+import { treeRefreshFailure } from '../../../lib/tree-read-model.mjs';
 
 const require = createRequire(import.meta.url);
 const source = readFileSync(new URL('./page.jsx', import.meta.url), 'utf8');
@@ -29,23 +30,29 @@ function elements(tree) {
 
 // Run the real client route with local hook/module boundaries. The synthetic
 // reader below cannot request production data, and effects run only on demand.
-function networkView({ query = '', loading = false } = {}) {
-  const effects = [], deferred = [], loaded = [], events = [];
+function networkView({ query = '', loading = false, stateOverride = {} } = {}) {
+  const effects = [], deferred = [], loaded = [], events = [], callbacks = [];
   let stateIndex = 0;
   const state = {
     loading, refreshing: false, error: '', errorStatus: 0, refreshError: '',
     data: { positioned: true, me: { id: 1, name: 'Synthetic member' }, tree: [], meta: {} },
-    summary: null, referral: null, summaryError: null, referralError: null, syncing: false,
+    summary: null, referral: null, summaryError: null, referralError: null, syncing: false, ...stateOverride,
   };
   const hooks = {
-    useState: initial => [stateIndex++ === 3 ? state : typeof initial === 'function' ? initial() : initial, () => {}],
+    useState: initial => {
+      const index = stateIndex++;
+      return [index === 3 ? state : typeof initial === 'function' ? initial() : initial, update => {
+        if (index === 3) Object.assign(state, typeof update === 'function' ? update(state) : update);
+        else events.push(`state-update:${index}`);
+      }];
+    },
     useRef: current => ({ current }),
     useMemo: run => run(),
     useEffect: run => effects.push(run),
   };
   const mocks = {
     react: hooks,
-    'next/link': { default: empty },
+    'next/link': { default: ({ children, ...props }) => React.createElement('a', props, children) },
     'next/navigation': { useSearchParams: () => new URLSearchParams(query) },
     'lucide-react': icons,
     'next/dynamic': { default: (load, options) => {
@@ -53,12 +60,12 @@ function networkView({ query = '', loading = false } = {}) {
       deferred.push({ Component, load, options });
       return Component;
     } },
-    '@/lib/tree-read-model.mjs': { treeRefreshFailure: () => assert.fail('Unexpected read failure') },
-    '@/lib/member-network-reader.mjs': { createMemberNetworkReader: () => ({
+    '@/lib/tree-read-model.mjs': { treeRefreshFailure },
+    '@/lib/member-network-reader.mjs': { createMemberNetworkReader: handlers => { callbacks.push(handlers); return {
       refresh: async () => { events.push('reads-started'); },
       changeDepth: async () => {},
       dispose: () => { events.push('disposed'); },
-    }) },
+    }; } },
     '@/components/panel/network/NetworkTabs': { default: empty, NETWORK_TABS: [...viewPaths.keys()].map(id => ({ id })) },
   };
   const module = { exports: {} };
@@ -69,7 +76,8 @@ function networkView({ query = '', loading = false } = {}) {
     if (id === 'react/jsx-runtime') return require(id);
     assert.fail(`Unexpected test dependency: ${id}`);
   }, module, module.exports);
-  return { tree: module.exports.default(), deferred, loaded, effects, events };
+  const render = () => { stateIndex = 0; return module.exports.default(); };
+  return { tree: render(), deferred, loaded, effects, events, state, callbacks, render };
 }
 
 test('network view implementations are split out of the route entry without disabling server rendering', () => {
@@ -152,4 +160,59 @@ test('overview network action uses a client transition and preserves its existin
   recent.props.onSeeAll();
   assert.deepEqual(pushed, ['/dashboard/network']);
   assert.doesNotMatch(overviewSource, /window\.location\.assign/);
+});
+
+test('a temporary access failure offers retry without declaring expiry, requesting OTP, or exposing a private tree', () => {
+  const message = 'El servicio de acceso no está disponible temporalmente. Reintenta la consulta en unos instantes.';
+  const view = networkView({ stateOverride: { error: message, errorStatus: 503, data: null } });
+  const html = renderToStaticMarkup(view.tree);
+  assert.match(html, /role="alert"/);
+  assert.match(html, /servicio de acceso.*temporalmente/);
+  assert.doesNotMatch(html, /expir|iniciar sesi|c[oó]digo|href="\/login"|Synthetic member/i);
+  const retry = elements(view.tree).find(item => item.type === 'button');
+  assert.ok(retry);
+  retry.props.onClick();
+  assert.deepEqual(view.events, ['state-update:2'], 'retry only requests the existing manual refresh transition');
+});
+
+test('an awaiting checkout does not claim that the disabled Stripe gateway will confirm the payment', () => {
+  const view = networkView({ stateOverride: { data: { positioned: false }, summary: { active_packages: 0, payments: [{ status: 'created' }] } } });
+  const html = renderToStaticMarkup(view.tree);
+  assert.match(html, /Cuando se confirme el pago/);
+  assert.doesNotMatch(html, /Stripe|membresía activa|Pago recibido/i);
+});
+
+test('real unauthorized and forbidden network errors discard all private state and only 401 offers login', () => {
+  for (const status of [401, 403]) {
+    const view = networkView({ stateOverride: { summary: { private: true }, referral: { private: true } } });
+    const cleanup = view.effects[1]();
+    view.callbacks[0].onDenied(Object.assign(new Error(status === 401 ? 'Tu sesion expiro.' : 'No tienes permiso para consultar estos datos.'), { status }));
+    assert.equal(view.state.data, null);
+    assert.equal(view.state.summary, null);
+    assert.equal(view.state.referral, null);
+    const html = renderToStaticMarkup(view.render());
+    assert.doesNotMatch(html, /Synthetic member|private|Cargando/);
+    if (status === 401) assert.match(html, /href="\/login"/);
+    else assert.doesNotMatch(html, /href="\/login"|expir|iniciar sesi/i);
+    cleanup();
+  }
+});
+
+test('temporary tree refresh preserves the last tree with an explicit stale notice and a successful retry clears it', () => {
+  const view = networkView();
+  const cleanup = view.effects[1]();
+  const before = view.state.data;
+  const error = Object.assign(new Error('El servicio de acceso no está disponible temporalmente.'), { status: 503, code: 'authentication_unavailable' });
+  view.callbacks[0].onPart('tree', { error });
+  assert.equal(view.state.data, before);
+  assert.equal(view.state.error, '');
+  assert.match(view.state.refreshError, /servicio de acceso.*última lectura sin actualizar/);
+  const stale = renderToStaticMarkup(view.render());
+  assert.match(stale, /role="alert"/);
+  assert.match(stale, /última lectura sin actualizar/);
+  assert.doesNotMatch(stale, /href="\/login"|expir|iniciar sesi/i);
+  view.callbacks[0].onPart('tree', { data: before });
+  assert.equal(view.state.refreshError, '');
+  assert.equal(view.state.errorStatus, 0);
+  cleanup();
 });

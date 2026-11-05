@@ -70,6 +70,93 @@ for (const status of [401, 403]) test(`HTTP ${status} cancels all reads and clea
   reader.dispose();
 });
 
+for (const failedPart of ["tree", "summary", "referral"]) test(`authentication outage in ${failedPart} preserves independent reads without denial or automatic retries`, async () => {
+  const calls = [], signals = [], scheduled = [];
+  const unavailable = Object.assign(new Error("El servicio de acceso no está disponible temporalmente. Reintenta."), { status: 503, code: "authentication_unavailable" });
+  const { reader, parts, denied, sync } = setup({ read: async (url, { signal }) => {
+    calls.push(url); signals.push(signal);
+    const key = url.includes("/tree?") ? "tree" : url.includes("/payments/") ? "summary" : "referral";
+    if (key === failedPart) throw unavailable;
+    return dataFor(url);
+  }, schedule: callback => { scheduled.push(callback); return callback; } });
+  await reader.refresh();
+  assert.equal(denied.length, 0);
+  assert.equal(parts.length, 3);
+  assert.equal(signals.some(signal => signal.aborted), false);
+  assert.equal(parts.find(([key]) => key === failedPart)[1].error, unavailable);
+  for (const [key, result] of parts) if (key !== failedPart) assert.ok(result.data);
+  assert.equal(calls.length, 3);
+  assert.equal(scheduled.length, 0);
+  assert.equal(sync.at(-1), false);
+  reader.dispose();
+});
+
+test("an access outage stops post-payment polling until an explicit refresh, without probing login or sending OTP", async () => {
+  const calls = [], scheduled = [];
+  let unavailable = true;
+  const { reader, denied } = setup({ read: async url => {
+    calls.push(url);
+    if (url.includes("/referral") && unavailable) throw Object.assign(new Error("Temporal"), { status: 503, code: "authentication_unavailable" });
+    return url.includes("/tree?") ? unavailable ? { positioned: false } : tree
+      : url.includes("/payments/") ? { ...summary, active_packages: 1 } : referral;
+  }, schedule: callback => { scheduled.push(callback); return callback; } });
+  await reader.refresh();
+  await tick();
+  assert.equal(calls.length, 3);
+  assert.equal(scheduled.length, 0, "a failed auxiliary access read must not keep rereading balances");
+  assert.equal(denied.length, 0);
+  unavailable = false;
+  await reader.refresh();
+  assert.equal(calls.length, 6, "recovery requires the normal explicit read-only refresh");
+  assert.equal(scheduled.length, 0);
+  assert.equal(calls.every(url => /^\/api\/(?:member\/(?:tree\?|referral)|payments\/me)/.test(url)), true);
+  reader.dispose();
+});
+
+test("a previously scheduled placement callback cannot restart reads after an access outage", async () => {
+  const calls = [], scheduled = [], removed = [];
+  const { reader } = setup({ read: async url => {
+    calls.push(url);
+    if (url === memberTreeUrl("6")) throw Object.assign(new Error("Temporal"), { status: 503, code: "authentication_unavailable" });
+    return url.includes("/tree?") ? { positioned: false }
+      : url.includes("/payments/") ? { ...summary, active_packages: 1 } : referral;
+  }, schedule: callback => { scheduled.push(callback); return callback; }, unschedule: callback => removed.push(callback) });
+  await reader.refresh();
+  assert.equal(scheduled.length, 1);
+  await reader.changeDepth("6");
+  assert.deepEqual(removed, [scheduled[0]]);
+  const before = calls.length;
+  scheduled[0]();
+  await tick();
+  assert.equal(calls.length, before);
+  reader.dispose();
+});
+
+for (const status of [401, 403]) test(`a later HTTP ${status} still clears private data after a temporary access outage`, async () => {
+  const wallet = deferred(), links = deferred();
+  let state = { data: tree, summary, referral };
+  const { reader, parts, denied } = setup({ read: async url => {
+    if (url.includes("/tree?")) throw Object.assign(new Error("Temporal"), { status: 503, code: "authentication_unavailable" });
+    return url.includes("/payments/") ? wallet.promise : links.promise;
+  }, onPart: (key, result) => {
+    parts.push([key, result]);
+    if (key === "tree" && result.error) state = treeRefreshFailure(state, result.error.status, result.error.message);
+  }, onDenied: error => { denied.push(error); state = treeRefreshFailure(state, error.status, error.message); } });
+  const pending = reader.refresh();
+  await tick();
+  assert.equal(state.data, tree);
+  wallet.reject(Object.assign(new Error("Acceso denegado"), { status }));
+  await tick();
+  links.resolve(referral);
+  await pending;
+  assert.equal(denied.length, 1);
+  assert.equal(state.data, null);
+  assert.equal(state.summary, null);
+  assert.equal(state.referral, null);
+  assert.equal(parts.some(([key]) => key === "referral"), false);
+  reader.dispose();
+});
+
 test("post-payment polling remains bounded, refreshes membership evidence, and stops after placement", async () => {
   const calls = []; const scheduled = []; let placed = false;
   const { reader, sync } = setup({ read: async url => {

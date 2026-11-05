@@ -2,7 +2,7 @@ import { coreFetch, runtimeEnvironment } from '@/lib/cloudflare-runtime.mjs';
 import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
-import { verifyIdToken } from "@/lib/verify-id-token";
+import { verifyIdTokenForSession as verifyIdToken } from "@/lib/verify-id-token";
 import { memberMutationError } from '@/lib/member-mutation-policy.mjs';
 import { memberProfilePatch, validMemberProfile, validMemberProfileUpdate, readMemberProfileJson } from '@/lib/member-profile.mjs';
 

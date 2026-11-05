@@ -5,21 +5,27 @@ import { NextResponse } from "next/server";
 import { memberOnboardingSchema, toPaymentsOnboarding } from "@/lib/member-onboarding-schema";
 import { rateLimit } from "@/lib/rate-limit";
 import { hasSameOrigin } from "@/lib/request-origin";
-import { verifyIdToken } from "@/lib/verify-id-token";
+import { verifyIdTokenForSession as verifyIdToken } from "@/lib/verify-id-token";
+import { AuthServiceUnavailable } from "@/lib/better-auth-bridge.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 async function context() {
-  const idToken = await rawIdToken();
-  if (!idToken) return { error: "unauthenticated", status: 401 };
-  const claims = await verifyIdToken(idToken);
-  const email = String(claims?.email || "").trim().toLowerCase();
-  if (!email) return { error: "session-invalid", status: 401 };
-  const base = process.env.VP_PAYMENTS_URL;
-  const token = process.env.PAYMENTS_SERVICE_TOKEN;
-  if (!base || !token) return { error: "payments-unconfigured", status: 503 };
-  return { idToken, email, base, token };
+  try {
+    const idToken = await rawIdToken();
+    if (!idToken) return { error: "unauthenticated", status: 401 };
+    const claims = await verifyIdToken(idToken);
+    const email = String(claims?.email || "").trim().toLowerCase();
+    if (!email) return { error: "session-invalid", status: 401 };
+    const base = process.env.VP_PAYMENTS_URL;
+    const token = process.env.PAYMENTS_SERVICE_TOKEN;
+    if (!base || !token) return { error: "payments-unconfigured", status: 503 };
+    return { idToken, email, base, token };
+  } catch (error) {
+    if (!(error instanceof AuthServiceUnavailable)) throw error;
+    return { error: 'authentication_unavailable', status: 503 };
+  }
 }
 
 export async function GET() {
@@ -85,5 +91,6 @@ export async function POST(request) {
 function noStoreJson(body, status) {
   const response = NextResponse.json(body, { status });
   response.headers.set("Cache-Control", "private, no-store, max-age=0");
+  response.headers.set("Vary", "Cookie");
   return response;
 }

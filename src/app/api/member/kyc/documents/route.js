@@ -2,18 +2,23 @@ import { coreFetch } from '@/lib/cloudflare-runtime.mjs';
 import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
-import { verifiedEmailFromIdToken } from "@/lib/verify-id-token";
+import { verifiedEmailFromIdTokenForSession as verifiedEmailFromIdToken } from "@/lib/verify-id-token";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const privateHeaders = { "Cache-Control": "private, no-store", Vary: "Cookie" };
 
 /** Lista los documentos KYC del miembro + su kyc_status global. */
 export async function GET() {
-  const idToken = await rawIdToken();
-  if (!idToken) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
-
-  const email = await verifiedEmailFromIdToken(idToken);
-  if (!email) return NextResponse.json({ error: "session-invalid" }, { status: 401 });
+  let idToken, email;
+  try {
+    idToken = await rawIdToken();
+    if (!idToken) return NextResponse.json({ error: "unauthenticated" }, { status: 401, headers: privateHeaders });
+    email = await verifiedEmailFromIdToken(idToken);
+    if (!email) return NextResponse.json({ error: "session-invalid" }, { status: 401, headers: privateHeaders });
+  } catch {
+    return NextResponse.json({ error: "authentication_unavailable" }, { status: 503, headers: privateHeaders });
+  }
 
   const base = process.env.VP_PAYMENTS_URL;
   const token = process.env.PAYMENTS_SERVICE_TOKEN;

@@ -130,3 +130,9 @@ export async function verifiedEmailFromIdToken(token) {
   const claims = await verifyIdToken(token);
   return claims ? claims.email : "";
 }
+
+/** Private session reads must not describe an unavailable verifier as logout. */
+export async function verifiedEmailFromIdTokenForSession(token) {
+  const claims = await verifyIdTokenForSession(token);
+  return claims ? claims.email : "";
+}

@@ -61,7 +61,7 @@ function profileRoute(upstream) {
       coreFetch: async (url, options) => { calls.push({ url, options }); return upstream(); } },
     '@/lib/admin-bff': { rawIdToken: async () => 'synthetic-jwt' },
     'next/server': { NextResponse: Response },
-    '@/lib/verify-id-token': { verifyIdToken: async () => ({ email: 'verified@example.test' }) },
+    '@/lib/verify-id-token': { verifyIdTokenForSession: async () => ({ email: 'verified@example.test' }) },
     '@/lib/member-mutation-policy.mjs': { memberMutationError },
     '@/lib/member-profile.mjs': profilePolicy,
   };

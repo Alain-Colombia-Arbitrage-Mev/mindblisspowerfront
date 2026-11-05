@@ -61,6 +61,35 @@ for (const status of [401, 403, 429, 500, 502, 503]) test(`member read preserves
     return true;
   });
 });
+
+test("authentication infrastructure unavailability is retryable 503, never an expired session or a new OTP request", async () => {
+  const calls = [];
+  await assert.rejects(readMemberJson("/api/member/tree", { validate: validMemberTree, fetchImpl: async (url, options) => {
+    calls.push({ url, options });
+    return Response.json({ error: "authentication_unavailable", message: "synthetic-private-provider-detail" }, { status: 503 });
+  } }), error => {
+    assert.equal(error.status, 503);
+    assert.equal(error.code, "authentication_unavailable");
+    assert.match(error.message, /servicio de acceso.*temporalmente.*Reintenta/);
+    assert.doesNotMatch(error.message, /expir|iniciar sesi|c[oó]digo|private|provider/i);
+    return true;
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "/api/member/tree");
+  assert.equal(calls[0].options.cache, "no-store");
+  assert.equal(calls[0].options.body, undefined);
+});
+
+test("a 401 or 403 cannot be disguised as a retryable outage by an error body", async () => {
+  for (const status of [401, 403]) {
+    await assert.rejects(readMemberJson("/tree", { fetchImpl: async () => Response.json({ error: "authentication_unavailable" }, { status }) }), error => {
+      assert.equal(error.status, status);
+      assert.equal(error.code, undefined);
+      if (status === 403) assert.doesNotMatch(error.message, /expir|iniciar sesi/i);
+      return true;
+    });
+  }
+});
 test("hung reads terminate with a timeout", async () => {
   await assert.rejects(readMemberJson("/test", { timeoutMs: 5, validate: validMemberTree, fetchImpl: (_, { signal }) => new Promise((_, reject) => signal.addEventListener("abort", () => reject(signal.reason))) }), error => error.status === 504);
 });

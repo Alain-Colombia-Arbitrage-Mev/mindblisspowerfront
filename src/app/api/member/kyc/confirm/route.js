@@ -2,21 +2,26 @@ import { coreFetch } from '@/lib/cloudflare-runtime.mjs';
 import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
-import { verifiedEmailFromIdToken } from "@/lib/verify-id-token";
+import { verifiedEmailFromIdTokenForSession as verifiedEmailFromIdToken } from "@/lib/verify-id-token";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const privateHeaders = { "Cache-Control": "private, no-store", Vary: "Cookie" };
 
 /**
  * Confirma en vp-payments que el documento KYC ya se subió a S3; el documento
  * pasa a in_review y mlm.person.kyc_status se actualiza.
  */
 export async function POST(request) {
-  const idToken = await rawIdToken();
-  if (!idToken) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
-
-  const email = await verifiedEmailFromIdToken(idToken);
-  if (!email) return NextResponse.json({ error: "session-invalid" }, { status: 401 });
+  let idToken, email;
+  try {
+    idToken = await rawIdToken();
+    if (!idToken) return NextResponse.json({ error: "unauthenticated" }, { status: 401, headers: privateHeaders });
+    email = await verifiedEmailFromIdToken(idToken);
+    if (!email) return NextResponse.json({ error: "session-invalid" }, { status: 401, headers: privateHeaders });
+  } catch {
+    return NextResponse.json({ error: "authentication_unavailable" }, { status: 503, headers: privateHeaders });
+  }
 
   let body;
   try { body = await request.json(); } catch { return NextResponse.json({ error: "invalid-json" }, { status: 400 }); }

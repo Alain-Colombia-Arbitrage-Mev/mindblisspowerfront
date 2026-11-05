@@ -2,7 +2,8 @@ import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
 import { memberDb } from "@/lib/member-db";
-import { verifiedEmailFromIdToken } from "@/lib/verify-id-token";
+import { verifiedEmailFromIdTokenForSession as verifiedEmailFromIdToken } from "@/lib/verify-id-token";
+import { AuthServiceUnavailable } from "@/lib/better-auth-bridge.mjs";
 import { memberReadLimit, withMemberTreeCapacity } from "@/lib/member-read-policy.mjs";
 import { childCoverage, loadedChildCounts } from "@/lib/tree-read-model.mjs";
 
@@ -21,15 +22,23 @@ export async function GET(request) {
   const depthLimit = parseDepth(params.get("depth"));
   const rowLimit = parseLimit(params.get("limit"), depthLimit === 0 ? 2000 : depthLimit <= 4 ? 64 : 1000);
   const queryLimit = rowLimit + 1;
-  const idToken = await rawIdToken();
-
-  if (!idToken) {
-    return NextResponse.json({ error: "unauthenticated" }, { status: 401, headers: { "Cache-Control": "private, no-store" } });
+  let idToken, email;
+  try {
+    idToken = await rawIdToken();
+    if (idToken) email = await verifiedEmailFromIdToken(idToken);
+  } catch (error) {
+    if (!(error instanceof AuthServiceUnavailable)) throw error;
+    return NextResponse.json({ error: "authentication_unavailable" }, {
+      status: 503, headers: { "Cache-Control": "private, no-store", Vary: "Cookie" },
+    });
   }
 
-  const email = await verifiedEmailFromIdToken(idToken);
+  if (!idToken) {
+    return NextResponse.json({ error: "unauthenticated" }, { status: 401, headers: { "Cache-Control": "private, no-store", Vary: "Cookie" } });
+  }
+
   if (!email) {
-    return NextResponse.json({ error: "session-invalid" }, { status: 401, headers: { "Cache-Control": "private, no-store" } });
+    return NextResponse.json({ error: "session-invalid" }, { status: 401, headers: { "Cache-Control": "private, no-store", Vary: "Cookie" } });
   }
 
   const limited = memberReadLimit(email, positionOnly ? "position" : "tree");
@@ -53,11 +62,7 @@ async function readTree(email, { positionOnly, depthLimit, rowLimit, queryLimit 
              EXISTS (
                SELECT 1
                  FROM mlm.blacklist b
-                WHERE (b.email_norm IS NOT NULL AND b.email_norm = mlm.norm_email(p.email))
-                   OR (b.phone_last10 IS NOT NULL AND b.phone_last10 = mlm.norm_phone10(p.phone_number))
-                   OR (b.name_norm IS NOT NULL
-                       AND b.name_norm = mlm.norm_name(p.first_name || ' ' || p.last_name)
-                       AND (b.birthdate IS NULL OR (p.birthday IS NOT NULL AND b.birthdate = p.birthday)))
+                WHERE b.email_norm = mlm.norm_email(p.email)
              ) AS listed_by_blacklist
         FROM mlm.person p
        WHERE lower(p.email) = ${email}
@@ -97,11 +102,7 @@ async function readTree(email, { positionOnly, depthLimit, rowLimit, queryLimit 
          AND NOT EXISTS (
            SELECT 1
              FROM mlm.blacklist b
-            WHERE (b.email_norm IS NOT NULL AND b.email_norm = mlm.norm_email(p.email))
-               OR (b.phone_last10 IS NOT NULL AND b.phone_last10 = mlm.norm_phone10(p.phone_number))
-               OR (b.name_norm IS NOT NULL
-                   AND b.name_norm = mlm.norm_name(p.first_name || ' ' || p.last_name)
-                   AND (b.birthdate IS NULL OR (p.birthday IS NOT NULL AND b.birthdate = p.birthday)))
+            WHERE b.email_norm = mlm.norm_email(p.email)
          )
        LIMIT 1`;
 
@@ -184,11 +185,7 @@ async function readTree(email, { positionOnly, depthLimit, rowLimit, queryLimit 
                  OR EXISTS (
                    SELECT 1
                      FROM mlm.blacklist b
-                    WHERE (b.email_norm IS NOT NULL AND b.email_norm = mlm.norm_email(p.email))
-                       OR (b.phone_last10 IS NOT NULL AND b.phone_last10 = mlm.norm_phone10(p.phone_number))
-                       OR (b.name_norm IS NOT NULL
-                           AND b.name_norm = mlm.norm_name(p.first_name || ' ' || p.last_name)
-                           AND (b.birthdate IS NULL OR (p.birthday IS NOT NULL AND b.birthdate = p.birthday)))
+                    WHERE b.email_norm = mlm.norm_email(p.email)
                  )) AS unavailable,
                1 AS level,
                ARRAY[${root.id}::bigint, a.id]::bigint[] AS path_ids
@@ -211,11 +208,7 @@ async function readTree(email, { positionOnly, depthLimit, rowLimit, queryLimit 
                  OR EXISTS (
                    SELECT 1
                      FROM mlm.blacklist b
-                    WHERE (b.email_norm IS NOT NULL AND b.email_norm = mlm.norm_email(p.email))
-                       OR (b.phone_last10 IS NOT NULL AND b.phone_last10 = mlm.norm_phone10(p.phone_number))
-                       OR (b.name_norm IS NOT NULL
-                           AND b.name_norm = mlm.norm_name(p.first_name || ' ' || p.last_name)
-                           AND (b.birthdate IS NULL OR (p.birthday IS NOT NULL AND b.birthdate = p.birthday)))
+                    WHERE b.email_norm = mlm.norm_email(p.email)
                  )) AS unavailable,
                sub.level + 1,
                sub.path_ids || a.id

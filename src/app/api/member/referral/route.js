@@ -2,7 +2,8 @@ import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
 import { memberDb } from "@/lib/member-db";
-import { verifiedEmailFromIdToken } from "@/lib/verify-id-token";
+import { verifiedEmailFromIdTokenForSession as verifiedEmailFromIdToken } from "@/lib/verify-id-token";
+import { AuthServiceUnavailable } from "@/lib/better-auth-bridge.mjs";
 import { runtimeEnvironment } from '@/lib/cloudflare-runtime.mjs';
 import { buildReferralLinks, referralPublicOrigin } from '@/lib/referral-links.mjs';
 
@@ -24,7 +25,8 @@ export async function GET() {
   try {
     idToken = await rawIdToken();
     if (idToken) email = await verifiedEmailFromIdToken(idToken);
-  } catch {
+  } catch (error) {
+    if (error instanceof AuthServiceUnavailable) return referralResponse({ error: 'authentication_unavailable' }, 503);
     return referralResponse({ error: 'referral-unavailable' }, 503);
   }
   if (!idToken) {
@@ -49,11 +51,7 @@ export async function GET() {
              EXISTS (
                SELECT 1
                  FROM mlm.blacklist b
-                WHERE (b.email_norm IS NOT NULL AND b.email_norm = mlm.norm_email(p.email))
-                   OR (b.phone_last10 IS NOT NULL AND b.phone_last10 = mlm.norm_phone10(p.phone_number))
-                   OR (b.name_norm IS NOT NULL
-                       AND b.name_norm = mlm.norm_name(p.first_name || ' ' || p.last_name)
-                       AND (b.birthdate IS NULL OR (p.birthday IS NOT NULL AND b.birthdate = p.birthday)))
+                WHERE b.email_norm = mlm.norm_email(p.email)
              ) AS listed_by_blacklist
         FROM mlm.person p
        WHERE lower(p.email) = ${email}
@@ -111,11 +109,7 @@ export async function GET() {
          AND NOT EXISTS (
            SELECT 1
              FROM mlm.blacklist b
-            WHERE (b.email_norm IS NOT NULL AND b.email_norm = mlm.norm_email(rp.email))
-               OR (b.phone_last10 IS NOT NULL AND b.phone_last10 = mlm.norm_phone10(rp.phone_number))
-               OR (b.name_norm IS NOT NULL
-                   AND b.name_norm = mlm.norm_name(rp.first_name || ' ' || rp.last_name)
-                   AND (b.birthdate IS NULL OR (rp.birthday IS NOT NULL AND b.birthdate = rp.birthday)))
+            WHERE b.email_norm = mlm.norm_email(rp.email)
          )
        ORDER BY child.created_at DESC
        LIMIT 50`;

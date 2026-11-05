@@ -3,7 +3,8 @@ import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
 import { getNetworkDashboardModel } from "@/lib/dashboardNetworkModel";
-import { verifiedEmailFromIdToken } from "@/lib/verify-id-token";
+import { verifiedEmailFromIdTokenForSession as verifiedEmailFromIdToken } from "@/lib/verify-id-token";
+import { AuthServiceUnavailable } from "@/lib/better-auth-bridge.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,18 +13,27 @@ export const dynamic = "force-dynamic";
 // arbitrario de un cliente anónimo al motor interno si VP_ENGINE_HTTP_URL
 // estaba configurado. Fail-closed: sesión Cognito verificada o 401.
 async function requireSession() {
-  const idToken = await rawIdToken();
-  if (!idToken) return null;
-  return verifiedEmailFromIdToken(idToken);
+  try {
+    const idToken = await rawIdToken();
+    if (!idToken) return reply({ error: "unauthenticated" }, 401);
+    const email = await verifiedEmailFromIdToken(idToken);
+    return email ? null : reply({ error: "unauthenticated" }, 401);
+  } catch (error) {
+    if (!(error instanceof AuthServiceUnavailable)) throw error;
+    return reply({ error: 'authentication_unavailable' }, 503);
+  }
 }
 
+const reply = (body, status = 200) => NextResponse.json(body, {
+  status, headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' },
+});
+
 export async function GET() {
-  if (!(await requireSession())) {
-    return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
-  }
+  const denied = await requireSession();
+  if (denied) return denied;
   const model = getNetworkDashboardModel();
 
-  return NextResponse.json({
+  return reply({
     provider: process.env.LLM_PROVIDER || "local-network-rules",
     insights: model.insights,
     context: model.llmContext,
@@ -31,10 +41,12 @@ export async function GET() {
 }
 
 export async function POST(request) {
-  if (!(await requireSession())) {
-    return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
-  }
-  const payload = await request.json();
+  const denied = await requireSession();
+  if (denied) return denied;
+  let payload;
+  try { payload = await request.json(); }
+  catch { return reply({ error: 'invalid_json' }, 400); }
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return reply({ error: 'invalid_json' }, 400);
   const engineURL = process.env.VP_ENGINE_HTTP_URL || process.env.BACKEND_ANALYSIS_URL;
 
   if (engineURL) {
@@ -47,15 +59,15 @@ export async function POST(request) {
       });
 
       const data = await response.json();
-      return NextResponse.json(data, { status: response.status });
-    } catch (error) {
+      return reply(data, response.status);
+    } catch {
       const fallback = buildLocalAnalysis(payload);
-      fallback.warnings = [`No se pudo contactar vp-engine: ${error.message}`];
-      return NextResponse.json(fallback);
+      fallback.warnings = ["El servicio de análisis no está disponible; se muestra un cálculo local."];
+      return reply(fallback);
     }
   }
 
-  return NextResponse.json(buildLocalAnalysis(payload));
+  return reply(buildLocalAnalysis(payload));
 }
 
 function buildLocalAnalysis(payload = {}) {

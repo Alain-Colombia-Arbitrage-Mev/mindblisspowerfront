@@ -3,7 +3,8 @@ import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
 import { idTokenHeader } from "@/lib/admin-bff";
-import { verifiedEmailFromIdToken } from "@/lib/verify-id-token";
+import { verifiedEmailFromIdTokenForSession as verifiedEmailFromIdToken } from "@/lib/verify-id-token";
+import { AuthServiceUnavailable } from "@/lib/better-auth-bridge.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,13 +14,21 @@ export const dynamic = "force-dynamic";
  * Valida la sesión Cognito y delega al servicio Go vp-payments.
  */
 export async function GET(request) {
-  const idToken = await rawIdToken();
+  let idToken, email;
+  try {
+    idToken = await rawIdToken();
+    if (idToken) email = await verifiedEmailFromIdToken(idToken);
+  } catch (error) {
+    if (!(error instanceof AuthServiceUnavailable)) throw error;
+    return NextResponse.json({ error: "authentication_unavailable" }, {
+      status: 503, headers: { "Cache-Control": "private, no-store", Vary: "Cookie" },
+    });
+  }
   if (!idToken)
-    return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+    return NextResponse.json({ error: "unauthenticated" }, { status: 401, headers: { "Cache-Control": "private, no-store", Vary: "Cookie" } });
 
-  const email = await verifiedEmailFromIdToken(idToken);
   if (!email)
-    return NextResponse.json({ error: "session-invalid" }, { status: 401 });
+    return NextResponse.json({ error: "session-invalid" }, { status: 401, headers: { "Cache-Control": "private, no-store", Vary: "Cookie" } });
 
   const base = process.env.VP_PAYMENTS_URL;
   const token = process.env.PAYMENTS_SERVICE_TOKEN;

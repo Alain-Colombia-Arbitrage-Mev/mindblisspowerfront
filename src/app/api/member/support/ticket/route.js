@@ -2,7 +2,8 @@ import { coreFetch } from '@/lib/cloudflare-runtime.mjs';
 import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
-import { verifyIdToken } from "@/lib/verify-id-token";
+import { verifyIdTokenForSession as verifyIdToken } from "@/lib/verify-id-token";
+import { AuthServiceUnavailable } from "@/lib/better-auth-bridge.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,24 +11,33 @@ export const dynamic = "force-dynamic";
 // Soporte del miembro: POST crea un ticket. El backend deriva/verifica el email
 // del id token (resolveIdentity), aquí solo reenviamos subject + body.
 async function ctx() {
-  const idToken = await rawIdToken();
-  if (!idToken) return { error: "unauthenticated", status: 401 };
-  const id = await identityFromIdToken(idToken);
-  if (!id.email) return { error: "session-invalid", status: 401 };
-  const base = process.env.VP_PAYMENTS_URL;
-  const token = process.env.PAYMENTS_SERVICE_TOKEN;
-  if (!base || !token) return { error: "payments-unconfigured", status: 503 };
-  return { idToken, id, base, token };
+  try {
+    const idToken = await rawIdToken();
+    if (!idToken) return { error: "unauthenticated", status: 401 };
+    const id = await identityFromIdToken(idToken);
+    if (!id.email) return { error: "session-invalid", status: 401 };
+    const base = process.env.VP_PAYMENTS_URL;
+    const token = process.env.PAYMENTS_SERVICE_TOKEN;
+    if (!base || !token) return { error: "payments-unconfigured", status: 503 };
+    return { idToken, id, base, token };
+  } catch (error) {
+    if (!(error instanceof AuthServiceUnavailable)) throw error;
+    return { error: 'authentication_unavailable', status: 503 };
+  }
 }
+
+const reply = (body, status = 200) => NextResponse.json(body, {
+  status, headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' },
+});
 
 export async function POST(request) {
   const c = await ctx();
-  if (c.error) return NextResponse.json({ error: c.error }, { status: c.status });
+  if (c.error) return reply({ error: c.error }, c.status);
   const body = await request.json().catch(() => ({}));
   const subject = (body.subject || "").trim();
   const message = (body.body || "").trim();
   if (!subject || !message) {
-    return NextResponse.json({ error: "invalid_ticket" }, { status: 400 });
+    return reply({ error: "invalid_ticket" }, 400);
   }
   try {
     const resp = await coreFetch(`${c.base}/api/support/ticket`, {
@@ -41,9 +51,9 @@ export async function POST(request) {
       cache: "no-store",
     });
     const data = await resp.json().catch(() => ({}));
-    return NextResponse.json(data, { status: resp.status });
+    return reply(data, resp.status);
   } catch {
-    return NextResponse.json({ error: "payments-unreachable" }, { status: 502 });
+    return reply({ error: "payments-unreachable" }, 502);
   }
 }
 
