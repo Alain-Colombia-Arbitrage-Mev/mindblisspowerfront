@@ -176,7 +176,7 @@ function response(path, session = { authenticated: true, mode: 'better-auth', em
   assert.fail(`Unexpected offline request: ${path}`);
 }
 
-test('real React StrictMode navigates once after delayed fresh native POST proof with no session preflight', async t => {
+test('real React StrictMode checks one browser cookie roundtrip after delayed native POST proof before navigating once', async t => {
   const started = deferred(), released = deferred();
   const ui = await view(t, path => {
     if (path === '/api/auth/sign-in/email-otp') { started.resolve(); return released.promise; }
@@ -195,7 +195,7 @@ test('real React StrictMode navigates once after delayed fresh native POST proof
   assert.deepEqual(ui.destinations, ['/dashboard']);
   assert.deepEqual(ui.navigationMethods, ['replace']);
   assert.equal(nodes(ui.container, node => node.nodeName === 'A' && node.getAttribute('href') === '/dashboard').length, 1);
-  assert.equal(ui.paths.some(path => path.startsWith('/api/auth/session')), false);
+  assert.equal(ui.paths.filter(path => path === '/api/auth/session?view=access').length, 1);
   assert.equal(ui.paths.filter(path => path === '/api/auth/sign-in/email-otp').length, 1);
 });
 
@@ -208,7 +208,7 @@ test('real React mobile login still confirms fresh proof and navigates with both
     assert.match(ui.container.textContent, /Correo verificado correctamente/);
     assert.deepEqual(ui.destinations, ['/dashboard']);
     assert.deepEqual(ui.navigationMethods, ['replace']);
-    assert.deepEqual(ui.paths, ['/api/auth/email-otp/send-verification-otp', '/api/auth/sign-in/email-otp']);
+    assert.deepEqual(ui.paths, ['/api/auth/email-otp/send-verification-otp', '/api/auth/sign-in/email-otp', '/api/auth/session?view=access']);
     assert.equal(nodes(ui.container, node => node.nodeName === 'A' && node.getAttribute('href') === '/dashboard').length, 1);
     await ui.unmount();
   } finally {
@@ -228,15 +228,19 @@ test('real React rejects a failed sign-in POST and permits an explicit retry wit
   assert.deepEqual(ui.destinations, ['/dashboard']);
   assert.equal(ui.paths.filter(path => path.endsWith('/send-verification-otp')).length, 1);
   assert.equal(ui.paths.filter(path => path === '/api/auth/sign-in/email-otp').length, 2);
-  assert.equal(ui.paths.some(path => path.startsWith('/api/auth/session')), false);
+  assert.equal(ui.paths.filter(path => path === '/api/auth/session?view=access').length, 1);
 });
 
-test('payment or access-summary failure cannot block React navigation to the server gate after fresh proof', async t => {
+test('a temporary cookie check failure keeps the real native dashboard link and verified result without auto-navigation or repeated requests', async t => {
   const ui = await view(t, path => path.startsWith('/api/auth/session')
     ? Response.json({ error: 'synthetic_summary_unavailable' }, { status: 503 }) : response(path));
   await ui.send(); await ui.code(); await ui.confirm();
-  assert.deepEqual(ui.destinations, ['/dashboard']);
-  assert.equal(ui.paths.some(path => path.startsWith('/api/auth/session')), false, 'no session GET is a client navigation prerequisite');
+  assert.deepEqual(ui.destinations, []);
+  assert.equal(ui.paths.filter(path => path === '/api/auth/session?view=access').length, 1);
+  assert.match(ui.container.textContent, /Correo verificado correctamente/);
+  assert.equal(nodes(ui.container, node => node.nodeName === 'A' && node.getAttribute('href') === '/dashboard').length, 1);
+  assert.equal(ui.paths.filter(path => path === '/api/auth/sign-in/email-otp').length, 1);
+  assert.equal(ui.paths.filter(path => path.endsWith('/send-verification-otp')).length, 1);
   assert.doesNotMatch(ui.container.textContent, /synthetic_summary_unavailable|Revisar acceso/);
 });
 
@@ -279,4 +283,58 @@ test('real React rejects send acknowledgements, unverified and mismatched POST p
     assert.equal(ui.paths.some(path => path.startsWith('/api/auth/session')), false);
     await ui.unmount();
   }
+});
+
+test('real React preserves verified email and a native fallback for discarded cookies, restricted access, outages, wrong-owner cookies and offline checks', async t => {
+  for (const scenario of ['anonymous', 'missing-cookie', 'restricted', 'unavailable', 'wrong-owner', 'offline']) {
+    const ui = await view(t, (path, options) => {
+      if (path !== '/api/auth/session?view=access') return response(path);
+      assert.equal(options.credentials, 'same-origin'); assert.equal(options.cache, 'no-store');
+      assert.equal(options.redirect, 'error'); assert.equal(options.body, undefined);
+      if (scenario === 'offline') throw new TypeError('private-network-diagnostic');
+      if (scenario === 'anonymous') return Response.json({ authenticated: false, mode: 'better-auth' });
+      if (scenario === 'wrong-owner') return Response.json({ authenticated: true, mode: 'better-auth', email: 'unrelated@example.test' });
+      return Response.json({ error: scenario === 'restricted' ? 'account_access_restricted' : 'private-provider-diagnostic',
+        token: 'private-native-token', email: 'unrelated@example.test' }, { status: scenario === 'missing-cookie' ? 401 : scenario === 'restricted' ? 403 : 503 });
+    });
+    await ui.send(); await ui.code(); await ui.confirm();
+    assert.match(ui.container.textContent, /Correo verificado correctamente/);
+    assert.doesNotMatch(ui.container.textContent, /private-|unrelated@example|Reenviar|Enviar código|id="login-code"/);
+    assert.deepEqual(ui.destinations, []);
+    const fallback = nodes(ui.container, node => node.nodeName === 'A' && node.getAttribute('href') === '/dashboard');
+    assert.equal(fallback.length, 1); assert.equal(fallback[0].textContent, 'Continuar al panel');
+    assert.equal(fallback[0].hasAttribute('disabled'), false);
+    assert.deepEqual(ui.paths, ['/api/auth/email-otp/send-verification-otp', '/api/auth/sign-in/email-otp', '/api/auth/session?view=access']);
+    if (scenario === 'restricted') assert.match(ui.container.textContent, /no pudimos autorizar/);
+    if (scenario === 'missing-cookie') assert.match(ui.container.textContent, /misma pestaña de Safari/);
+    await ui.unmount();
+  }
+});
+
+test('real React keeps its native fallback while one cookie check is pending, blocks duplicate submissions and cancels stale navigation on unmount', async t => {
+  const started = deferred(), released = deferred();
+  let cookieSignal;
+  const ui = await view(t, (path, options) => {
+    if (path === '/api/auth/session?view=access') { cookieSignal = options.signal; started.resolve(); return released.promise; }
+    return response(path);
+  });
+  await ui.send(); await ui.code();
+  const form = nodes(ui.container, node => node.nodeName === 'FORM')[0], submit = props(form).onSubmit;
+  let pending;
+  await act(async () => {
+    pending = submit(event); await started.promise;
+    await submit(event);
+  });
+  assert.match(ui.container.textContent, /Correo verificado correctamente/);
+  assert.match(ui.container.textContent, /Comprobando la sesión de este navegador/);
+  assert.equal(nodes(ui.container, node => node.nodeName === 'A' && node.getAttribute('href') === '/dashboard').length, 1);
+  assert.deepEqual(ui.destinations, []);
+  assert.equal(ui.paths.filter(path => path === '/api/auth/sign-in/email-otp').length, 1);
+  assert.equal(ui.paths.filter(path => path === '/api/auth/session?view=access').length, 1);
+  await ui.unmount(); await pending;
+  assert.equal(cookieSignal.aborted, true);
+  released.resolve(Response.json({ authenticated: true, mode: 'better-auth', email }));
+  await Promise.resolve();
+  assert.deepEqual(ui.destinations, []);
+  assert.equal(ui.paths.length, 3);
 });

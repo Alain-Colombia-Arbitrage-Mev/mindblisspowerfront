@@ -294,9 +294,13 @@ try {
   for (const [fixtureCookie, outcome] of [
     [cookie, 'dashboard'],
     ['', 'anonymous'],
-    ['__Secure-better-auth.session_token=synthetic-tampered', 'anonymous'],
+    ['__Secure-better-auth.session_token=synthetic-tampered', 'invalid-jwt'],
     ['__Secure-better-auth.session_token=synthetic-wrong-audience', 'MBP-LOGIN-VERIFY'],
     ['__Secure-better-auth.session_token=synthetic-token-unavailable', 'MBP-LOGIN-SERVICE'],
+    ['__Secure-better-auth.session_token=synthetic-access-restricted', 'MBP-LOGIN-ACCESS'],
+    ['__Secure-better-auth.session_token=synthetic-unrecognized-denial', 'MBP-LOGIN-SERVICE'],
+    ['__Secure-better-auth.session_token=synthetic-storage-failure', 'MBP-LOGIN-SERVICE'],
+    ['__Secure-better-auth.session_token=synthetic-token-inconsistent', 'MBP-LOGIN-SERVICE'],
   ]) {
     const dashboard = await fetch('http://127.0.0.1:8787/dashboard', {
       headers: { ...sessionHeaders, cookie: fixtureCookie }, redirect: 'manual', signal: AbortSignal.timeout(12000),
@@ -315,18 +319,20 @@ try {
     } else {
       assert.doesNotMatch(html, /class="vp-dashboard-shell"|id="member-main"|>Plan Fixture 1</,
         'invalid or unavailable identities never receive the dashboard shell or rendered private child');
-      if (outcome === 'anonymous') {
+      if (outcome === 'anonymous' || outcome === 'invalid-jwt') {
         assert.equal(dashboard.status, 307);
         const location = new URL(dashboard.headers.get('location'), 'https://app.mindblisspower.com');
-        assert.equal(location.pathname + location.search, '/login?auth=session-not-established');
+        assert.equal(location.pathname + location.search, outcome === 'anonymous' ? '/login' : '/login?auth=session-not-established');
       } else {
-        assert.equal(dashboard.status, 200, 'an auth infrastructure outage presents the static retry view, not a login loop');
+        assert.equal(dashboard.status, 200, 'a denial or infrastructure outage presents only the static safe view, not a login loop');
         assert.equal(dashboard.headers.get('location'), null);
         assert.ok(html.includes(outcome), 'support reference identifies the unavailable stage without internal diagnostics');
         assert.match(html, /role="alert"/);
         assert.match(html, /href="\/dashboard"[^>]*>Reintentar abrir el panel</);
         assert.match(html, /href="\/login"[^>]*>Volver al acceso</);
         assert.doesNotMatch(html, /fixture@example\.test|synthetic-wrong-audience|synthetic-token-unavailable|synthetic-member|synthetic-private-context|member-services/);
+        assert.doesNotMatch(html, /private-synthetic|AUTH_IDENTITY_REVIEW_REQUIRED/);
+        if (outcome === 'MBP-LOGIN-ACCESS') assert.match(html, /Tu cuenta necesita revisión de acceso/);
       }
     }
     probes++;
@@ -526,7 +532,28 @@ try {
   const afterAccess = await (await fetch('http://127.0.0.1:8787/__synthetic_metrics')).json();
   assert.equal(afterAccess.verifiedReferrals, beforeAccess.verifiedReferrals, 'login access does not wait for payments enrichment');
   assert.ok(afterAccess.tokens > beforeAccess.tokens, 'access still validates the current native session and service JWT');
+  assert.equal(afterAccess.tokens, beforeAccess.tokens + 1, 'healthy access obtains exactly one fresh token');
+  assert.equal(afterAccess.nativeSessions, beforeAccess.nativeSessions, 'healthy access does not add a native-session fallback');
   probes++;
+  for (const [fixtureCookie, status, expected] of [
+    ['__Secure-better-auth.session_token=synthetic-access-restricted', 403, { authenticated: false, mode: 'better-auth', error: 'account_access_restricted' }],
+    ['__Secure-better-auth.session_token=synthetic-unrecognized-denial', 503, { error: 'authentication_unavailable' }],
+    ['__Secure-better-auth.session_token=synthetic-storage-failure', 503, { error: 'authentication_unavailable' }],
+    ['__Secure-better-auth.session_token=synthetic-token-inconsistent', 503, { error: 'authentication_unavailable' }],
+  ]) {
+    const before = await (await fetch('http://127.0.0.1:8787/__synthetic_metrics')).json();
+    const denied = await fetch('http://127.0.0.1:8787/api/auth/session?view=access', {
+      headers: { ...sessionHeaders, cookie: fixtureCookie }, signal: AbortSignal.timeout(8000),
+    });
+    assert.equal(denied.status, status); assert.deepEqual(await denied.json(), expected);
+    assert.equal(denied.headers.get('set-cookie'), null);
+    assert.match(denied.headers.get('cache-control'), /private.*no-store/);
+    const after = await (await fetch('http://127.0.0.1:8787/__synthetic_metrics')).json();
+    assert.equal(after.tokens, before.tokens + 1, 'a rejected token is never retried');
+    assert.equal(after.nativeSessions, before.nativeSessions + (fixtureCookie.includes('storage-failure') || fixtureCookie.includes('token-inconsistent') ? 1 : 0),
+      'only an ambiguous401 adds one read-only signed native-session proof');
+    probes++;
+  }
   for (const cookieValue of ['', '__Secure-better-auth.session_token=synthetic-tampered']) {
     const rejected = await fetch('http://127.0.0.1:8787/api/auth/session', {
       headers: { ...sessionHeaders, cookie: cookieValue }, signal: AbortSignal.timeout(8000),

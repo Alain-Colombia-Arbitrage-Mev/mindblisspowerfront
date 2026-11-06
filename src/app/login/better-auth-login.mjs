@@ -32,12 +32,25 @@ export function verifiedEmailSignIn(payload, expectedEmail) {
 export async function betterAuthAccess(fetchImpl = fetch, expectedEmail = '', options = {}) {
   const { signal } = options;
   const deadline = browserRequestDeadline(signal, 12000);
+  let cancelled;
   try {
-    const response = await fetchImpl('/api/auth/session?view=access', {
-      credentials: 'same-origin', cache: 'no-store', redirect: 'error',
-      signal: deadline.signal,
+    if (deadline.signal.aborted) throw new Error('access_check_cancelled');
+    const cancellation = new Promise((_, reject) => {
+      cancelled = () => reject(new Error('access_check_cancelled'));
+      deadline.signal.addEventListener('abort', cancelled, { once: true });
     });
-    const identity = await response.json().catch(() => ({}));
+    // Bound both transport and body, including mobile suspension or an adapter
+    // that does not settle its promise after AbortController cancellation.
+    const { response, identity } = await Promise.race([(async () => {
+      const response = await fetchImpl('/api/auth/session?view=access', {
+        credentials: 'same-origin', cache: 'no-store', redirect: 'error',
+        signal: deadline.signal,
+      });
+      return { response, identity: await response.json().catch(() => ({})) };
+    })(), cancellation]);
+    if (deadline.signal.aborted) throw new Error('access_check_cancelled');
+    if (response.status === 403) return { ready: false, error: 'Tu correo está verificado, pero no pudimos autorizar el acceso de esta cuenta al portal. Contacta al soporte para revisar el acceso; no necesitas cambiar tu correo ni crear otra cuenta.' };
+    if (response.status === 401) return { ready: false, notice: 'Tu correo está verificado, pero este navegador no devolvió una sesión activa. Puedes intentar abrir el panel con el enlace de abajo. En iPhone, vuelve a esta misma pestaña de Safari; las sesiones no se comparten con otras aplicaciones.' };
     if (!response.ok) return { ready: false, error: 'El servicio de autorización no está disponible. Intenta más tarde.' };
     if (!identity || typeof identity !== 'object' || Array.isArray(identity) || identity.error || identity.code
       || typeof identity.authenticated !== 'boolean' || identity.mode !== 'better-auth') {
@@ -56,5 +69,8 @@ export async function betterAuthAccess(fetchImpl = fetch, expectedEmail = '', op
     return { ready: false, notice: 'Tu correo está verificado, pero no pudimos confirmar una sesión con acceso al portal. Puedes revisar el acceso otra vez; si continúa sin sesión, vuelve a iniciar sesión con el mismo correo.' };
   } catch {
     return { ready: false, error: 'No pudimos comprobar tu acceso a la red. Revisa tu conexión e inténtalo otra vez.' };
-  } finally { deadline.dispose(); }
+  } finally {
+    if (cancelled) deadline.signal.removeEventListener('abort', cancelled);
+    deadline.dispose();
+  }
 }

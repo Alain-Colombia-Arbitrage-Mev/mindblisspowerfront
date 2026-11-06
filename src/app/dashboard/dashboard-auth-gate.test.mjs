@@ -5,7 +5,7 @@ import React from 'react';
 import * as jsxRuntime from 'react/jsx-runtime';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
-import { AuthServiceUnavailable } from '../../lib/better-auth-bridge.mjs';
+import { AuthServiceUnavailable, AuthAccessRestricted } from '../../lib/better-auth-bridge.mjs';
 import { privateCloudflareResponse } from '../../lib/cloudflare-portal-guard.mjs';
 
 // Execute the real layout and existing AuthShell without starting Next or
@@ -41,7 +41,7 @@ function gate({ token = 'synthetic-private-token', claims = null, tokenError,
       if (tokenError) throw tokenError;
       return token;
     } },
-    '@/lib/better-auth-bridge.mjs': { betterAuthEnabled: () => betterAuth, AuthServiceUnavailable },
+    '@/lib/better-auth-bridge.mjs': { betterAuthEnabled: () => betterAuth, AuthServiceUnavailable, AuthAccessRestricted },
     '@/lib/verify-id-token': {
       verifyIdToken: () => assert.fail('dashboard must distinguish unavailable verification from invalid proof'),
       verifyIdTokenForSession: async value => {
@@ -74,8 +74,8 @@ for (const [label, token] of [['empty', ''], ['forged', 'synthetic-forged'],
     t.mock.method(console, 'warn', value => logs.push(value));
     const app = gate({ token });
     await assert.rejects(app.render(), { message: 'synthetic-next-redirect' });
-    assert.deepEqual(app.calls.redirects, ['/login?auth=session-not-established']);
-    assert.deepEqual(app.calls.verification, [token]);
+    assert.deepEqual(app.calls.redirects, [token ? '/login?auth=session-not-established' : '/login']);
+    assert.deepEqual(app.calls.verification, token ? [token] : []);
     assert.equal(app.calls.shell, 0);
     assert.equal(app.calls.privateChildren, 0);
     assert.deepEqual(logs, []);
@@ -88,6 +88,23 @@ test('Cognito invalid proof retains its existing login destination', async () =>
   assert.deepEqual(app.calls.redirects, ['/login']);
   assert.equal(app.calls.shell, 0);
   assert.equal(app.calls.privateChildren, 0);
+});
+
+test('a canonical binding denial retains the native session and renders only explicit access guidance', async t => {
+  const logs = [];
+  t.mock.method(console, 'warn', value => logs.push(value));
+  const app = gate({ tokenError: new AuthAccessRestricted() });
+  const { html } = await app.render();
+  assert.deepEqual(app.calls.redirects, []);
+  assert.deepEqual(app.calls.verification, []);
+  assert.equal(app.calls.shell, 0);
+  assert.equal(app.calls.privateChildren, 0);
+  assert.match(html, /MBP-LOGIN-ACCESS/);
+  assert.match(html, /Tu cuenta necesita revisión de acceso/);
+  assert.match(html, /Repetir el código no cambia esos permisos/);
+  assert.match(html, /href="\/dashboard"/);
+  assert.doesNotMatch(html, /MBP-LOGIN-SESSION|synthetic-private|data-dashboard-mode|sesión expiró/);
+  assert.deepEqual(logs, []);
 });
 
 for (const [stage, errorProperty, reference] of [

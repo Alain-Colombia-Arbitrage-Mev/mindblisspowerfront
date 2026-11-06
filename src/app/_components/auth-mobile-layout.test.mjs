@@ -142,6 +142,7 @@ test('verified login exposes a prominent native dashboard anchor without a JavaS
   t.mock.method(globalThis, 'fetch', async path => {
     paths.push(path);
     if (path === '/api/auth/email-otp/send-verification-otp') return Response.json({ ok: true });
+    if (path === '/api/auth/session?view=access') return Response.json({ authenticated: true, mode: 'better-auth', email });
     assert.equal(path, '/api/auth/sign-in/email-otp');
     return Response.json({ ok: true, user: { id: 'synthetic-member', email, emailVerified: true } });
   });
@@ -156,7 +157,7 @@ test('verified login exposes a prominent native dashboard anchor without a JavaS
   assert.equal(anchor.props.onClick, undefined); assert.equal(anchor.props.target, undefined);
   assert.match(renderToStaticMarkup(anchor), /Continuar al panel/);
   assert.deepEqual(destinations, ['/dashboard']);
-  assert.deepEqual(paths, ['/api/auth/email-otp/send-verification-otp', '/api/auth/sign-in/email-otp']);
+  assert.deepEqual(paths, ['/api/auth/email-otp/send-verification-otp', '/api/auth/sign-in/email-otp', '/api/auth/session?view=access']);
 });
 
 test('login and recovery cards retain desktop padding but allow narrow mobile content to shrink', () => {

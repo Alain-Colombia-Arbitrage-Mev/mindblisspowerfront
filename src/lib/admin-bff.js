@@ -3,23 +3,30 @@
 import { cookies, headers } from "next/headers";
 
 import { verifyIdToken } from "./verify-id-token";
-import { betterAuthEnabled, betterAuthServiceToken, trustedAuthClientIp, AuthServiceUnavailable } from "./better-auth-bridge.mjs";
+import { betterAuthEnabled, betterAuthServiceToken, trustedAuthClientIp, AuthServiceUnavailable, AuthAccessRestricted } from "./better-auth-bridge.mjs";
 import { coreFetch, runtimeEnvironment } from './cloudflare-runtime.mjs';
 import { boundedServiceRequest } from './private-service-request.mjs';
 
 // Next's request-local cookie object is the key; never cache across sessions.
 const requestTokens = new WeakMap();
 
-/** Id token crudo de la cookie de sesión (sin verificar), o "". */
-export async function rawIdToken() {
+/** Server-only token, still requiring signature verification by each caller.
+ * @param {{strictAccess?: boolean}} [options] */
+export async function rawIdToken({ strictAccess = false } = {}) {
   const store = await cookies();
   if (betterAuthEnabled()) {
     if (!requestTokens.has(store)) {
       let clientIp;
       try { clientIp = trustedAuthClientIp(await headers()); } catch { throw new AuthServiceUnavailable(); }
-      requestTokens.set(store, betterAuthServiceToken(store.toString(), { clientIp }));
+      requestTokens.set(store, betterAuthServiceToken(store.toString(), { clientIp, strictAccess: true }));
     }
-    return requestTokens.get(store);
+    try { return await requestTokens.get(store); }
+    catch (error) {
+      // Existing data APIs retain their fail-closed anonymous contract. The
+      // access handoff explicitly distinguishes a live canonical denial.
+      if (!strictAccess && error instanceof AuthAccessRestricted) return '';
+      throw error;
+    }
   }
   return store.get("vp_id_token")?.value || "";
 }

@@ -22,6 +22,12 @@ export class AuthServiceUnavailable extends Error {
   constructor() { super('authentication_unavailable'); this.name = 'AuthServiceUnavailable'; }
 }
 
+// A native session may be valid while its canonical member binding is denied.
+// This is not a missing cookie or permission to enter the private dashboard.
+export class AuthAccessRestricted extends Error {
+  constructor() { super('account_access_restricted'); this.name = 'AuthAccessRestricted'; }
+}
+
 export function betterAuthConfig(env = runtimeEnvironment()) {
   if (!betterAuthEnabled(env)) throw new Error("better_auth_disabled");
   if ((env.AUTH_BFF_SHARED_SECRET || '').length < 32) throw new Error('auth_proxy_secret_required');
@@ -119,9 +125,27 @@ export async function fetchBetterAuth(path, { cookie = "", method = "GET", body,
   });
 }
 
+async function confirmCanonicalAccessDenial(response) {
+  if (!/^application\/json(?:\s*;|$)/i.test(response.headers.get('content-type') || '')) throw new AuthServiceUnavailable();
+  const denial = await readAuthBody({ body: response.body, signal: AbortSignal.timeout(8000) });
+  if (denial?.code !== 'AUTH_IDENTITY_REVIEW_REQUIRED') throw new AuthServiceUnavailable();
+}
+
+async function confirmMissingNativeSession(cookie, dependencies) {
+  // Native token middleware can swallow a session-storage failure into401.
+  // Its direct session endpoint preserves that error. Only native200/null is
+  // confirmed absence; a non-null session does not authorize a service JWT.
+  // This is one bounded read of the same cookie, never a token/send retry.
+  const response = await fetchBetterAuth('/get-session', { cookie }, dependencies);
+  if (response.status !== 200 || !/^application\/json(?:\s*;|$)/i.test(response.headers.get('content-type') || '')) {
+    throw new AuthServiceUnavailable();
+  }
+  if (await readAuthBody({ body: response.body, signal: AbortSignal.timeout(8000) }) !== null) throw new AuthServiceUnavailable();
+}
+
 // Session-authorized JWT stays on the server. It is not a replacement browser cookie.
 export async function betterAuthServiceToken(cookie, dependencies = {}) {
-  if (!betterAuthCookies(cookie)) return "";
+  if (!betterAuthCookies(cookie).split(';').some(part => /^(?:__Secure-)?better-auth\.session_token=[^;\s,]+$/.test(part.trim()))) return "";
   let stage = 'transport';
   /** @type {number | 'unavailable'} */
   let status = 'unavailable';
@@ -133,7 +157,13 @@ export async function betterAuthServiceToken(cookie, dependencies = {}) {
   try {
     const response = await fetchBetterAuth("/token", { cookie }, dependencies);
     if ([401, 403].includes(response.status)) {
-      stage = 'endpoint'; status = response.status; observe();
+      stage = 'endpoint'; status = response.status;
+      if (response.status === 401 && dependencies.strictAccess === true) await confirmMissingNativeSession(cookie, dependencies);
+      if (response.status === 403 && dependencies.strictAccess === true) {
+        await confirmCanonicalAccessDenial(response);
+        throw new AuthAccessRestricted();
+      }
+      observe();
       return "";
     }
     if (!response.ok) {
@@ -148,6 +178,7 @@ export async function betterAuthServiceToken(cookie, dependencies = {}) {
   } catch (error) {
     if (error?.name === 'AbortError' || error?.name === 'TimeoutError') { stage = 'transport'; status = 'unavailable'; }
     observe();
+    if (error instanceof AuthAccessRestricted) throw error;
     throw new AuthServiceUnavailable();
   }
 }

@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { callPayments } from "@/lib/admin-bff";
 import { clearCookie } from "@/lib/cognito-session";
 import { verifyIdTokenForSession as verifyIdToken } from "@/lib/verify-id-token";
-import { betterAuthEnabled, AuthServiceUnavailable } from "@/lib/better-auth-bridge.mjs";
+import { betterAuthEnabled, AuthServiceUnavailable, AuthAccessRestricted } from "@/lib/better-auth-bridge.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,9 +24,11 @@ export async function GET(request) {
   let idToken;
   let claims;
   try {
-    idToken = await rawIdToken();
+    idToken = await rawIdToken({ strictAccess: true });
     claims = (await verifyIdToken(idToken)) || {};
   } catch (error) {
+    if (error instanceof AuthAccessRestricted) return NextResponse.json({ authenticated: false,
+      mode: 'better-auth', error: 'account_access_restricted' }, { status: 403, headers: { 'Cache-Control': 'private, no-store' } });
     if (!(error instanceof AuthServiceUnavailable)) throw error;
     return NextResponse.json({ error: 'authentication_unavailable' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
   }
