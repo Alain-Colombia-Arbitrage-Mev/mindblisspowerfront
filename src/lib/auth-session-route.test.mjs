@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import ts from 'typescript';
-import { AuthServiceUnavailable } from './better-auth-bridge.mjs';
+import { AuthServiceUnavailable, AuthAccessRestricted } from './better-auth-bridge.mjs';
 
 function sessionRequest(query = '') {
   return new Request(`https://portal.example.test/api/auth/session${query}`);
@@ -25,7 +25,7 @@ function sessionRoute({ token = 'synthetic-private-token', tokenError, claims = 
     'next/server': { NextResponse: { json: (body, init) => Response.json(body, init) } },
     '@/lib/cognito-session': { clearCookie },
     '@/lib/verify-id-token': { verifyIdToken: verify, verifyIdTokenForSession: verify },
-    '@/lib/better-auth-bridge.mjs': { betterAuthEnabled: () => betterAuth, AuthServiceUnavailable },
+    '@/lib/better-auth-bridge.mjs': { betterAuthEnabled: () => betterAuth, AuthServiceUnavailable, AuthAccessRestricted },
   };
   const module = { exports: {} };
   new Function('require', 'module', 'exports', compiled)(id => {
@@ -35,6 +35,18 @@ function sessionRoute({ token = 'synthetic-private-token', tokenError, claims = 
   assert.equal(module.exports.dynamic, 'force-dynamic');
   return module.exports.GET;
 }
+
+test('canonical access denial is a private403 without misreporting logout or querying optional member data', async () => {
+  const error = new AuthAccessRestricted();
+  error.cause = 'synthetic-private-member@example.test';
+  const response = await sessionRoute({ tokenError: error,
+    callPayments: () => assert.fail('denied identity cannot query payments'),
+  })(sessionRequest('?view=access'));
+  assert.equal(response.status, 403);
+  assert.equal(response.headers.get('cache-control'), 'private, no-store');
+  assert.equal(response.headers.get('set-cookie'), null);
+  assert.deepEqual(await response.json(), { authenticated: false, mode: 'better-auth', error: 'account_access_restricted' });
+});
 
 for (const stage of ['token', 'verification']) {
   test(`session ${stage} unavailability is a private generic 503, never an anonymous review decision`, async () => {

@@ -1,5 +1,5 @@
 import { rawIdToken } from "@/lib/admin-bff";
-import { betterAuthEnabled, AuthServiceUnavailable } from "@/lib/better-auth-bridge.mjs";
+import { betterAuthEnabled, AuthServiceUnavailable, AuthAccessRestricted } from "@/lib/better-auth-bridge.mjs";
 import { redirect } from "next/navigation";
 
 import { verifyIdTokenForSession } from "@/lib/verify-id-token";
@@ -19,12 +19,17 @@ import DashboardShell from "./_components/DashboardShell";
 export default async function DashboardLayout({ children }) {
   let token;
   try {
-    token = await rawIdToken();
+    token = await rawIdToken({ strictAccess: true });
   } catch (error) {
+    if (error instanceof AuthAccessRestricted) return <AuthHandoffUnavailable reference="MBP-LOGIN-ACCESS" restricted />;
     if (!(error instanceof AuthServiceUnavailable)) throw error;
     console.warn(JSON.stringify({ event: 'auth_handoff_unavailable', stage: 'service_token' }));
     return <AuthHandoffUnavailable reference="MBP-LOGIN-SERVICE" />;
   }
+
+  // An anonymous/expired native session is a normal login destination, not a
+  // failed verified handoff. A canonical denial is handled above, separately.
+  if (!token) redirect('/login');
 
   let claims;
   try {
@@ -42,18 +47,20 @@ export default async function DashboardLayout({ children }) {
   return <DashboardShell authMode={betterAuthEnabled() ? "better-auth" : "cognito"}>{children}</DashboardShell>;
 }
 
-function AuthHandoffUnavailable({ reference }) {
+function AuthHandoffUnavailable({ reference, restricted = false }) {
   return (
     <AuthShell
       activePath="/login"
       eyebrow="Acceso seguro"
-      title="Volvamos a comprobar tu acceso."
-      description="El servicio de acceso no está disponible en este momento. Puedes volver a intentar abrir el panel sin cambiar tu cuenta."
+      title={restricted ? 'Revisemos el acceso de tu cuenta.' : 'Volvamos a comprobar tu acceso.'}
+      description={restricted ? 'El correo está verificado, pero el acceso a la cuenta requiere revisión. Conserva tu correo y contacta al soporte.'
+        : 'El servicio de acceso no está disponible en este momento. Puedes volver a intentar abrir el panel sin cambiar tu cuenta.'}
     >
       <section role="alert" className="space-y-5 rounded-xl border border-[var(--vp-border)] bg-[var(--vp-surface)] p-6 text-[var(--vp-text)] sm:p-7">
-        <h2 className="auth-display text-2xl">No pudimos comprobar tu sesión</h2>
+        <h2 className="auth-display text-2xl">{restricted ? 'Tu cuenta necesita revisión de acceso' : 'No pudimos comprobar tu sesión'}</h2>
         <p className="text-sm leading-6 text-[var(--vp-muted)]">
-          Reintenta esta comprobación. No necesitas cambiar tu correo ni crear otra cuenta.
+          {restricted ? 'Soporte debe revisar la vinculación o las restricciones de tu cuenta. Repetir el código no cambia esos permisos. No cambies tu correo ni crees otra cuenta.'
+            : 'Reintenta esta comprobación. No necesitas cambiar tu correo ni crear otra cuenta.'}
         </p>
         <p className="text-xs text-[var(--vp-muted)]">Referencia de soporte: <code>{reference}</code></p>
         <div className="flex flex-col gap-3 text-sm font-bold">

@@ -21,7 +21,7 @@ import { checkPassword, isValidPassword } from "@/lib/password";
 import { bindReferralCodeToEmail, captureReferralFromUrl, normalizePlacementSide, normalizeReferralCode } from "@/lib/referral-attribution";
 import { otpRequest, otpFailureMessage, otpTimeoutMs, otpConfirmationRetrySeconds, OTP_SEND_NOTICE, OTP_SEND_UNCONFIRMED_NOTICE } from "@/lib/email-otp-client.mjs";
 import BetterAuthPasswordLogin from './BetterAuthPasswordLogin';
-import { verifiedEmailSignIn } from './better-auth-login.mjs';
+import { verifiedEmailSignIn, betterAuthAccess } from './better-auth-login.mjs';
 import { registrationRequired, registrationRedirect, registrationRetrySeconds, registrationUrl } from '../register/registration-model.mjs';
 import { beginVerifiedReferralSync } from '@/lib/referral-sync.mjs';
 import { browserRequestDeadline } from '@/lib/browser-request-deadline.mjs';
@@ -69,6 +69,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
   const mountedRef = useRef(false);
   const verifiedLoginRef = useRef(null);
   const dashboardNavigationRef = useRef(false);
+  const dashboardAccessRef = useRef(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [accessHelpPhone, setAccessHelpPhone] = useState("");
@@ -78,6 +79,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
   const [resetStep, setResetStep] = useState("request");
   const [resetCode, setResetCode] = useState("");
   const [verifiedLogin, setVerifiedLogin] = useState(null);
+  const [checkingAccess, setCheckingAccess] = useState(false);
   const verifiedTitle = useRef(null);
   const codeCooldown = useResendCooldown(emailOtpOnly ? 300 : 45, `${authMode}:sign-in:${(codeStep === 'confirm' ? codeRecipient : email).trim().toLowerCase()}`);
   const confirmationCooldown = useResendCooldown(60, `${authMode}:sign-in-confirm:${codeRecipient.trim().toLowerCase()}`);
@@ -100,6 +102,8 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     return () => {
       mountedRef.current = false;
       verifiedLoginRef.current = null;
+      dashboardAccessRef.current?.abort();
+      dashboardAccessRef.current = null;
       otpRequestRef.current?.abort();
       otpRequestRef.current = null;
       otpSubmittingRef.current = false;
@@ -111,30 +115,48 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
   }, [verifiedEmail]);
 
   function showVerifiedLogin(verifiedEmail) {
-    if (!mountedRef.current || dashboardNavigationRef.current) return;
+    if (!mountedRef.current || dashboardNavigationRef.current || verifiedLoginRef.current) return;
     setError('');
     setNotice('');
     setLoginCode('');
     const verified = { email: verifiedEmail };
     verifiedLoginRef.current = verified;
     setVerifiedLogin(verified);
-    enterVerifiedDashboard(verified);
+    return enterVerifiedDashboard(verified);
   }
 
-  function enterVerifiedDashboard(verified) {
-    if (!mountedRef.current || dashboardNavigationRef.current || verifiedLoginRef.current !== verified) return;
-    // The BFF proved the newly issued native session and its verified owner.
-    // Navigate, not authorize: the dashboard and every API enforce live access.
-    // Optional browser storage/referral sync must not strand a valid sign-in.
+  async function enterVerifiedDashboard(verified) {
+    if (!mountedRef.current || dashboardNavigationRef.current || dashboardAccessRef.current || verifiedLoginRef.current !== verified) return;
+    const controller = new AbortController();
+    dashboardAccessRef.current = controller;
+    setCheckingAccess(true);
     try {
-      rememberReferralForEmail(verified.email);
-      if (referralCode) void beginVerifiedReferralSync(verified.email, referralCode, preferredSide);
-    } catch { /* The server independently authorizes referral persistence. */ }
-    dashboardNavigationRef.current = true;
-    try {
+      // The POST proved the native session server-side. This single GET proves
+      // that this browser also returned its cookie, for the same verified owner.
+      // It never replaces the dashboard/API gates or the direct fallback link.
+      const access = await betterAuthAccess(fetch, verified.email, { signal: controller.signal });
+      if (!mountedRef.current || controller.signal.aborted || dashboardAccessRef.current !== controller || verifiedLoginRef.current !== verified) return;
+      if (!access.ready) {
+        setError(access.error || '');
+        setNotice(access.notice || '');
+        return;
+      }
+      // Optional browser storage/referral sync must not strand a valid sign-in.
+      try {
+        rememberReferralForEmail(verified.email);
+        if (referralCode) void beginVerifiedReferralSync(verified.email, referralCode, preferredSide);
+      } catch { /* The server independently authorizes referral persistence. */ }
+      dashboardNavigationRef.current = true;
       window.location.replace('/dashboard');
     } catch {
-      setError('Tu correo está verificado. Abre el panel con el enlace de abajo para continuar.');
+      if (mountedRef.current && !controller.signal.aborted && dashboardAccessRef.current === controller) {
+        setError('Tu correo está verificado. Abre el panel con el enlace de abajo para continuar.');
+      }
+    } finally {
+      if (dashboardAccessRef.current === controller) {
+        dashboardAccessRef.current = null;
+        setCheckingAccess(false);
+      }
     }
   }
 
@@ -446,7 +468,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
           return;
         }
         // Fresh native proof permits the handoff, not network permissions.
-        showVerifiedLogin(normalizedEmail);
+        await showVerifiedLogin(normalizedEmail);
         return;
       }
 
@@ -602,14 +624,15 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
 
   if (verifiedLogin) {
     return (
-      <div className="space-y-4" aria-busy={isLoading}>
+      <div className="space-y-4" aria-busy={isLoading || checkingAccess}>
         <Message tone="info">
           <h2 ref={verifiedTitle} tabIndex={-1} className="text-base font-bold">Correo verificado correctamente</h2>
           <p className="mt-2 break-words font-normal">Confirmamos el correo {verifiedLogin.email}. Puedes continuar sin repetir este paso.</p>
         </Message>
         {error ? <Message tone="info">{error}</Message> : null}
+        {notice ? <Message tone="info">{notice}</Message> : null}
         <p className="text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
-          Abriendo tu panel… El servidor comprobará tu sesión y tu acceso a la red.
+          {checkingAccess ? 'Comprobando la sesión de este navegador…' : 'El servidor comprobará tu sesión y tu acceso a la red al abrir el panel.'}
         </p>
         <p className="text-sm leading-6" style={{ color: "var(--vp-muted)" }}>Si no se abre automáticamente, usa «Continuar al panel». No necesitas registrarte de nuevo ni cambiar tu correo; esto no modifica tu cuenta ni tu posición en la red.</p>
         <a href="/dashboard" className="flex min-h-12 items-center justify-center gap-2 rounded-lg border border-[var(--vp-accent)] bg-[var(--vp-accent)] px-4 py-3 text-center text-base font-bold text-[var(--vp-shell)] transition hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--vp-accent)]">

@@ -16,8 +16,12 @@ const registrationToken = 'synthetic-registration-token';
 const modes = new Map([[sessionCookie, 'member'],
   ['__Secure-better-auth.session_token=synthetic-tampered', 'tampered'],
   ['__Secure-better-auth.session_token=synthetic-wrong-audience', 'wrong-audience'],
-  ['__Secure-better-auth.session_token=synthetic-token-unavailable', 'token-unavailable']]);
-const metrics = { tokens: 0, jwks: 0, verifiedReferrals: 0, sensitiveJwksHeaders: 0, registrations: 0, contactRegistrations: 0, phoneCalls: 0,
+  ['__Secure-better-auth.session_token=synthetic-token-unavailable', 'token-unavailable'],
+  ['__Secure-better-auth.session_token=synthetic-access-restricted', 'access-restricted'],
+  ['__Secure-better-auth.session_token=synthetic-unrecognized-denial', 'unrecognized-denial'],
+  ['__Secure-better-auth.session_token=synthetic-storage-failure', 'storage-failure'],
+  ['__Secure-better-auth.session_token=synthetic-token-inconsistent', 'token-inconsistent']]);
+const metrics = { tokens: 0, nativeSessions: 0, jwks: 0, verifiedReferrals: 0, sensitiveJwksHeaders: 0, registrations: 0, contactRegistrations: 0, phoneCalls: 0,
   stripeCheckoutCalls: 0, stripeResumeCalls: 0, nowpaymentsCheckoutCalls: 0, nowpaymentsCaptures: 0, nowpaymentsStatusReads: 0,
   nowpaymentsPurchaseReads: 0, nowpaymentsPurchaseResumes: 0, nowpaymentsPurchaseCancels: 0, signOutCalls: 0,
   passwordRecoveryRequests: 0, passwordRecoveryResets: 0, referralPreferenceReads: 0, referralPreferenceWrites: 0 };
@@ -179,6 +183,9 @@ const syntheticEnv = {
       if (!mode || ip !== '192.0.2.10' || Math.abs(Number(timestamp) - Date.now() / 1000) > 30
         || headers.get('x-vp-auth-signature') !== signature) return Response.json({ error: 'synthetic-session-rejected' }, { status: 401 });
       if (mode === 'token-unavailable') return Response.json({ error: 'synthetic-token-unavailable' }, { status: 503 });
+      if (mode === 'access-restricted') return Response.json({ code: 'AUTH_IDENTITY_REVIEW_REQUIRED', message: 'private-synthetic-account-diagnostic' }, { status: 403 });
+      if (mode === 'unrecognized-denial') return new Response('<html>private-synthetic-perimeter-denial</html>', { status: 403, headers: { 'content-type': 'text/html' } });
+      if (mode === 'storage-failure' || mode === 'token-inconsistent') return Response.json({ code: 'UNAUTHORIZED' }, { status: 401 });
       return Response.json({ token: await signedJwt(mode) });
     }
     if (target.hostname === 'auth.core.internal' && target.pathname === '/api/auth/jwks') {
@@ -217,17 +224,20 @@ const syntheticEnv = {
     }
     if (url.endsWith('/get-session')) {
       if (options.method !== 'GET' || !validProxySignature(target, options, headers)) throw new Error('invalid_native_session_proof');
+      metrics.nativeSessions++;
+      const nativeMode = modes.get(headers.get('cookie'));
+      if (nativeMode === 'storage-failure') return Response.json({ error: 'private-synthetic-storage-diagnostic' }, { status: 500 });
       if (headers.get('cookie') === registrationCookie) {
         return Response.json({ session: { id: 'synthetic-registration-session', userId: 'synthetic-signup',
           token: registrationToken, expiresAt: new Date(Date.now() + 300000).toISOString() },
         user: { id: 'synthetic-signup', email: 'signup@example.test', emailVerified: true } });
       }
-      if (headers.get('cookie') === sessionCookie) {
+      if ((headers.get('cookie') === sessionCookie && modes.has(sessionCookie)) || nativeMode === 'token-inconsistent') {
         return Response.json({ session: { id: 'synthetic-login-session', userId: 'synthetic',
           token: 'must-not-leak', expiresAt: new Date(Date.now() + 300000).toISOString() },
         user: { id: 'synthetic', email: 'fixture@example.test', emailVerified: true } });
       }
-      throw new Error('invalid_native_session_cookie');
+      return Response.json(null);
     }
     if (url.endsWith('/email-otp/request-password-reset') || url.endsWith('/email-otp/reset-password')) {
       if (!validProxySignature(target, options, headers) || headers.get('cookie')) throw new Error('invalid_recovery_signature_or_cookie');

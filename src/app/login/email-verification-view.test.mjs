@@ -85,12 +85,12 @@ test('rejected login OTP guidance cannot reflect provider diagnostics, delivery 
   harness.unmount();
 });
 
-test('fresh BFF-proven OTP session starts one hard dashboard navigation without a client session preflight', async t => {
+test('fresh BFF-proven OTP session checks the browser cookie once before one hard dashboard navigation', async t => {
   const destinations = browser(t), paths = [];
   t.mock.method(globalThis, 'fetch', async path => {
     paths.push(path);
-    assert.ok(!path.startsWith('/api/auth/session'), 'server dashboard, not a client preflight, owns authorization');
-    return Response.json(path.endsWith('/send-verification-otp') ? { ok: true } : proof());
+    return Response.json(path.endsWith('/send-verification-otp') ? { ok: true }
+      : path === '/api/auth/session?view=access' ? { authenticated: true, mode: 'better-auth', email } : proof());
   });
   const harness = view();
   harness.replayEffects();
@@ -99,12 +99,12 @@ test('fresh BFF-proven OTP session starts one hard dashboard navigation without 
     const rendered = html(harness);
     assert.match(rendered, /Correo verificado correctamente/);
     assert.match(rendered, /role="status"[^>]*aria-live="polite"[^>]*aria-atomic="true"/);
-    assert.match(rendered, /Abriendo tu panel/);
+    assert.match(rendered, /El servidor comprobará tu sesión/);
     assert.doesNotMatch(rendered, /id="login-code"|Reenviar|Enviar código|Revisar acceso/);
     assert.equal(find(harness.render(props), node => node?.type === 'a' && node?.props?.href === '/dashboard').props.href, '/dashboard');
     assert.deepEqual(destinations, ['/dashboard']);
   }
-  assert.deepEqual(paths, ['/api/auth/email-otp/send-verification-otp', '/api/auth/sign-in/email-otp']);
+  assert.deepEqual(paths, ['/api/auth/email-otp/send-verification-otp', '/api/auth/sign-in/email-otp', '/api/auth/session?view=access']);
   harness.unmount();
 });
 
@@ -112,7 +112,8 @@ test('a dashboard continuation is a real same-origin anchor and never claims a n
   const destinations = browser(t), paths = [];
   t.mock.method(globalThis, 'fetch', async path => {
     paths.push(path);
-    return Response.json(path.endsWith('/send-verification-otp') ? { ok: true } : proof());
+    return Response.json(path.endsWith('/send-verification-otp') ? { ok: true }
+      : path === '/api/auth/session?view=access' ? { authenticated: true, mode: 'better-auth', email } : proof());
   });
   const harness = view(); await enterCode(harness);
   const rendered = html(harness);
@@ -121,11 +122,11 @@ test('a dashboard continuation is a real same-origin anchor and never claims a n
   const continuation = find(harness.render(props), node => node?.type === 'a' && node?.props?.href === '/dashboard');
   assert.equal(continuation.props.href, '/dashboard');
   assert.deepEqual(destinations, ['/dashboard']);
-  assert.deepEqual(paths, ['/api/auth/email-otp/send-verification-otp', '/api/auth/sign-in/email-otp']);
+  assert.deepEqual(paths, ['/api/auth/email-otp/send-verification-otp', '/api/auth/sign-in/email-otp', '/api/auth/session?view=access']);
   harness.unmount();
 });
 
-test('unavailable session summaries cannot hold a newly established native session on a client review screen', async t => {
+test('an unavailable cookie roundtrip keeps verified proof and a direct native fallback without automatic navigation or another OTP', async t => {
   const destinations = browser(t), paths = [];
   t.mock.method(globalThis, 'fetch', async path => {
     paths.push(path);
@@ -134,8 +135,10 @@ test('unavailable session summaries cannot hold a newly established native sessi
   });
   const harness = view(); await enterCode(harness);
   assert.match(html(harness), /Correo verificado correctamente/);
-  assert.equal(paths.some(path => path.startsWith('/api/auth/session')), false);
-  assert.deepEqual(destinations, ['/dashboard'], 'navigation reaches the server gate; it grants no account or financial permissions');
+  assert.equal(paths.filter(path => path === '/api/auth/session?view=access').length, 1);
+  assert.deepEqual(destinations, []);
+  assert.match(html(harness), /servicio de autorización no está disponible/);
+  assert.equal(find(harness.render(props), node => node?.type === 'a' && node?.props?.href === '/dashboard').props.href, '/dashboard');
   harness.unmount();
 });
 
@@ -157,12 +160,14 @@ test('send acknowledgements, rejected OTPs and malformed or mismatched proof nev
   assert.deepEqual(destinations, []);
 });
 
-test('password login publishes fresh native proof to the parent and navigates without a client session request or email send', async t => {
+test('password login publishes fresh native proof and the parent checks its browser cookie once without sending email', async t => {
   const destinations = browser(t), paths = [];
   let release, started;
   const waiting = new Promise(resolve => { started = resolve; });
   t.mock.method(globalThis, 'fetch', async path => {
-    paths.push(path); assert.equal(path, '/api/auth/sign-in/email');
+    paths.push(path);
+    if (path === '/api/auth/session?view=access') return Response.json({ authenticated: true, mode: 'better-auth', email });
+    assert.equal(path, '/api/auth/sign-in/email');
     started(); return new Promise(resolve => { release = resolve; });
   });
   const parent = view(), parentProps = { ...props, initialMode: 'password' };
@@ -178,12 +183,14 @@ test('password login publishes fresh native proof to the parent and navigates wi
   assert.deepEqual(destinations, []);
   assert.doesNotMatch(renderToStaticMarkup(parent.render(parentProps)), /Correo verificado correctamente/);
   release(Response.json(proof())); await pending;
+  await new Promise(resolve => setImmediate(resolve));
   assert.match(renderToStaticMarkup(parent.render(parentProps)), /Correo verificado correctamente/);
-  assert.deepEqual(paths, ['/api/auth/sign-in/email']);
+  assert.deepEqual(paths, ['/api/auth/sign-in/email', '/api/auth/session?view=access']);
   assert.equal(harness.state[0], '');
   assert.deepEqual(destinations, ['/dashboard']);
   passwordProps.onVerified(email);
   assert.deepEqual(destinations, ['/dashboard']);
+  assert.deepEqual(paths, ['/api/auth/sign-in/email', '/api/auth/session?view=access'], 'a duplicate password completion cannot repeat the cookie check');
   harness.unmount(); parent.unmount();
 });
 
@@ -228,12 +235,13 @@ test('an accepted OTP cannot trigger a second redemption or send when the verifi
   const destinations = browser(t), paths = [];
   t.mock.method(globalThis, 'fetch', async path => {
     paths.push(path);
-    return Response.json(path.endsWith('/send-verification-otp') ? { ok: true } : proof());
+    return Response.json(path.endsWith('/send-verification-otp') ? { ok: true }
+      : path === '/api/auth/session?view=access' ? { authenticated: true, mode: 'better-auth', email } : proof());
   });
   const harness = view(); await enterCode(harness);
   for (let index = 0; index < 5; index++) harness.render(props);
   assert.deepEqual(destinations, ['/dashboard']);
-  assert.deepEqual(paths, ['/api/auth/email-otp/send-verification-otp', '/api/auth/sign-in/email-otp']);
+  assert.deepEqual(paths, ['/api/auth/email-otp/send-verification-otp', '/api/auth/sign-in/email-otp', '/api/auth/session?view=access']);
   assert.equal(find(harness.render(props), node => node?.type === 'a' && node?.props?.href === '/dashboard').props.href, '/dashboard');
   harness.unmount();
 });

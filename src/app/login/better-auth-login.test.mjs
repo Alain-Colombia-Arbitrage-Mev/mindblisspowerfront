@@ -80,3 +80,53 @@ test('canonical access belongs to the just-verified recipient, not an older sign
   }
   assert.deepEqual(await betterAuthAccess(async () => Response.json({ authenticated: true, mode: 'better-auth', email: 'MEMBER@EXAMPLE.TEST' }), 'member@example.test'), { ready: true });
 });
+
+test('cookie roundtrip distinguishes missing or inactive browser sessions from restricted access without reflecting diagnostics', async () => {
+  for (const status of [401, 403]) {
+    let calls = 0;
+    const result = await betterAuthAccess(async () => {
+      calls++;
+      return Response.json({ error: status === 403 ? 'account_access_restricted' : 'unauthenticated',
+        message: 'private-provider-message', email: 'other@example.test', token: 'private-token' }, { status });
+    }, 'member@example.test');
+    assert.equal(result.ready, false); assert.equal(calls, 1);
+    const message = result.error || result.notice;
+    assert.match(message, /Tu correo está verificado/);
+    assert.doesNotMatch(message, /private-|other@example|bloquead|suspendid|aprobación|registrarte/);
+    if (status === 401) { assert.ok(result.notice); assert.match(message, /misma pestaña de Safari/); }
+    else { assert.ok(result.error); assert.match(message, /no pudimos autorizar/); }
+  }
+});
+
+test('cookie roundtrip has one mobile-compatible bounded request and releases its resources on success, timeout or caller cancellation', async t => {
+  const timers = new Map(), descriptors = new Map(['any', 'timeout'].map(key => [key, Object.getOwnPropertyDescriptor(AbortSignal, key)]));
+  let nextTimer = 0;
+  t.mock.method(globalThis, 'setTimeout', (callback, milliseconds) => { const id = ++nextTimer; timers.set(id, { callback, milliseconds }); return id; });
+  t.mock.method(globalThis, 'clearTimeout', id => timers.delete(id));
+  try {
+    for (const key of descriptors.keys()) Object.defineProperty(AbortSignal, key, { configurable: true, value: undefined });
+    assert.deepEqual(await betterAuthAccess(async () => Response.json({ authenticated: true, mode: 'better-auth', email: 'member@example.test' }), 'member@example.test'), { ready: true });
+    assert.equal(timers.size, 0);
+    for (const stalled of ['transport', 'body']) {
+      let calls = 0, signal, bodyStarted;
+      const decoding = new Promise(resolve => { bodyStarted = resolve; });
+      const pending = betterAuthAccess(async (_path, options) => {
+        calls++; signal = options.signal;
+        if (stalled === 'transport') return new Promise(() => {});
+        return { ok: true, status: 200, json() { bodyStarted(); return new Promise(() => {}); } };
+      }, 'member@example.test');
+      if (stalled === 'body') await decoding;
+      assert.equal(calls, 1); assert.equal([...timers.values()][0].milliseconds, 12000);
+      [...timers.values()][0].callback();
+      const result = await pending;
+      assert.equal(result.ready, false); assert.match(result.error, /No pudimos comprobar/);
+      assert.equal(signal.aborted, true); assert.equal(timers.size, 0);
+    }
+    const parent = new AbortController(); let calls = 0;
+    const pending = betterAuthAccess(async () => { calls++; return new Promise(() => {}); }, 'member@example.test', { signal: parent.signal });
+    parent.abort(); assert.equal((await pending).ready, false); assert.equal(calls, 1); assert.equal(timers.size, 0);
+    assert.equal((await betterAuthAccess(() => assert.fail('cancelled caller must not start a request'), 'member@example.test', { signal: parent.signal })).ready, false);
+  } finally {
+    for (const [key, descriptor] of descriptors) Object.defineProperty(AbortSignal, key, descriptor);
+  }
+});
