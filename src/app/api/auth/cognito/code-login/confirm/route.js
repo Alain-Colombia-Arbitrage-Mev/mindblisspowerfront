@@ -10,6 +10,7 @@ import {
   clearCookie,
   setCognitoSessionCookies,
 } from "@/lib/cognito-session";
+import { issueDevDemoIdToken } from "@/lib/dev-demo-session.mjs";
 
 export const runtime = "nodejs";
 
@@ -55,12 +56,21 @@ export async function POST(request) {
       return NextResponse.json({ error: "El código no es válido. / The code is not valid." }, { status: 400 });
     }
 
+    const demoToken = issueDevDemoIdToken(email);
     const response = NextResponse.json({
       ok: true,
       mode: "demo",
       redirectTo: "/dashboard/profile",
       user: buildDemoUser(email),
     });
+    // The dashboard is server-gated even in development. Install a signed,
+    // short-lived local proof so the documented 123456 demo can actually
+    // traverse the UI. Production never issues or accepts this token.
+    setCognitoSessionCookies(response, {
+      AccessToken: demoToken,
+      IdToken: demoToken,
+      ExpiresIn: 60 * 60,
+    }, requestUrl);
     clearCookie(response, CODE_CHALLENGE_COOKIE);
     return response;
   }

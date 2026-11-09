@@ -15,6 +15,7 @@ import { CognitoJwtVerifier } from "aws-jwt-verify";
 import { betterAuthEnabled, AuthServiceUnavailable } from "./better-auth-bridge.mjs";
 import { createBetterAuthVerifier, validBetterAuthClaims, authVerificationDiagnostic } from "./better-auth-token.mjs";
 import { getCloudflareScope, runtimeEnvironment, coreFetch } from './cloudflare-runtime.mjs';
+import { verifyDevDemoIdToken } from './dev-demo-session.mjs';
 
 let betterVerifier;
 
@@ -87,6 +88,8 @@ export async function verifyIdToken(token, { throwOnUnavailable = false } = {}) 
     }
   }
   if (process.env.AUTH_PROVIDER && process.env.AUTH_PROVIDER !== "cognito") return null;
+  const demoClaims = verifyDevDemoIdToken(token);
+  if (demoClaims) return demoClaims;
   return verifyIdTokenWith(getVerifier(), token);
 }
 

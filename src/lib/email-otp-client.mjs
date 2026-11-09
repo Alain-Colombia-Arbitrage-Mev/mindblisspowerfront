@@ -18,9 +18,12 @@ export function otpRequest(provider, action, email, code = '') {
     body: action === 'send' ? { email: normalizedEmail, channel: 'email' } : { email: normalizedEmail, code } };
 }
 
-export function otpFailureMessage(status, action) {
+export function otpFailureMessage(status, action, code = '') {
   if (status === 429) return 'Demasiados intentos. Espera antes de volver a intentarlo. Si aparece un contador, deja que termine; no envíes solicitudes repetidas.';
   if (status >= 500) return 'El servicio de acceso no está disponible. Intenta más tarde.';
+  if (action === 'confirm' && ['INVALID_OTP', 'OTP_EXPIRED'].includes(code)) {
+    return 'Código inválido o expirado. Usa el código de acceso más reciente; si venció o agotó sus intentos, espera el contador antes de solicitar otro. El código de prueba 123456 sólo funciona en el entorno local de desarrollo.';
+  }
   return action === 'confirm' ? 'Código inválido o expirado. Usa el código de acceso más reciente; si venció o agotó sus intentos, espera el contador antes de solicitar otro.' : 'No se pudo solicitar el código. Revisa el correo original y vuelve a intentarlo cuando termine el contador, si aparece.';
 }
 

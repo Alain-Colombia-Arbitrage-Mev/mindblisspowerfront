@@ -469,7 +469,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
       if (emailOtpOnly) {
         if (!response.ok || !verifiedEmailSignIn(payload, normalizedEmail)) {
           if (response.status === 429) confirmationCooldown.start(otpConfirmationRetrySeconds(response));
-          setError(otpFailureMessage(response.ok ? 502 : response.status, 'confirm'));
+          setError(otpFailureMessage(response.ok ? 502 : response.status, 'confirm', payload?.code));
           return;
         }
         // Fresh native proof permits the handoff, not network permissions.

@@ -43,9 +43,9 @@ export default function State2EmailVerification({ email, onComplete }) {
       setCodeSent(true);
       setCode('');
       setError('');
-      setTimeout(() => {
-        alert(`Código de prueba: ${result.testCode}`);
-      }, 500);
+      if (process.env.NODE_ENV !== 'production' && result.testCode) {
+        setError(`Entorno local: usa el código ${result.testCode}.`);
+      }
     } finally {
       setLoading(false);
     }
@@ -82,7 +82,9 @@ export default function State2EmailVerification({ email, onComplete }) {
               style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
               placeholder="000000"
             />
-            <p className="text-white/30 text-xs mt-2 text-center">Código de prueba: 123456</p>
+            {process.env.NODE_ENV !== 'production' ? (
+              <p className="text-white/30 text-xs mt-2 text-center">Código local de desarrollo: 123456</p>
+            ) : null}
           </div>
 
           {error && (

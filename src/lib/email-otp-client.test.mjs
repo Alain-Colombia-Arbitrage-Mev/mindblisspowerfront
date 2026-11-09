@@ -31,6 +31,7 @@ test('legacy Cognito contract remains separate and bounded errors do not expose 
   assert.match(otpFailureMessage(429, 'send'), /Demasiados/);
   assert.match(otpFailureMessage(503, 'confirm'), /no está disponible/);
   assert.match(otpFailureMessage(401, 'confirm'), /inválido o expirado/);
+  assert.match(otpFailureMessage(400, 'confirm', 'INVALID_OTP'), /sólo funciona en el entorno local/);
 });
 
 test('single email delivery attempt waits 30 seconds while received-code confirmation stays at 12 seconds', () => {
