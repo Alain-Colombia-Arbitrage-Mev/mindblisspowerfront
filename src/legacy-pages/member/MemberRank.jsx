@@ -237,7 +237,6 @@ export default function MemberRank() {
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 padding: '11px 22px',
                 background: isCurrent ? 'rgba(59,130,246,0.07)' : isNext ? 'rgba(124,58,237,0.04)' : 'transparent',
-                borderLeft: isCurrent ? '2px solid rgba(59,130,246,0.5)' : isNext ? '2px solid rgba(124,58,237,0.3)' : '2px solid transparent',
                 opacity: (!isUnlocked && !isNext) ? 0.45 : 1,
                 transition: 'all 200ms ease',
               }}>
@@ -295,8 +294,7 @@ export default function MemberRank() {
                 className="p-4 rounded-lg flex items-start gap-4"
                 style={{
                   background: 'rgba(8,18,40,0.6)',
-                  borderLeft: `2px solid ${rec.priority === 'high' ? '#7C3AED' : 'rgba(59,130,246,0.4)'}`,
-                  border: '1px solid rgba(59,130,246,0.08)',
+                  border: `1px solid ${rec.priority === 'high' ? 'rgba(124,58,237,0.35)' : 'rgba(59,130,246,0.2)'}`,
                 }}
               >
                 <div style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, marginTop: 4, background: rec.priority === 'high' ? '#7C3AED' : 'rgba(59,130,246,0.5)' }} />

@@ -134,7 +134,7 @@ export default function NetworkVisualizationPanel({ members, networkNodes, binar
               className="p-3 rounded-lg flex items-center justify-between cursor-pointer transition-all"
               style={{
                 background: 'rgba(255,255,255,0.04)',
-                borderLeft: `3px solid ${getRankColor(member.rank)}`,
+                border: `1px solid ${getRankColor(member.rank)}55`,
               }}
               onClick={() => setSelectedNode(member.user_id)}
             >

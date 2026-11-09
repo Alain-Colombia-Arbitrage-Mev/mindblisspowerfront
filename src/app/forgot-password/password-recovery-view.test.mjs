@@ -389,7 +389,10 @@ test('the actual login page exposes recovery in both modes without putting a pri
   for (const enabled of [true, false]) {
     const page = loadPage('../login/page.jsx', {
       'next/link': { default: link }, '../_components/AuthShell': { default: ({ children }) => React.createElement('main', null, children) },
-      './MagicLinkLoginForm': { default: () => null }, '@/lib/better-auth-bridge.mjs': { betterAuthEnabled: () => enabled },
+      './MagicLinkLoginForm': { default: () => null }, '@/lib/better-auth-bridge.mjs': {
+        betterAuthEnabled: () => enabled,
+        betterAuthSocialProviders: () => [],
+      },
       '../register/registration-model.mjs': { registrationLoginUrl, registrationUrl },
     });
     const tree = await page({ searchParams: Promise.resolve({ email, mode: 'password' }) });

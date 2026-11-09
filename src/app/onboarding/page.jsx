@@ -319,7 +319,7 @@ export default function OnboardingPage() {
       title="Tu ingreso a Mindbliss Power empieza aquí."
       description="Completa tu perfil personal para que la empresa pueda darte una bienvenida ordenada, identificar tus preferencias y preparar tu acceso al portal."
       sideKpis={sideKpis}
-      visualSrc="/mindbliss/pink-poppy.avif"
+      visualSrc="/mindbliss/mindbliss-auth-background.png"
       visualAlt="Equipo Mindbliss compartiendo en un sofá"
     >
       <section

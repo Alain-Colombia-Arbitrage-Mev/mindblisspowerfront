@@ -85,6 +85,31 @@ test('resume/cancel require same-origin JSON and only an order UUID before forwa
   }
 });
 
+test('history/resume/cancel distinguish unavailable authentication without clearing cookies, exposing details or replaying requests', async () => {
+  for (const action of ['history', 'resume', 'cancel']) {
+    const failure = await run(action, request(action), { identity: async () => {
+      throw new Error('private identity database and token detail');
+    }, fetchImpl: forbidden });
+    assert.equal(failure.status, 503);
+    assert.equal(failure.headers.get('cache-control'), 'private, no-store');
+    assert.equal(failure.headers.get('set-cookie'), null);
+    assert.deepEqual(await failure.json(), { error: 'authentication_unavailable' });
+    let calls = 0;
+    const upstreamFailure = await run(action, request(action), { fetchImpl: async () => {
+      calls++;
+      return Response.json({ error: 'authentication_unavailable', private: 'not-public' }, { status: 503 });
+    } });
+    assert.equal(upstreamFailure.status, 503);
+    assert.deepEqual(await upstreamFailure.json(), { error: 'authentication_unavailable' });
+    assert.equal(calls, 1);
+    for (const [status, error] of [[401, 'invalid_id_token'], [403, 'unauthenticated']]) {
+      const denied = await run(action, request(action), { fetchImpl: async () => Response.json({ error }, { status }) });
+      assert.equal(denied.status, status);
+      assert.deepEqual(await denied.json(), { error });
+    }
+  }
+});
+
 test('malformed/oversized upstream content, redirects and unknown errors never become a usable purchase or expose details', async () => {
   for (const upstream of [Response.json({}), Response.json({ ...history(), padding: 'x'.repeat(131072) }),
     new Response(JSON.stringify(history()), { headers: { 'content-type': 'text/plain' } }),

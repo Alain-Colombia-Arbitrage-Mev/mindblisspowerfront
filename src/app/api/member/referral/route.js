@@ -2,7 +2,8 @@ import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
 import { memberDb } from "@/lib/member-db";
-import { verifiedEmailFromIdToken } from "@/lib/verify-id-token";
+import { verifiedEmailFromIdTokenForSession as verifiedEmailFromIdToken } from "@/lib/verify-id-token";
+import { AuthServiceUnavailable } from "@/lib/better-auth-bridge.mjs";
 import { runtimeEnvironment } from '@/lib/cloudflare-runtime.mjs';
 import { buildReferralLinks, referralPublicOrigin } from '@/lib/referral-links.mjs';
 
@@ -24,7 +25,8 @@ export async function GET() {
   try {
     idToken = await rawIdToken();
     if (idToken) email = await verifiedEmailFromIdToken(idToken);
-  } catch {
+  } catch (error) {
+    if (error instanceof AuthServiceUnavailable) return referralResponse({ error: 'authentication_unavailable' }, 503);
     return referralResponse({ error: 'referral-unavailable' }, 503);
   }
   if (!idToken) {

@@ -263,8 +263,7 @@ export default function MemberWarRoom() {
                 <div key={alert.id} style={{
                   padding: '10px 12px', borderRadius: 10,
                   background: alert.type === 'critical' ? 'rgba(124,58,237,0.08)' : 'rgba(59,130,246,0.06)',
-                  border: `1px solid ${alert.type === 'critical' ? 'rgba(124,58,237,0.25)' : 'rgba(59,130,246,0.15)'}`,
-                  borderLeft: `2px solid ${alert.type === 'critical' ? '#7C3AED' : '#3b82f6'}`,
+                  border: `1px solid ${alert.type === 'critical' ? 'rgba(124,58,237,0.35)' : 'rgba(59,130,246,0.25)'}`,
                 }}>
                   <p style={{ color: alert.type === 'critical' ? '#C4B5FD' : '#93C5FD', fontSize: 10, fontWeight: 700, margin: '0 0 2px 0' }}>{alert.title}</p>
                   <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 9, margin: 0 }}>{alert.message}</p>

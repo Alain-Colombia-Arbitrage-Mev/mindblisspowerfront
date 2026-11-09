@@ -100,7 +100,6 @@ export default function MemberActivity() {
                   display: 'flex', alignItems: 'center', gap: 16,
                   padding: '14px 20px',
                   borderBottom: i < filteredActivity.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
-                  borderLeft: `2px solid ${event.color}30`,
                   background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)',
                   transition: 'background 150ms ease',
                 }}

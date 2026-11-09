@@ -54,7 +54,7 @@ export default function State6Review({ userId, onComplete }) {
 
       {progress === 100 && (
         <div className="flex justify-center mb-4">
-          <CheckCircle size={48} style={{ color: '#10b981' }} className="animate-bounce" />
+          <CheckCircle size={48} style={{ color: 'var(--vp-success)' }} />
         </div>
       )}
 

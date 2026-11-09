@@ -297,8 +297,58 @@ test('query failures remain local, specific and non-financial while denied sessi
     assert.match(renderToStaticMarkup(view.tree()), /Consulta realizada:/);
     orderButton(view.tree(), 'Consultar estado').props.onClick(); await settle();
     const html = renderToStaticMarkup(view.tree());
-    assert.match(html, /role="alert"/); assert.match(html, /Vuelve a iniciar sesión/);
+    assert.match(html, /role="alert"/);
+    if (status === 401) assert.match(html, /Vuelve a iniciar sesión/);
+    else { assert.match(html, /No tienes autorización/); assert.doesNotMatch(html, /Vuelve a iniciar sesión/); }
     assert.doesNotMatch(html, /Synthetic plan|payment-check-|Consulta realizada:|must-not-leak|Continuar pago/);
+  }
+});
+
+test('history distinguishes missing sessions, restricted access and temporary authentication outages without replaying a payment', async () => {
+  for (const [status, code, expected] of [[401, 'unauthenticated', /Vuelve a iniciar sesión/],
+    [403, 'account_suspended', /No tienes autorización/], [503, 'authentication_unavailable', /servicio de acceso.*temporalmente/]]) {
+    const view = historyView(); await view.mount();
+    const previous = view.tree(), resume = button(previous, 'Continuar pago').props.onClick;
+    view.fail(Object.assign(new Error('must-not-leak-private-diagnostic'), { status, code }));
+    button(previous, 'Actualizar historial').props.onClick(); await settle();
+    const tree = view.tree(), html = renderToStaticMarkup(tree);
+    assert.match(html, expected); assert.doesNotMatch(html, /must-not-leak/);
+    if (status !== 401) assert.doesNotMatch(html, /Vuelve a iniciar sesión/);
+    if (status === 503) {
+      assert.match(html, /Synthetic plan/);
+      assert.equal(button(tree, 'Continuar pago').props.disabled, true);
+    } else assert.doesNotMatch(html, /Synthetic plan|Continuar pago|Confirmar cancelación local/);
+    resume(); await settle();
+    assert.deepEqual(view.calls.resumes, [], 'an old enabled handler cannot bypass a failed fresh history read');
+    assert.deepEqual(view.calls.cancels, []); assert.deepEqual(view.calls.statuses, []);
+    assert.equal(view.calls.reads, 2, 'only initial and explicit GETs');
+  }
+});
+
+test('a real denial clears confirmation state and cancels older actions so late URLs and stale handlers cannot restore access', async t => {
+  const previousWindow = globalThis.window, navigations = [];
+  t.after(() => { if (previousWindow === undefined) delete globalThis.window; else globalThis.window = previousWindow; });
+  for (const status of [401, 403]) {
+    delete globalThis.window;
+    let complete, actionSignal, resumes = 0;
+    const view = historyView({ purchaseMocks: { resumeNOWPaymentsPurchase: async (_id, { signal }) => {
+      resumes++; actionSignal = signal; return new Promise(resolve => { complete = resolve; });
+    } } });
+    await view.mount();
+    const original = view.tree(), resume = button(original, 'Continuar pago').props.onClick;
+    const refresh = button(original, 'Actualizar historial').props.onClick;
+    button(original, 'Cancelar intención').props.onClick({ currentTarget: { isConnected: false } });
+    assert.match(renderToStaticMarkup(view.tree()), /role="alertdialog"/);
+    resume(); await settle();
+    view.fail(Object.assign(new Error('private-denial'), { status }));
+    refresh(); await settle();
+    assert.equal(actionSignal.aborted, true);
+    assert.doesNotMatch(renderToStaticMarkup(view.tree()), /Synthetic plan|role="alertdialog"|Guardando|Procesando tu solicitud/);
+    globalThis.window = { location: { assign: value => navigations.push(value) } };
+    complete({ url: 'https://nowpayments.io/payment/?iid=12345' }); await settle();
+    resume(); await settle();
+    assert.equal(resumes, 1, 'a saved old handler cannot send another mutation after denial');
+    assert.deepEqual(navigations, []); assert.deepEqual(view.calls.cancels, []);
   }
 });
 

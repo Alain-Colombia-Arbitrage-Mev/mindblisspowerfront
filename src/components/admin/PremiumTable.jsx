@@ -40,8 +40,8 @@ export default function PremiumTable({ columns, data, onRowClick, selectable = f
               transition={{ delay: i * 0.02 }}
               className="table-row-hover"
               style={{
-                borderLeft: selected.has(row.id) ? '3px solid #3b82f6' : '3px solid transparent',
                 borderBottom: '1px solid rgba(255,255,255,0.04)',
+                background: selected.has(row.id) ? 'rgba(59,130,246,0.08)' : 'transparent',
                 cursor: onRowClick ? 'pointer' : 'default',
               }}
               onClick={() => onRowClick?.(row)}>

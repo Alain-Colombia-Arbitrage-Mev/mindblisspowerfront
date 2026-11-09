@@ -54,10 +54,12 @@ function forwardIdTokenEnabled() {
   return process.env.VP_FORWARD_ID_TOKEN !== "0";
 }
 
-export async function idTokenHeader() {
+/** Reuse an already verified request token when the caller has one.
+ * @param {string} [verifiedToken] */
+export async function idTokenHeader(verifiedToken) {
   if (!forwardIdTokenEnabled()) return {};
   try {
-    const raw = await rawIdToken();
+    const raw = verifiedToken === undefined ? await rawIdToken() : verifiedToken;
     return raw ? { "X-VP-Id-Token": raw } : {};
   } catch {
     return {};

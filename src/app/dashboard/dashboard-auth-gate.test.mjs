@@ -28,7 +28,8 @@ function gate({ token = 'synthetic-private-token', claims = null, tokenError,
   const AuthShell = compile('../_components/AuthShell.jsx', {
     'react/jsx-runtime': jsxRuntime,
     'next/link': { default: ({ children, ...props }) => React.createElement('a', props, children) },
-    'lucide-react': { ArrowUpRight: () => null },
+    'lucide-react': new Proxy({}, { get: () => () => null }),
+    './ThemeToggle': { default: () => null }, './AuthSupportWidget': { default: () => null },
   });
   function DashboardShell({ authMode, children }) {
     calls.shell++;
@@ -126,7 +127,7 @@ for (const [stage, errorProperty, reference] of [
     assert.equal(app.calls.privateChildren, 0);
     assert.deepEqual(app.calls.redirects, []);
     assert.deepEqual(logs, [{ event: 'auth_handoff_unavailable', stage }]);
-    assert.match(html, /auth-mono/);
+    assert.match(html, /auth-shell/);
     assert.match(html, /role="alert"/);
     assert.match(html, /No pudimos comprobar tu sesión/);
     assert.match(html, new RegExp(reference));

@@ -18,24 +18,27 @@ export default function DashboardShell({ authMode: _authMode, children }) {
   const [referralNotice, setReferralNotice] = useState('');
   const [referralSaving, setReferralSaving] = useState(false);
   const [referralChoice, setReferralChoice] = useState(null);
+  const [referralPending, setReferralPending] = useState(false);
   const referralView = useRef(null);
   const referralSubmitting = useRef(false);
   const closeMenu = useCallback(() => setMobileMenuOpen(false), []);
 
   function showReferralResult(recipient, result) {
     const visit = pendingVerifiedReferral(recipient);
-    const confirmed = result?.ok === true && (result.positioned || (result.ref
+    const positioned = result?.ok === true && result.positioned === true && result.ref === '' && result.preferred_side === '';
+    const confirmed = result?.ok === true && (positioned || (result.positioned === false && result.ref
       && (!visit || (result.ref === visit.ref && result.preferred_side === visit.preferred_side))));
     let notice = '', choice = null;
     if (!confirmed && visit) {
       notice = 'No pudimos confirmar que tu enlace de referido quedó guardado. Reintenta antes de comprar; no se ha cambiado tu posición en la red.';
     } else if (result?.ok !== true) {
-      notice = 'No pudimos confirmar el guardado de tu enlace de referido. Intenta más tarde antes de comprar. Tu posición en la red no se ha cambiado.';
-    } else if (!result.positioned && !result.ref) {
+      notice = 'No pudimos consultar tu enlace de referido. Puedes reintentar la comprobación; esta consulta no guarda enlaces ni cambia tu posición en la red.';
+    } else if (!positioned && !result.ref) {
       choice = browserReferralChoice(recipient);
       if (choice) notice = 'Hay un enlace guardado sólo en este dispositivo, sin confirmar en el servidor. Puedes elegirlo de nuevo antes de comprar; no se guardará automáticamente ni cambiará una posición existente.';
     }
     setReferralChoice(choice);
+    setReferralPending(Boolean(visit && !confirmed));
     setReferralNotice(notice);
     return Boolean(visit && !confirmed);
   }
@@ -112,7 +115,8 @@ export default function DashboardShell({ authMode: _authMode, children }) {
     view.timer = null;
     setReferralSaving(true);
     try {
-      const result = await (referralChoice ? chooseBrowserReferral(view.email, referralChoice) : retryVerifiedReferral(view.email));
+      const result = await (referralChoice ? chooseBrowserReferral(view.email, referralChoice)
+        : referralPending ? retryVerifiedReferral(view.email) : readVerifiedReferral(view.email));
       if (referralView.current !== view) return;
       showReferralResult(view.email, result);
     } finally {
@@ -152,16 +156,26 @@ export default function DashboardShell({ authMode: _authMode, children }) {
             tabIndex={-1}
             className="vp-dashboard-main flex-1 overflow-y-auto"
           >
-            {referralNotice ? <div role="alert" className="mb-4 rounded-lg border border-[var(--vp-border)] bg-[var(--vp-surface)] p-4 text-sm leading-6 text-[var(--vp-text)]">
-              <p>{referralNotice}</p>
-              {referralChoice ? <p className="mt-2 break-words">Cuenta: {referralChoice.email}. Referido: {referralChoice.code}. Rama: {referralChoice.side === 'L' ? 'izquierda' : referralChoice.side === 'R' ? 'derecha' : 'sin preferencia'}.</p> : null}
-              <button type="button" onClick={retryReferral} disabled={referralSaving} className="executive-button mt-3 disabled:opacity-60">
-                {referralSaving ? 'Guardando enlace…' : referralChoice ? 'Guardar este enlace como mi elección' : 'Reintentar guardar enlace'}
-              </button>
-            </div> : null}
-            {children}
+            <div className="vp-dashboard-content">
+              {referralNotice ? <div role="alert" className="vp-dashboard-notice rounded-lg border border-[var(--vp-border)] bg-[var(--vp-surface)] p-4 text-sm leading-6 text-[var(--vp-text)]">
+                <p>{referralNotice}</p>
+                {referralChoice ? <p className="mt-2 break-words">Cuenta: {referralChoice.email}. Referido: {referralChoice.code}. Rama: {referralChoice.side === 'L' ? 'izquierda' : referralChoice.side === 'R' ? 'derecha' : 'sin preferencia'}.</p> : null}
+                <button type="button" onClick={retryReferral} disabled={referralSaving} className="executive-button mt-3 disabled:opacity-60">
+                  {referralSaving ? (referralChoice || referralPending ? 'Guardando enlace…' : 'Comprobando enlace…')
+                    : referralChoice ? 'Guardar este enlace como mi elección' : referralPending ? 'Reintentar guardar enlace' : 'Reintentar comprobación'}
+                </button>
+              </div> : null}
+              {children}
+            </div>
           </main>
         </div>
+        <a className="vp-support-launcher" href="/dashboard/support" aria-label="Abrir centro de soporte">
+          <span className="vp-support-launcher-icon" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 13a8 8 0 0 1 16 0"/><path d="M18 19c0 1.1-.9 2-2 2h-3"/><path d="M4 13v4a2 2 0 0 0 2 2h1v-8H6a2 2 0 0 0-2 2Z"/><path d="M20 13v4a2 2 0 0 1-2 2h-1v-8h1a2 2 0 0 1 2 2Z"/></svg>
+          </span>
+          <span className="vp-support-launcher-copy"><strong>¿Necesitas ayuda?</strong><small>Habla con soporte</small></span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>
+        </a>
       </div>
     </MemberSessionContext.Provider>
   );

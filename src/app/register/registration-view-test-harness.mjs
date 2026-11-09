@@ -9,8 +9,8 @@ const require = createRequire(import.meta.url);
 
 // Exercise real JSX event handlers without a browser, network or real messages.
 export function registrationViewHarness(filename, mocks) {
-  const state = [], refs = [], effects = [], callbacks = [];
-  let stateIndex = 0, refIndex = 0, effectIndex = 0, callbackIndex = 0;
+  const state = [], refs = [], effects = [], callbacks = [], ids = [];
+  let stateIndex = 0, refIndex = 0, effectIndex = 0, callbackIndex = 0, idIndex = 0;
   const queued = [];
   const hooks = { ...React, useState(initial) {
     const index = stateIndex++;
@@ -20,6 +20,10 @@ export function registrationViewHarness(filename, mocks) {
     const index = refIndex++;
     if (!(index in refs)) refs[index] = { current: initial };
     return refs[index];
+  }, useId() {
+    const index = idIndex++;
+    if (!(index in ids)) ids[index] = `test-id-${index}`;
+    return ids[index];
   }, useCallback(callback, dependencies) {
     const index = callbackIndex++, previous = callbacks[index];
     if (!previous || !dependencies || dependencies.length !== previous.dependencies?.length
@@ -40,12 +44,13 @@ export function registrationViewHarness(filename, mocks) {
   new Function('require', 'module', 'exports', code)(id => {
     if (id === 'react') return hooks;
     if (Object.hasOwn(mocks, id)) return mocks[id];
+    if (id === './SocialLoginButtons') return { default: () => null };
     if (id === '@/lib/browser-request-deadline.mjs') return deadline;
     if (id === 'react/jsx-runtime') return require(id);
     assert.fail(`Unexpected test dependency: ${id}`);
   }, module, module.exports);
   return { render(props = {}) {
-    stateIndex = 0; refIndex = 0; effectIndex = 0; callbackIndex = 0;
+    stateIndex = 0; refIndex = 0; effectIndex = 0; callbackIndex = 0; idIndex = 0;
     const tree = module.exports.default(props);
     while (queued.length) queued.shift()();
     return tree;

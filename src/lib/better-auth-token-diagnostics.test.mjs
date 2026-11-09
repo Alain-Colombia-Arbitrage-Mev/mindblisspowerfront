@@ -4,7 +4,7 @@ import { generateKeyPairSync, sign } from 'node:crypto';
 import { AuthVerificationUnavailable, authVerificationDiagnostic, createBetterAuthVerifier } from './better-auth-token.mjs';
 import { createPublicJwksCache } from './public-jwks-cache.mjs';
 import { getCloudflareScope, runCloudflareRequest } from './cloudflare-runtime.mjs';
-import { verifyIdToken, verifyIdTokenForSession } from './verify-id-token.js';
+import { verifyIdToken, verifyIdTokenForSession, verifiedEmailFromIdTokenForSession } from './verify-id-token.js';
 
 const env = { AUTH_PROVIDER: 'better-auth', NODE_ENV: 'production', AUTH_PUBLIC_ORIGIN: 'https://portal.example.test',
   BETTER_AUTH_BACKEND_URL: 'https://auth.core.internal', BETTER_AUTH_JWT_ISSUER: 'https://auth.example.test',
@@ -100,4 +100,18 @@ test('invalid proof remains anonymous in strict session mode and no token does n
     await assert.rejects(verifyIdTokenForSession('synthetic-private-token'), { name: 'AuthServiceUnavailable' });
   }, { AUTH_PROVIDER: 'better-auth' });
   assert.deepEqual(logs.at(-1), { event: 'auth_verification', phase: 'configuration', status: 'unavailable' });
+});
+
+test('private read email helper retains signature checks and distinguishes unavailable proof', async t => {
+  t.mock.method(console, 'warn', () => {});
+  const checked = verifier(); checked.cacheJwks({ keys: [jwk] });
+  await inRequest(checked, async () => {
+    assert.equal(await verifiedEmailFromIdTokenForSession(token()), claims().email);
+    assert.equal(await verifiedEmailFromIdTokenForSession(token({ email_verified: false })), '');
+    assert.equal(await verifiedEmailFromIdTokenForSession(''), '');
+  });
+  await inRequest({ verify: async () => { throw new AuthVerificationUnavailable('jwks'); } }, async () => {
+    await assert.rejects(verifiedEmailFromIdTokenForSession('synthetic-private-token'), { name: 'AuthServiceUnavailable' });
+    assert.equal(await verifyIdToken('synthetic-private-token'), null, 'legacy helper contract remains fail-closed null');
+  });
 });

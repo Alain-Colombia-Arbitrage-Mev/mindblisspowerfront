@@ -2,7 +2,8 @@ import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
 import { memberDb } from "@/lib/member-db";
-import { verifiedEmailFromIdToken } from "@/lib/verify-id-token";
+import { verifiedEmailFromIdTokenForSession as verifiedEmailFromIdToken } from "@/lib/verify-id-token";
+import { AuthServiceUnavailable } from "@/lib/better-auth-bridge.mjs";
 import { memberReadLimit, withMemberTreeCapacity } from "@/lib/member-read-policy.mjs";
 import { childCoverage, loadedChildCounts } from "@/lib/tree-read-model.mjs";
 
@@ -21,15 +22,23 @@ export async function GET(request) {
   const depthLimit = parseDepth(params.get("depth"));
   const rowLimit = parseLimit(params.get("limit"), depthLimit === 0 ? 2000 : depthLimit <= 4 ? 64 : 1000);
   const queryLimit = rowLimit + 1;
-  const idToken = await rawIdToken();
-
-  if (!idToken) {
-    return NextResponse.json({ error: "unauthenticated" }, { status: 401, headers: { "Cache-Control": "private, no-store" } });
+  let idToken, email;
+  try {
+    idToken = await rawIdToken();
+    if (idToken) email = await verifiedEmailFromIdToken(idToken);
+  } catch (error) {
+    if (!(error instanceof AuthServiceUnavailable)) throw error;
+    return NextResponse.json({ error: "authentication_unavailable" }, {
+      status: 503, headers: { "Cache-Control": "private, no-store", Vary: "Cookie" },
+    });
   }
 
-  const email = await verifiedEmailFromIdToken(idToken);
+  if (!idToken) {
+    return NextResponse.json({ error: "unauthenticated" }, { status: 401, headers: { "Cache-Control": "private, no-store", Vary: "Cookie" } });
+  }
+
   if (!email) {
-    return NextResponse.json({ error: "session-invalid" }, { status: 401, headers: { "Cache-Control": "private, no-store" } });
+    return NextResponse.json({ error: "session-invalid" }, { status: 401, headers: { "Cache-Control": "private, no-store", Vary: "Cookie" } });
   }
 
   const limited = memberReadLimit(email, positionOnly ? "position" : "tree");

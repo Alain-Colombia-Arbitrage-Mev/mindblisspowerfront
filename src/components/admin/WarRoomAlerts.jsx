@@ -31,7 +31,7 @@ export default function WarRoomAlerts({ onAlertClick }) {
                   transition={{ delay: i * 0.08 }}
                   onClick={() => onAlertClick?.(alert)}
                   className="flex items-start gap-2.5 p-2.5 rounded-lg cursor-pointer transition-all hover:bg-white/5 alert-critical-pulse"
-                  style={{ background: `${alert.color}08`, borderLeft: `2px solid ${alert.color}` }}>
+                  style={{ background: `${alert.color}08`, border: `1px solid ${alert.color}45` }}>
                   <div className="w-7 h-7 rounded flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: `${alert.color}15` }}>
                     <Icon size={13} style={{ color: alert.color }} />
                   </div>

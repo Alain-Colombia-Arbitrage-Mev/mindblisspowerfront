@@ -18,6 +18,7 @@ export function createMemberNetworkReader({
   let tries = 0;
   let timer = null;
   let snapshots = {};
+  const unavailableAccess = new Set();
   const requests = new Map();
   const clearTimer = () => { if (timer !== null) unschedule(timer); timer = null; };
   const cancelAll = () => {
@@ -30,11 +31,11 @@ export function createMemberNetworkReader({
     const { tree, summary } = snapshots;
     const status = summary?.payments?.[0]?.status;
     const paid = Number(summary?.active_packages) > 0 || ["paid", "activated", "needs_placement"].includes(status);
-    const shouldPoll = tree?.positioned === false && paid && status !== "needs_placement" && tries < maxTries;
+    const shouldPoll = !unavailableAccess.size && tree?.positioned === false && paid && status !== "needs_placement" && tries < maxTries;
     onSync(shouldPoll);
     if (shouldPoll) timer = schedule(() => {
       timer = null;
-      if (!active || denied) return;
+      if (!active || denied || unavailableAccess.size) return;
       tries++;
       void run(["tree", "summary", "referral"], true);
     }, pollDelay);
@@ -53,6 +54,7 @@ export function createMemberNetworkReader({
     try {
       const data = await read(config.url, { signal: request.controller.signal, validate: config.validate });
       if (!active || denied || requests.get(key) !== request || request.controller.signal.aborted) return;
+      unavailableAccess.delete(key);
       snapshots[key] = data;
       onPart(key, { data });
     } catch (error) {
@@ -65,6 +67,11 @@ export function createMemberNetworkReader({
         onSync(false);
         onDenied(error);
       } else {
+        if (error.status === 503 && error.code === "authentication_unavailable") {
+          unavailableAccess.add(key);
+          clearTimer();
+          onSync(false);
+        }
         delete snapshots[key];
         onPart(key, { error });
       }
@@ -81,7 +88,7 @@ export function createMemberNetworkReader({
     refresh(nextDepth = depth) {
       if (!active) return Promise.resolve();
       clearTimer(); cancelAll();
-      denied = false; snapshots = {}; depth = nextDepth; tries = 1;
+      denied = false; snapshots = {}; unavailableAccess.clear(); depth = nextDepth; tries = 1;
       onStart(true); onSync(false);
       return run(["tree", "summary", "referral"]);
     },
@@ -93,7 +100,7 @@ export function createMemberNetworkReader({
       return run(["tree"]);
     },
     dispose() {
-      active = false; clearTimer(); cancelAll(); snapshots = {};
+      active = false; clearTimer(); cancelAll(); snapshots = {}; unavailableAccess.clear();
     },
   };
 }

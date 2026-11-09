@@ -35,19 +35,18 @@ function moduleAt(relative, mocks = {}) {
 test("actual member sidebar removes identity verification while preserving account, plans, network and support navigation", () => {
   const { default: Sidebar } = moduleAt("../components/panel/PanelSidebar.jsx");
   const html = renderToStaticMarkup(React.createElement(Sidebar, {
-    pathname: "/dashboard/communications/news",
+    pathname: "/dashboard/referrals",
     member: { name: "Test Member", email: "member@example.test" },
   }));
   assert.doesNotMatch(html, /\/dashboard\/kyc|Verificación de identidad|KYC|Identidad verificada/);
-  for (const href of ["/dashboard", "/dashboard/communications", "/dashboard/communications/news",
-    "/dashboard/support", "/dashboard/communications/testimonials", "/dashboard/packages",
-    "/dashboard/coupons", "/dashboard/withdrawals", "/dashboard/profile", "/dashboard/rank", "/dashboard/network"]) {
+  for (const href of ["/dashboard", "/dashboard/referrals", "/dashboard/support", "/dashboard/packages",
+    "/dashboard/withdrawals", "/dashboard/profile", "/dashboard/rank", "/dashboard/network"]) {
     assert.ok(html.includes(`href="${href}"`), `missing retained destination ${href}`);
   }
   assert.match(html, /<button[^>]*type="button"[^>]*aria-label="Cerrar sesión"/);
   assert.doesNotMatch(html, /href="\/api\/auth\/logout"/);
   assert.match(html, /aria-label="Navegación del miembro"/);
-  assert.match(html, /href="\/dashboard\/communications\/news"[^>]*aria-current="page"/);
+  assert.match(html, /href="\/dashboard\/referrals"[^>]*aria-current="page"/);
 });
 
 test("retired KYC route has no remaining navigation title or false verified state", () => {

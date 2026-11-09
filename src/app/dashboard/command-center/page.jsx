@@ -27,7 +27,6 @@ export default function CommandCenterPage() {
       <div className="executive-container">
         <div className="executive-page-header">
           <div>
-            <p className="executive-eyebrow">Administracion</p>
             <h1 className="executive-title">Centro de Mando</h1>
             <p className="executive-subtitle">
               Vista ejecutiva para alertas, sanidad de red, margen, retiros y fondo corporativo.

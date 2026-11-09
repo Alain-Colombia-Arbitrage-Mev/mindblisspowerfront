@@ -13,7 +13,6 @@ export default function PaymentsPage() {
       <div className="executive-container">
         <div className="executive-page-header">
           <div>
-            <p className="executive-eyebrow">Finanzas</p>
             <h1 className="executive-title">Mis pagos</h1>
             <p className="executive-subtitle">
               Tus pagos realizados, comisiones disponibles para retiro y solicitudes en curso.

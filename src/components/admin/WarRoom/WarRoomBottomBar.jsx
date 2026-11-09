@@ -184,8 +184,8 @@ export default function WarRoomBottomBar({ sim }) {
                 initial={{ opacity: 0, x: -8 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: i * 0.08 }}
-                className="p-2 rounded-lg border-l-3 flex items-start justify-between"
-                style={{ background: `${insight.color}0a`, borderColor: insight.color }}
+                className="p-2 rounded-lg border flex items-start justify-between"
+                style={{ background: `${insight.color}0a`, borderColor: `${insight.color}55` }}
               >
                 <div className="flex-1">
                   <p style={{ color: 'white', fontSize: 11, fontWeight: 700, margin: 0 }}>{insight.title}</p>

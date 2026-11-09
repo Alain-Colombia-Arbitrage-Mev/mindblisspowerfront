@@ -6,7 +6,7 @@ const reply = (body, status = 200) => Response.json(body, { status, headers: { '
 const paths = new Map([['history', '/api/payments/nowpayments/purchases'], ['resume', '/api/payments/nowpayments/purchases/resume'],
   ['cancel', '/api/payments/nowpayments/purchases/cancel']]);
 const safeErrors = new Set(['purchase_not_found', 'purchase_cannot_cancel', 'purchase_cannot_resume', 'membership_payment_pending_review',
-  'membership_purchase_already_processed', 'unauthenticated', 'invalid_id_token', 'upstream_unavailable']);
+  'membership_purchase_already_processed', 'unauthenticated', 'invalid_id_token', 'upstream_unavailable', 'authentication_unavailable']);
 
 async function boundedJSON(response, signal, limit) {
   if (!/^application\/json(?:\s*;|$)/i.test(response.headers.get('content-type') || '')) throw new Error('invalid_content');
@@ -40,7 +40,7 @@ export async function handleNOWPaymentsPurchases(request, { action, env, identit
   if (denied) return reply({ error: denied.error }, denied.status);
   if (!env.PAYMENTS_SERVICE_TOKEN) return reply({ error: 'purchases_unavailable' }, 503);
   let verified;
-  try { verified = await identity(); } catch { return reply({ error: 'purchases_unavailable' }, 503); }
+  try { verified = await identity(); } catch { return reply({ error: 'authentication_unavailable' }, 503); }
   const claims = verified?.claims;
   if (!verified?.token || claims?.email_verified !== true || typeof claims.sub !== 'string' || !claims.sub.trim()
       || typeof claims.email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(claims.email)

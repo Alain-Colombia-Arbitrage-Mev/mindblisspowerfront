@@ -1,5 +1,5 @@
 import { rawIdToken } from '@/lib/admin-bff';
-import { verifyIdToken } from '@/lib/verify-id-token';
+import { verifyIdTokenForSession as verifyIdToken } from '@/lib/verify-id-token';
 import { coreFetch, runtimeEnvironment } from '@/lib/cloudflare-runtime.mjs';
 import { handleMembershipCheckout } from '@/lib/checkout-bff.mjs';
 

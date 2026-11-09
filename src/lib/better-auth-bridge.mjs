@@ -18,6 +18,19 @@ export function betterAuthEnabled(env = runtimeEnvironment()) {
   return env.AUTH_PROVIDER === "better-auth";
 }
 
+const supportedSocialProviders = new Set(['google', 'apple']);
+
+export function betterAuthSocialProviders(env = runtimeEnvironment()) {
+  if (!betterAuthEnabled(env)) return [];
+  const configured = String(env.AUTH_SOCIAL_PROVIDERS || '').split(',')
+    .map(provider => provider.trim().toLowerCase()).filter(provider => supportedSocialProviders.has(provider));
+  return [...new Set(configured)];
+}
+
+export function betterAuthSocialProviderEnabled(provider, env = runtimeEnvironment()) {
+  return supportedSocialProviders.has(provider) && betterAuthSocialProviders(env).includes(provider);
+}
+
 export class AuthServiceUnavailable extends Error {
   constructor() { super('authentication_unavailable'); this.name = 'AuthServiceUnavailable'; }
 }
@@ -40,7 +53,7 @@ export function betterAuthConfig(env = runtimeEnvironment()) {
   return base.origin;
 }
 
-const authCookie = /^(?:__Secure-)?better-auth\.(?:session_token|session_data|dont_remember)$/;
+const authCookie = /^(?:__Secure-)?better-auth\.(?:session_token|session_data|dont_remember|state|oauth_state)$/;
 export function betterAuthCookies(value = "") {
   if (/[\r\n]/.test(value)) return "";
   return value.split(";").map(part => part.trim()).filter(part => authCookie.test(part.split("=")[0])).join("; ");
@@ -103,12 +116,13 @@ const emailDeliveryPaths = new Set(['/sign-up/email', '/email-otp/send-verificat
 export const betterAuthTimeoutMs = path => emailDeliveryPaths.has(path) ? 20000 : 8000;
 
 /** @param {string} path
- * @param {{cookie?: string, method?: string, body?: unknown, origin?: string, signal?: AbortSignal}} [options]
+ * @param {{cookie?: string, method?: string, body?: unknown, origin?: string, signal?: AbortSignal, query?: string}} [options]
  */
-export async function fetchBetterAuth(path, { cookie = "", method = "GET", body, origin, signal } = {},
+export async function fetchBetterAuth(path, { cookie = "", method = "GET", body, origin, signal, query = '' } = {},
   { env = runtimeEnvironment(), fetchImpl = coreFetch, clientIp = '' } = {}) {
   const base = betterAuthConfig(env);
   if (!/^\/[a-z0-9/-]+$/.test(path)) throw new Error("invalid_auth_path");
+  if (query && (!query.startsWith('?') || query.length > 8192 || /[\r\n#]/.test(query))) throw new Error('invalid_auth_query');
   if (!isIP(clientIp)) throw new Error('trusted_proxy_required');
   const serialized = body ? JSON.stringify(body) : '';
   const sessionCookie = betterAuthCookies(cookie);
@@ -116,7 +130,7 @@ export async function fetchBetterAuth(path, { cookie = "", method = "GET", body,
   const hash = value => createHash('sha256').update(value).digest('hex');
   const signature = createHmac('sha256', env.AUTH_BFF_SHARED_SECRET).update([method, `/api/auth${path}`, timestamp, clientIp, hash(sessionCookie), hash(serialized)].join('\n')).digest('hex');
   const deadline = AbortSignal.timeout(betterAuthTimeoutMs(path));
-  return fetchImpl(`${base}/api/auth${path}`, {
+  return fetchImpl(`${base}/api/auth${path}${query}`, {
     method, redirect: "manual", cache: "no-store",
     signal: signal ? AbortSignal.any([signal, deadline]) : deadline,
     headers: { cookie: sessionCookie, 'x-vp-auth-client-ip': clientIp, 'x-vp-auth-timestamp': timestamp, 'x-vp-auth-signature': signature,
@@ -190,6 +204,74 @@ export const browserAuthPaths = new Set([
   "send-verification-email",
 ]);
 
+const socialAuthorizationOrigins = {
+  google: 'https://accounts.google.com',
+  apple: 'https://appleid.apple.com',
+};
+
+function validSocialAuthorizationURL(provider, value) {
+  try {
+    const url = new URL(value);
+    return !url.username && !url.password && !url.hash
+      && url.origin === socialAuthorizationOrigins[provider]
+      && (provider !== 'apple' || url.pathname === '/auth/authorize')
+      && (provider !== 'google' || url.pathname.startsWith('/o/oauth2/'));
+  } catch { return false; }
+}
+
+function socialFailureRedirect(origin) {
+  return new URL('/login?auth=social-failed', origin).toString();
+}
+
+function authSetCookies(upstream, env) {
+  const issued = upstream.headers.getSetCookie();
+  if (issued.length > 8) throw new Error('invalid_social_cookies');
+  return issued.map(value => browserAuthCookie(value, env.NODE_ENV === 'production')).filter(Boolean);
+}
+
+export async function proxyBetterAuthSocialStart(request, dependencies = {}) {
+  const env = dependencies.env || runtimeEnvironment();
+  const headers = { 'Cache-Control': 'private, no-store' };
+  if (!betterAuthEnabled(env) || request.method !== 'POST') return Response.json({ error: 'not_found' }, { status: 404, headers });
+  const expectedOrigin = env.AUTH_PUBLIC_ORIGIN || new URL(request.url).origin;
+  if (request.headers.get('origin') !== expectedOrigin
+    || new URL(request.url).search || request.headers.has('content-encoding')
+    || !/^application\/json(?:\s*;|$)/i.test(request.headers.get('content-type') || '')) {
+    return Response.json({ error: 'invalid_social_request' }, { status: 400, headers });
+  }
+  try {
+    const body = await readAuthBody(request);
+    const keys = body && typeof body === 'object' && !Array.isArray(body) ? Object.keys(body) : [];
+    const provider = keys.length === 1 && keys[0] === 'provider' && typeof body.provider === 'string'
+      ? body.provider.trim().toLowerCase() : '';
+    if (!betterAuthSocialProviderEnabled(provider, env)) {
+      return Response.json({ error: 'provider_unavailable' }, { status: 404, headers });
+    }
+    const transport = { ...dependencies, clientIp: trustedAuthClientIp(request.headers, env) };
+    const upstream = await fetchBetterAuth('/sign-in/social', {
+      method: 'POST', origin: expectedOrigin, cookie: request.headers.get('cookie') || '', signal: request.signal,
+      body: {
+        provider,
+        callbackURL: new URL('/dashboard', expectedOrigin).toString(),
+        errorCallbackURL: socialFailureRedirect(expectedOrigin),
+        disableRedirect: true,
+      },
+    }, transport);
+    const data = await readAuthUpstreamBody(upstream, request.signal);
+    if (upstream.status !== 200 || !/^application\/json(?:\s*;|$)/i.test(upstream.headers.get('content-type') || '')
+      || data?.redirect !== false || !validSocialAuthorizationURL(provider, data?.url)) {
+      throw new Error('invalid_social_start');
+    }
+    const response = Response.json({ url: data.url }, { headers });
+    for (const cookie of authSetCookies(upstream, env)) {
+      if (/better-auth\.(?:state|oauth_state)=/.test(cookie)) response.headers.append('set-cookie', cookie);
+    }
+    return response;
+  } catch {
+    return Response.json({ error: 'authentication_unavailable' }, { status: 503, headers });
+  }
+}
+
 export async function proxyBetterAuthKeys(request, dependencies = {}) {
   const env = dependencies.env || runtimeEnvironment();
   if (!betterAuthEnabled(env)) return Response.json({ error: 'not_found' }, { status: 404 });
@@ -241,6 +323,97 @@ async function confirmedSignInCookies(upstream, data, verified, request, origin,
     throw new Error('invalid_sign_in_session');
   }
   return cookies;
+}
+
+const socialCallbackFields = new Set(['code', 'error', 'device_id', 'error_description', 'state', 'user']);
+
+function validatedSocialCallbackSearch(value) {
+  if (typeof value !== 'string' || value.length > 8192 || /[\r\n#]/.test(value)) throw new Error('invalid_social_callback');
+  const params = new URLSearchParams(value.startsWith('?') ? value.slice(1) : value);
+  for (const key of params.keys()) {
+    if (!socialCallbackFields.has(key) || params.getAll(key).length !== 1) throw new Error('invalid_social_callback');
+  }
+  if (!params.get('state') || (!params.get('code') && !params.get('error'))) throw new Error('invalid_social_callback');
+  return params.toString();
+}
+
+async function readSocialCallbackForm(request) {
+  const reader = request.body?.getReader();
+  if (!reader) return '';
+  const chunks = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > 16384) { await reader.cancel(); throw new RangeError('body_too_large'); }
+      chunks.push(value);
+    }
+    const combined = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) { combined.set(chunk, offset); offset += chunk.byteLength; }
+    return new TextDecoder().decode(combined);
+  } finally { reader.releaseLock(); }
+}
+
+async function confirmedSocialSignInCookies(upstream, request, origin, transport, env) {
+  const cookies = authSetCookies(upstream, env);
+  const sessions = cookies.filter(value => /^(?:__Secure-)?better-auth\.session_token=[^;\s,]+;/.test(value));
+  if (sessions.length !== 1) throw new Error('missing_social_session');
+  const maxAges = [...sessions[0].matchAll(/(?:^|;)\s*max-age=([^;]+)/ig)];
+  const expiries = [...sessions[0].matchAll(/(?:^|;)\s*expires=([^;]+)/ig)];
+  if (maxAges.length > 1 || expiries.length > 1
+    || (maxAges.length && (!/^\d+$/.test(maxAges[0][1]) || !Number.isSafeInteger(Number(maxAges[0][1])) || Number(maxAges[0][1]) <= 0))
+    || (!maxAges.length && expiries.length && !(Date.parse(expiries[0][1]) > Date.now()))) {
+    throw new Error('expired_social_cookie');
+  }
+  const sessionCookie = betterAuthCookies(sessions[0].split(';')[0]);
+  const canonical = await fetchBetterAuth('/get-session', { cookie: sessionCookie, origin, signal: request.signal }, transport);
+  const identity = await readAuthBody({ body: canonical.body, signal: request.signal });
+  if (canonical.status !== 200 || !/^application\/json(?:\s*;|$)/i.test(canonical.headers.get('content-type') || '')
+    || !identity || typeof identity !== 'object' || Array.isArray(identity) || identity.error || identity.code
+    || !identity.session || typeof identity.session !== 'object' || Array.isArray(identity.session)
+    || typeof identity.session.id !== 'string' || !identity.session.id.trim() || identity.session.id.length > 128
+    || typeof identity.session.userId !== 'string' || identity.session.userId !== identity.user?.id
+    || typeof identity.session.expiresAt !== 'string' || identity.session.expiresAt.length > 64
+    || !(Date.parse(identity.session.expiresAt) > Date.now())
+    || !identity.user || typeof identity.user !== 'object' || Array.isArray(identity.user)
+    || typeof identity.user.email !== 'string' || !identity.user.email.trim() || identity.user.emailVerified !== true
+    || request.signal.aborted) throw new Error('invalid_social_session');
+  return cookies;
+}
+
+export async function proxyBetterAuthSocialCallback(request, provider, dependencies = {}) {
+  const env = dependencies.env || runtimeEnvironment();
+  const expectedOrigin = env.AUTH_PUBLIC_ORIGIN || new URL(request.url).origin;
+  const failure = socialFailureRedirect(expectedOrigin);
+  const redirect = (location = failure, status = 302, cookies = []) => {
+    const response = new Response(null, { status, headers: { location, 'Cache-Control': 'private, no-store' } });
+    for (const cookie of cookies) response.headers.append('set-cookie', cookie);
+    return response;
+  };
+  if (!betterAuthEnabled(env) || !betterAuthSocialProviderEnabled(provider, env)) return redirect();
+  try {
+    if (request.method === 'POST') {
+      if (!/^application\/x-www-form-urlencoded(?:\s*;|$)/i.test(request.headers.get('content-type') || '')) return redirect();
+      const search = validatedSocialCallbackSearch(await readSocialCallbackForm(request));
+      return redirect(new URL(`/api/auth/callback/${provider}?${search}`, expectedOrigin).toString(), 303);
+    }
+    if (request.method !== 'GET') return redirect();
+    const search = validatedSocialCallbackSearch(new URL(request.url).search);
+    const transport = { ...dependencies, clientIp: trustedAuthClientIp(request.headers, env) };
+    const upstream = await fetchBetterAuth(`/callback/${provider}`, {
+      method: 'GET', origin: expectedOrigin, cookie: request.headers.get('cookie') || '', signal: request.signal, query: `?${search}`,
+    }, transport);
+    if (![302, 303].includes(upstream.status)) throw new Error('invalid_social_callback_response');
+    let target;
+    try { target = new URL(upstream.headers.get('location') || '', expectedOrigin); } catch { throw new Error('invalid_social_redirect'); }
+    if (target.origin !== expectedOrigin || target.pathname !== '/dashboard' || target.search || target.hash
+      || target.username || target.password) throw new Error('invalid_social_redirect');
+    const cookies = await confirmedSocialSignInCookies(upstream, request, expectedOrigin, transport, env);
+    return redirect(target.toString(), 302, cookies);
+  } catch { return redirect(); }
 }
 
 export async function proxyBetterAuth(request, path, dependencies = {}) {

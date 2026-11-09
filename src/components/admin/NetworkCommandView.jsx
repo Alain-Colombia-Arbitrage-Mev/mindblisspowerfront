@@ -102,10 +102,10 @@ export default function NetworkCommandView({ selectedPerson }) {
           }}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <TrendingUp size={16} className="text-purple-400" />
+              <TrendingUp size={16} className="text-[var(--vp-link)]" />
               <span className="text-sm font-semibold text-white">Direct Referrals</span>
             </div>
-            <p className="text-lg font-black text-purple-400">{mockNetwork.directReferrals}</p>
+            <p className="text-lg font-black text-[var(--vp-link)]">{mockNetwork.directReferrals}</p>
           </div>
         </motion.div>
       </div>

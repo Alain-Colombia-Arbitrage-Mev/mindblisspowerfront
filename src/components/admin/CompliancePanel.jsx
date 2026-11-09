@@ -196,7 +196,7 @@ export default function CompliancePanel({ compact = false }) {
           <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 10, fontWeight: 700, margin: '0 0 8px 0' }}>AUDIT LOG (RECENT 20)</p>
           <div className="space-y-1 max-h-96 overflow-y-auto">
             {dashboard.recentLogs.map((log, i) => (
-              <div key={i} className="p-3 rounded-lg text-xs" style={{ background: 'rgba(255,255,255,0.03)', borderLeft: `3px solid ${log.severity === 'critical' ? '#ef4444' : log.severity === 'warning' ? '#fb923c' : '#3b82f6'}` }}>
+              <div key={i} className="p-3 rounded-lg border text-xs" style={{ background: 'rgba(255,255,255,0.03)', borderColor: `${log.severity === 'critical' ? '#ef4444' : log.severity === 'warning' ? '#fb923c' : '#3b82f6'}55` }}>
                 <div className="flex items-center justify-between mb-1">
                   <span style={{ color: 'rgba(255,255,255,0.6)', fontWeight: 600 }}>{log.eventType}</span>
                   <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '9px' }}>{new Date(log.timestamp).toLocaleTimeString()}</span>

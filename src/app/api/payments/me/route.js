@@ -1,32 +1,41 @@
 import { coreFetch } from '@/lib/cloudflare-runtime.mjs';
-import { rawIdToken } from "@/lib/admin-bff";
+import { rawIdToken, idTokenHeader } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
-import { idTokenHeader } from "@/lib/admin-bff";
-import { verifiedEmailFromIdToken } from "@/lib/verify-id-token";
+import { verifiedEmailFromIdTokenForSession as verifiedEmailFromIdToken } from "@/lib/verify-id-token";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const privateHeaders = { "Cache-Control": "private, no-store", Vary: "Cookie" };
+const safeErrors = new Set(["invalid_id_token", "id_token_required", "identity_mismatch", "account_suspended",
+  "authentication_unavailable", "rate_limited", "too_many_requests", "internal"]);
 
 /**
  * Resumen de pagos + posición + comisiones del miembro autenticado.
- * Valida la sesión Cognito y delega al servicio Go vp-payments.
+ * Verifica la sesión y delega al servicio Go, que vuelve a verificar el mismo JWT.
  */
 export async function GET(request) {
-  const idToken = await rawIdToken();
+  let idToken, email;
+  try {
+    idToken = await rawIdToken();
+    if (idToken) email = await verifiedEmailFromIdToken(idToken);
+  } catch {
+    return NextResponse.json({ error: "authentication_unavailable" }, {
+      status: 503, headers: privateHeaders,
+    });
+  }
   if (!idToken)
-    return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+    return NextResponse.json({ error: "unauthenticated" }, { status: 401, headers: privateHeaders });
 
-  const email = await verifiedEmailFromIdToken(idToken);
   if (!email)
-    return NextResponse.json({ error: "session-invalid" }, { status: 401 });
+    return NextResponse.json({ error: "session-invalid" }, { status: 401, headers: privateHeaders });
 
   const base = process.env.VP_PAYMENTS_URL;
   const token = process.env.PAYMENTS_SERVICE_TOKEN;
   if (!base || !token)
     return NextResponse.json(
       { error: "payments-unconfigured" },
-      { status: 503 },
+      { status: 503, headers: privateHeaders },
     );
 
   try {
@@ -34,7 +43,8 @@ export async function GET(request) {
     const fresh = requestUrl.searchParams.get("fresh") === "1";
     const upstreamUrl = `${base}/api/payments/me?email=${encodeURIComponent(email)}${fresh ? "&fresh=1" : ""}`;
     const resp = await coreFetch(upstreamUrl, {
-      headers: { "X-VP-Service-Token": token, ...(await idTokenHeader()) },
+      headers: { "X-VP-Service-Token": token, ...(await idTokenHeader(idToken)) },
+      redirect: "manual",
       cache: "no-store",
       signal: AbortSignal.any([request.signal, AbortSignal.timeout(20_000)]),
     });
@@ -49,26 +59,25 @@ export async function GET(request) {
           : 0;
       return NextResponse.json(
         {
-          error: payload.error || "summary-failed",
+          error: safeErrors.has(payload?.error) ? payload.error : "summary-failed",
           ...(retryAfterSec ? { retryAfterSec } : {}),
         },
         {
           status: resp.status,
           headers: {
-            "Cache-Control": "private, no-store",
+            ...privateHeaders,
             ...(retryAfterSec ? { "Retry-After": String(retryAfterSec) } : {}),
           },
         },
       );
     }
     return NextResponse.json(payload, {
-      headers: { "Cache-Control": "private, no-store" },
+      headers: privateHeaders,
     });
-  } catch (error) {
-    console.error("payments/me proxy failed:", error.message);
+  } catch {
     return NextResponse.json(
       { error: "payments-unreachable" },
-      { status: 502 },
+      { status: 502, headers: privateHeaders },
     );
   }
 }

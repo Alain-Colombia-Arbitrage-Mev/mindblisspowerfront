@@ -7,7 +7,7 @@ import { betterAuthPasswordRequest, betterAuthPasswordFailure, verifiedEmailSign
 import { registrationRequired, registrationRedirect, registrationUrl } from '../register/registration-model.mjs';
 import { browserRequestDeadline } from '@/lib/browser-request-deadline.mjs';
 
-export default function BetterAuthPasswordLogin({ email, setEmail, onBusy, onError, onNotice, onVerified, onRegistrationRequired = undefined, rememberReferral, registrationHref = '' }) {
+export default function BetterAuthPasswordLogin({ email, setEmail, onBusy, onError, onNotice, onVerified, onRegistrationRequired = undefined, onUseCode = undefined, rememberReferral, registrationHref = '' }) {
   const [password, setPassword] = useState('');
   const [visible, setVisible] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -90,18 +90,23 @@ export default function BetterAuthPasswordLogin({ email, setEmail, onBusy, onErr
   }
 
   return (
-    <form onSubmit={submit} noValidate aria-busy={loading} className="space-y-4">
-      <p className="text-sm leading-6 text-[var(--vp-muted)]">Si ya creaste una contraseña de acceso, úsala aquí con el correo original de tu cuenta. También puedes entrar con un código al correo, aunque nunca hayas creado una contraseña. No compartas tu contraseña ni tus códigos.</p>
+    <form onSubmit={submit} noValidate aria-busy={loading} className="auth-password-form">
       <RegistrationField id="password-login-email" inputRef={emailInput} error={fieldErrors.email} name="email" label="Correo electrónico" type="email" autoComplete="email" autoCapitalize="none" spellCheck={false} required maxLength={254}
         value={email} disabled={loading} onChange={event => { setEmail(event.target.value); setFieldErrors({}); setRequiresVerification(false); onError(''); }} />
       <RegistrationPassword id="password-login-password" inputRef={passwordInput} error={fieldErrors.password} name="password" label="Contraseña" autoComplete="current-password" required maxLength={128}
         value={password} disabled={loading} onChange={event => { setPassword(event.target.value); setFieldErrors({}); onError(''); }} visible={visible} onToggle={() => setVisible(current => !current)} />
-      <RegistrationButton type="submit" disabled={loading} loading={loading}>{loading ? 'Comprobando acceso…' : 'Entrar con mi contraseña'}</RegistrationButton>
-      <div className="space-y-1 rounded-lg border border-[var(--vp-border)] p-3 text-sm leading-6">
-        <p className="m-0 font-bold text-[var(--vp-text)]">¿No tienes contraseña o la olvidaste?</p>
-        <Link href="/forgot-password" className="inline-flex min-h-11 items-center font-bold text-[var(--vp-accent)] underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--vp-accent)]">Crear o cambiar contraseña con un código al correo</Link>
-        <p className="m-0 text-[var(--vp-muted)]">Usa el correo original de tu cuenta. No necesitas cambiarlo ni crear otra cuenta. En «Crear o cambiar contraseña», solicita el código de recuperación, escríbelo y repite tu nueva contraseña para confirmarla. Los pasos y límites de recuperación se muestran allí; ese código no es el de inicio de sesión.</p>
+      <div className="auth-password-links">
+        <button type="button" onClick={onUseCode}>Entrar con código</button>
+        <Link href="/forgot-password">¿Olvidaste tu contraseña?</Link>
       </div>
+      <details className="auth-password-help">
+        <summary>¿No tienes contraseña o la olvidaste?</summary>
+        <p>Si ya creaste una contraseña, úsala aquí. También puedes crear o cambiar una contraseña aunque nunca hayas creado una contraseña.</p>
+        <p>Usa el correo original de tu cuenta. No necesitas cambiarlo ni crear otra cuenta: solicita el código de recuperación, escríbelo y repite tu nueva contraseña para confirmarla.</p>
+        <p>Los pasos y límites de recuperación se muestran allí; ese código no es el de inicio de sesión. No compartas tu contraseña ni tus códigos.</p>
+        <Link href="/forgot-password">Crear o cambiar contraseña con un código</Link>
+      </details>
+      <RegistrationButton type="submit" disabled={loading} loading={loading}>{loading ? 'Comprobando acceso…' : 'Iniciar sesión'}</RegistrationButton>
       {requiresVerification ? <Link href={registrationHref || registrationUrl(email, '', '', true)}
         className="inline-flex min-h-11 items-center text-sm text-[var(--vp-text)] underline">Verificar mi correo de registro</Link> : null}
     </form>

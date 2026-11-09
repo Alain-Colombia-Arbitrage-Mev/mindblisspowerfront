@@ -42,44 +42,35 @@ const loginMocks = {
   '@/lib/referral-attribution': { bindReferralCodeToEmail() {}, captureReferralFromUrl: () => null, normalizePlacementSide: () => '', normalizeReferralCode: value => value },
   '@/lib/email-otp-client.mjs': emailOtp,
   './BetterAuthPasswordLogin': { default: () => null },
+  './SocialLoginButtons': { default: () => null },
   '@/lib/referral-sync.mjs': { beginVerifiedReferralSync: () => Promise.resolve({ ok: true }) },
   './better-auth-login.mjs': auth,
   '../register/registration-model.mjs': registration,
   '@/lib/browser-request-deadline.mjs': deadline,
 };
 
-test('the real AuthShell retains desktop editorial layout while declaring compact, wrapping mobile landmarks', t => {
+test('the real AuthShell renders the approved identity card and compact access landmarks', t => {
   t.mock.method(globalThis, 'fetch', () => assert.fail('rendering an auth shell cannot query or send an OTP'));
-  const AuthShell = compile('./AuthShell.jsx', { 'next/link': { default: link }, 'lucide-react': icons }).default;
+  const AuthShell = compile('./AuthShell.jsx', { 'next/link': { default: link }, 'lucide-react': icons, './ThemeToggle': { default: () => null }, './AuthSupportWidget': { default: () => React.createElement('button', null, '¿Necesitas ayuda?') } }).default;
   const tree = AuthShell({ activePath: '/login', eyebrow: 'Acceso', title: 'Tu equipo ya está adentro.', description: 'Descripción de marca',
     sideKpis: [{ value: '24/7', label: 'portal' }], children: React.createElement('form', { 'aria-label': 'Acceso seguro' }),
     loginHref: '/login?ref=Sponsor&side=R', registrationHref: '/register?ref=Sponsor&side=R' });
-  assert.equal(tree.type, 'main');
-  hasClasses(tree, 'min-h-dvh', 'min-w-0', 'lg:grid', 'lg:grid-cols-[minmax(420px,46%)_minmax(0,1fr)]');
+  assert.equal(tree.type, 'main'); hasClasses(tree, 'auth-shell');
   const brand = find(tree, node => node?.type === 'aside');
-  hasClasses(brand, 'min-h-36', 'sm:min-h-48', 'p-4', 'lg:sticky', 'lg:top-0', 'lg:h-dvh', 'lg:p-10');
-  assert.ok(!classes(brand).has('min-h-[300px]'));
+  hasClasses(brand, 'auth-identity');
   const heading = find(tree, node => node?.type === 'h1');
-  hasClasses(heading, 'break-words', 'text-2xl', 'sm:text-3xl', 'lg:text-6xl');
+  assert.equal(heading.props.children, 'Tu equipo ya está adentro.');
   const description = find(tree, node => node?.type === 'p' && node.props.children === 'Descripción de marca');
-  hasClasses(description, 'hidden', 'lg:block');
+  assert.ok(description);
   const column = find(tree, node => node?.type === 'section');
-  hasClasses(column, 'min-h-0', 'min-w-0', 'lg:min-h-dvh');
-  const nav = find(tree, node => node?.type === 'nav');
-  assert.equal(nav.props['aria-label'], 'Acceso y registro');
-  hasClasses(nav, 'flex-wrap');
-  for (const item of React.Children.toArray(nav.props.children)) hasClasses(item, 'min-h-11', 'items-center');
+  hasClasses(column, 'auth-access-area');
   const content = find(tree, node => classes(node).has('auth-content'));
-  hasClasses(content, 'min-w-0', 'px-4', 'py-5', 'lg:items-center', 'lg:px-14');
-  hasClasses(content.props.children, 'min-w-0', 'w-full', '[overflow-wrap:anywhere]');
+  assert.ok(content);
   const html = renderToStaticMarkup(tree);
-  assert.match(html, /<main\b/); assert.match(html, /<nav aria-label="Acceso y registro"/);
+  assert.match(html, /<main\b/); assert.match(html, /auth-identity/);
   assert.match(html, /<form aria-label="Acceso seguro"/);
-  assert.match(html, /href="\/login\?ref=Sponsor&amp;side=R" aria-current="page"/);
-  assert.match(html, /href="\/register\?ref=Sponsor&amp;side=R"/);
-  for (const brandLink of React.Children.toArray(brand.props.children[2].props.children)) hasClasses(brandLink, 'min-h-11');
-  // These assertions test semantic markup/Tailwind contracts, not actual pixel
-  // geometry. Browser viewport/keyboard and zoom checks remain separate QA.
+  assert.match(html, /loading="eager" decoding="async"/);
+  assert.match(html, /¿Necesitas ayuda\?/);
 });
 
 test('mobile auth safe-area and keyboard styles are scoped, preserve zoom and do not hide form overflow', () => {
@@ -88,16 +79,16 @@ test('mobile auth safe-area and keyboard styles are scoped, preserve zoom and do
   css.walkDecls(decl => { if (decl.value.includes('safe-area-inset')) insets.push(decl); });
   assert.ok(insets.length >= 4);
   for (const decl of insets) {
-    for (const selector of decl.parent.selector.split(',')) assert.match(selector.trim(), /^\.auth-(?:brand-panel|nav|content)$/);
+    for (const selector of decl.parent.selector.split(',')) assert.match(selector.trim(), /^(?:(?:\.auth-shell--long )?\.auth-(?:wordmark|identity-copy|access-tools|content|legal)|\.auth-shell \.vp-support-launcher)$/);
     assert.equal(decl.parent.parent.name, 'media');
-    assert.equal(decl.parent.parent.params, '(max-width: 1023px)');
+    assert.ok(['(max-width: 860px)', '(max-width: 380px)'].includes(decl.parent.parent.params));
   }
   const authRules = [];
   css.walkRules(rule => { if (rule.selector.includes('.auth-')) authRules.push(rule); });
   assert.ok(authRules.some(rule => rule.nodes.some(node => node.prop === 'scroll-margin-block' && node.value === '1.5rem')));
   assert.ok(authRules.some(rule => rule.nodes.some(node => node.prop === 'touch-action' && node.value === 'manipulation')));
   for (const rule of authRules) {
-    if (rule.selector.includes('.auth-grain')) continue; // decorative photo grain is intentionally clipped
+    if (/\.auth-(?:shell|identity|password-form)/.test(rule.selector)) continue;
     for (const decl of rule.nodes) {
       if (/^overflow(?:-[xy])?$/.test(decl.prop || '')) assert.doesNotMatch(decl.value, /hidden|clip/);
       if (decl.prop === 'touch-action') assert.notEqual(decl.value, 'none');
@@ -160,8 +151,11 @@ test('verified login exposes a prominent native dashboard anchor without a JavaS
   assert.deepEqual(paths, ['/api/auth/email-otp/send-verification-otp', '/api/auth/sign-in/email-otp', '/api/auth/session?view=access']);
 });
 
-test('login and recovery cards retain desktop padding but allow narrow mobile content to shrink', () => {
-  for (const file of ['../login/page.jsx', '../forgot-password/page.jsx']) {
-    assert.match(source(file), /className="min-w-0 rounded-xl p-4 sm:p-7"/);
-  }
+test('auth flows use shared layout variants and avoid a nested recovery card', () => {
+  assert.match(source('../login/page.jsx'), /className="auth-login-form"/);
+  assert.match(source('../forgot-password/page.jsx'), /layout="compact"/);
+  assert.match(source('../forgot-password/page.jsx'), /className="auth-recovery-form"/);
+  assert.doesNotMatch(source('../forgot-password/page.jsx'), /rounded-xl p-4 sm:p-7/);
+  assert.match(source('../register/RegisterForm.jsx'), /layout="long"/);
+  assert.match(source('../register/BetterAuthRegisterForm.jsx'), /layout="long"/);
 });

@@ -3,8 +3,7 @@ import { Activity, Search } from "lucide-react";
 function PageHeader({ eyebrow, title, subtitle, action = null }) {
   return (
     <div className="executive-page-header">
-      <div>
-        <p className="executive-eyebrow">{eyebrow}</p>
+      <div aria-label={eyebrow ? `${eyebrow}: ${title}` : title}>
         <h1 className="executive-title">{title}</h1>
         {subtitle && <p className="executive-subtitle">{subtitle}</p>}
       </div>

@@ -362,7 +362,7 @@ function MemberNetwork() {
               { label: 'Derecha',        value: confirmed.right,  color: 'var(--vp-amber)' },
               { label: 'Activos',        value: dataset.summary.activeCount, color: 'var(--vp-text-soft)' },
             ].map((s, i) => (
-              <div key={i} style={{ padding: '8px 10px', borderRadius: 9, background: 'var(--vp-surface)', border: '1px solid var(--vp-border)', borderLeft: `2px solid ${s.color}` }}>
+              <div key={i} style={{ padding: '8px 10px', borderRadius: 9, background: 'var(--vp-surface)', border: '1px solid var(--vp-border)' }}>
                 <p style={{ color: 'var(--vp-subtle)', fontSize: 7, fontWeight: 700, margin: '0 0 2px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{s.label}</p>
                 <p style={{ color: s.color, fontSize: 16, fontWeight: 900, margin: 0 }}>{s.value}</p>
               </div>

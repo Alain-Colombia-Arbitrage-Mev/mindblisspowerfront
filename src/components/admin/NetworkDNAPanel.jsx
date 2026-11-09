@@ -91,7 +91,7 @@ export default function NetworkDNAPanel({ person = {} }) {
       <div className="grid grid-cols-2 gap-4">
         <div className="p-4 rounded-lg bg-white/5 border border-white/10">
           <p className="text-xs text-gray-400 mb-2">Team Size</p>
-          <p className="font-black text-purple-400 text-lg">{teamSize}</p>
+          <p className="font-black text-[var(--vp-link)] text-lg">{teamSize}</p>
         </div>
         <div className="p-4 rounded-lg bg-white/5 border border-white/10">
           <p className="text-xs text-gray-400 mb-2">Direct Referrals</p>

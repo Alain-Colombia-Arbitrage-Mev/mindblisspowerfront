@@ -258,8 +258,7 @@ export default function ForensicAudit() {
               onClick={() => setExpandedLog(expandedLog === entry.id ? null : entry.id)}
               style={{
                 background: 'rgba(255,255,255,0.03)',
-                border: '1px solid rgba(255,255,255,0.08)',
-                borderLeft: `3px solid ${RESULT_COLORS[entry.result]}`,
+                border: `1px solid ${RESULT_COLORS[entry.result]}55`,
               }}
             >
               <div className="flex items-center justify-between mb-2">

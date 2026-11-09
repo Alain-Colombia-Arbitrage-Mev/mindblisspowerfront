@@ -149,7 +149,7 @@ export default function LeaderResponseView() {
                     whileHover={{ scale: 1.02 }}
                     href={`mailto:${selectedLeader.email}`}
                     className="flex items-center gap-3 p-3 rounded-lg bg-white/5 border border-white/10 hover:border-white/20 transition-all text-sm">
-                    <Mail size={16} className="text-purple-400" />
+                    <Mail size={16} className="text-[var(--vp-link)]" />
                     <span className="text-white font-semibold text-xs truncate">{selectedLeader.email}</span>
                   </motion.a>
                 </div>

@@ -51,7 +51,6 @@ function TaskRow({ action, isSelected, onSelect, status }) {
         borderColor: 'rgba(255,255,255,0.05)',
         background: isSelected ? `${s.color}10` : isDone ? 'rgba(16,185,129,0.04)' : 'transparent',
         opacity: isDone ? 0.55 : 1,
-        borderLeft: `3px solid ${isSelected ? s.color : isDone ? '#10b981' : 'transparent'}`,
       }}
     >
       {/* Priority indicator */}

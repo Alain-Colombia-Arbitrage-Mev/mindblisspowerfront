@@ -8,7 +8,6 @@ export default function MessageListItem({ message, active, onSelect }) {
         background: active ? "var(--vp-surface-raised)" : "transparent",
         border: 0,
         borderBottom: "1px solid var(--vp-border)",
-        borderLeft: `3px solid ${active ? "var(--vp-accent)" : "transparent"}`,
         cursor: "pointer",
       }}
       type="button"

@@ -208,7 +208,7 @@ export default function AdvancedSimulator() {
                   <button key={val} onClick={() => setIntensidad(val)}
                     className={`w-full px-4 py-3 rounded-lg text-left font-semibold text-sm transition-all duration-200 ${
                       intensidad === val
-                        ? highlight ? 'bg-gradient-to-r from-purple-600 to-vicion-blue text-white shadow-lg' : 'bg-vicion-blue text-white shadow-lg shadow-blue-600/30'
+                        ? 'bg-vicion-blue text-white shadow-lg shadow-blue-600/30'
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
                     }`}>
                     <span className="block font-bold">{label}</span>
@@ -322,7 +322,7 @@ export default function AdvancedSimulator() {
               context: 'Alta participación · Red balanceada · Actividad constante',
               value: calcularSimulacion.sistemaCompleto,
               icon: Star,
-              color: 'from-purple-500 to-vicion-blue',
+              color: 'from-vicion-blue to-blue-400',
               pct: 100,
               highlight: true,
             },
@@ -415,7 +415,7 @@ export default function AdvancedSimulator() {
       {/* ══ BLOQUE 5: BONOS Y VALORIZACIÓN ═══════════════════════ */}
       <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mb-20">
         <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} transition={{ duration: 0.7 }}
-          variants={fadeUp} className="p-10 rounded-2xl bg-gradient-to-br from-purple-50 to-indigo-50 border border-purple-200">
+          variants={fadeUp} className="p-10 rounded-2xl bg-blue-50 border border-blue-200">
           
           <h2 className="font-montserrat font-black text-3xl text-vicion-deep mb-6">
             Participación en valorización del ecosistema
@@ -425,10 +425,10 @@ export default function AdvancedSimulator() {
             El ecosistema puede generar beneficios adicionales derivados del crecimiento de sus proyectos, incluyendo tecnología, desarrollos inmobiliarios y activos estratégicos.
           </p>
 
-          <div className="p-8 rounded-xl bg-white border border-purple-200 mb-8">
+          <div className="p-8 rounded-xl bg-white border border-blue-200 mb-8">
             <p className="text-sm text-gray-600 mb-3">Bonos estimados por valorización</p>
             <motion.p key={calcularSimulacion.bonusAleatorio} initial={{ scale: 0.8 }} animate={{ scale: 1 }}
-              transition={{ duration: 0.5 }} className="font-montserrat font-black text-5xl text-purple-600">
+              transition={{ duration: 0.5 }} className="font-montserrat font-black text-5xl text-vicion-blue">
               +{calcularSimulacion.bonusAleatorio}%
             </motion.p>
           </div>
@@ -472,7 +472,7 @@ export default function AdvancedSimulator() {
       {/* ══ BLOQUE LEGAL ═════════════════════════════════════════ */}
       <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mb-20">
         <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} transition={{ duration: 0.7 }}
-          variants={fadeUp} className="p-8 rounded-2xl bg-orange-50 border-l-4 border-orange-500">
+          variants={fadeUp} className="p-8 rounded-2xl bg-orange-50 border border-orange-300">
           
           <div className="flex gap-4">
             <AlertCircle size={32} className="text-orange-600 flex-shrink-0 mt-0.5" />

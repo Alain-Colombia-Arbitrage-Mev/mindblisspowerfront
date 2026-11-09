@@ -98,13 +98,15 @@ try {
     assert.equal(response.headers.get('set-cookie'), null);
     probes++;
   }
-  for (const path of ['/register?ref=SYNTHETIC-SPONSOR&side=R','/login?ref=SYNTHETIC-SPONSOR&side=R']) {
+  for (const [path, destination, message] of [
+    ['/register?ref=SYNTHETIC-SPONSOR&side=R', '/login?mode=code&ref=SYNTHETIC-SPONSOR&side=R', 'the built registration page preserves the referral when returning to access'],
+    ['/login?ref=SYNTHETIC-SPONSOR&side=R', '/register?ref=SYNTHETIC-SPONSOR&side=R', 'the built access page preserves the referral when continuing to registration'],
+  ]) {
     const response = await fetch(`http://127.0.0.1:8787${path}`, { redirect: 'manual', signal: AbortSignal.timeout(8000) });
     assert.equal(response.status, 200);
     const html = await response.text();
     const hrefs = [...html.matchAll(/href="([^"]+)"/g)].map(match => match[1].replaceAll('&amp;', '&'));
-    assert.ok(hrefs.includes('/register?ref=SYNTHETIC-SPONSOR&side=R'), 'the built registration tab preserves the referral');
-    assert.ok(hrefs.includes('/login?mode=code&ref=SYNTHETIC-SPONSOR&side=R'), 'the built access tab preserves the referral');
+    assert.ok(hrefs.includes(destination), message);
     assert.match(response.headers.get('cache-control'), /private.*no-store/);
     assert.equal(response.headers.get('set-cookie'), null);
     probes++;
@@ -126,8 +128,11 @@ try {
     assert.equal(response.status, expected, `${path}: ${body.slice(0, 200)}\n${logs}`);
     if (path === '/login') {
       staticChunk = body.match(/src="(\/_next\/static\/[^" ]+\.js(?:\?[^" ]*)?)"/)?.[1];
-      assert.match(body, /Código al correo/);
-      assert.match(body, /Usar mi contraseña/);
+      assert.match(body, /aria-label="Método de inicio de sesión"/);
+      assert.match(body, />Código<\/button>/);
+      assert.match(body, />Contraseña<\/button>/);
+      assert.match(body, /Continuar con Google/);
+      assert.match(body, /Continuar con Apple/);
       assert.match(body, /Crear cuenta/);
       assert.match(body, /solicita un código con tu correo original/);
       assert.match(body, /si tu vinculación requiere revisión, debe aprobarse antes de entrar/);
@@ -135,7 +140,7 @@ try {
       // Browser-context help may mention WhatsApp, never offer it as auth.
       assert.doesNotMatch(body, /Enviar código SMS|Código por WhatsApp|type="tel"|phoneConsent|account\/security/);
       assert.doesNotMatch(body, /fonts\.googleapis|fonts\.gstatic|chatwoot|soporte\.mindbliss/i);
-      assert.match(body, /rel="preload"[^>]*href="\/fonts\/montserrat-latin-wght\.woff2"/);
+      assert.match(body, /rel="preload"[^>]*href="\/fonts\/manrope-latin-wght\.woff2"/);
       assert.match(response.headers.get('cache-control'), /no-store/);
     }
     if (path === '/account/security') assert.equal(response.headers.get('location'), '/login');
@@ -187,7 +192,7 @@ try {
     const html = await response.text();
     assert.match(html, /Crear o cambiar contraseña/);
     assert.match(html, /Solicitar código por correo/);
-    assert.match(html, /5m/);
+    assert.match(html, /vence en 5 minutos/);
     assert.equal(response.headers.get('location'), null);
     assert.match(response.headers.get('cache-control'), /no-store/);
     probes++;
@@ -364,6 +369,24 @@ try {
   });
   assert.equal(attribution.status, 200); assert.match(attribution.headers.get('cache-control'), /private.*no-store/);
   assert.deepEqual(await attribution.json(), { ok: true, ref: '', preferred_side: '', positioned: false }); probes++;
+  const beforeReferralProofs = await (await fetch('http://127.0.0.1:8787/__synthetic_metrics')).json();
+  for (const [prefix, status, expected] of [
+    ['/__referral_positioned', 200, { ok: true, ref: '', preferred_side: '', positioned: true }],
+    ['/__referral_unavailable', 503, { error: 'referral_unavailable' }],
+  ]) {
+    const proof = await fetch(`http://127.0.0.1:8787${prefix}${attributionPath}`, {
+      headers: { ...sessionHeaders, 'X-VP-Expected-Email': 'fixture@example.test' }, signal: AbortSignal.timeout(8000),
+    });
+    assert.equal(proof.status, status); assert.deepEqual(await proof.json(), expected);
+    assert.match(proof.headers.get('cache-control'), /private.*no-store/);
+    assert.equal(proof.headers.get('set-cookie'), null); probes++;
+  }
+  const afterReferralProofs = await (await fetch('http://127.0.0.1:8787/__synthetic_metrics')).json();
+  assert.equal(afterReferralProofs.referralPreferenceReads, beforeReferralProofs.referralPreferenceReads + 2);
+  assert.equal(afterReferralProofs.referralPreferenceWrites, beforeReferralProofs.referralPreferenceWrites,
+    'position confirmation and unavailable reads never save a referral');
+  assert.equal(afterReferralProofs.nowpaymentsCheckoutCalls, beforeReferralProofs.nowpaymentsCheckoutCalls,
+    'reading referral state never creates an invoice');
   const crossAttribution = await fetch(`http://127.0.0.1:8787${attributionPath}`, { method: 'POST',
     headers: { ...authHeaders, ...sessionHeaders, origin: 'https://evil.example.test' },
     body: JSON.stringify({ ref: 'SYNTHETIC-SPONSOR', preferred_side: 'R', expected_email: 'fixture@example.test' }), signal: AbortSignal.timeout(8000),
@@ -484,6 +507,25 @@ try {
   assert.equal(cryptoPayload.fee_usd, '0.00');
   assert.equal(cryptoPayload.url, 'https://nowpayments.io/payment/?iid=12345'); probes++;
   const purchasePath = '/api/payments/nowpayments/purchases';
+  const beforeMembershipErrors = await (await fetch('http://127.0.0.1:8787/__synthetic_metrics')).json();
+  for (const path of ['/api/payments/me?fresh=1', purchasePath]) {
+    for (const [prefix, status, error] of [['/__membership_unavailable', 503, 'authentication_unavailable'],
+      ['/__membership_invalid', 401, 'invalid_id_token']]) {
+      const failure = await fetch(`http://127.0.0.1:8787${prefix}${path}`, { headers: sessionHeaders,
+        redirect: 'manual', signal: AbortSignal.timeout(8000) });
+      assert.equal(failure.status, status, `membership read ${prefix}${path}`);
+      assert.deepEqual(await failure.json(), { error });
+      assert.match(failure.headers.get('cache-control'), /private.*no-store/);
+      assert.equal(failure.headers.get('cloudflare-cdn-cache-control'), 'no-store');
+      assert.equal(failure.headers.get('set-cookie'), null);
+      assert.equal(failure.headers.get('location'), null); probes++;
+    }
+  }
+  const afterMembershipErrors = await (await fetch('http://127.0.0.1:8787/__synthetic_metrics')).json();
+  for (const key of ['nowpaymentsCheckoutCalls', 'nowpaymentsCaptures', 'nowpaymentsPurchaseResumes', 'nowpaymentsPurchaseCancels',
+    'signOutCalls', 'referralPreferenceWrites']) {
+    assert.equal(afterMembershipErrors[key], beforeMembershipErrors[key], `membership errors cannot cause ${key}`);
+  }
   const purchaseOrder = 'a02f5a55-5fa3-4239-845b-ac6b699110a1';
   const noHistory = await fetch(`http://127.0.0.1:8787${purchasePath}`, { headers: { 'cf-connecting-ip': '192.0.2.10' }, signal: AbortSignal.timeout(8000) });
   assert.equal(noHistory.status, 401); probes++;

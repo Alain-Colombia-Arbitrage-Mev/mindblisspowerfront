@@ -25,7 +25,10 @@ export function createMemberSummaryResource({ fresh = false, read = readMemberJs
     }).then(data => {
       if (pending === request && !request.controller.signal.aborted) publish({ loading: false, error: "", data });
     }).catch(error => {
-      if (pending === request && !request.controller.signal.aborted) publish({ loading: false, error: error.message, data: null });
+      if (pending === request && !request.controller.signal.aborted) publish({ loading: false, error: error.message, data: null,
+        ...(Number.isInteger(error?.status) && error.status >= 400 && error.status <= 599 ? { errorStatus: error.status } : {}),
+        ...(error?.status === 503 && error?.code === 'authentication_unavailable' ? { errorCode: 'authentication_unavailable' } : {}),
+      });
     }).finally(() => { if (pending === request) pending = null; });
     publish(initialState());
     return request.promise;

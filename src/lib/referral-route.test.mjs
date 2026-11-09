@@ -3,6 +3,7 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import ts from 'typescript';
 import * as links from './referral-links.mjs';
+import { AuthServiceUnavailable } from './better-auth-bridge.mjs';
 
 function route({ token = 'synthetic-token', email = 'member@example.test', rows = [
   [{ status: 'active', blacklisted: false, listed_by_blacklist: false }],
@@ -17,7 +18,8 @@ function route({ token = 'synthetic-token', email = 'member@example.test', rows 
     '@/lib/member-db': { memberDb: () => { if (databaseError) throw new Error('private-database-detail'); return async () => {
       const result = rows[calls++]; if (result instanceof Error) throw result; return result;
     }; } },
-    '@/lib/verify-id-token': { verifiedEmailFromIdToken: async () => email },
+    '@/lib/verify-id-token': { verifiedEmailFromIdTokenForSession: async () => email },
+    '@/lib/better-auth-bridge.mjs': { AuthServiceUnavailable },
     '@/lib/cloudflare-runtime.mjs': { runtimeEnvironment: () => env },
     '@/lib/referral-links.mjs': links,
   };

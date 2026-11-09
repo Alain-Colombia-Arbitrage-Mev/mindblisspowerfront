@@ -11,7 +11,6 @@ export default function WarRoomPage() {
               <ShieldAlert size={20} />
             </span>
             <div>
-              <p className="executive-eyebrow">Modulo desactivado</p>
               <h1 className="executive-title">War Room no esta disponible</h1>
             </div>
           </div>

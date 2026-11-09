@@ -1,7 +1,7 @@
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-const controlClass = 'min-h-12 w-full rounded-lg border bg-[var(--vp-surface-raised)] px-3 text-base text-[var(--vp-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--vp-accent)] disabled:opacity-60';
+const controlClass = 'min-h-14 w-full rounded-xl border bg-[var(--vp-surface-raised)] px-4 text-base font-medium text-[var(--vp-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--vp-link)] disabled:opacity-60';
 
 export function RegistrationField({ id, label, error = '', helper = '', inputRef = null, ...props }) {
   return (
@@ -30,7 +30,7 @@ export function RegistrationPassword({ id, label, error = '', helper = '', visib
 
 export function RegistrationButton({ loading = false, children, className = '', ...props }) {
   return (
-    <button className={cn('inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-[var(--vp-accent)] px-4 py-3 text-base font-bold text-[var(--vp-shell)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--vp-accent)] disabled:cursor-not-allowed disabled:opacity-60', className)} {...props}>
+    <button className={cn('inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-full bg-[var(--vp-accent)] px-5 py-3 text-sm font-bold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--vp-link)] disabled:cursor-not-allowed disabled:opacity-60', className)} {...props}>
       {loading ? <Loader2 size={18} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : null}{children}
     </button>
   );

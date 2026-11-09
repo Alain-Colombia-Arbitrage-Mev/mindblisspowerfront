@@ -46,7 +46,7 @@ export default function WarRoomActivityFeed() {
                 exit={{ opacity: 0, x: -16, height: 0 }}
                 transition={{ duration: 0.3 }}
                 className="flex items-center gap-2.5 px-3 py-2 rounded-lg"
-                style={{ background: i === 0 ? `${item.color}15` : 'transparent', borderLeft: `2px solid ${item.color}` }}>
+                style={{ background: i === 0 ? `${item.color}15` : 'transparent', border: `1px solid ${item.color}35` }}>
                 <div className="w-6 h-6 rounded flex items-center justify-center flex-shrink-0" style={{ background: `${item.color}18` }}>
                   <Icon size={12} style={{ color: item.color }} />
                 </div>

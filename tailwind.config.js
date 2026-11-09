@@ -7,9 +7,10 @@ const config = {
   theme: {
   	extend: {
       fontFamily: {
-        montserrat: ['Montserrat', 'sans-serif'],
-        inter: ['Montserrat', 'IBM Plex Sans', 'Inter', 'sans-serif'],
-        display: ['Montserrat', 'Archivo', 'sans-serif'],
+        montserrat: ['Manrope', 'sans-serif'],
+        inter: ['Manrope', 'Inter', 'sans-serif'],
+        display: ['Manrope', 'sans-serif'],
+        mono: ['IBM Plex Mono', 'ui-monospace', 'monospace'],
       },
   		borderRadius: {
   			lg: 'var(--radius)',

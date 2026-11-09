@@ -163,7 +163,6 @@ export default function MemberSidebar() {
                         style={{
                           background: isActive ? `${accentColor}15` : 'transparent',
                           color: isActive ? accentColor : 'rgba(255,255,255,0.45)',
-                          borderLeft: `2px solid ${isActive ? accentColor : 'transparent'}`,
                           paddingLeft: '11px',
                           position: 'relative',
                           overflow: 'hidden',

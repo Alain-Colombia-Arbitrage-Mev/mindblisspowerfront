@@ -55,7 +55,7 @@ test('unbound sessions never read or save attribution, and positioned users do n
     let reads = 0;
     t.mock.method(globalThis, 'fetch', async () => Response.json(identity));
     const harness = view({ pendingVerifiedReferral: () => ({ ref: 'LocalVisit' }),
-      readVerifiedReferral: async () => { reads++; return { ok: true, positioned: true }; },
+      readVerifiedReferral: async () => { reads++; return ack('', '', true); },
       retryVerifiedReferral: () => assert.fail('mount must not persist old browser attribution'),
     });
     harness.render(); await settle();
@@ -158,20 +158,63 @@ test('an expired marker retry that reads an empty server offers the exact browse
 
 test('an unavailable initial lookup keeps a retry action and later exposes the backup only after a confirmed empty server response', async t => {
   browser(t);
-  const choice = { email, code: 'BrowserBackup', side: 'R' }; let saves = 0;
+  const choice = { email, code: 'BrowserBackup', side: 'R' }; let saves = 0, reads = 0;
   t.mock.method(globalThis, 'fetch', async () => Response.json(session));
-  const harness = view({ pendingVerifiedReferral: () => null, readVerifiedReferral: async () => ({ ok: false }),
-    browserReferralChoice: () => choice, retryVerifiedReferral: async () => ack(),
+  const harness = view({ pendingVerifiedReferral: () => null, readVerifiedReferral: async () => ++reads === 1 ? { ok: false } : ack(),
+    browserReferralChoice: () => choice, retryVerifiedReferral: () => assert.fail('a read retry must never save a newly appearing marker'),
     chooseBrowserReferral: async () => { saves++; return ack('BrowserBackup', 'R'); },
   });
   harness.render(); await settle();
   let markup = renderToStaticMarkup(harness.render());
-  assert.match(markup, /Reintentar guardar enlace/); assert.doesNotMatch(markup, /Referido: BrowserBackup/);
-  await find(harness.render(), node => node?.props?.children === 'Reintentar guardar enlace').props.onClick();
+  assert.match(markup, /No pudimos consultar tu enlace de referido/);
+  assert.match(markup, /Reintentar comprobación/); assert.doesNotMatch(markup, /Referido: BrowserBackup|Reintentar guardar enlace|confirmar el guardado/);
+  await find(harness.render(), node => node?.props?.children === 'Reintentar comprobación').props.onClick();
   markup = renderToStaticMarkup(harness.render());
   assert.match(markup, /Referido: BrowserBackup/); assert.match(markup, /Rama: derecha/);
   assert.match(markup, /Guardar este enlace como mi elección/); assert.equal(saves, 0);
   harness.unmount();
+});
+
+test('a failed GET without a pending choice offers only a read retry and never claims that a save or placement failed', async t => {
+  browser(t);
+  let reads = 0, complete;
+  t.mock.method(globalThis, 'fetch', async () => Response.json(session));
+  const harness = view({ pendingVerifiedReferral: () => null,
+    readVerifiedReferral: async () => { reads++; return reads === 1 ? { ok: false } : new Promise(resolve => { complete = resolve; }); },
+    browserReferralChoice: () => null,
+    retryVerifiedReferral: () => assert.fail('a displayed read retry must never replay a write'),
+    chooseBrowserReferral: () => assert.fail('a read failure cannot select a sponsor'),
+  });
+  harness.render(); await settle();
+  let tree = harness.render(), markup = renderToStaticMarkup(tree);
+  assert.match(markup, /No pudimos consultar tu enlace de referido/);
+  assert.match(markup, /esta consulta no guarda enlaces ni cambia tu posición/);
+  assert.doesNotMatch(markup, /Reintentar guardar enlace|confirmar el guardado|antes de comprar|posición asignada/);
+  const retry = find(tree, node => node?.props?.children === 'Reintentar comprobación').props.onClick;
+  const pending = retry(); await retry();
+  assert.equal(reads, 2, 'one initial read and one explicit duplicate-locked read');
+  assert.match(renderToStaticMarkup(harness.render()), /Comprobando enlace/);
+  complete(ack('', '', true)); await pending;
+  markup = renderToStaticMarkup(harness.render());
+  assert.doesNotMatch(markup, /role="alert"|Reintentar|Guardando/);
+  harness.unmount();
+});
+
+test('only the complete canonical positioned contract suppresses a pending-save warning, never a local node or malformed flag', async t => {
+  browser(t);
+  for (const result of [ack('', '', true), { ok: true, positioned: true }, ack('PendingSponsor', 'L', true)]) {
+    t.mock.method(globalThis, 'fetch', async () => Response.json({ ...session, referralCode: 'MP32031', affiliate_id: 32031 }));
+    const harness = view({ pendingVerifiedReferral: () => ({ ref: 'PendingSponsor', preferred_side: 'L' }),
+      readVerifiedReferral: async () => result,
+      retryVerifiedReferral: () => assert.fail('no automatic save'),
+      browserReferralChoice: () => assert.fail('an immutable placement cannot be chosen from a local backup'),
+    });
+    harness.render(); await settle();
+    const markup = renderToStaticMarkup(harness.render());
+    if (result.ref === '' && result.preferred_side === '') assert.doesNotMatch(markup, /role="alert"|Reintentar guardar/);
+    else assert.match(markup, /No pudimos confirmar que tu enlace de referido quedó guardado/);
+    harness.unmount();
+  }
 });
 
 test('a failed session HTTP response cannot trigger an authenticated referral lookup from its JSON fields', async t => {
@@ -182,6 +225,25 @@ test('a failed session HTTP response cannot trigger an authenticated referral lo
   });
   harness.render(); await settle();
   assert.doesNotMatch(renderToStaticMarkup(harness.render()), /role="alert"|Referido:/);
+  harness.unmount();
+});
+
+test('a displayed read retry stays read-only if a pending marker appears before the click', async t => {
+  browser(t);
+  let marker = null, reads = 0;
+  t.mock.method(globalThis, 'fetch', async () => Response.json(session));
+  const harness = view({ pendingVerifiedReferral: () => marker,
+    readVerifiedReferral: async () => ++reads === 1 ? { ok: false } : ack('', '', true),
+    browserReferralChoice: () => null,
+    retryVerifiedReferral: () => assert.fail('a read action must not replay an unseen pending choice'),
+    chooseBrowserReferral: () => assert.fail('a read action must not choose a sponsor'),
+  });
+  harness.render(); await settle();
+  const retry = find(harness.render(), node => node?.props?.children === 'Reintentar comprobación').props.onClick;
+  marker = { ref: 'NewerUnseenChoice', preferred_side: 'R' };
+  await retry();
+  assert.equal(reads, 2);
+  assert.doesNotMatch(renderToStaticMarkup(harness.render()), /role="alert"|Reintentar guardar enlace/);
   harness.unmount();
 });
 

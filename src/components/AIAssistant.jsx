@@ -139,7 +139,7 @@ export default function AIAssistant() {
 
                   {/* Suggested Action */}
                   {msg.action && (
-                    <div className="mt-3 p-2 rounded" style={{ background: 'rgba(59,130,246,0.15)', borderLeft: '3px solid rgba(59,130,246,0.4)' }}>
+                    <div className="mt-3 p-2 rounded" style={{ background: 'var(--vp-accent-muted)', border: '1px solid var(--vp-accent-border)' }}>
                       <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: 600, margin: '0 0 4px 0' }}>Próximo paso:</p>
                       <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, margin: 0 }}>{msg.action}</p>
                     </div>

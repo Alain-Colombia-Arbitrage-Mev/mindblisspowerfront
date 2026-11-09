@@ -6,6 +6,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import ts from "typescript";
 import { createMemberSummaryResource } from "./member-summary-resource.mjs";
+import { readMemberJson } from "./member-read.mjs";
 
 const require = createRequire(import.meta.url);
 const icon = () => React.createElement("svg", { "aria-hidden": true });
@@ -30,6 +31,34 @@ test("the paywall consumes the same validated membership state and never invents
   const failed = render(); assert.match(failed, /Catálogo de planes/); assert.doesNotMatch(failed, /Tu membresía está activa/);
   state.data = { active_packages: "invalid" }; state.error = "";
   assert.doesNotMatch(render(), /Tu membresía está activa/);
+});
+
+test('payments summary offers explicit login only for true 401; forbidden and temporary outages keep safe manual GET recovery without fabricated expiry', async () => {
+  let state, reloads = 0;
+  const Panel = component('../app/dashboard/packages/MyPaymentsPanel.jsx', {
+    '@/hooks/useMemberSummary': { useMemberSummary: () => ({ state, reload: () => { reloads++; } }) },
+    '@/lib/member-read.mjs': { isRecoverySummary: () => false },
+    '@/lib/payment-display.mjs': { formatPaymentMoney: () => 'synthetic money', formatPaymentDate: () => 'synthetic date' },
+    './payments-summary.module.css': { default: {} }, './StripeSalesHistory': { default: () => null },
+    './WithdrawalRequest': { default: () => null },
+    '@/components/panel/NOWPaymentsBalances': { default: () => null },
+    './NOWPaymentsPurchases': { default: () => React.createElement('p', {}, 'Independent purchase history') },
+  });
+  for (const [status, code] of [[401, 'unauthenticated'], [403, 'account_suspended'], [503, 'authentication_unavailable']]) {
+    let calls = 0;
+    const resource = createMemberSummaryResource({ read: () => readMemberJson('/synthetic-payments', {
+      fetchImpl: async (_url, options) => { calls++; assert.equal(options.body, undefined);
+        return Response.json({ error: code, message: 'must-not-leak' }, { status }); },
+    }) });
+    await resource.load(); state = resource.getSnapshot();
+    const markup = renderToStaticMarkup(React.createElement(Panel));
+    assert.match(markup, /No pudimos cargar el resumen/); assert.match(markup, /Independent purchase history/);
+    assert.doesNotMatch(markup, /expir|must-not-leak|synthetic money/);
+    if (status === 401) { assert.match(markup, /href="\/login"/); assert.doesNotMatch(markup, /Reintentar pagos/); }
+    else { assert.match(markup, /Reintentar pagos/); assert.doesNotMatch(markup, /href="\/login"|Vuelve a iniciar sesión/); }
+    assert.equal(calls, 1); assert.equal(reloads, 0);
+    resource.cancel();
+  }
 });
 
 test("actual payment-result effect refreshes the shared GET once only after confirmed activation", async () => {

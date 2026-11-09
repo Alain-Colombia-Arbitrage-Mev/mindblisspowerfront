@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { nowpaymentsPurchaseCheck, nowpaymentsPurchaseCheckError } from './nowpayments-purchase-check.mjs';
+import { nowpaymentsHistoryError, nowpaymentsPurchaseError } from './nowpayments-purchases.mjs';
 
 const orderId = 'a02f5a55-5fa3-4239-845b-ac6b699110ee';
 const pending = { provider: 'nowpayments', order_id: orderId, state: 'pending', payment_confirmed: false,
@@ -44,7 +45,7 @@ test('the inline presenter revalidates exact owner, persistence, provider verifi
 
 test('query errors use safe specific copy from status or timeout enums, never raw diagnostics or statements that funds were not paid', () => {
   const cases = [
-    [{ status: 401 }, 'Sesión no disponible'], [{ status: 403 }, 'Sesión no disponible'],
+    [{ status: 401 }, 'Sesión no disponible'], [{ status: 403 }, 'Acceso a la compra restringido'],
     [{ status: 404 }, 'No pudimos consultar esta compra'], [{ status: 429 }, 'Demasiadas consultas'],
     [{ name: 'TimeoutError' }, 'La consulta tardó demasiado'], [{ name: 'AbortError' }, 'La consulta tardó demasiado'],
     [{ status: 503 }, 'Estado temporalmente no disponible'], [{ status: 502 }, 'Estado temporalmente no disponible'],
@@ -58,4 +59,21 @@ test('query errors use safe specific copy from status or timeout enums, never ra
   }
   assert.match(nowpaymentsPurchaseCheckError({ status: 404 }).description, /Esto no confirma si el pago se realizó/);
   assert.match(nowpaymentsPurchaseCheckError({ status: 429 }).description, /este límite no indica el estado del pago/);
+  assert.doesNotMatch(nowpaymentsPurchaseCheckError({ status: 403 }).description, /Vuelve a iniciar sesión|expiró/);
+});
+
+test('known HTTP status outranks misleading sign-in codes and no temporary purchase failure requests another session or OTP', () => {
+  for (const status of [429, 500, 502, 503, 504]) {
+    for (const code of ['unauthenticated', 'invalid_id_token', 'private@example.test postgres://secret@host']) {
+      const message = nowpaymentsPurchaseError(code, status);
+      assert.doesNotMatch(message, /Vuelve a iniciar sesión|sesión.*expir|private@|postgres:|secret@/i);
+    }
+  }
+  for (const code of ['unauthenticated', 'authentication_unavailable', 'invalid_id_token']) {
+    assert.match(nowpaymentsPurchaseError(code, 401), /Vuelve a iniciar sesión/);
+    assert.match(nowpaymentsPurchaseError(code, 403), /No tienes autorización/);
+    assert.doesNotMatch(nowpaymentsPurchaseError(code, 403), /Vuelve a iniciar sesión/);
+  }
+  assert.match(nowpaymentsHistoryError({ status: 503, code: 'authentication_unavailable' }), /servicio de acceso.*temporalmente/);
+  assert.match(nowpaymentsPurchaseError('unauthenticated'), /Vuelve a iniciar sesión/, 'legacy code-only callers keep their explicit behavior');
 });

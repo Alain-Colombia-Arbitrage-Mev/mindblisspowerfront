@@ -1,147 +1,81 @@
 import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
+import { Headphones, Layers3, Network } from "lucide-react";
 
-const navItems = [
-  { href: "/login", label: "Acceso" },
-  { href: "/register", label: "Registro" },
-  { href: "/onboarding", label: "Bienvenida" },
+import ThemeToggle from "./ThemeToggle";
+import AuthSupportWidget from "./AuthSupportWidget";
+
+const benefits = [
+  { icon: Layers3, label: "Consulta tus membresías" },
+  { icon: Network, label: "Explora tu red de conexiones" },
+  { icon: Headphones, label: "Encuentra ayuda cuando la necesites" },
 ];
 
-/**
- * Editorial two-column auth layout.
- * Left: full-height B&W brand photograph with copy overlay.
- * Right: scrollable form column.
- * Always dark ("auth-mono") — auth pages are the brand moment.
- */
-export default function AuthShell({
-  activePath,
-  eyebrow,
-  title,
-  description,
-  children,
-  sideKpis = [],
-  visualSrc = "/mindbliss/mindbliss-02.avif",
-  visualAlt = "",
-  visualPosition = "center",
-  loginHref = "/login",
-  registrationHref = "/register",
-}) {
-  return (
-    <main className="auth-mono min-h-dvh min-w-0 lg:grid lg:grid-cols-[minmax(420px,46%)_minmax(0,1fr)]">
-      {/* ── Photo panel ─────────────────────────────────────────── */}
-      <aside className="auth-brand-panel auth-grain relative flex min-h-36 flex-col justify-between gap-3 overflow-hidden p-4 sm:min-h-48 sm:p-6 lg:sticky lg:top-0 lg:h-dvh lg:gap-0 lg:p-10">
-        <img
-          src={visualSrc}
-          alt={visualAlt}
-          loading="eager"
-          decoding="async"
-          className="auth-photo absolute inset-0 h-full w-full object-cover"
-          style={{ objectPosition: visualPosition }}
-        />
-        <div
-          className="absolute inset-0"
-          style={{
-            background:
-              "linear-gradient(to top, rgba(6,6,7,0.94) 0%, rgba(6,6,7,0.46) 46%, rgba(6,6,7,0.22) 100%)",
-          }}
-        />
+const capabilities = [
+  ["Cuenta", "Tu espacio personal"],
+  ["Comunidad", "Red y membresías"],
+  ["Soporte", "Canales de ayuda"],
+];
 
-        <div className="relative z-10 flex items-center justify-between">
-          <Link href="/" className="auth-rise inline-flex min-h-11 items-center gap-2" style={{ animationDelay: "0ms" }}>
-            <span className="auth-display text-lg leading-none" style={{ color: "var(--vp-text)" }}>
-              Mindbliss
-            </span>
-            <span className="auth-display text-lg leading-none" style={{ color: "var(--vp-accent)" }}>
-              Power
-            </span>
-          </Link>
-          <Link
-            href="/"
-            className="auth-rise inline-flex min-h-11 items-center gap-1 px-2 text-xs font-bold uppercase tracking-[0.12em] transition hover:opacity-80"
-            style={{ color: "var(--vp-muted)", animationDelay: "60ms" }}
-          >
-            Inicio
-            <ArrowUpRight size={13} />
-          </Link>
+export default function AuthShell({
+  title = "Tu comunidad.\nTu próximo paso.",
+  description = "Gestiona tu cuenta, consulta tus membresías y explora tu red desde un mismo espacio.",
+  children,
+  visualSrc = "/mindbliss/mindbliss-auth-background.png",
+  visualAlt = "Arquitectura urbana de Mindbliss",
+  activePath: _activePath = undefined,
+  loginHref: _loginHref = undefined,
+  registrationHref: _registrationHref = undefined,
+  eyebrow: _eyebrow = undefined,
+  sideKpis: _sideKpis = undefined,
+  visualPosition: _visualPosition = undefined,
+  layout = "default",
+  supportEmail = "",
+}) {
+  void [_activePath, _loginHref, _registrationHref, _eyebrow, _sideKpis, _visualPosition];
+  const shellLayout = ["default", "compact", "long"].includes(layout) ? layout : "default";
+  return (
+    <main className={`auth-shell auth-shell--${shellLayout}`}>
+      <aside className="auth-identity" aria-label="Mindbliss Power">
+        <img src={visualSrc} alt={visualAlt} loading="eager" decoding="async" />
+        <div className="auth-identity-scrim" aria-hidden="true" />
+
+        <Link className="auth-wordmark" href="/">Mindbliss</Link>
+
+        <div className="auth-identity-copy">
+          <h1>{title}</h1>
+          <p>{description}</p>
         </div>
 
-        <div className="relative z-10">
-          <div
-            className="auth-rise mb-4 hidden items-center gap-2 text-[11px] font-black uppercase tracking-[0.28em] lg:inline-flex"
-            style={{ color: "var(--vp-accent)", animationDelay: "120ms" }}
-          >
-            <span className="inline-block h-2 w-2" style={{ background: "var(--vp-accent)" }} />
-            {eyebrow}
-          </div>
-
-          <h1
-            className="auth-display auth-rise max-w-xl break-words text-2xl leading-[1.05] sm:text-3xl lg:text-6xl lg:leading-[0.98]"
-            style={{ color: "var(--vp-text)", animationDelay: "180ms" }}
-          >
-            {title}
-          </h1>
-
-          {description && (
-            <p
-              className="auth-rise mt-5 hidden max-w-md text-sm leading-7 lg:block"
-              style={{ color: "var(--vp-text-soft)", animationDelay: "240ms" }}
-            >
-              {description}
-            </p>
-          )}
-
-          {sideKpis.length > 0 && (
-            <div
-              className="auth-rise mt-7 hidden border-t pt-5 lg:flex"
-              style={{ borderColor: "rgba(247,247,244,0.18)", animationDelay: "300ms" }}
-            >
-              {sideKpis.map((item, index) => (
-                <div
-                  key={item.label}
-                  className={index === 0 ? "pr-6" : "border-l px-6"}
-                  style={index === 0 ? undefined : { borderColor: "rgba(247,247,244,0.18)" }}
-                >
-                  <div className="auth-display text-2xl" style={{ color: "var(--vp-accent)" }}>
-                    {item.value}
-                  </div>
-                  <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: "var(--vp-muted)" }}>
-                    {item.label}
-                  </div>
-                </div>
-              ))}
+        <div className="auth-benefits" aria-label="Todo tu espacio Mindbliss">
+          {benefits.map(({ icon: Icon, label }) => (
+            <div key={label}>
+              <span><Icon size={16} aria-hidden="true" /></span>
+              <p>{label}</p>
             </div>
-          )}
+          ))}
+        </div>
+
+        <div className="auth-capabilities">
+          {capabilities.map(([name, copy]) => (
+            <div key={name}><strong>{name}</strong><span>{copy}</span></div>
+          ))}
         </div>
       </aside>
 
-      {/* ── Form column ─────────────────────────────────────────── */}
-      <section className="relative flex min-h-0 min-w-0 flex-col lg:min-h-dvh">
-        <nav aria-label="Acceso y registro" className="auth-nav flex flex-wrap items-center gap-x-4 gap-y-1 px-4 pt-3 sm:px-10 lg:gap-x-6 lg:px-14 lg:pt-6">
-          {navItems.map((item) => {
-            const active = activePath === item.href;
-            return (
-              <Link
-                key={item.href}
-                href={item.href === "/login" ? loginHref : item.href === "/register" ? registrationHref : item.href}
-                aria-current={active ? "page" : undefined}
-                className="inline-flex min-h-11 items-center border-b-2 px-1 text-xs font-black uppercase tracking-[0.1em] transition lg:text-[11px] lg:tracking-[0.2em]"
-                style={{
-                  color: active ? "var(--vp-text)" : "var(--vp-subtle)",
-                  borderColor: active ? "var(--vp-accent)" : "transparent",
-                }}
-              >
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
+      <section className="auth-access-area">
+        <header className="auth-access-tools">
+          <AuthSupportWidget initialEmail={supportEmail} variant="header" />
+          <ThemeToggle />
+        </header>
 
-        <div className="auth-content flex min-w-0 flex-1 items-start justify-center px-4 py-5 sm:px-10 sm:py-8 lg:items-center lg:px-14 lg:py-10">
-          <div className="auth-rise min-w-0 w-full max-w-[560px] [overflow-wrap:anywhere]" style={{ animationDelay: "200ms" }}>
-            {children}
-          </div>
+        <div className="auth-content">
+          <div className={`auth-form-panel auth-form-panel--${shellLayout}`}>{children}</div>
         </div>
+
+        <p className="auth-legal">© 2026 Mindbliss · Privacidad · Términos · Soporte</p>
       </section>
+
+      <AuthSupportWidget initialEmail={supportEmail} />
     </main>
   );
 }

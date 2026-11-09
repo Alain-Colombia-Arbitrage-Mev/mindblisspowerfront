@@ -30,7 +30,7 @@ export default function Riesgos() {
           <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} transition={{ duration: 0.8 }}
             variants={fadeUp} className="prose prose-lg max-w-none text-gray-700">
 
-            <div className="bg-red-50 border-l-4 border-red-600 p-6 rounded mb-12">
+            <div className="bg-red-50 border border-red-300 p-6 rounded mb-12">
               <p className="font-bold text-red-900 m-0">
                 LECTURA OBLIGATORIA: Esta sección describe riesgos materiales asociados con la participación en el ecosistema Mindbliss Power. Los usuarios deben leer cuidadosamente y entender estos riesgos antes de participar.
               </p>
@@ -136,7 +136,7 @@ export default function Riesgos() {
             </ul>
             <p><strong>Mitigación:</strong> Lee todos los comunicados de Mindbliss Power cuidadosamente. Entiende que estos cambios pueden ocurrir.</p>
 
-            <div className="bg-yellow-50 border-l-4 border-yellow-600 p-6 rounded my-12">
+            <div className="bg-yellow-50 border border-yellow-300 p-6 rounded my-12">
               <h3 className="font-bold text-yellow-900 mt-0">RECONOCIMIENTO IMPORTANTE</h3>
               <p className="m-0">Al participar en Mindbliss Power, reconoces que:</p>
               <ul className="list-disc pl-6 space-y-2 mt-3 mb-0">

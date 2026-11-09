@@ -181,9 +181,9 @@ export default function DashGrowthAssistant() {
               <div className="px-4 py-3 rounded-2xl rounded-bl-none"
                 style={{ background: 'rgba(255,255,255,0.1)' }}>
                 <div className="flex gap-1">
-                  <div className="w-2 h-2 rounded-full" style={{ background: '#a855f7', animation: 'bounce 1.4s infinite' }} />
-                  <div className="w-2 h-2 rounded-full" style={{ background: '#a855f7', animation: 'bounce 1.4s infinite 0.2s' }} />
-                  <div className="w-2 h-2 rounded-full" style={{ background: '#a855f7', animation: 'bounce 1.4s infinite 0.4s' }} />
+                  <div className="w-2 h-2 rounded-full" style={{ background: 'var(--vp-link)', animation: 'status-pulse 1.4s ease-in-out infinite' }} />
+                  <div className="w-2 h-2 rounded-full" style={{ background: 'var(--vp-link)', animation: 'status-pulse 1.4s ease-in-out infinite 0.2s' }} />
+                  <div className="w-2 h-2 rounded-full" style={{ background: 'var(--vp-link)', animation: 'status-pulse 1.4s ease-in-out infinite 0.4s' }} />
                 </div>
               </div>
             </motion.div>

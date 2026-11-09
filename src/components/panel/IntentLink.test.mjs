@@ -135,10 +135,10 @@ test("only shell navigation uses the wrapper and logout is an explicit non-link 
     assert.doesNotMatch(shell, /from ["']next\/link["']/);
   }
   const sidebar = readFileSync(new URL("./PanelSidebar.jsx", import.meta.url), "utf8");
-  for (const shell of [sidebar, readFileSync(new URL('./PanelHeader.jsx', import.meta.url), 'utf8')]) {
-    assert.match(shell, /<LogoutButton/);
-    assert.doesNotMatch(shell, /href=["']\/api\/auth\/logout/);
-  }
+  const header = readFileSync(new URL('./PanelHeader.jsx', import.meta.url), 'utf8');
+  assert.match(sidebar, /<LogoutButton/);
+  assert.doesNotMatch(header, /<LogoutButton|href=["']\/api\/auth\/logout/);
+  assert.doesNotMatch(sidebar, /href=["']\/api\/auth\/logout/);
   assert.match(sidebar, /<LogoutButton\b[^>]*errorPlacement="above"/);
   assert.doesNotMatch(source, /router\.prefetch|router\.push|setInterval|setTimeout|fetch\(/);
 });

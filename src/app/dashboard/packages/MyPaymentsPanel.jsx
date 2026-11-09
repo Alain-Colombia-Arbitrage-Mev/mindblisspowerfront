@@ -40,7 +40,9 @@ function PaymentsSummary({ state, load }) {
   }
   if (state.error || !state.data) return <Card>
     <div role="alert" className={styles.error}><AlertTriangle size={21} aria-hidden="true" /><div><h3>No pudimos cargar el resumen</h3><p>{state.error || "No se pudieron cargar los pagos. Intenta de nuevo."}</p></div></div>
-    <button type="button" onClick={load} className={`executive-button ${styles.retry}`}>Reintentar pagos</button>
+    {state.errorStatus === 401
+      ? <a href="/login" className={`executive-button ${styles.retry}`}>Iniciar sesión</a>
+      : <button type="button" onClick={load} className={`executive-button ${styles.retry}`}>Reintentar pagos</button>}
   </Card>;
 
   const d = state.data;
@@ -108,7 +110,7 @@ function PaymentsSummary({ state, load }) {
 }
 
 function Card({ children }) {
-  return <section className={`executive-panel vp-glass ${styles.panel}`}>{children}</section>;
+  return <section className={`executive-panel ${styles.panel}`}>{children}</section>;
 }
 function Metric({ Icon, label, value, accent = false }) {
   return (

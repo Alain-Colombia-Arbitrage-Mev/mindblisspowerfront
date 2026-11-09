@@ -72,15 +72,26 @@ async function validForwardedIdentity(token) {
 const syntheticEnv = {
   CLOUDFLARE_DEPLOYMENT_READY: 'true', MEMBER_DB_PROVIDER: 'hyperdrive', MEMBER_DB_QUERY_CACHE_DISABLED: 'true',
   HYPERDRIVE_MEMBER_FRESH: { connectionString: 'postgres://synthetic:synthetic@127.0.0.1:9/synthetic' },
-  CORE_API: { async fetch(url, options) {
+  CORE_API: { async fetch(url, options, fixture = {}) {
     privateCalls++;
     const target = new URL(url);
     const headers = new Headers(options.headers);
+    if (fixture.membershipReadStatus && target.hostname === 'payments.core.internal'
+        && ['/api/payments/me', '/api/payments/nowpayments/purchases'].includes(target.pathname)) {
+      if (headers.get('x-vp-service-token') !== 'synthetic-service-only'
+          || !await validForwardedIdentity(headers.get('x-vp-id-token') || '')) return Response.json({ error: 'unauthenticated' }, { status: 401 });
+      if ((options.method || 'GET') !== 'GET') throw new Error('membership_fixture_must_be_read_only');
+      const unavailable = fixture.membershipReadStatus === 'unavailable';
+      return Response.json({ error: unavailable ? 'authentication_unavailable' : 'invalid_id_token', private: 'synthetic-private-storage-detail' },
+        { status: unavailable ? 503 : 401, headers: { 'set-cookie': 'synthetic-must-not-forward' } });
+    }
     if (target.hostname === 'payments.core.internal' && target.pathname === '/api/payments/referral-attribution') {
       if (headers.get('x-vp-service-token') !== 'synthetic-service-only'
         || !await validForwardedIdentity(headers.get('x-vp-id-token') || '')) return Response.json({ error: 'unauthenticated' }, { status: 401 });
       if (options.method === 'GET' && target.search === '?email=fixture%40example.test') {
         metrics.referralPreferenceReads++;
+        if (fixture.referralRead === 'positioned') return Response.json({ ok: true, ref: '', preferred_side: '', positioned: true });
+        if (fixture.referralRead === 'unavailable') return Response.json({ error: 'synthetic-private-referral-storage' }, { status: 503 });
         return Response.json(referralPreference);
       }
       const body = JSON.parse(options.body || '{}');
@@ -339,17 +350,29 @@ export default {
     const traceFixture = incoming.pathname.startsWith('/__resend_trace/');
     const traceUnavailableFixture = incoming.pathname.startsWith('/__resend_trace_unavailable/');
     const alternateFixture = incoming.pathname.startsWith('/__alternate/');
+    const positionedReferralFixture = incoming.pathname.startsWith('/__referral_positioned/');
+    const unavailableReferralFixture = incoming.pathname.startsWith('/__referral_unavailable/');
+    const unavailableMembershipFixture = incoming.pathname.startsWith('/__membership_unavailable/');
+    const invalidMembershipFixture = incoming.pathname.startsWith('/__membership_invalid/');
     const pathname = staleSmsFixture ? incoming.pathname.slice('/__stale_sms'.length)
       : nowDisabledFixture ? incoming.pathname.slice('/__now_disabled'.length)
       : resendDisabledFixture ? incoming.pathname.slice('/__resend_disabled'.length)
       : resendUnconfiguredFixture ? incoming.pathname.slice('/__resend_unconfigured'.length)
       : traceFixture ? incoming.pathname.slice('/__resend_trace'.length)
       : traceUnavailableFixture ? incoming.pathname.slice('/__resend_trace_unavailable'.length)
-      : alternateFixture ? incoming.pathname.slice('/__alternate'.length) : incoming.pathname;
+      : alternateFixture ? incoming.pathname.slice('/__alternate'.length)
+      : positionedReferralFixture ? incoming.pathname.slice('/__referral_positioned'.length)
+      : unavailableReferralFixture ? incoming.pathname.slice('/__referral_unavailable'.length)
+      : unavailableMembershipFixture ? incoming.pathname.slice('/__membership_unavailable'.length)
+      : invalidMembershipFixture ? incoming.pathname.slice('/__membership_invalid'.length) : incoming.pathname;
     const inputOrigin = alternateFixture ? 'https://mindbliss-portal-rewon.devfidubit.workers.dev' : 'https://app.mindblisspower.com';
     const input = new Request(`${inputOrigin}${pathname}${incoming.search}`, { method: request.method, headers, body: request.body });
     return worker.fetch(input, { ...env, ...syntheticEnv,
       ...(alternateFixture ? { AUTH_ALTERNATE_ORIGIN: inputOrigin } : {}),
+      ...((positionedReferralFixture || unavailableReferralFixture) ? { CORE_API: { fetch: (url, options) =>
+        syntheticEnv.CORE_API.fetch(url, options, { referralRead: positionedReferralFixture ? 'positioned' : 'unavailable' }) } } : {}),
+      ...((unavailableMembershipFixture || invalidMembershipFixture) ? { CORE_API: { fetch: (url, options) =>
+        syntheticEnv.CORE_API.fetch(url, options, { membershipReadStatus: unavailableMembershipFixture ? 'unavailable' : 'invalid' }) } } : {}),
       BETTER_AUTH_REGISTRATION_SMS_REQUIRED: 'true', SENTDM_API_KEY: 'synthetic-never-call', SENTDM_OTP_TEMPLATE_ID: 'synthetic-never-call',
       ...(nowDisabledFixture ? { NOWPAYMENTS_MEMBERSHIPS_ENABLED: 'false' } : {}),
       ...(resendDisabledFixture ? { RESEND_WEBHOOK_ENABLED: 'false' } : {}),

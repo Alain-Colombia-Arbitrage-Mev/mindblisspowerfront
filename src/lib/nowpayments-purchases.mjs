@@ -53,8 +53,18 @@ const labels = new Map(Object.entries({ awaiting_payment: 'Pendiente de pago', p
 export const nowpaymentsPurchaseLabel = item => item?.fulfillment_status === 'activated' && item?.payment_status === 'completed'
   ? 'Membresía activada' : labels.get(item?.payment_status) || 'Estado no disponible';
 
-export function nowpaymentsPurchaseError(code) {
-  if (['unauthenticated', 'invalid_id_token'].includes(code)) return 'Tu sesión no está disponible. Vuelve a iniciar sesión.';
+export function nowpaymentsHistoryError(failure) {
+  if (failure?.status === 401) return 'No pudimos confirmar una sesión activa en este navegador. Vuelve a iniciar sesión para consultar tus compras. No repitas ningún pago por este aviso.';
+  if (failure?.status === 403) return 'No tienes autorización para consultar estas compras. Contacta al soporte para revisar el acceso de la cuenta. No repitas ningún pago por este aviso.';
+  if (failure?.status === 503 && failure?.code === 'authentication_unavailable') return 'El servicio de acceso no está disponible temporalmente. Puedes actualizar el historial en unos instantes; no necesitas solicitar otro código ni repetir un pago. Los registros anteriores, si aparecen, no confirman el estado actual.';
+  return 'No pudimos actualizar el historial NOWPayments. Los registros anteriores, si aparecen, no confirman el estado actual.';
+}
+
+export function nowpaymentsPurchaseError(code, status = 0) {
+  if (status === 403) return nowpaymentsHistoryError({ status });
+  if (status === 503 && code === 'authentication_unavailable') return nowpaymentsHistoryError({ status, code });
+  if (status === 401) return nowpaymentsHistoryError({ status });
+  if (status === 0 && ['unauthenticated', 'invalid_id_token'].includes(code)) return 'Tu sesión no está disponible. Vuelve a iniciar sesión.';
   if (code === 'purchase_not_found') return 'No pudimos encontrar esta compra en tu cuenta.';
   if (code === 'purchase_cannot_cancel') return 'No se puede cancelar esta intención en su estado actual. Actualiza el historial; si pagaste, no vuelvas a pagar.';
   if (code === 'purchase_cannot_resume') return 'No se puede continuar esta factura en su estado actual. Actualiza el historial antes de pagar.';

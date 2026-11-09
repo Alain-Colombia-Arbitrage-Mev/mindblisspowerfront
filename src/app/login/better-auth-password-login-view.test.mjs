@@ -51,7 +51,7 @@ test('passwordless members get an explicit recovery path using the original emai
   assert.match(html, /No compartas tu contraseña ni tus códigos/);
   assert.doesNotMatch(html, /5 solicitudes|10 intentos|24 horas|recibirás|Te enviamos|te quedan/);
   assert.doesNotMatch(html, /contraseña que creaste al registrarte/);
-  const recovery = find(tree, node => node?.props?.href === '/forgot-password');
+  const recovery = find(tree, node => node?.props?.href === '/forgot-password' && /Crear o cambiar/.test(String(node.props.children)));
   assert.ok(recovery);
   assert.match(recovery.props.children, /Crear o cambiar contraseña con un código/);
   assert.equal(recovery.props.href.includes('@'), false, 'contact details stay out of the link');

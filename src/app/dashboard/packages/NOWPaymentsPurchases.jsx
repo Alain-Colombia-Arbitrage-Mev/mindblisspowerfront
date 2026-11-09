@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import * as AlertDialog from '@radix-ui/react-alert-dialog';
 import { AlertCircle, CalendarDays, CheckCircle2, ChevronDown, CircleHelp, Clock3, Info, Loader2, ShoppingBag, XCircle } from 'lucide-react';
 import { readNOWPaymentsPurchases, resumeNOWPaymentsPurchase, cancelNOWPaymentsPurchase,
-  nowpaymentsPurchaseLabel, nowpaymentsPurchaseError } from '@/lib/nowpayments-purchases.mjs';
+  nowpaymentsPurchaseLabel, nowpaymentsPurchaseError, nowpaymentsHistoryError } from '@/lib/nowpayments-purchases.mjs';
 import { readNOWPaymentsReceipt } from '@/lib/nowpayments-receipt.mjs';
 import { nowpaymentsPurchaseCheck, nowpaymentsPurchaseCheckError } from '@/lib/nowpayments-purchase-check.mjs';
 import { nowpaymentsMoney, nowpaymentsDate } from '@/lib/nowpayments-balances.mjs';
@@ -21,27 +21,40 @@ export default function NOWPaymentsPurchases({ onChange }) {
   const [cancelTarget, setCancelTarget] = useState(null);
   const [checkResults, setCheckResults] = useState({});
   const readRequest = useRef(null), actionRequest = useRef(null), locked = useRef(false), returnFocus = useRef(null);
+  const historyFresh = useRef(false), accessDenied = useRef(false);
+  const discardDeniedAccess = useCallback(() => {
+    accessDenied.current = true; historyFresh.current = false;
+    readRequest.current?.abort(); readRequest.current = null;
+    actionRequest.current?.abort(); actionRequest.current = null;
+    locked.current = false;
+    setHistory(null); setCheckResults({}); setCancelTarget(null); setNotice(''); setBusy(''); setLoading(false);
+  }, []);
   const load = useCallback(async () => {
     readRequest.current?.abort();
     const controller = new AbortController(); readRequest.current = controller;
+    historyFresh.current = false;
     setLoading(true); setError('');
     try {
       const value = await readNOWPaymentsPurchases({ signal: controller.signal });
-      if (!controller.signal.aborted) setHistory(value);
+      if (!controller.signal.aborted) {
+        historyFresh.current = true; accessDenied.current = false;
+        setHistory(value);
+      }
     } catch (failure) {
       if (!controller.signal.aborted) {
-        if ([401, 403].includes(failure?.status)) { setHistory(null); setCheckResults({}); }
-        setError('No pudimos actualizar el historial NOWPayments. Los registros anteriores, si aparecen, no confirman el estado actual.');
+        if ([401, 403].includes(failure?.status)) discardDeniedAccess();
+        setError(nowpaymentsHistoryError(failure));
       }
     } finally { if (!controller.signal.aborted) setLoading(false); }
-  }, []);
+  }, [discardDeniedAccess]);
   useEffect(() => {
     void load();
     return () => { readRequest.current?.abort(); actionRequest.current?.abort(); };
   }, [load]);
 
   async function perform(action, item) {
-    if (locked.current || !item || !['check', 'resume', 'cancel'].includes(action)
+    if (locked.current || accessDenied.current || !item || !['check', 'resume', 'cancel'].includes(action)
+        || (action !== 'check' && !historyFresh.current)
         || (action === 'resume' && item.can_resume !== true) || (action === 'cancel' && item.can_cancel !== true)
         || (action !== 'check' && checkResults[item.order_id]?.blockPayment)) return;
     locked.current = true; setBusy(item.order_id); setNotice('');
@@ -73,15 +86,17 @@ export default function NOWPaymentsPurchases({ onChange }) {
         if (action === 'check') {
           const result = nowpaymentsPurchaseCheckError(failure);
           setCheckResults(previous => ({ ...previous, [item.order_id]: { ...previous[item.order_id], phase: 'error', result, checkedAt: null } }));
-          if ([401, 403].includes(failure?.status)) { setHistory(null); setCheckResults({}); setError(result.description); }
+          if ([401, 403].includes(failure?.status)) { discardDeniedAccess(); setError(result.description); }
         } else {
-          if ([401, 403].includes(failure?.status)) { setHistory(null); setCheckResults({}); }
-          setNotice(nowpaymentsPurchaseError(failure?.code));
+          if ([401, 403].includes(failure?.status)) { discardDeniedAccess(); setError(nowpaymentsHistoryError(failure)); }
+          else setNotice(nowpaymentsPurchaseError(failure?.code, failure?.status));
         }
       }
     } finally {
-      locked.current = false;
-      if (!controller.signal.aborted) setBusy('');
+      if (actionRequest.current === controller) {
+        actionRequest.current = null; locked.current = false;
+        if (!controller.signal.aborted) setBusy('');
+      }
     }
   }
 
@@ -157,7 +172,7 @@ export default function NOWPaymentsPurchases({ onChange }) {
           {notice && !busy && <p role="alert" className={styles.dialogError}>{notice}</p>}
           <div className={styles.dialogActions}>
             <AlertDialog.Cancel asChild><button type="button" className={styles.action} disabled={Boolean(busy)}>Conservar compra</button></AlertDialog.Cancel>
-            <AlertDialog.Action asChild><button type="button" className={cn(styles.action, styles.danger)} disabled={Boolean(busy)} onClick={event => { event.preventDefault(); void perform('cancel', cancelTarget); }}>{busy ? 'Confirmando cancelación…' : 'Confirmar cancelación local'}</button></AlertDialog.Action>
+            <AlertDialog.Action asChild><button type="button" className={cn(styles.action, styles.danger)} disabled={Boolean(busy) || loading || Boolean(error)} onClick={event => { event.preventDefault(); void perform('cancel', cancelTarget); }}>{busy ? 'Confirmando cancelación…' : 'Confirmar cancelación local'}</button></AlertDialog.Action>
           </div>
         </AlertDialog.Content>
       </AlertDialog.Portal>

@@ -19,6 +19,8 @@ test('the actual auth catch-all rejects every phone route without consulting an 
   const route = loadSource('../app/api/auth/[...path]/route.js', { '@/lib/better-auth-bridge.mjs': {
     proxyBetterAuth() { upstream += 1; return Response.json({ ok: true }); },
     proxyBetterAuthKeys() { upstream += 1; return Response.json({ keys: [] }); },
+    proxyBetterAuthSocialStart() { upstream += 1; return Response.json({ url: 'https://accounts.google.com/o/oauth2/v2/auth' }); },
+    proxyBetterAuthSocialCallback(_request, provider) { upstream += 1; return Response.json({ provider }); },
   } });
   for (const path of ['phone-number/opt-in', 'phone-number/send-otp', 'phone-number/verify', 'phone-number/revoke-consent', 'phone-number/sign-in', 'phone-number/unknown']) {
     for (const method of ['GET', 'POST']) {
@@ -33,6 +35,10 @@ test('the actual auth catch-all rejects every phone route without consulting an 
   assert.equal(upstream, 1);
   assert.equal((await route.POST(new Request('https://example.test/api/auth/sign-in/email', { method: 'POST' }), { params: Promise.resolve({ path: ['sign-in', 'email'] }) })).status, 200);
   assert.equal(upstream, 2);
+  assert.equal((await route.POST(new Request('https://example.test/api/auth/sign-in/social', { method: 'POST' }), { params: Promise.resolve({ path: ['sign-in', 'social'] }) })).status, 200);
+  assert.deepEqual(await (await route.GET(new Request('https://example.test/api/auth/callback/google?code=a&state=b'), { params: Promise.resolve({ path: ['callback', 'google'] }) })).json(), { provider: 'google' });
+  assert.deepEqual(await (await route.POST(new Request('https://example.test/api/auth/callback/apple', { method: 'POST' }), { params: Promise.resolve({ path: ['callback', 'apple'] }) })).json(), { provider: 'apple' });
+  assert.equal(upstream, 5);
 });
 
 test('the actual former SMS page redirects to email login without loading its SMS component', () => {

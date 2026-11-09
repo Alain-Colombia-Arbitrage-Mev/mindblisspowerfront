@@ -13,8 +13,8 @@ import { ExecutiveModulePage } from './executive-ui';
 const moduleConfigs = {
 ranks: {
     eyebrow: "Progreso",
-    title: "Rangos",
-    subtitle: "Carrera de rangos, avance operativo y requisitos pendientes presentados sin mezclar datos simulados con liquidaciones reales.",
+    title: "Haz visible tu avance",
+    subtitle: "Revisa tu rango actual, el siguiente paso y los requisitos pendientes sin mezclar progreso con liquidaciones.",
     action: { label: "Ver actividad", href: "/dashboard/activity", icon: Activity },
     // Placeholder: RankDashboardPage lo reemplaza con el rango REAL del miembro.
     metrics: [

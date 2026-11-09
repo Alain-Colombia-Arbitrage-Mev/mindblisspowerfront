@@ -8,7 +8,8 @@ import { registrationLoginUrl, registrationUrl } from '../register/registration-
 function shell(props) {
   const source = readFileSync(new URL('./AuthShell.jsx', import.meta.url), 'utf8');
   const code = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
-  const module = { exports: {} }, mocks = { 'next/link': { default: () => null }, 'lucide-react': { ArrowUpRight: () => null },
+  const module = { exports: {} }, mocks = { 'next/link': { default: ({ children, ...props }) => React.createElement('a', props, children) }, 'lucide-react': new Proxy({}, { get: () => () => null }),
+    './ThemeToggle': { default: () => null }, './AuthSupportWidget': { default: props => React.createElement('button', { className: `support-${props.variant || 'floating'}` }, 'Soporte') },
     'react/jsx-runtime': { jsx: (type, props, key) => React.createElement(type, { ...props, key }), jsxs: (type, props, key) => React.createElement(type, { ...props, key }) } };
   new Function('require', 'module', 'exports', code)(name => {
     assert.ok(Object.hasOwn(mocks, name), `Unexpected auth navigation dependency: ${name}`); return mocks[name];
@@ -17,27 +18,20 @@ function shell(props) {
 }
 function nodes(node) { return [node, ...React.Children.toArray(node?.props?.children).flatMap(nodes)]; }
 
-test('the real auth shell preserves explicit login and registration contexts with the existing active tab and unchanged home/onboarding links', t => {
+test('the real auth shell keeps the approved Mindbliss identity and access-help navigation', t => {
   t.mock.method(globalThis, 'fetch', () => assert.fail('the static shell must not inspect a session or send messages'));
-  const context = { ref: 'Sponsor&A#?+', side: 'R', email: 'member@example.test' };
-  const loginHref = registrationLoginUrl(context.email, context.ref, context.side);
-  const registrationHref = registrationUrl(context.email, context.ref, context.side);
-  const tree = shell({ activePath: '/register', loginHref, registrationHref });
+  const tree = shell({ activePath: '/register', loginHref: registrationLoginUrl('member@example.test', 'Sponsor', 'R'), registrationHref: registrationUrl('member@example.test', 'Sponsor', 'R') });
   const all = nodes(tree);
-  const login = all.find(node => node?.props?.children === 'Acceso');
-  const registration = all.find(node => node?.props?.children === 'Registro');
-  assert.equal(login.props.href, loginHref); assert.equal(registration.props.href, registrationHref);
-  assert.equal(registration.props['aria-current'], 'page'); assert.equal(login.props['aria-current'], undefined);
-  assert.equal(all.find(node => node?.props?.children === 'Bienvenida').props.href, '/onboarding');
-  assert.equal(all.filter(node => node?.props?.href === '/').length, 2);
+  assert.equal(all.find(node => node?.props?.className === 'auth-wordmark').props.href, '/');
+  assert.ok(all.some(node => node?.props?.variant === 'header'));
+  assert.ok(all.some(node => node?.props?.initialEmail === '' && node.props.variant === undefined));
+  assert.equal(all.some(node => node?.type === 'nav'), false);
 });
 
-test('auth pages without an attribution context retain their existing plain paths and design', () => {
+test('auth pages without attribution retain the approved shell classes', () => {
   const all = nodes(shell({ activePath: '/login' }));
-  assert.equal(all.find(node => node?.props?.children === 'Acceso').props.href, '/login');
-  assert.equal(all.find(node => node?.props?.children === 'Registro').props.href, '/register');
   const layout = new Set(all.find(node => node?.type === 'main').props.className.split(/\s+/));
-  for (const token of ['auth-mono', 'min-h-dvh', 'min-w-0', 'lg:grid', 'lg:grid-cols-[minmax(420px,46%)_minmax(0,1fr)]']) {
-    assert.ok(layout.has(token), `Missing auth layout contract: ${token}`);
-  }
+  assert.ok(layout.has('auth-shell'));
+  assert.ok(all.some(node => node?.props?.className === 'auth-identity'));
+  assert.ok(all.some(node => node?.props?.className === 'auth-content'));
 });

@@ -38,8 +38,8 @@ const sections = [
     title: 'Business Model',
     description: 'Descripción del modelo operativo y estructura de incentivos',
     icon: FileText,
-    color: 'from-purple-500/10 to-purple-600/5',
-    borderColor: 'border-purple-200/50',
+    color: 'from-blue-500/10 to-slate-600/5',
+    borderColor: 'border-blue-200/50',
     docs: ['Descripción del ecosistema', 'Care Plan', 'Estructura de beneficios', 'Flujos operativos'],
   },
   {

@@ -12,7 +12,10 @@ function page(enabled = true) {
   const Form = () => null;
   const element = (type, props, key) => React.createElement(type, { ...props, key });
   const mocks = { 'next/link': { default: () => null }, '../_components/AuthShell': { default: () => null },
-    './MagicLinkLoginForm': { default: Form }, '@/lib/better-auth-bridge.mjs': { betterAuthEnabled: () => enabled },
+    './MagicLinkLoginForm': { default: Form }, '@/lib/better-auth-bridge.mjs': {
+      betterAuthEnabled: () => enabled,
+      betterAuthSocialProviders: () => enabled ? ['google'] : [],
+    },
     '../register/registration-model.mjs': { registrationLoginUrl, registrationUrl }, 'react/jsx-runtime': { jsx: element, jsxs: element } };
   const module = { exports: {} };
   new Function('require', 'module', 'exports', compiled)(name => {
@@ -40,6 +43,7 @@ test('the real login page remounts the form for a changed referral, side, recipi
     assert.equal(next.props.initialMode, change.mode || initial.mode);
   }
   assert.notEqual((await page(false).render(initial)).key, first.key, 'a changed auth provider cannot reuse another provider state');
+  assert.deepEqual(first.props.enabledSocialProviders, ['google']);
 });
 
 test('unrelated, privileged and duplicate-shaped query values cannot alter the allowed login context', async () => {
@@ -51,6 +55,14 @@ test('unrelated, privileged and duplicate-shaped query values cannot alter the a
   const invalid = await app.render({ email: ['a@example.test', 'b@example.test'], ref: {}, side: true, mode: ['password'] });
   assert.equal(invalid.props.initialEmail, ''); assert.equal(invalid.props.initialRef, ''); assert.equal(invalid.props.initialSide, '');
   assert.equal(invalid.props.initialMode, 'code');
+});
+
+test('rewon opens email OTP first and only switches to password when explicitly requested', async () => {
+  const app = page(true);
+  assert.equal((await app.render()).props.initialMode, 'code');
+  assert.equal((await app.render({ mode: 'code' })).props.initialMode, 'code');
+  assert.equal((await app.render({ mode: 'password' })).props.initialMode, 'password');
+  assert.equal((await app.render({ mode: 'reset' })).props.initialMode, 'code');
 });
 
 test('the login server page passes the same current referral and side to both top navigation actions without trusting redirects or roles', async t => {

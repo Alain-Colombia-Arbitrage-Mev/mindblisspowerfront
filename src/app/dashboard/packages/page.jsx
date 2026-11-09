@@ -48,10 +48,9 @@ export default async function PackagesPage({ searchParams } = {}) {
       <div className="executive-container">
         <div className="executive-page-header">
           <div>
-            <p className="executive-eyebrow">Inversion</p>
-            <h1 id="memberships-title" tabIndex={-1} className="executive-title">Membresías</h1>
+            <h1 id="memberships-title" tabIndex={-1} className="executive-title">Compara las membresías</h1>
             <p className="executive-subtitle">
-              Catalogo conectado a RDS para revisar membresías activas, puntos y carrera de rangos de Mindbliss Power.
+              Selecciona el plan que mejor encaja contigo y revisa con claridad precio, beneficios y condiciones.
             </p>
           </div>
           <span className="executive-icon-badge">
@@ -71,7 +70,7 @@ export default async function PackagesPage({ searchParams } = {}) {
           <PaywallGate initialShowPlans>
           <div className="executive-grid three">
             {packages.map((pkg, index) => {
-              const featured = index === Math.min(2, packages.length - 1);
+              const featured = index === 0;
               const quote = membershipPriceQuote(pkg.amount_usd);
               return (
                 <article

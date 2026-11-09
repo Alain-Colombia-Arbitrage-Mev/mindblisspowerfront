@@ -4,7 +4,7 @@ import { Award, TrendingUp, Users, Zap } from "lucide-react";
 const tiers = [
   { level: "Builder I", req: "Entry level", benefits: "Base participation access", color: "border-slate-500" },
   { level: "Builder II", req: "10 active participants", benefits: "Enhanced structure benefits", color: "border-blue-500" },
-  { level: "Builder III", req: "25 active participants", benefits: "Leadership recognition + expanded access", color: "border-purple-500" },
+  { level: "Builder III", req: "25 active participants", benefits: "Leadership recognition + expanded access", color: "border-primary/50" },
   { level: "Director", req: "50 active participants", benefits: "Full ecosystem access + mentorship role", color: "border-amber-500" },
   { level: "Executive", req: "100+ active participants", benefits: "Top-tier recognition + global leadership", color: "border-primary" },
 ];
@@ -32,7 +32,7 @@ export default function Incentives() {
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: i * 0.1 }}
-            className={`p-6 rounded-2xl bg-card border-l-4 ${t.color} border border-border/50`}
+            className={`p-6 rounded-2xl bg-card border ${t.color}`}
           >
             <div className="flex flex-col sm:flex-row sm:items-center gap-4">
               <div className="flex-1">

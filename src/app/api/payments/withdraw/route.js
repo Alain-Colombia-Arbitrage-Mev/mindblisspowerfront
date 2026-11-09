@@ -3,23 +3,29 @@ import { rawIdToken } from "@/lib/admin-bff";
 import { NextResponse } from "next/server";
 
 import { idTokenHeader } from "@/lib/admin-bff";
-import { verifiedEmailFromIdToken } from "@/lib/verify-id-token";
+import { verifiedEmailFromIdTokenForSession as verifiedEmailFromIdToken } from "@/lib/verify-id-token";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const privateHeaders = { "Cache-Control": "private, no-store", Vary: "Cookie" };
 
 /**
  * Solicitud de retiro de comisiones. Valida sesión Cognito y delega al servicio
  * Go (que valida mínimo $100 + saldo disponible y crea mlm.withdrawal_request).
  */
 export async function POST(request) {
-  const idToken = await rawIdToken();
-  if (!idToken) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+  let idToken, email;
+  try {
+    idToken = await rawIdToken();
+    if (!idToken) return NextResponse.json({ error: "unauthenticated" }, { status: 401, headers: privateHeaders });
 
-  // Identidad VERIFICADA (firma JWKS + iss + aud + token_use + exp). Sin esto,
-  // cualquiera podía forjar un token y pedir el retiro del saldo ajeno.
-  const email = await verifiedEmailFromIdToken(idToken);
-  if (!email) return NextResponse.json({ error: "session-invalid" }, { status: 401 });
+    // Identidad VERIFICADA (firma JWKS + iss + aud + token_use + exp). Sin esto,
+    // cualquiera podía forjar un token y pedir el retiro del saldo ajeno.
+    email = await verifiedEmailFromIdToken(idToken);
+    if (!email) return NextResponse.json({ error: "session-invalid" }, { status: 401, headers: privateHeaders });
+  } catch {
+    return NextResponse.json({ error: "authentication_unavailable" }, { status: 503, headers: privateHeaders });
+  }
 
   let body;
   try { body = await request.json(); } catch { return NextResponse.json({ error: "invalid-json" }, { status: 400 }); }

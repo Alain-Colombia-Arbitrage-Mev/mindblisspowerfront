@@ -220,7 +220,7 @@ export default function ViralNarrativeSystem() {
                     color: '#a78bfa'
                   }
                 ].map((item, i) => (
-                  <div key={i} style={{ paddingLeft: 20, borderLeft: `3px solid ${item.color}` }}>
+                  <div key={i} style={{ padding: 16, border: `1px solid ${item.color}55`, borderRadius: 12 }}>
                     <p style={{ fontSize: 13, fontWeight: 700, color: '#0F1419', margin: 0, fontFamily: 'Inter, sans-serif' }}>
                       {item.stage}
                     </p>

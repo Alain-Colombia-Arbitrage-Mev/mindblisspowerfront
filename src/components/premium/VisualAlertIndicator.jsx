@@ -18,7 +18,6 @@ export default function VisualAlertIndicator({ alert, onClick = null }) {
       style={{
         background: config.bg,
         border: `1px solid ${config.border}`,
-        borderLeft: `3px solid ${config.dot}`,
       }}
     >
       <div className="flex items-start gap-3">

@@ -76,7 +76,6 @@ export default function AdminPage() {
     <section className="executive-page"><div className="executive-container">
       <div className="executive-page-header">
         <div>
-          <p className="executive-eyebrow">Administración</p>
           <h1 className="executive-title">Panel Admin</h1>
           <p className="executive-subtitle">Usuarios, pagos, rangos, ventas por producto y control de bloqueo.</p>
         </div>

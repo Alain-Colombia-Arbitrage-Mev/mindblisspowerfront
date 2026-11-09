@@ -239,10 +239,10 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
   }
 
   return (
-    <AuthShell activePath="/register" loginHref={loginUrl} registrationHref={registrationUrl(email, hints.referralCode, hints.preferredSide)} eyebrow="Nuevo miembro" title="Tu cuenta, con acceso seguro."
+    <AuthShell activePath="/register" loginHref={loginUrl} registrationHref={registrationUrl(email, hints.referralCode, hints.preferredSide)} eyebrow="Nuevo miembro" title="Tu cuenta, con acceso seguro." layout="long" supportEmail={email}
       description="Crea tu acceso y verifica tu correo. Si ya perteneces a la red, tus posiciones y datos anteriores se conservan; si tu vinculación requiere revisión, deberás completarla antes de entrar."
-      visualSrc="/mindbliss/mindbliss-01.avif" visualAlt="Equipo Mindbliss Power">
-      <section className="min-w-0 rounded-xl border border-[var(--vp-border)] bg-[var(--vp-surface)] p-4 shadow-[var(--vp-shadow)] sm:p-8" aria-labelledby="registration-title" aria-busy={isLoading}>
+      visualSrc="/mindbliss/mindbliss-auth-background.png" visualAlt="Arquitectura urbana de Mindbliss">
+      <section className="auth-registration-card min-w-0" aria-labelledby="registration-title" aria-busy={isLoading}>
         <div className="mb-6 flex items-start gap-3">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[var(--vp-accent-muted)] text-[var(--vp-accent)]" aria-hidden="true">
             {step === 'verified' ? <CheckCircle2 size={22} /> : step === 'confirm' ? <Mail size={22} /> : <UserPlus size={22} />}

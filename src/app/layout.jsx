@@ -21,7 +21,7 @@ export default function RootLayout({ children }) {
       <head>
         <link
           rel="preload"
-          href="/fonts/montserrat-latin-wght.woff2"
+          href="/fonts/manrope-latin-wght.woff2"
           as="font"
           type="font/woff2"
           crossOrigin="anonymous"

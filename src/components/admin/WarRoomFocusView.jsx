@@ -104,7 +104,7 @@ export default function WarRoomFocusView({ isOpen, onClose, item, type }) {
               </div>
 
               {/* Recommended Action */}
-              <div className="p-4 rounded-lg border-l-4" style={{ background: `${color}08`, borderColor: color, borderLeftWidth: 4 }}>
+              <div className="p-4 rounded-lg border" style={{ background: `${color}08`, borderColor: `${color}55` }}>
                 <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, margin: '0 0 6px', fontWeight: 700, textTransform: 'uppercase' }}>
                   Recommended Action
                 </p>

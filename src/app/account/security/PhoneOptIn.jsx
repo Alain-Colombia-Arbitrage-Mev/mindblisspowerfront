@@ -134,7 +134,7 @@ export default function PhoneOptIn() {
   return (
     <AuthShell activePath="/account/security" eyebrow="Seguridad opcional" title="Tu teléfono, bajo tu control."
       description="Verifica un número propio sólo si quieres. Los códigos por correo siguen disponibles y esta autorización no incluye publicidad."
-      visualSrc="/mindbliss/mindbliss-02.avif" visualAlt="Comunidad Mindbliss Power">
+      visualSrc="/mindbliss/mindbliss-auth-background.png" visualAlt="Arquitectura urbana de Mindbliss">
       <section aria-labelledby="phone-opt-in-title" aria-busy={busy || checking} className="rounded-xl border border-[var(--vp-border)] bg-[var(--vp-surface)] p-6 shadow-[var(--vp-shadow)] sm:p-8">
         <div className="mb-5 flex items-start gap-3">
           <Smartphone size={24} className="mt-1 shrink-0 text-[var(--vp-accent)]" aria-hidden="true" />

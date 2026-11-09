@@ -83,7 +83,6 @@ export function CommunicationsDashboardPage() {
                     style={{
                       background: selectedMessage?.id === message.id ? "var(--vp-surface-raised)" : "transparent",
                       border: 0,
-                      borderLeft: `3px solid ${selectedMessage?.id === message.id ? "var(--vp-accent)" : "transparent"}`,
                       cursor: "pointer",
                     }}
                     type="button"

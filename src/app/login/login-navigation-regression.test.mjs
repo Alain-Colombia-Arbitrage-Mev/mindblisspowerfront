@@ -111,6 +111,7 @@ function component() {
     '@/lib/referral-attribution': attribution,
     '@/lib/email-otp-client.mjs': otp,
     './BetterAuthPasswordLogin': { default: () => null },
+    './SocialLoginButtons': { default: () => null },
     '@/lib/referral-sync.mjs': referralSync,
     '@/lib/browser-request-deadline.mjs': deadline,
     './better-auth-login.mjs': auth,

@@ -102,18 +102,17 @@ test('immutable placement ignores pending hints while a missing durable attribut
   assert.equal(referralForCheckout(email, owner.localStorage).code, 'OldSponsor', 'no node placement or browser binding is rewritten');
 });
 
-test('late responses cannot clear a newer visit or another owner, and expired markers never get replayed', async () => {
+test('late responses cannot clear a newer visit or another owner, and expired markers never get replayed', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: 1800000000000 });
   const owner = browser(), old = pending();
   const first = beginVerifiedReferralSync(email, 'First', 'L', { browser: owner, fetchImpl: () => old.promise });
-  await beginVerifiedReferralSync(email, 'Second', 'R', { browser: owner, fetchImpl: async () => Response.json({}, { status: 503 }) });
-  old.resolve(Response.json(serverHint('First', 'L'))); await first;
+  const second = beginVerifiedReferralSync(email, 'Second', 'R', { browser: owner, fetchImpl: async () => Response.json({}, { status: 503 }) });
+  old.resolve(Response.json(serverHint('First', 'L'))); await first; await second;
   assert.equal(pendingVerifiedReferral(email, { browser: owner }).ref, 'Second');
   await beginVerifiedReferralSync('other@example.test', 'Other', 'R', { browser: owner, fetchImpl: async () => Response.json({}, { status: 503 }) });
-  assert.equal(pendingVerifiedReferral(email, { browser: owner }), null);
+  assert.equal(pendingVerifiedReferral(email, { browser: owner }).ref, 'Second', 'another owner cannot erase this context\'s pending choice');
   assert.equal(pendingVerifiedReferral('other@example.test', { browser: owner }).ref, 'Other');
-  const record = [...owner.sessionStorage.values.values()][0];
-  const expired = JSON.parse(record); expired.createdAt -= 31 * 60 * 1000;
-  owner.sessionStorage.setItem('mp_ref_verified_visit.v1', JSON.stringify(expired));
+  t.mock.timers.tick(31 * 60 * 1000);
   const methods = [];
   await retryVerifiedReferral('other@example.test', { browser: owner, fetchImpl: async (_path, options) => {
     methods.push(options.method || 'GET'); return Response.json(serverHint('DurableOther', 'L'));
@@ -192,20 +191,17 @@ test('repeated concurrent verified changes fail closed after one fresh GET inste
   assert.equal(reads, 2);
 });
 
-test('expired or unavailable tab markers retain the browser backup as a visible fresh choice, never an automatic replay or silent default', async () => {
+test('expired or unavailable tab markers retain the browser backup as a visible fresh choice, never an automatic replay or silent default', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: 1800000000000 });
   for (const unavailable of [false, true]) {
     const owner = browser(), calls = [];
     bindReferralCodeToEmail(email, 'BrowserBackup', owner.localStorage, undefined, 'login', 'L');
     if (unavailable) owner.sessionStorage = { getItem() { throw new Error('denied'); }, setItem() { throw new Error('denied'); } };
     await beginVerifiedReferralSync(email, 'BrowserBackup', 'L', { browser: owner, fetchImpl: async () => Response.json({}, { status: 503 }) });
-    if (!unavailable) {
-      const record = JSON.parse(owner.sessionStorage.getItem('mp_ref_verified_visit.v1'));
-      record.createdAt -= 31 * 60 * 1000;
-      owner.sessionStorage.setItem('mp_ref_verified_visit.v1', JSON.stringify(record));
-    }
-    assert.equal(pendingVerifiedReferral(email, { browser: owner }), null);
+    if (!unavailable) t.mock.timers.tick(31 * 60 * 1000);
+    assert.equal(pendingVerifiedReferral(email, { browser: owner })?.ref || null, unavailable ? 'BrowserBackup' : null);
     const options = { browser: owner, fetchImpl: async (_path, input) => { calls.push(input); return Response.json(serverHint('', '')); } };
-    assert.deepEqual(await verifiedReferralForCheckout(email, options), { ok: false, error: 'unconfirmed' });
+    assert.deepEqual(await verifiedReferralForCheckout(email, options), { ok: false, error: unavailable ? 'pending' : 'unconfirmed' });
     assert.equal(calls.length, 1); assert.equal(calls[0].method, undefined, 'preflight never reposts the old cache');
     const choice = browserReferralChoice(email, { browser: owner });
     assert.deepEqual(choice, { code: 'BrowserBackup', email, side: 'L' });
@@ -217,6 +213,126 @@ test('expired or unavailable tab markers retain the browser backup as a visible 
     } });
     assert.equal(confirmed.ok, true); assert.equal(calls.length, 2); assert.equal(calls[1].method, 'POST');
     assert.equal((await chooseBrowserReferral('other@example.test', choice, { browser: owner, fetchImpl: () => assert.fail('cross-owner choice') })).ok, false);
+  }
+});
+
+test('same-owner choices are saved in selection order and checkout observes the last explicit choice, not the first reply', async () => {
+  const owner = browser(), firstReply = pending(), methods = [];
+  let stored = serverHint('', '');
+  const options = { browser: owner, fetchImpl: async (_path, input) => {
+    if (input.method === 'POST') {
+      const choice = JSON.parse(input.body); methods.push(choice.ref);
+      if (choice.ref === 'FirstChoice') await firstReply.promise;
+      stored = serverHint(choice.ref, choice.preferred_side);
+      return Response.json(stored);
+    }
+    methods.push('GET'); return Response.json(stored);
+  } };
+  const first = beginVerifiedReferralSync(email, 'FirstChoice', 'L', options);
+  const second = beginVerifiedReferralSync(email, 'LastChoice', 'R', options);
+  const checkout = verifiedReferralForCheckout(email, options);
+  assert.deepEqual(methods, ['FirstChoice'], 'the second POST and checkout GET wait for the existing owner save');
+  assert.equal(pendingVerifiedReferral(email, { browser: owner }).ref, 'LastChoice');
+  firstReply.resolve(); await first; await second;
+  assert.deepEqual(await checkout, { ok: true, code: 'LastChoice', email, side: 'R' });
+  assert.deepEqual(methods, ['FirstChoice', 'LastChoice', 'GET']);
+  assert.equal(pendingVerifiedReferral(email, { browser: owner }), null);
+});
+
+test('a late server commit cannot silently undo an acknowledged last choice across reloads; only an explicit save reconciles it', async () => {
+  const owner = browser(), methods = [];
+  await beginVerifiedReferralSync(email, 'LastChoice', 'R', { browser: owner, fetchImpl: async () => Response.json(serverHint('LastChoice', 'R')) });
+  assert.equal(pendingVerifiedReferral(email, { browser: owner }), null);
+  // A new module context still has only a short-lived hint, never authority.
+  const reloaded = { sessionStorage: owner.sessionStorage, localStorage: owner.localStorage };
+  const options = { browser: reloaded, fetchImpl: async (_path, input) => { methods.push(input.method || 'GET'); return Response.json(serverHint('OlderDelayedChoice', 'L')); } };
+  assert.deepEqual(await verifiedReferralForCheckout(email, options), { ok: false, error: 'pending' });
+  assert.deepEqual(methods, ['GET'], 'a discrepancy never automatically resends a choice');
+  assert.equal(pendingVerifiedReferral(email, { browser: reloaded }).ref, 'LastChoice');
+  const confirmed = await retryVerifiedReferral(email, { browser: reloaded, fetchImpl: async (_path, input) => {
+    methods.push(input.method); assert.equal(JSON.parse(input.body).ref, 'LastChoice');
+    return Response.json(serverHint('LastChoice', 'R'));
+  } });
+  assert.equal(confirmed.ok, true); assert.deepEqual(methods, ['GET', 'POST']);
+});
+
+test('denied browser stores retain failed choices per owner and checkout fails closed until exact ACK or authoritative placement', async () => {
+  const owner = { sessionStorage: { getItem() { throw new Error('denied'); }, setItem() { throw new Error('denied'); } },
+    localStorage: { getItem() { throw new Error('denied'); }, setItem() { throw new Error('denied'); } } };
+  await beginVerifiedReferralSync(email, 'ChosenSponsor', 'R', { browser: owner, fetchImpl: async () => Response.json({}, { status: 503 }) });
+  assert.equal(pendingVerifiedReferral(email, { browser: owner }).ref, 'ChosenSponsor');
+  assert.equal(pendingVerifiedReferral('another@example.test', { browser: owner }), null);
+  const calls = [], options = { browser: owner, fetchImpl: async (_path, input) => { calls.push(input.method || 'GET'); return Response.json(serverHint('', '')); } };
+  assert.deepEqual(await verifiedReferralForCheckout(email, options), { ok: false, error: 'pending' });
+  assert.deepEqual(calls, ['GET']);
+  assert.deepEqual(await verifiedReferralForCheckout(email, { browser: owner, fetchImpl: async () => Response.json(serverHint('', '', true)) }),
+    { ok: true, code: '', email: '', side: '' });
+  assert.equal(pendingVerifiedReferral(email, { browser: owner }), null);
+});
+
+test('a failed storage write cannot hide the latest same-millisecond choice behind an older readable confirmed record', async t => {
+  t.mock.method(Date, 'now', () => 1800000000000);
+  const owner = browser(), setItem = owner.sessionStorage.setItem;
+  await beginVerifiedReferralSync(email, 'FirstChoice', 'L', { browser: owner, fetchImpl: async () => Response.json(serverHint('FirstChoice', 'L')) });
+  const previous = owner.sessionStorage.getItem('mp_ref_verified_visit.v1');
+  owner.sessionStorage.setItem = () => { throw new Error('quota_exceeded'); };
+  await beginVerifiedReferralSync(email, 'LastChoice', 'R', { browser: owner, fetchImpl: async () => Response.json({}, { status: 503 }) });
+  assert.equal(pendingVerifiedReferral(email, { browser: owner }).ref, 'LastChoice');
+  const methods = [];
+  assert.deepEqual(await verifiedReferralForCheckout(email, { browser: owner, fetchImpl: async (_path, input) => {
+    methods.push(input.method || 'GET'); return Response.json(serverHint('FirstChoice', 'L'));
+  } }), { ok: false, error: 'pending' });
+  assert.deepEqual(methods, ['GET']);
+  assert.equal(owner.sessionStorage.getItem('mp_ref_verified_visit.v1'), previous, 'a GET never rewrites storage');
+  owner.sessionStorage.setItem = setItem;
+  assert.equal((await retryVerifiedReferral(email, { browser: owner, fetchImpl: async (_path, input) => {
+    methods.push(input.method); assert.equal(JSON.parse(input.body).ref, 'LastChoice');
+    return Response.json(serverHint('LastChoice', 'R'));
+  } })).ok, true);
+  assert.equal(pendingVerifiedReferral(email, { browser: owner }), null);
+  assert.deepEqual(methods, ['GET', 'POST']);
+});
+
+test('a read never overwrites a newer stored choice; ambiguous same-time choices remain pending rather than authorizing another referral', async t => {
+  let now = 1800000000000;
+  t.mock.method(Date, 'now', () => now);
+  for (const newer of [false, true]) {
+    const owner = browser(), setItem = owner.sessionStorage.setItem;
+    await beginVerifiedReferralSync(email, 'FirstChoice', 'L', { browser: owner, fetchImpl: async () => Response.json(serverHint('FirstChoice', 'L')) });
+    owner.sessionStorage.setItem = () => { throw new Error('quota_exceeded'); };
+    await beginVerifiedReferralSync(email, 'LocalLastChoice', 'R', { browser: owner, fetchImpl: async () => Response.json({}, { status: 503 }) });
+    if (newer) now++;
+    const replacement = JSON.stringify({ id: 'another-explicit-choice', email, ref: 'OtherDocumentChoice', preferred_side: 'L', createdAt: now, confirmed: true });
+    setItem('mp_ref_verified_visit.v1', replacement);
+    let reads = 0;
+    const result = await verifiedReferralForCheckout(email, { browser: owner, fetchImpl: async (_path, input) => {
+      assert.equal(input.method, undefined); reads++;
+      return Response.json(serverHint('OtherDocumentChoice', 'L'));
+    } });
+    assert.deepEqual(result, newer ? { ok: true, code: 'OtherDocumentChoice', email, side: 'L' } : { ok: false, error: 'pending' });
+    assert.equal(pendingVerifiedReferral(email, { browser: owner })?.ref || null, newer ? null : 'LocalLastChoice');
+    assert.equal(owner.sessionStorage.getItem('mp_ref_verified_visit.v1'), replacement);
+    assert.equal(reads, 1);
+  }
+});
+
+test('corrupt same-owner storage or failed reads cannot erase this context\'s valid pending choice, and real expiry retires both hints', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: 1800000000000 });
+  for (const corruption of ['invalid-json', 'invalid-fields', 'read-unavailable']) {
+    const owner = browser();
+    await beginVerifiedReferralSync(email, 'PendingChoice', 'R', { browser: owner, fetchImpl: async () => Response.json({}, { status: 503 }) });
+    if (corruption === 'read-unavailable') owner.sessionStorage.getItem = () => { throw new Error('read_denied'); };
+    else owner.sessionStorage.setItem('mp_ref_verified_visit.v1', corruption === 'invalid-json' ? '{' : JSON.stringify({ email, id: 'bad', ref: '', preferred_side: 'ROOT', createdAt: Date.now() }));
+    assert.equal(pendingVerifiedReferral(email, { browser: owner }).ref, 'PendingChoice');
+    const methods = [];
+    assert.deepEqual(await verifiedReferralForCheckout(email, { browser: owner, fetchImpl: async (_path, input) => {
+      methods.push(input.method || 'GET'); return Response.json(serverHint('', ''));
+    } }), { ok: false, error: 'pending' });
+    assert.deepEqual(methods, ['GET']);
+    t.mock.timers.tick(31 * 60 * 1000);
+    assert.equal(pendingVerifiedReferral(email, { browser: owner }), null);
+    assert.deepEqual(await verifiedReferralForCheckout(email, { browser: owner, fetchImpl: async () => Response.json(serverHint('', '')) }),
+      { ok: true, code: '', email: '', side: '' });
   }
 });
 

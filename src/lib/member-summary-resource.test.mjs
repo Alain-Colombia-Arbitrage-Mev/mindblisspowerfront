@@ -61,3 +61,22 @@ test("separate page instances never share private responses or transport failure
   await first.load(); assert.equal(calls, 3);
   first.cancel(); second.cancel();
 });
+
+test("summary failures preserve only safe status and canonical outage metadata and never retain old financial data", async () => {
+  for (const [status, code] of [[401, 'private-account-detail'], [403, 'private-account-detail'], [503, 'authentication_unavailable'], [503, 'private-account-detail']]) {
+    let failure = false, calls = 0;
+    const resource = createMemberSummaryResource({ read: async () => {
+      calls++;
+      if (failure) throw Object.assign(new Error('Safe read error'), { status, code, email: 'must-not-leak@example.test' });
+      return summary;
+    } });
+    await resource.load(); assert.equal(resource.getSnapshot().data, summary);
+    failure = true; await resource.refresh();
+    const state = resource.getSnapshot();
+    assert.equal(state.errorStatus, status); assert.equal(state.data, null); assert.equal(state.loading, false);
+    assert.equal(state.errorCode, status === 503 && code === 'authentication_unavailable' ? code : undefined);
+    assert.doesNotMatch(JSON.stringify(state), /private-account|must-not-leak/);
+    assert.equal(calls, 2, 'there is no automatic retry or OTP request');
+    resource.cancel(); assert.deepEqual(resource.getSnapshot(), { loading: true, error: '', data: null });
+  }
+});

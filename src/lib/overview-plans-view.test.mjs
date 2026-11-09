@@ -114,7 +114,7 @@ test("both summary routes stream the server catalog slot without adding a catalo
   assert.doesNotMatch(source, /["']use client["']|useEffect|setInterval|\bfetch\s*\(|runtimeEnvironment|process\.env/);
 });
 
-test("actual summary places the plans slot after the referral and before secondary support", () => {
+test("actual summary places the plans slot after wallet discovery and before secondary support", () => {
   const react = { ...React, useState: initial => [initial, () => {}], useRef: () => ({ current: null }), useCallback: callback => callback, useEffect: () => {} };
   const mocks = { react,
     "next/navigation": { useRouter: () => ({ push() { throw new Error("Unexpected transition during render"); } }) },
@@ -123,10 +123,10 @@ test("actual summary places the plans slot after the referral and before seconda
     "@/lib/member-read.mjs": { readMemberParts: () => { throw new Error("Unexpected request"); }, validMemberTree: () => true, validMemberSummary: () => true },
     "@/lib/payment-display.mjs": { formatPaymentMoney: () => "not-called" },
   };
-  for (const name of ["EarningsCard", "ReferralLinkCard", "PositionSnapshotCard", "RecentSignupsCard", "ShortcutPill", "TopRanksCard"]) mocks[`./${name}`] = { default: marker(name) };
+  for (const name of ["EarningsCard", "OverviewDiscoveryCard", "PositionSnapshotCard", "RecentSignupsCard", "ShortcutPill", "TopRanksCard"]) mocks[`./${name}`] = { default: marker(name) };
   const { default: Dashboard } = moduleAt("../components/panel/overview/OverviewDashboard.jsx", mocks);
   const html = render(React.createElement(Dashboard, { plans: React.createElement("p", { "data-test": "plans-slot" }, "planes") }));
-  assert.ok(html.indexOf("ReferralLinkCard") < html.indexOf("plans-slot"));
+  assert.ok(html.indexOf("OverviewDiscoveryCard") < html.indexOf("plans-slot"));
   assert.ok(html.indexOf("plans-slot") < html.indexOf("Centro de soporte"));
 });
 

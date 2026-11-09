@@ -1,9 +1,8 @@
 "use client";
 
 import Link from "./IntentLink";
-import { LifeBuoy, Mail, Menu, Power, UserRound } from "lucide-react";
+import { Headphones, Menu, UserRound } from "lucide-react";
 import ThemeToggle from "@/app/_components/ThemeToggle";
-import LogoutButton from "./LogoutButton";
 
 export default function PanelHeader({
   title,
@@ -32,21 +31,14 @@ export default function PanelHeader({
       </div>
       <div className="vp-panel-actions">
         <Link
-          className="vp-shell-icon vp-desktop-action"
-          href="/dashboard/communications"
-          aria-label="Mensajes"
-          title="Mensajes"
-        >
-          <Mail size={18} />
-        </Link>
-        <Link
-          className="vp-shell-icon vp-desktop-action"
+          className="vp-shell-icon vp-header-pill vp-desktop-action"
           href="/dashboard/support"
           aria-label="Soporte"
           title="Soporte"
         >
-          <LifeBuoy size={18} />
+          <Headphones size={16} /><span>Soporte</span>
         </Link>
+        <ThemeToggle />
         <Link
           className="vp-shell-icon"
           href="/dashboard/profile"
@@ -55,12 +47,6 @@ export default function PanelHeader({
         >
           <UserRound size={18} />
         </Link>
-        <LogoutButton
-          className="vp-shell-icon vp-desktop-action"
-        >
-          <Power size={18} aria-hidden="true" />
-        </LogoutButton>
-        <ThemeToggle />
       </div>
     </header>
   );

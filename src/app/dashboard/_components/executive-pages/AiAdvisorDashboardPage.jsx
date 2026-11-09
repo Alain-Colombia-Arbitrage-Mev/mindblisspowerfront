@@ -182,7 +182,6 @@ export function AiAdvisorDashboardPage() {
       <section className="executive-page" style={{ paddingTop: 0 }}>
         <div className="executive-container">
           <div className="mb-6">
-            <p className="executive-eyebrow">Análisis prospectivo</p>
             <h2 className="executive-title">Escenarios proyectados</h2>
             <p className="executive-subtitle">
               {sustLoading

@@ -22,8 +22,7 @@ export default function NetworkSummaryPanel({ summary, maxDepth, setMaxDepth, to
             transition={{ delay: i * 0.06 }}
             style={{
               padding: '10px 12px', borderRadius: 10,
-              background: `${s.color}0D`, border: `1px solid ${s.color}25`,
-              borderLeft: `3px solid ${s.color}`,
+              background: `${s.color}0D`, border: `1px solid ${s.color}40`,
             }}
           >
             <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 9, fontWeight: 700, margin: '0 0 3px 0' }}>{s.icon} {s.label}</p>

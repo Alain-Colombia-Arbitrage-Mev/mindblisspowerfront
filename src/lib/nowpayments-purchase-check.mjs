@@ -23,7 +23,10 @@ export function nowpaymentsPurchaseCheck(value, orderId) {
 }
 
 export function nowpaymentsPurchaseCheckError(failure) {
-  if ([401, 403].includes(failure?.status)) return {
+  if (failure?.status === 403) return {
+    title: 'Acceso a la compra restringido', description: 'No tienes autorización para consultar esta compra. Contacta al soporte para revisar el acceso; no necesitas repetir un pago ni solicitar otro código por este aviso.',
+  };
+  if (failure?.status === 401) return {
     title: 'Sesión no disponible', description: 'Vuelve a iniciar sesión para consultar esta compra. No vuelvas a pagar sin comprobar su estado.',
   };
   if (failure?.status === 404) return {

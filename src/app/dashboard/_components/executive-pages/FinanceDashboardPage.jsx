@@ -14,6 +14,7 @@ import NOWPaymentsBalances from "@/components/panel/NOWPaymentsBalances";
 import { Activity, AlertTriangle, ArrowDownToLine, CreditCard, DollarSign, Download, Loader2, TrendingUp, UserPlus, Wallet } from "lucide-react";
 
 import { PageHeader, MetricCard, Field, StatusPill } from './executive-ui';
+import WalletGettingStarted from "./WalletGettingStarted";
 
 // Estados de retiro → etiqueta + tono del StatusPill.
 const WITHDRAWAL_STATUS = {
@@ -43,18 +44,22 @@ export function FinanceDashboardPage() {
     <section className="executive-page">
       <div className="executive-container">
         <PageHeader
-          eyebrow="Finanzas"
-          title="Billetera y retiros"
-          subtitle="Consulta por separado el histórico Stripe y tus membresías y comisiones NOWPayments. El vencimiento de un plazo no implica un pago automático."
+          eyebrow="Wallet"
+          title="Tu wallet Mindbliss"
+          subtitle="Crea una wallet y úsala como destino de tus compras de cripto."
         />
 
-        {state.loading ? (
-          <FinanceLoading />
-        ) : state.error ? (
-          <FinanceError onRetry={load} />
-        ) : (
-          <FinanceContent data={state.data || {}} onDone={load} />
-        )}
+        <WalletGettingStarted />
+
+        <div id="wallet-finance" className="mb-wallet-finance">
+          {state.loading ? (
+            <FinanceLoading />
+          ) : state.error ? (
+            <FinanceError onRetry={load} />
+          ) : (
+            <FinanceContent data={state.data || {}} onDone={load} />
+          )}
+        </div>
       </div>
     </section>
   );

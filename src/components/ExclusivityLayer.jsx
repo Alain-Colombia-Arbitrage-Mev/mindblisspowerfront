@@ -158,8 +158,9 @@ export default function ExclusivityLayer() {
                 color: '#4b5563',
                 margin: 0,
                 fontFamily: 'Inter, sans-serif',
-                paddingLeft: 20,
-                borderLeft: '2px solid rgba(30, 64, 175, 0.3)',
+                padding: 16,
+                border: '1px solid rgba(30, 64, 175, 0.25)',
+                borderRadius: 12,
                 lineHeight: 1.6
               }}
             >

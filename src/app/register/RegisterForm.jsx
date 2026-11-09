@@ -442,17 +442,12 @@ export default function RegisterForm() {
       title="Bienvenido a Mindbliss Power."
       description="Crea tu perfil personal para que el equipo pueda identificarte, contactarte y preparar tu primera experiencia dentro de la empresa."
       sideKpis={sideKpis}
-      visualSrc="/mindbliss/mindbliss-01.avif"
+      visualSrc="/mindbliss/mindbliss-auth-background.png"
       visualAlt="Equipo Mindbliss creando una cuenta"
+      layout="long"
+      supportEmail={form.email}
     >
-      <section
-        className="w-full rounded-xl p-6 sm:p-8"
-        style={{
-          background: "var(--vp-surface)",
-          border: "1px solid var(--vp-border)",
-          boxShadow: "var(--vp-shadow)",
-        }}
-      >
+      <section className="auth-registration-card w-full">
         <div className="mb-7 flex items-start gap-4">
           <div
             className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-lg"
@@ -515,7 +510,7 @@ export default function RegisterForm() {
               required
             />
 
-            <p className="-mt-2 text-xs leading-5" style={{ color: isMicrosoftEmail(form.email) ? "var(--vp-amber, #d97706)" : "var(--vp-subtle)" }}>
+            <p className="-mt-2 text-xs leading-5" style={{ color: isMicrosoftEmail(form.email) ? "var(--vp-amber, #d97706)" : "var(--vp-muted)" }}>
               {isMicrosoftEmail(form.email)
                 ? "Tu correo es de Microsoft (Hotmail/Outlook/Live): a veces demora o cae en «Correo no deseado». Revisa esa carpeta."
                 : "¿No llega en 1–2 min? Revisa la carpeta de spam / correo no deseado."}
@@ -526,7 +521,7 @@ export default function RegisterForm() {
               disabled={loading}
               className="flex min-h-12 w-full items-center justify-center gap-2 rounded-lg px-5 py-3 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-60"
               style={{
-                color: "var(--vp-shell)",
+                color: "#fff",
                 background: "var(--vp-accent)",
                 border: "1px solid var(--vp-accent-strong)",
               }}
@@ -562,7 +557,7 @@ export default function RegisterForm() {
           </form>
         ) : (
         <form className="space-y-5" onSubmit={handleSubmit}>
-          <div className="grid gap-4">
+          <div className="grid gap-4 sm:grid-cols-2">
             <Field
               id="fullName"
               label="Nombre completo"
@@ -625,7 +620,7 @@ export default function RegisterForm() {
               required
             />
             <div
-              className="rounded-lg px-3 py-3"
+              className="rounded-lg px-3 py-3 sm:col-span-2"
               style={{
                 background: "var(--vp-surface-raised)",
                 border: "1px solid var(--vp-border)",
@@ -660,11 +655,11 @@ export default function RegisterForm() {
             }}
           >
             <label className="block text-xs font-bold" htmlFor="phone" style={{ color: "var(--vp-muted)" }}>
-              Teléfono <span style={{ color: "var(--vp-subtle)" }}>· recibirás aquí tu código si el correo falla</span>
+              Teléfono <span style={{ color: "var(--vp-muted)" }}>· recibirás aquí tu código si el correo falla</span>
             </label>
-            <div className="mt-3 grid gap-3">
+            <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
               <div>
-                <label className="mb-1.5 block text-[11px] font-bold uppercase" htmlFor="dialCode" style={{ color: "var(--vp-subtle)" }}>
+                <label className="mb-1.5 block text-[11px] font-bold uppercase" htmlFor="dialCode" style={{ color: "var(--vp-muted)" }}>
                   País / código
                 </label>
                 <select
@@ -681,7 +676,7 @@ export default function RegisterForm() {
                 </select>
               </div>
               <div className="min-w-0">
-                <label className="mb-1.5 block text-[11px] font-bold uppercase" htmlFor="phone" style={{ color: "var(--vp-subtle)" }}>
+                <label className="mb-1.5 block text-[11px] font-bold uppercase" htmlFor="phone" style={{ color: "var(--vp-muted)" }}>
                   Número local
                 </label>
                 <input
@@ -708,7 +703,7 @@ export default function RegisterForm() {
                 Se guardará como {form.dialCode} {formatLocalPhone(form.phone)}.
               </p>
             ) : (
-              <p className="mt-2 text-xs leading-5" style={{ color: "var(--vp-subtle)" }}>
+              <p className="mt-2 text-xs leading-5" style={{ color: "var(--vp-muted)" }}>
                 Escribe solo el número local; el código de país se agrega desde el selector.
               </p>
             )}
@@ -752,7 +747,7 @@ export default function RegisterForm() {
             disabled={loading}
             className="flex min-h-12 w-full items-center justify-center gap-2 rounded-lg px-5 py-3 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-60"
             style={{
-              color: "var(--vp-shell)",
+              color: "#fff",
               background: "var(--vp-accent)",
               border: "1px solid var(--vp-accent-strong)",
             }}
@@ -780,7 +775,7 @@ export default function RegisterForm() {
             href="/onboarding"
             className="flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition"
             style={{
-              color: "var(--vp-accent)",
+              color: "var(--vp-link)",
               background: "var(--vp-accent-muted)",
               border: "1px solid var(--vp-accent-border)",
             }}
@@ -848,7 +843,7 @@ function PasswordChecklist({ password }) {
         <li
           key={rule.key}
           className="flex min-h-5 items-center gap-2 text-xs font-semibold leading-5 transition-colors"
-          style={{ color: rule.met ? "var(--vp-accent)" : "var(--vp-subtle)" }}
+          style={{ color: rule.met ? "var(--vp-link)" : "var(--vp-muted)" }}
         >
           <span
             className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full"
@@ -900,7 +895,7 @@ function Field({ id, label, error = "", helper = "", icon = null, ...props }) {
           {error}
         </p>
       ) : helper ? (
-        <p id={`${id}-helper`} className="mt-2 text-xs leading-5" style={{ color: "var(--vp-subtle)" }}>
+        <p id={`${id}-helper`} className="mt-2 text-xs leading-5" style={{ color: "var(--vp-muted)" }}>
           {helper}
         </p>
       ) : null}

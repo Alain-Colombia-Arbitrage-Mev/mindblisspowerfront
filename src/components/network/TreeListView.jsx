@@ -123,8 +123,7 @@ export default function TreeListView({ dataset, onSelect }) {
                 border: '1px solid var(--vp-border)',
                 cursor: 'pointer',
                 opacity: isInactive ? 0.6 : 1,
-                transition: 'opacity 0.15s',
-                borderLeft: `3px solid ${sc}`,
+                transition: 'opacity 0.15s ease-out, background-color 0.15s ease-out',
               }}
             >
               {/* Initials */}

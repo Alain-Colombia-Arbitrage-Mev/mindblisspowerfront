@@ -8,7 +8,7 @@ const endpoint = '/api/member/referral-attribution';
 const browserDefault = () => typeof window === 'undefined' ? undefined : window;
 function syncState(browser) {
   const scope = browser && typeof browser === 'object' ? browser : globalThis;
-  if (!scopes.has(scope)) scopes.set(scope, { reads: new Map(), writes: new Map(), revision: 0 });
+  if (!scopes.has(scope)) scopes.set(scope, { reads: new Map(), writes: new Map(), owners: new Map(), visits: new Map(), revision: 0 });
   return scopes.get(scope);
 }
 function validResponse(body) {
@@ -20,30 +20,57 @@ function validResponse(body) {
     && (!body.positioned || (!body.ref && !body.preferred_side)) && (body.ref || !body.preferred_side);
 }
 function store(browser, value) {
-  try { browser?.sessionStorage?.setItem(key, JSON.stringify(value)); } catch { /* A denied store cannot block verified entry. */ }
+  // An unavailable browser store cannot turn a failed choice into an empty,
+  // apparently confirmed attribution. This memory is an owner-scoped hint only.
+  const { visits } = syncState(browser);
+  visits.set(value.email, value);
+  try {
+    if (!browser?.sessionStorage?.setItem) throw new Error('storage_unavailable');
+    browser.sessionStorage.setItem(key, JSON.stringify(value));
+  } catch { /* The owner-scoped memory above remains available in this context. */ }
 }
-function currentVisit(email, browser, now = Date.now()) {
+function validVisit(value, email, now) {
+  return value?.email === email && typeof value.id === 'string' && value.id.length <= 128
+    && value.ref && normalizeReferralCode(value.ref) === value.ref && ['', 'L', 'R'].includes(value.preferred_side)
+    && (value.confirmed === undefined || typeof value.confirmed === 'boolean')
+    && Number.isSafeInteger(value.createdAt) && value.createdAt <= now && now - value.createdAt <= ttl;
+}
+function latestVisit(email, browser, now = Date.now()) {
+  const normalized = normalizeReferralEmail(email);
+  if (!normalized) return null;
+  let value;
   try {
     const raw = browser?.sessionStorage?.getItem(key);
-    if (typeof raw !== 'string' || raw.length > 2048) return null;
-    const value = JSON.parse(raw), normalized = normalizeReferralEmail(email);
-    return normalized && value?.email === normalized && typeof value.id === 'string' && value.id.length <= 128
-      && value.ref && normalizeReferralCode(value.ref) === value.ref && ['', 'L', 'R'].includes(value.preferred_side)
-      && Number.isSafeInteger(value.createdAt) && value.createdAt <= now && now - value.createdAt <= ttl ? value : null;
-  } catch { return null; }
+    if (typeof raw === 'string' && raw.length <= 2048) value = JSON.parse(raw);
+  } catch { /* Use only this context's unexpired verified-choice hint below. */ }
+  const remembered = syncState(browser).visits.get(normalized);
+  // A quota failure may leave a readable but older stored record, even in the
+  // same millisecond. Prefer the latest known choice in that context; a valid,
+  // strictly newer stored choice still wins. Equal-time conflicts fail closed
+  // against the local choice instead of selecting an arbitrary random UUID.
+  if (validVisit(remembered, normalized, now)
+      && (!validVisit(value, normalized, now) || value.createdAt <= remembered.createdAt)) return remembered;
+  return validVisit(value, normalized, now) ? value : null;
+}
+function currentVisit(email, browser, now = Date.now()) {
+  const visit = latestVisit(email, browser, now);
+  return visit && visit.confirmed !== true ? visit : null;
 }
 function clearVisit(visit, browser) {
-  if (currentVisit(visit.email, browser)?.id !== visit.id) return;
-  try { browser?.sessionStorage?.removeItem(key); } catch { /* Keep the hint if storage is unavailable. */ }
+  if (latestVisit(visit.email, browser)?.id !== visit.id) return;
+  // Retain the last explicit choice briefly, even after its exact ACK. An
+  // aborted older request may still finish on the server; a later GET that
+  // disagrees must block checkout, not silently accept that older choice.
+  store(browser, { ...visit, confirmed: true });
 }
 const matches = (result, visit) => result.positioned || (result.ref === visit.ref && result.preferred_side === visit.preferred_side);
 
 async function postVisit(visit, { browser = browserDefault(), fetchImpl = fetch } = {}) {
-  const state = syncState(browser), { writes } = state;
+  const state = syncState(browser), { writes, owners } = state;
   const flight = `${visit.email}:${visit.id}`;
   if (writes.has(flight)) return writes.get(flight);
   state.revision++;
-  const completion = (async () => {
+  const send = async () => {
     const deadline = browserRequestDeadline(undefined, 5000);
     try {
       const response = await fetchImpl(endpoint, { method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error',
@@ -55,10 +82,16 @@ async function postVisit(visit, { browser = browserDefault(), fetchImpl = fetch 
       return body;
     } catch { return { ok: false }; }
     finally { deadline.dispose(); }
-  })();
+  };
+  // Only one save for this owner may be in flight in this browser context.
+  // Queue explicit newer choices; reads never create or replay a save.
+  const previous = owners.get(visit.email);
+  const completion = previous ? previous.then(send) : send();
   writes.set(flight, completion);
+  owners.set(visit.email, completion);
   try { return await completion; } finally {
     if (writes.get(flight) === completion) { writes.delete(flight); state.revision++; }
+    if (owners.get(visit.email) === completion) owners.delete(visit.email);
   }
 }
 
@@ -128,7 +161,14 @@ export async function readVerifiedReferral(email, options = {}) {
         // A late GET must not supersede a write that completed while it was
         // in flight, or clear the marker of a different verified visit.
         if (revision !== state.revision || visitId !== visit?.id) continue;
-        if (visit && matches(body, visit)) clearVisit(visit, browser);
+        const choice = latestVisit(normalized, browser);
+        if (choice && !matches(body, choice)) {
+          // A GET must never overwrite another document's stored choice. Keep
+          // the discrepancy pending only in this context; a later document
+          // independently compares its retained short-lived choice again.
+          state.visits.set(normalized, { ...choice, confirmed: false });
+        }
+        else if (choice) clearVisit(choice, browser);
         return body;
       }
       return { ok: false };

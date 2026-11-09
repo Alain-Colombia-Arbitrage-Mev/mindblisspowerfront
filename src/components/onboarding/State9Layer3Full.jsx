@@ -70,7 +70,7 @@ export default function State9Layer3Full({ userId, onDashboardReady }) {
         {activated ? (
           <>
             <div className="flex justify-center mb-6">
-              <CheckCircle size={56} style={{ color: '#10b981' }} className="animate-bounce" />
+              <CheckCircle size={56} style={{ color: 'var(--vp-success)' }} />
             </div>
             <h2 className="font-montserrat font-black text-2xl text-white mb-3">¡Bienvenido constructor!</h2>
             <p className="text-white/50 text-base mb-6">Tu acceso completo está activo. Entrando al panel privado...</p>

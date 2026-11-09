@@ -21,6 +21,7 @@ import { checkPassword, isValidPassword } from "@/lib/password";
 import { bindReferralCodeToEmail, captureReferralFromUrl, normalizePlacementSide, normalizeReferralCode } from "@/lib/referral-attribution";
 import { otpRequest, otpFailureMessage, otpTimeoutMs, otpConfirmationRetrySeconds, OTP_SEND_NOTICE, OTP_SEND_UNCONFIRMED_NOTICE } from "@/lib/email-otp-client.mjs";
 import BetterAuthPasswordLogin from './BetterAuthPasswordLogin';
+import SocialLoginButtons from './SocialLoginButtons';
 import { verifiedEmailSignIn, betterAuthAccess } from './better-auth-login.mjs';
 import { registrationRequired, registrationRedirect, registrationRetrySeconds, registrationUrl } from '../register/registration-model.mjs';
 import { beginVerifiedReferralSync } from '@/lib/referral-sync.mjs';
@@ -51,9 +52,13 @@ const AUTH_STATE_MESSAGES = {
     tone: "danger",
     text: "No se pudo completar la sesión. Intenta de nuevo.",
   },
+  "social-failed": {
+    tone: "info",
+    text: "No pudimos completar el acceso con esa cuenta. Intenta de nuevo o entra con tu correo.",
+  },
 };
 
-export default function MagicLinkLoginForm({ authState, initialEmail = "", initialMode = "code", initialRef = "", initialSide = "", authMode = "cognito" }) {
+export default function MagicLinkLoginForm({ authState, initialEmail = "", initialMode = "code", initialRef = "", initialSide = "", authMode = "cognito", enabledSocialProviders = [] }) {
   const emailOtpOnly = authMode === "better-auth";
   const [mode, setMode] = useState(() => emailOtpOnly ? initialMode === 'password' ? 'password' : 'code' : normalizeMode(initialMode));
   const [codeStep, setCodeStep] = useState("request");
@@ -646,7 +651,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
   }
 
   return (
-    <div className="space-y-4">
+    <div className="auth-login-stack space-y-4">
       {(authMessage || error) && (
         <Message tone={error ? "danger" : authMessage.tone}>
           {error || authMessage.text}
@@ -655,24 +660,27 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
 
       {notice && !error && <Message tone="info">{notice}</Message>}
 
-      {mode !== "reset" && (
+      <SocialLoginButtons enabledProviders={enabledSocialProviders} />
+
+      {(mode === "code" || mode === "password") && (
         <div
-          className="grid grid-cols-2 gap-1 rounded-lg p-1"
+          aria-label="Método de inicio de sesión"
+          className="auth-mode-switcher grid grid-cols-2 gap-1 rounded-lg p-1"
           style={{ background: "var(--vp-surface-raised)", border: "1px solid var(--vp-border)" }}
         >
           <ModeButton disabled={isLoading} active={mode === "code"} onClick={() => switchMode("code")}>
-            Código al correo
+            Código
           </ModeButton>
           <ModeButton disabled={isLoading} active={mode === "password"} onClick={() => switchMode("password")}>
-            {emailOtpOnly ? 'Usar mi contraseña' : 'Contraseña'}
+            Contraseña
           </ModeButton>
         </div>
       )}
 
       {mode === "code" ? (
         codeStep === "request" ? (
-          <form className="space-y-4" onSubmit={requestLoginCode}>
-            <p className="text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
+          <form className="auth-code-form space-y-4" onSubmit={requestLoginCode}>
+            <p className="auth-code-intro text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
               {emailOtpOnly ? 'Usa el correo original de tu cuenta. Puedes entrar con un código, aunque no tengas contraseña.' : 'Recibe un código en tu correo para entrar a tu cuenta.'}
             </p>
             <EmailField email={email} readOnly={isLoading} setEmail={setEmail} onClearError={() => setError("")} />
@@ -681,24 +689,27 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
               {codeCooldown.active ? codeCooldown.label : "Enviar código"}
             </PrimaryButton>
 
-            {emailOtpOnly ? <details className="rounded-lg border border-[var(--vp-border)] px-3">
+            {emailOtpOnly ? <details className="auth-code-help rounded-lg border border-[var(--vp-border)] px-3">
               <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold" style={{ color: 'var(--vp-text)' }}>Límites y ayuda para entrar</summary>
               <p className="pb-3 text-sm leading-6" style={{ color: 'var(--vp-muted)' }}>El código de acceso tiene 6 dígitos, vence en 5 minutos y permite hasta 3 intentos. Es distinto del código de registro o recuperación. Por seguridad, espera al menos 5 minutos entre envíos al mismo correo y respeta el contador. No compartas el código.</p>
               <p className="pb-3 text-sm leading-6" style={{ color: 'var(--vp-muted)' }}>En iPhone, vuelve a esta misma pestaña después de leer el correo. Si abriste el portal dentro de WhatsApp u otra aplicación, ábrelo en Safari antes de solicitar el código; las sesiones no se comparten entre navegadores.</p>
             </details> : null}
 
-            <p className="text-center text-xs" style={{ color: "var(--vp-muted)" }}>
+            <p className="auth-code-registration-note text-center text-xs" style={{ color: "var(--vp-muted)" }}>
               ¿Primera vez? Necesitas una cuenta para recibir el código.
             </p>
-            <SecondaryButton
-              disabled={isLoading}
-              onClick={() =>
-                window.location.assign(registrationUrl(email, referralCode, preferredSide))
-              }
-              icon={<UserPlus size={15} />}
-            >
-              Crear cuenta nueva
-            </SecondaryButton>
+            <div className="auth-code-registration-action">
+              <SecondaryButton
+                disabled={isLoading}
+                onClick={() =>
+                  window.location.assign(registrationUrl(email, referralCode, preferredSide))
+                }
+                icon={<UserPlus size={15} />}
+              >
+                Crear cuenta nueva
+              </SecondaryButton>
+            </div>
+            {emailOtpOnly ? <a className="auth-code-recovery-link" href="/forgot-password">Crear o cambiar contraseña</a> : null}
             {showAccessFallback && renderAccessFallback()}
           </form>
         ) : (
@@ -745,9 +756,10 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
           onError={setError} onNotice={setNotice} rememberReferral={rememberReferralForEmail}
           onVerified={showVerifiedLogin}
           onRegistrationRequired={continueToRegistration}
+          onUseCode={() => switchMode("code")}
           registrationHref={registrationUrl(email, referralCode, preferredSide, true)} />
       ) : mode === "password" ? (
-        <form className="space-y-4" onSubmit={handlePasswordSubmit}>
+        <form className="auth-password-form" onSubmit={handlePasswordSubmit}>
           <EmailField email={email} setEmail={setEmail} onClearError={() => setError("")} />
           <PasswordField
             id="password"
@@ -762,18 +774,13 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
             onToggle={() => setShowPassword((current) => !current)}
           />
 
+          <div className="auth-password-links">
+            <button type="button" onClick={() => switchMode("code")}>Entrar con código</button>
+            <button type="button" onClick={() => switchMode("reset")}>¿Olvidaste tu contraseña?</button>
+          </div>
           <PrimaryButton disabled={isLoading} loading={loadingAction === "password"} icon={<ArrowRight size={16} />}>
-            Entrar con contraseña
+            Iniciar sesión
           </PrimaryButton>
-
-          <button
-            type="button"
-            onClick={() => switchMode("reset")}
-            className="block w-full text-center text-sm font-bold transition hover:opacity-80"
-            style={{ color: "var(--vp-accent)" }}
-          >
-            ¿Olvidaste tu contraseña?
-          </button>
         </form>
       ) : resetStep === "request" ? (
         <form className="space-y-4" onSubmit={requestPasswordResetCode}>
@@ -835,7 +842,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
           </div>
         </form>
       )}
-      {emailOtpOnly ? <div className="space-y-2 border-t pt-4 text-sm leading-6" style={{ borderColor: "var(--vp-border)", color: "var(--vp-muted)" }}>
+      {emailOtpOnly ? <div className="auth-login-guidance space-y-2 border-t pt-4 text-sm leading-6" style={{ borderColor: "var(--vp-border)", color: "var(--vp-muted)" }}>
         <p className="m-0">Si ya pertenecías a la red, solicita un código con tu correo original. Tu cuenta y posición en la red se conservan; si tu vinculación requiere revisión, debe aprobarse antes de entrar. Si todavía no tienes un acceso, utiliza Registro.</p>
         <a className="font-bold no-underline" style={{ color: "var(--vp-text-soft)" }} href={registrationUrl(codeStep === "confirm" ? codeRecipient : email, referralCode, preferredSide)}>Crear acceso en Registro</a>
       </div> : null}
@@ -916,8 +923,8 @@ function EmailField({ email, setEmail, onClearError, readOnly = false }) {
           autoCapitalize="none"
           spellCheck={false}
           inputMode="email"
-          placeholder="nombre@correo.com"
-          className="min-h-12 min-w-0 w-full rounded-lg py-3 pl-11 pr-4 text-base font-semibold outline-none"
+          placeholder="tu@email.com"
+          className="auth-email-input min-h-12 min-w-0 w-full rounded-lg py-3 pl-11 pr-4 text-base font-semibold outline-none"
           style={{
             color: "var(--vp-text)",
             background: "var(--vp-surface-raised)",
@@ -1035,9 +1042,9 @@ function PrimaryButton({ disabled, loading, icon, children }) {
     <button
       type="submit"
       disabled={disabled}
-      className="flex min-h-12 w-full items-center justify-center gap-2 rounded-lg px-5 py-3 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-60"
+      className="auth-primary-button flex min-h-12 w-full items-center justify-center gap-2 rounded-lg px-5 py-3 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-60"
       style={{
-        color: "var(--vp-shell)",
+        color: "#ffffff",
         background: "var(--vp-accent)",
         border: "1px solid var(--vp-accent-strong)",
       }}
@@ -1058,9 +1065,9 @@ function SecondaryButton({ disabled, onClick, icon, children, variant = "default
       onClick={onClick}
       className={`flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 text-center text-xs font-black transition hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-60 ${className}`}
       style={{
-        color: accent ? "#000" : "var(--vp-text-soft)",
-        background: accent ? "var(--vp-accent, #ffc700)" : "var(--vp-surface-raised)",
-        border: accent ? "1px solid var(--vp-accent, #ffc700)" : "1px solid var(--vp-border)",
+        color: accent ? "#ffffff" : "var(--vp-text-soft)",
+        background: accent ? "var(--vp-accent)" : "var(--vp-surface-raised)",
+        border: accent ? "1px solid var(--vp-accent-strong)" : "1px solid var(--vp-border)",
       }}
     >
       {icon}
