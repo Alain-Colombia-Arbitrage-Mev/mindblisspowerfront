@@ -3156,7 +3156,19 @@ html {
     font-size: 0;
   }
   .auth-access-tools > a svg { width: 18px; height: 18px; }
-  .auth-support-trigger--header { display: none; }
+  .auth-support-trigger--header {
+    display: inline-flex;
+    width: 44px;
+    height: 44px;
+    justify-content: center;
+    padding: 0;
+    border: 1px solid var(--vp-border);
+    border-radius: 12px;
+    background: var(--vp-accent-muted);
+    color: var(--vp-link);
+    font-size: 0;
+  }
+  .auth-support-trigger--header svg { width: 18px; height: 18px; }
   .auth-access-area .vp-theme-toggle { min-width: 44px; width: 44px; min-height: 44px; height: 44px; padding: 0; border-radius: 12px; background: var(--vp-accent-muted); }
   .auth-access-area .vp-theme-toggle .vp-theme-label { display: none; }
   .auth-access-area .vp-theme-switch { width: 44px; height: 44px; flex-basis: 44px; border: 0; border-radius: 12px; background: transparent; }
@@ -3205,19 +3217,7 @@ html {
   .auth-account-links { margin-top: 28px; padding-top: 0; border-top: 0; }
   .auth-registration-link { flex-wrap: wrap; gap: 6px; text-align: center; }
   .auth-legal { position: static; width: auto; max-width: none; margin: 72px max(20px, env(safe-area-inset-right)) max(124px, calc(env(safe-area-inset-bottom) + 92px)) max(20px, env(safe-area-inset-left)); transform: none; line-height: 1.6; }
-  .auth-shell .vp-support-launcher {
-    display: inline-flex;
-    right: 20px;
-    bottom: max(48px, calc(env(safe-area-inset-bottom) + 16px));
-    width: 56px;
-    height: 56px;
-    min-height: 56px;
-    padding: 8px;
-    border-radius: 999px;
-  }
-  .auth-shell .vp-support-launcher-icon { width: 40px; height: 40px; border-radius: 12px; }
-  .auth-shell .vp-support-launcher-copy,
-  .auth-shell .auth-support-chevron { display: none; }
+  .auth-shell .vp-support-launcher { display: none; }
   .auth-support-overlay { padding: 12px; }
   .auth-support-dialog { width: 100%; max-height: calc(100dvh - 24px); border-radius: 22px; }
 }
