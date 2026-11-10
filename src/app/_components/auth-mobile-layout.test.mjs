@@ -150,6 +150,23 @@ test('real login controls declare readable mobile input text and 44-pixel-or-lar
   assert.equal(otp.props.inputMode, 'numeric'); assert.equal(otp.props.autoComplete, 'one-time-code');
 });
 
+test('shared registration and recovery password icons stay centered inside their inputs without fixed offsets', () => {
+  const { RegistrationPassword } = compile('../register/RegistrationFields.jsx', {
+    'lucide-react': icons,
+    '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' ') },
+  });
+  const control = RegistrationPassword({ id: 'shared-password', label: 'Contraseña', visible: false,
+    onToggle() {}, name: 'password', value: '', onChange() {} });
+  const rendered = control.type(control.props);
+  const input = find(rendered, node => node?.type === 'input');
+  const button = find(rendered, node => node?.type === 'button');
+  hasClasses(input, 'pe-14');
+  hasClasses(button, 'absolute', 'inset-y-0', 'end-1', 'my-auto', 'h-11', 'w-11', 'items-center', 'justify-center');
+  assert.equal(button.props['aria-label'], 'Mostrar contraseña');
+  assert.equal(button.props['aria-pressed'], false);
+  assert.doesNotMatch(source('../../index.css'), /auth-password-form\s*>\s*div:nth-of-type\(2\)[^{]*\{[^}]*top:/s);
+});
+
 test('verified login exposes a prominent native dashboard anchor without a JavaScript click gate or extra code', async t => {
   const email = 'member@example.test', props = { authMode: 'better-auth', initialEmail: email }, paths = [], destinations = [];
   const previous = globalThis.window;

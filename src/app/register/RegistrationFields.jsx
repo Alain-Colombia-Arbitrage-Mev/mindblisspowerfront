@@ -1,14 +1,17 @@
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-const controlClass = 'min-h-14 w-full rounded-xl border bg-[var(--vp-surface-raised)] px-4 text-base font-medium text-[var(--vp-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--vp-link)] disabled:opacity-60';
+const controlClass = 'min-h-14 w-full rounded-xl border bg-[var(--vp-surface-raised)] ps-4 text-base font-medium text-[var(--vp-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--vp-link)] disabled:opacity-60';
 
-export function RegistrationField({ id, label, error = '', helper = '', inputRef = null, ...props }) {
+export function RegistrationField({ id, label, error = '', helper = '', inputRef = null, trailing = null, ...props }) {
   return (
     <div className="min-w-0">
       <label htmlFor={id} className="mb-2 block text-sm font-semibold text-[var(--vp-text)]">{label}</label>
-      <input ref={inputRef} id={id} aria-invalid={Boolean(error)} aria-describedby={error ? `${id}-error` : helper ? `${id}-helper` : undefined}
-        className={cn(controlClass, error ? 'border-[var(--vp-danger)]' : 'border-[var(--vp-border)]')} {...props} />
+      <div className={trailing ? 'relative' : undefined}>
+        <input ref={inputRef} id={id} aria-invalid={Boolean(error)} aria-describedby={error ? `${id}-error` : helper ? `${id}-helper` : undefined}
+          className={cn(controlClass, trailing ? 'pe-14' : 'pe-4', error ? 'border-[var(--vp-danger)]' : 'border-[var(--vp-border)]')} {...props} />
+        {trailing}
+      </div>
       {error ? <p id={`${id}-error`} className="mt-2 text-sm text-[var(--vp-danger)]">{error}</p>
         : helper ? <p id={`${id}-helper`} className="mt-2 text-sm leading-6 text-[var(--vp-muted)]">{helper}</p> : null}
     </div>
@@ -17,14 +20,13 @@ export function RegistrationField({ id, label, error = '', helper = '', inputRef
 
 export function RegistrationPassword({ id, label, error = '', helper = '', visible, onToggle, ...props }) {
   return (
-    <div className="relative">
-      <RegistrationField id={id} label={label} error={error} helper={helper} type={visible ? 'text' : 'password'} {...props} />
-      <button type="button" onClick={onToggle} disabled={props.disabled} aria-label={visible ? `Ocultar ${label.toLowerCase()}` : `Mostrar ${label.toLowerCase()}`}
-        aria-pressed={visible} className="mt-2 inline-flex min-h-11 items-center gap-2 rounded-md px-2 text-sm text-[var(--vp-muted)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--vp-accent)] disabled:cursor-not-allowed disabled:opacity-60">
+    <RegistrationField id={id} label={label} error={error} helper={helper} type={visible ? 'text' : 'password'} {...props}
+      trailing={<button type="button" onClick={onToggle} disabled={props.disabled}
+        aria-label={visible ? `Ocultar ${label.toLowerCase()}` : `Mostrar ${label.toLowerCase()}`}
+        aria-pressed={visible}
+        className="absolute inset-y-0 end-1 my-auto inline-flex h-11 w-11 items-center justify-center rounded-md text-[var(--vp-muted)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--vp-accent)] disabled:cursor-not-allowed disabled:opacity-60">
         {visible ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
-        {visible ? 'Ocultar' : 'Mostrar'} contraseña
-      </button>
-    </div>
+      </button>} />
   );
 }
 
