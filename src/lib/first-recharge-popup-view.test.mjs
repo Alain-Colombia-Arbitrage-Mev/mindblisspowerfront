@@ -12,8 +12,8 @@ const copy = {
   'recharge.stepReview': 'Revisa importe, activo y red', 'recharge.stepConfirm': 'Confirma la recarga',
   'recharge.start': 'Hacer mi primera recarga', 'recharge.notNow': 'Ahora no',
   'recharge.methodsEyebrow': 'Recarga a tu manera', 'recharge.methodsTitle': 'Tu wallet está lista.',
-  'recharge.methodsCopy': 'Elige una opción.', 'recharge.buyTitle': 'Comprar cripto',
-  'recharge.buyCopy': 'Revisa las opciones.', 'recharge.buyAction': 'Comprar cripto',
+  'recharge.methodsCopy': 'Elige una opción.', 'recharge.buyTitle': 'Recargar fondos',
+  'recharge.buyCopy': 'Revisa las opciones.', 'recharge.buyAction': 'Recargar fondos',
   'recharge.receiveTitle': 'Recibir desde otra wallet', 'recharge.receiveCopy': 'Verifica activo y red.',
   'recharge.receiveAction': 'Ver cómo recibir', 'recharge.providerUnavailable': 'Reown no disponible.', 'recharge.later': 'Lo haré después',
   'recharge.providerMismatch': 'Wallet distinta.', 'recharge.reconnectWallet': 'Reconectar wallet vinculada',
@@ -58,10 +58,10 @@ test('the first-recharge popup advances through the Pen welcome and routes to th
   button(harness.render(props), 'Hacer mi primera recarga').props.onClick();
   const methods = harness.render(props);
   const html = renderToStaticMarkup(methods);
-  assert.match(html, /Comprar cripto/);
+  assert.match(html, /Recargar fondos/);
   assert.equal(find(methods, node => node?.props?.href === '/dashboard/packages'), undefined);
   assert.equal(find(methods, node => node?.props?.href === '/dashboard/payments#wallet-steps').props.href, '/dashboard/payments#wallet-steps');
-  const cryptoMethod = find(methods, node => node?.type?.name === 'RechargeMethod' && node?.props?.href === '/dashboard/payments#wallet-topup');
+  const cryptoMethod = find(methods, node => node?.type?.name === 'RechargeMethod' && node?.props?.href === '/dashboard/payments#personal-wallet');
   cryptoMethod.props.onNavigate();
   assert.equal(closed, 1);
   harness.unmount();
@@ -70,7 +70,7 @@ test('the first-recharge popup advances through the Pen welcome and routes to th
 test('the popup never opens a provider before backend route and quote validation', () => {
   const harness = view('FirstRechargeDialog.jsx');
   const tree = harness.render({ open: true, initialStep: 'methods', onOpenChange() {} });
-  assert.match(renderToStaticMarkup(tree), /dashboard\/payments#wallet-topup/);
+  assert.match(renderToStaticMarkup(tree), /dashboard\/payments#personal-wallet/);
   assert.equal(find(tree, node => node?.type?.name === 'RechargeMethod' && typeof node?.props?.onClick === 'function'), undefined);
   harness.unmount();
 });

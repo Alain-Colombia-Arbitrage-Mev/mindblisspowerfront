@@ -47,7 +47,7 @@ export const ReownContext = createContext(Object.freeze({
  * @property {string} administrativeOnrampError
  * @property {() => Promise<unknown>} openConnect
  * @property {() => Promise<unknown>} openOnramp
- * @property {(input?: {amount?: number, countryCode?: string, paymentMethodType?: string, serviceProvider?: string}) => Promise<unknown>} startOnramp
+ * @property {(input?: {walletAddress?: string, amount?: number, countryCode?: string, paymentMethodType?: string, serviceProvider?: string}) => Promise<unknown>} startOnramp
  * @property {(input: {address: string, amount?: number, countryCode?: string, paymentMethodType?: string, serviceProvider?: string}) => Promise<unknown>} startAdministrativeOnramp
  * @property {() => Promise<unknown>} reconnectWallet
  * @property {() => Promise<unknown>} linkWallet

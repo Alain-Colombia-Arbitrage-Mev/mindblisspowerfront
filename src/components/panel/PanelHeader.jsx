@@ -45,7 +45,7 @@ export default function PanelHeader({
         <LanguageSwitcher compact />
         <ThemeToggle />
         <Link
-          className="vp-shell-icon"
+          className="vp-shell-icon vp-profile-action"
           href="/dashboard/profile"
           aria-label={t("pages.profile")}
           title={t("pages.profile")}

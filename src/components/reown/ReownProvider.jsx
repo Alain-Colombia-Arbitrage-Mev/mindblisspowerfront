@@ -50,7 +50,7 @@ if (configured) {
     defaultAccountTypes: { eip155: "eoa" },
     metadata: {
       name: "Mindbliss Power",
-      description: "Crea o conecta tu wallet y compra cripto de forma segura.",
+      description: "Recarga fondos en tu wallet personal o administrativa de forma segura.",
       url: "https://app.mindblisspower.com",
       icons: ["https://app.mindblisspower.com/mindbliss/mindbliss-favicon.png"],
     },
@@ -178,6 +178,7 @@ function ConfiguredReownProvider({ children }) {
     [open],
   );
   const currentAddress = typeof account.address === "string" && isAddress(account.address) ? getAddress(account.address) : "";
+  const boundAddress = binding.status === "linked" && isAddress(binding.address) ? getAddress(binding.address) : "";
   const isLinked = account.isConnected === true && Boolean(currentAddress) && binding.status === "linked"
     && binding.address.toLowerCase() === currentAddress.toLowerCase();
 
@@ -223,16 +224,29 @@ function ConfiguredReownProvider({ children }) {
   const runOnramp = useCallback((selection = onrampSelection.current || {}) => {
     if (onrampFlow.current) return onrampFlow.current;
     const operation = (async () => {
-      if (account.isConnected !== true || !currentAddress || !walletProvider) throw new Error("wallet_not_connected");
-      setOnrampState({ status: "linking", error: "" });
-      if (["loading", "error"].includes(binding.status)) await refreshLink();
-      if (!isLinked) await linkWallet();
+      let verifiedAddress = boundAddress;
+      if (!verifiedAddress) {
+        if (account.isConnected !== true || !currentAddress || !walletProvider) throw new Error("wallet_not_connected");
+        setOnrampState({ status: "linking", error: "" });
+        const currentBinding = ["loading", "error"].includes(binding.status) ? await refreshLink() : binding;
+        if (currentBinding.status === "linked") {
+          if (!sameAddress(currentBinding.address, currentAddress)) throw new Error("wallet_already_linked");
+          verifiedAddress = getAddress(currentBinding.address);
+        } else {
+          const confirmed = await linkWallet();
+          if (!sameAddress(confirmed?.address, currentAddress)) throw new Error("wallet_link_unconfirmed");
+          verifiedAddress = getAddress(confirmed.address);
+        }
+      }
+      if (selection.walletAddress && !sameAddress(selection.walletAddress, verifiedAddress)) {
+        throw new Error("wallet_address_mismatch");
+      }
       setOnrampState({ status: "opening", error: "" });
       const locale = navigator.languages?.[0] || navigator.language || "";
       const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
       const countryCode = selection.countryCode || browserOnrampRegion([...(navigator.languages || [locale])], timeZone);
       const intent = await createOnrampIntent({
-        walletKind: "personal", walletAddress: currentAddress, country: countryCode, fiat: "USD", crypto: ONRAMP_CRYPTO,
+        walletKind: "personal", walletAddress: verifiedAddress, country: countryCode, fiat: "USD", crypto: ONRAMP_CRYPTO,
         amount: selection.amount, paymentMethodType: selection.paymentMethodType, serviceProvider: selection.serviceProvider,
       });
       const provider = OnRampController.state.providers.find(item => item.name === "meld");
@@ -240,7 +254,7 @@ function ConfiguredReownProvider({ children }) {
       OnRampController.setSelectedProvider(provider);
       const checkoutUrl = buildMeldOnrampUrl({
         providerUrl: OnRampController.state.selectedProvider?.url,
-        address: currentAddress,
+        address: verifiedAddress,
         projectId,
         checkoutReference: intent.checkoutReference,
         countryCode,
@@ -266,15 +280,27 @@ function ConfiguredReownProvider({ children }) {
     });
     onrampFlow.current = operation;
     return operation;
-  }, [account.isConnected, binding.status, currentAddress, isLinked, linkWallet, refreshLink, walletProvider]);
+  }, [account.isConnected, binding, boundAddress, currentAddress, linkWallet, refreshLink, walletProvider]);
 
   const openOnramp = useCallback(() => runOnramp(), [runOnramp]);
 
   const startOnramp = useCallback(async (selection = {}) => {
     onrampSelection.current = selection;
+    if (selection.walletAddress && !isAddress(selection.walletAddress)) {
+      onrampSelection.current = null;
+      setOnrampState({ status: "error", error: "mismatch" });
+      throw new Error("wallet_address_mismatch");
+    }
+    if (boundAddress && selection.walletAddress && !sameAddress(selection.walletAddress, boundAddress)) {
+      onrampSelection.current = null;
+      setOnrampState({ status: "error", error: "mismatch" });
+      throw new Error("wallet_address_mismatch");
+    }
+    const boundReady = Boolean(boundAddress)
+      && (!selection.walletAddress || sameAddress(selection.walletAddress, boundAddress));
     const connectionReady = account.isConnected === true && Boolean(currentAddress) && Boolean(walletProvider);
-    setOnrampState({ status: connectionReady ? "linking" : "connecting", error: "" });
-    if (connectionReady) return runOnramp(selection);
+    setOnrampState({ status: boundReady ? "opening" : connectionReady ? "linking" : "connecting", error: "" });
+    if (boundReady || connectionReady) return runOnramp(selection);
     onrampIntent.current = true;
     connectModalSeen.current = false;
     if (account.isConnected === true) return { pending: true };
@@ -286,7 +312,7 @@ function ConfiguredReownProvider({ children }) {
       setOnrampState({ status: "error", error: onrampErrorCode(error) });
       throw error;
     }
-  }, [account.isConnected, currentAddress, openConnect, runOnramp, walletProvider]);
+  }, [account.isConnected, boundAddress, currentAddress, openConnect, runOnramp, walletProvider]);
 
   const reconnectWallet = useCallback(async () => {
     onrampIntent.current = true;

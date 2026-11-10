@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRight, Copy, CreditCard, Wallet } from "lucide-react";
+import { Copy, CreditCard, Wallet } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import Link from "./IntentLink";
@@ -31,13 +31,9 @@ export default function SidebarWalletCard({ onNavigate }) {
         {address ? <button type="button" onClick={copy} aria-label={t("walletPage.copyAddress")}><Copy size={12} aria-hidden="true" /></button> : null}
       </div>
       <div className="vp-sidebar-wallet-actions">
-        <Link href="/dashboard/payments#personal-wallet" onClick={onNavigate} className="vp-sidebar-wallet-action">
-          {t("nav.openWallet")}
-          <ArrowUpRight size={13} aria-hidden="true" />
-        </Link>
-        <Link href="/dashboard/payments#wallet-topup" onClick={onNavigate} className="vp-sidebar-wallet-action primary">
+        <Link href="/dashboard/payments#personal-wallet" onClick={onNavigate} className="vp-sidebar-wallet-action primary">
           <CreditCard size={14} aria-hidden="true" />
-          {t("nav.buyCrypto")}
+          {t("nav.addFunds")}
         </Link>
       </div>
     </section>

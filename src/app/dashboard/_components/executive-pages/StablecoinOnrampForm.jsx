@@ -11,7 +11,7 @@ import { MINDBLISS_ONRAMP_FEE_PERCENT, PERSONAL_WALLET_ASSET, PERSONAL_WALLET_MI
 
 const QUICK_AMOUNTS = Object.freeze([50, 100, 250, 500]);
 
-export default function StablecoinOnrampForm({ walletAddress = "", busy = false, onContinue }) {
+export default function StablecoinOnrampForm({ walletAddress = "", disabled = false, busy = false, onContinue }) {
   const { locale, t } = useI18n();
   const onramp = useStablecoinOnramp(walletAddress);
   const [editingRegion, setEditingRegion] = useState(false);
@@ -21,6 +21,7 @@ export default function StablecoinOnrampForm({ walletAddress = "", busy = false,
   const validating = onramp.availabilityStatus === "loading" || onramp.quoteStatus === "loading";
 
   async function primaryAction() {
+    if (disabled || !walletAddress) return;
     if (!onramp.selectedQuote) {
       await onramp.requestQuote();
       return;
@@ -81,10 +82,11 @@ export default function StablecoinOnrampForm({ walletAddress = "", busy = false,
           </fieldset>
         ) : null}
 
-        <OnrampState state={onramp} t={t} />
+        {disabled ? <p className="mb-onramp-message warning" role="status">{t("walletPage.destinationUnavailable")}</p>
+          : <OnrampState state={onramp} t={t} />}
 
         <button className="executive-button primary mb-onramp-primary" type="button" onClick={() => void primaryAction().catch(() => {})}
-          disabled={busy || validating || invalidAmount || onramp.availabilityStatus !== "ready"}>
+          disabled={disabled || busy || validating || invalidAmount || onramp.availabilityStatus !== "ready"}>
           {busy || validating ? <Loader2 className="animate-spin" size={17} aria-hidden="true" /> : <ShieldCheck size={17} aria-hidden="true" />}
           {busy ? t("recharge.connecting") : onramp.quoteStatus === "loading" ? t("walletPage.loadingQuote")
             : onramp.selectedQuote ? t("onramp.continueWithProvider", { provider: onramp.selectedQuote.serviceProvider })

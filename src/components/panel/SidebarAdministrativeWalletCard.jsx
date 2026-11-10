@@ -27,7 +27,7 @@ export default function SidebarAdministrativeWalletCard({ onNavigate }) {
         {address ? <button type="button" onClick={copy} aria-label={t("walletPage.copyAddress")}><Copy size={12} aria-hidden="true" /></button> : null}
       </div>
       <Link href="/dashboard/payments#administrative-wallet" onClick={onNavigate} className="vp-sidebar-wallet-action administrative">
-        <CreditCard size={14} aria-hidden="true" />{t("nav.topUpAdministrative")}
+        <CreditCard size={14} aria-hidden="true" />{t("nav.addFunds")}
       </Link>
     </section>
   );

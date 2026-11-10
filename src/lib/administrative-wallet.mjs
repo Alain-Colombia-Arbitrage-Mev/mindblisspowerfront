@@ -18,6 +18,10 @@ export async function ensureAdministrativeWallet({ signal } = {}) {
 async function administrativeWalletRequest(path, init) {
   const response = await fetch(path, { ...init, credentials: 'same-origin', cache: 'no-store' });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(typeof data?.error === 'string' ? data.error : 'administrative_wallet_unavailable');
+  if (!response.ok) {
+    const code = typeof data?.error === 'string' ? data.error : 'administrative_wallet_unavailable';
+    const error = Object.assign(new Error(code), { code, status: response.status });
+    throw error;
+  }
   return data;
 }

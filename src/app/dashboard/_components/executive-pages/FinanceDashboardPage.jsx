@@ -1,8 +1,7 @@
 "use client";
 
-import { Building2, Copy, CreditCard, Info, Loader2, PlusCircle, ReceiptText, RefreshCw, ShieldCheck, Wallet } from "lucide-react";
+import { CreditCard, Info, Loader2, ReceiptText, Wallet } from "lucide-react";
 import dynamic from "next/dynamic";
-import { useEffect, useState } from "react";
 
 import { useMemberSummary } from "@/hooks/useMemberSummary";
 import { useI18n } from "@/i18n/LanguageProvider";
@@ -11,9 +10,7 @@ import { formatPaymentDate as fmtMoneyDate, formatPaymentMoney as money } from "
 import NOWPaymentsBalances from "@/components/panel/NOWPaymentsBalances";
 import StripeSalesHistory from "../../packages/StripeSalesHistory";
 import { MetricCard, PageHeader, StatusPill } from "./executive-ui";
-import StablecoinOnrampForm from "./StablecoinOnrampForm";
-import { useReownWallet } from "@/components/reown/ReownContext";
-import { ensureAdministrativeWallet, readAdministrativeWallet } from "@/lib/administrative-wallet.mjs";
+import WalletFundingPanels from "./WalletFundingPanels";
 
 const ReownProvider = dynamic(() => import("@/components/reown/ReownProvider"), {
   ssr: false,
@@ -42,14 +39,11 @@ function FinanceDashboardContent() {
     <section className="executive-page">
       <div className="executive-container">
         <PageHeader eyebrow={t("walletPage.eyebrow")} title={t("walletPage.title")} subtitle={t("walletPage.subtitle")} />
-        <section id="personal-wallet" className="mb-personal-wallet-section">
-          <TopUpPanel />
-        </section>
+        <WalletFundingPanels />
 
         <div id="wallet-finance" className="mb-wallet-finance">
           {state.loading ? <FinanceLoading /> : state.error ? <FinanceError onRetry={reload} /> : <FinanceContent data={state.data || {}} />}
         </div>
-        <AdministrativeWalletPanel />
       </div>
     </section>
   );
@@ -96,13 +90,13 @@ function FinanceLoading() {
 function FinanceError({ onRetry }) {
   const { t } = useI18n();
   return (
-    <div className="executive-panel flex flex-col items-center justify-center gap-4 py-16 text-center">
+    <div className="executive-panel mb-wallet-summary-state" role="status">
       <span className="flex h-12 w-12 items-center justify-center rounded-full" style={{ background: "var(--vp-info-muted)", border: "1px solid var(--vp-info-border)", color: "var(--vp-info)" }}>
         <Info size={22} aria-hidden="true" />
       </span>
       <div>
-        <p className="text-base font-bold" style={{ color: "var(--vp-text)" }}>{t("walletPage.summaryUnavailable")}</p>
-        <p className="mt-1 text-sm" style={{ color: "var(--vp-muted)" }}>{t("walletPage.summaryUnavailableCopy")}</p>
+        <p className="text-base font-bold" style={{ color: "var(--vp-text)" }}>{t("walletPage.syncing")}</p>
+        <p className="mt-1 text-sm" style={{ color: "var(--vp-muted)" }}>{t("walletPage.syncingCopy")}</p>
       </div>
       <button className="executive-button primary" type="button" onClick={onRetry}>{t("walletPage.retry")}</button>
     </div>
@@ -168,122 +162,5 @@ function FinanceContent({ data }) {
           </div>
       </div>
     </>
-  );
-}
-
-function TopUpPanel() {
-  const { t } = useI18n();
-  const reown = useReownWallet();
-  const [providerError, setProviderError] = useState("");
-  const busy = ["connecting", "linking", "opening"].includes(reown.onrampStatus);
-  const openProvider = async input => {
-    setProviderError("");
-    try {
-      await reown.startOnramp(input);
-    } catch {
-      setProviderError(t("walletPage.quoteUnavailable"));
-    }
-  };
-
-  return (
-    <div id="wallet-topup" className="executive-panel mb-wallet-topup-card" style={{ scrollMarginTop: 20 }}>
-      <div className="mb-wallet-topup-heading">
-        <span><PlusCircle size={20} aria-hidden="true" /></span>
-        <div>
-          <p>{t("walletPage.personalEyebrow")}</p>
-          <h2>{t("walletPage.personalTitle")}</h2>
-          <small>{t("walletPage.personalCopy")}</small>
-        </div>
-      </div>
-      <StablecoinOnrampForm walletAddress={reown.address || reown.linkedAddress || ""} busy={busy} onContinue={openProvider} />
-      <div className="mb-wallet-provider-note">
-        <ShieldCheck size={16} aria-hidden="true" />
-        <p>{t("onramp.simpleProviderNote")}</p>
-      </div>
-      {providerError ? <p className="mt-3 text-xs" role="alert" style={{ color: "var(--vp-danger)" }}>{providerError}</p> : null}
-    </div>
-  );
-}
-
-function AdministrativeWalletPanel() {
-  const { t } = useI18n();
-  const reown = useReownWallet();
-  const [wallet, setWallet] = useState({ status: "loading", address: "", checkoutReference: "", assignedAt: "" });
-  const [actionError, setActionError] = useState("");
-
-  const loadWallet = async (signal) => {
-    setActionError("");
-    setWallet(current => ({ ...current, status: "loading" }));
-    try {
-      let next = await readAdministrativeWallet({ signal });
-      if (next.status === "pending") next = await ensureAdministrativeWallet({ signal });
-      setWallet(next);
-    } catch (error) {
-      if (error?.name !== "AbortError") setWallet({ status: "error", address: "", checkoutReference: "", assignedAt: "" });
-    }
-  };
-
-  useEffect(() => {
-    const controller = new AbortController();
-    void loadWallet(controller.signal);
-    return () => controller.abort();
-  }, []);
-
-  async function topUp(input) {
-    if (wallet.status !== "assigned") return;
-    setActionError("");
-    try {
-      await reown.startAdministrativeOnramp({ address: wallet.address, ...input });
-    } catch { setActionError(t("walletPage.quoteUnavailable")); }
-  }
-
-  async function copyAddress() {
-    if (wallet.status !== "assigned") return;
-    try { await navigator.clipboard.writeText(wallet.address); }
-    catch { setActionError(t("walletPage.administrativeCopyFailed")); }
-  }
-
-  const busy = reown.administrativeOnrampStatus === "opening";
-  return (
-    <section id="administrative-wallet" className="mb-administrative-wallet" aria-labelledby="administrative-wallet-title">
-      <div className="mb-administrative-wallet-heading">
-        <span className="mb-administrative-wallet-icon"><Building2 size={20} aria-hidden="true" /></span>
-        <div>
-          <p>{t("walletPage.administrativeEyebrow")}</p>
-          <h2 id="administrative-wallet-title">{t("walletPage.administrativeTitle")}</h2>
-          <small>{t("walletPage.administrativeCopy")}</small>
-        </div>
-        <span className={`mb-administrative-wallet-status ${wallet.status === "assigned" ? "ready" : ""}`}>
-          {wallet.status === "assigned" ? t("walletPage.administrativeReady")
-            : wallet.status === "exhausted" ? t("walletPage.administrativeUnavailable")
-              : t("walletPage.administrativeAssigning")}
-        </span>
-      </div>
-      {wallet.status === "loading" ? (
-        <div className="mb-administrative-wallet-state" role="status"><Loader2 className="animate-spin" size={18} /> {t("walletPage.administrativeAssigning")}</div>
-      ) : wallet.status === "error" ? (
-        <div className="mb-administrative-wallet-state error" role="alert">
-          <span>{t("walletPage.administrativeLoadError")}</span>
-          <button className="executive-button" type="button" onClick={() => loadWallet()}><RefreshCw size={14} /> {t("walletPage.retry")}</button>
-        </div>
-      ) : wallet.status === "exhausted" ? (
-        <div className="mb-administrative-wallet-state" role="status">{t("walletPage.administrativeExhaustedCopy")}</div>
-      ) : (
-        <div className="mb-administrative-wallet-body">
-          <div className="mb-administrative-wallet-address">
-            <span>{t("walletPage.administrativeAddress")}</span>
-            <code title={wallet.address}>{wallet.address}</code>
-            <button type="button" onClick={copyAddress} aria-label={t("walletPage.copyAddress")}><Copy size={15} /></button>
-          </div>
-          <div className="mb-administrative-wallet-summary">
-            <span>{t("onramp.administrativeRoute")}</span><strong>USDT · Polygon</strong>
-            <small>{t("onramp.administrativeProviderCopy")}</small>
-          </div>
-          <StablecoinOnrampForm walletAddress={wallet.address} busy={busy} onContinue={topUp} />
-          <p className="mb-administrative-wallet-separation"><ShieldCheck size={15} /> {t("walletPage.administrativeSeparation")}</p>
-        </div>
-      )}
-      {actionError ? <p className="mb-reown-wallet-error" role="alert">{actionError}</p> : null}
-    </section>
   );
 }

@@ -23,14 +23,16 @@ test("Reown creates EVM wallets, links one signed address and never replaces mem
   assert.match(provider, /provider: "meld"/);
   assert.doesNotMatch(provider, /\/api\/member\/onramp\/session|app\.topperpay\.com|widget\.swapped\.com|Binance/i);
   assert.match(provider, /onrampIntent\.current = true/);
-  assert.match(provider, /const connectionReady = account\.isConnected === true/);
+  assert.match(provider, /const boundReady = Boolean\(boundAddress\)/);
+  assert.match(provider, /walletAddress: verifiedAddress/);
+  assert.match(provider, /if \(boundReady \|\| connectionReady\) return runOnramp\(selection\)/);
   assert.match(provider, /await disconnect\(\{ namespace: "eip155" \}\)/);
   assert.match(provider, /setOnrampState\(\{ status: "error", error: "connection" \}\)/);
   assert.match(provider, /void runOnramp\(\)\.catch/);
   assert.match(provider, /signMessage\(challenge\.message\)/);
   assert.match(provider, /\/api\/member\/wallet-link\/challenge/);
   assert.match(provider, /\/api\/member\/wallet-link\/confirm/);
-  assert.match(provider, /if \(!isLinked\) await linkWallet\(\)/);
+  assert.match(provider, /const confirmed = await linkWallet\(\)/);
   assert.doesNotMatch(provider, /sendTransaction|privateKey|mnemonic/);
   assert.match(provider, /appKitThemeRef\.current\.setThemeMode/);
   assert.match(provider, /appKitThemeRef\.current\.setThemeVariables/);
@@ -50,24 +52,43 @@ test("all Reown packages use the same pinned release", () => {
 test("personal and administrative wallets remain visibly separate without loading AppKit in the global shell", () => {
   const sidebar = read("../components/panel/SidebarWalletCard.jsx");
   const finance = read("../app/dashboard/_components/executive-pages/FinanceDashboardPage.jsx");
+  const funding = read("../app/dashboard/_components/executive-pages/WalletFundingPanels.jsx");
   const policy = read("./personal-wallet.mjs");
   assert.match(sidebar, /nav\.personalWallet/);
   assert.match(sidebar, /\/dashboard\/payments#personal-wallet/);
-  assert.match(sidebar, /\/dashboard\/payments#wallet-topup/);
-  assert.match(finance, /id="personal-wallet"/);
-  assert.match(finance, /mb-administrative-wallet/);
-  assert.match(finance, /StablecoinOnrampForm/);
-  assert.match(finance, /reown\.startOnramp\(input\)/);
-  assert.match(finance, /reown\.startAdministrativeOnramp/);
-  assert.match(finance, /readAdministrativeWallet/);
-  assert.match(finance, /ensureAdministrativeWallet/);
-  assert.match(finance, /onramp\.simpleProviderNote/);
+  assert.match(finance, /WalletFundingPanels/);
+  assert.match(funding, /id="personal-wallet"/);
+  assert.match(funding, /id="administrative-wallet"/);
+  assert.equal((funding.match(/<StablecoinOnrampForm/g) || []).length, 2);
+  assert.match(funding, /reown\.startOnramp\(\{ walletAddress: address, \.\.\.input \}\)/);
+  assert.match(funding, /reown\.startAdministrativeOnramp/);
+  assert.match(funding, /readAdministrativeWallet/);
+  assert.match(funding, /ensureAdministrativeWallet/);
+  assert.match(funding, /onramp\.simpleProviderNote/);
   assert.match(policy, /MINDBLISS_ONRAMP_FEE_BPS = 100/);
   assert.match(policy, /PERSONAL_WALLET_ASSET = "USDT"/);
   assert.match(policy, /PERSONAL_WALLET_MELD_ASSET = "USDT_POLYGON"/);
   assert.match(policy, /PERSONAL_WALLET_MINIMUM_USD = 50/);
-  assert.doesNotMatch(finance, /PERSONAL_WALLET_RECOMMENDED_PROVIDERS|Topper|Swapped/);
+  assert.doesNotMatch(funding, /PERSONAL_WALLET_RECOMMENDED_PROVIDERS|Topper|Swapped/);
   assert.doesNotMatch(sidebar, /Binance/i);
+});
+
+test("each wallet owns an independent funding component and keeps one neutral action label", () => {
+  const overview = read("../components/panel/overview/OverviewDiscoveryCard.jsx");
+  const personalSidebar = read("../components/panel/SidebarWalletCard.jsx");
+  const administrativeSidebar = read("../components/panel/SidebarAdministrativeWalletCard.jsx");
+  const funding = read("../app/dashboard/_components/executive-pages/WalletFundingPanels.jsx");
+  const messages = read("../i18n/messages.js");
+  assert.match(overview, /\/dashboard\/payments#personal-wallet/);
+  assert.match(personalSidebar, /nav\.addFunds/);
+  assert.match(administrativeSidebar, /nav\.addFunds/);
+  assert.match(administrativeSidebar, /#administrative-wallet/);
+  assert.match(funding, /function PersonalWalletFunding/);
+  assert.match(funding, /function AdministrativeWalletFunding/);
+  assert.doesNotMatch(funding, /destination ===|WalletDestinationSelector|aria-pressed/);
+  assert.doesNotMatch(overview, /createWallet|openConnect|Buy crypto/);
+  assert.match(messages, /buyCrypto: "Recargar fondos"/);
+  assert.match(messages, /amountLabel: "Monto a recargar"/);
 });
 
 test("AppKit is scoped to wallet surfaces and does not slow every dashboard route", () => {
