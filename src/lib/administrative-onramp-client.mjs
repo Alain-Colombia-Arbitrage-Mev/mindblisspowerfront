@@ -1,24 +1,22 @@
-import { buildAdministrativeMeldOnrampUrl } from './meld-onramp.mjs';
-import { createOnrampIntent, ONRAMP_CRYPTO } from './meld-onramp-client.mjs';
+import { createAdministrativeSandboxSession } from './wallet-funding-client.mjs';
+import { fundingAcknowledgement } from './wallet-funding-contract.mjs';
 
 /**
  * Administrative funding has its own checkout and never imports a personal wallet SDK.
- * @param {{address: string, amount: number, countryCode: string, paymentMethodType: string, serviceProvider: string}} input
- * @param {{signal?: AbortSignal, createIntent?: typeof createOnrampIntent, openCheckout?: (url: string) => void}} [options]
+ * @param {{requestId: string, address: string, amount: number, countryCode: string, paymentMethodType?: string, serviceProvider: string}} input
+ * @param {{signal?: AbortSignal, createSession?: typeof createAdministrativeSandboxSession, openCheckout?: (url: string) => void}} [options]
  */
-export async function startAdministrativeMeldOnramp({ address, amount, countryCode, paymentMethodType, serviceProvider }, {
-  signal, createIntent = createOnrampIntent, openCheckout = openMeldCheckout,
+export async function startAdministrativeMeldOnramp({ requestId, address, amount, countryCode, paymentMethodType, serviceProvider }, {
+  signal, createSession = createAdministrativeSandboxSession, openCheckout = openMeldCheckout,
 } = {}) {
-  const intent = await createIntent({ walletKind: 'administrative', walletAddress: address,
-    country: countryCode, fiat: 'USD', crypto: ONRAMP_CRYPTO, amount, paymentMethodType, serviceProvider }, { signal });
   if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-  if (intent?.walletKind !== 'administrative' || !intent.checkoutUrl || !intent.quote) throw new Error('onramp_unavailable');
-  const checkoutUrl = buildAdministrativeMeldOnrampUrl({ providerUrl: intent.checkoutUrl, address,
-    checkoutReference: intent.checkoutReference, countryCode,
-    amount: intent.quote.sourceAmount, paymentMethodType: intent.quote.paymentMethodType,
-    serviceProvider: intent.quote.serviceProvider });
-  openCheckout(checkoutUrl);
-  return { opened: true, provider: 'meld' };
+  const response = await createSession({ requestId, walletAddress: address, country: countryCode, amount, paymentMethodType, serviceProvider }, { signal });
+  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+  const session = fundingAcknowledgement(response, 'administrative');
+  if (!session || session.requestedAmount !== amount || session.checkoutReference !== requestId
+    || !('checkoutUrl' in session) || typeof session.checkoutUrl !== 'string') throw new Error('sandbox_unavailable');
+  openCheckout(session.checkoutUrl);
+  return session;
 }
 
 function openMeldCheckout(url) {

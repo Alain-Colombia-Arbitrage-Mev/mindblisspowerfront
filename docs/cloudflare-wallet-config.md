@@ -30,28 +30,49 @@ in sandbox. `ADMINISTRATIVE_ONRAMP_ENVIRONMENT=sandbox` is configured only on th
 the administrative component; it does not change the personal wallet's Reown
 project or environment. Omitting the mode retains the existing production path.
 
-The administrative component keeps address assignment and address display, but
-shows a translated sandbox notice instead of the top-up form. The checkout is
-disabled while sandbox persistence is not isolated: the current production
-attempt writer and webhook handler calculate real commission states and have no
-environment discriminator. Do not send sandbox attempts or callbacks to them.
-Sandbox activity must never credit balances or generate real commissions.
+The personal card records an initiated funding request through
+`POST /api/member/wallet-funding/personal/intent` after proving its linked wallet.
+That path uses no private Meld credential or quote. Reown supplies its own live
+checkout configuration. Mindbliss keeps Reown's `externalCustomerId` attribution
+and adds only its recorded session reference, requested USD amount, USDT Polygon,
+country and the requested Topper/Swapped filter. The provider confirms availability,
+received amount and fees; an initiated record does not confirm a paid transaction.
+No synthetic quote or 1% collected commission is displayed or calculated here.
+
+The administrative card retains address assignment and displays the translated
+sandbox notice alongside a separate test form. Its initial test country is US,
+independent of the personal wallet's detected country. Transak and Banxa are the
+only administrative sandbox choices approved for this release; the personal
+Reown flow remains restricted to its Topper/Swapped filter. Method and session
+data are never shared between cards.
+
+`GET /api/member/wallet-funding/administrative/options?country=US&serviceProvider=TRANSAK`
+reads payment methods from the administrative sandbox account only. The method
+selector resets and cancels its previous request when country or provider changes.
+Loading, empty and failed reads disable checkout and offer an explicit retry;
+they never default to invented card methods. Personal payment methods are selected
+inside Reown's production checkout and do not use this options endpoint.
+
+`POST /api/member/wallet-funding/administrative/session` creates the test attempt
+and mints a provider widget through `https://api-sb.meld.io/crypto/session/widget`.
+This white-label API uses the sandbox secret directly on the server and does not
+require exposing a secret or reusing Reown's checkout key. Wallet, amount and
+asset are server-authored and locked where supported. The client opens the
+returned `https://sb.meldcrypto.com` URL exactly as received. It never rebuilds a
+token URL or appends payment parameters. See the official
+[widget reference](https://docs.meld.io/api-reference/crypto/retail-ramp/crypto-session-widget-create.md).
 
 The available `MELD_API_SANDBOX` credential belongs in an encrypted Core secret,
 not in frontend `NEXT_PUBLIC_*` variables, Git or Docker build arguments. Keeping
 the secret in Cloudflare does not enable a checkout. Do not rename it to
 `MELD_API_KEY` or treat it as a live credential.
 
-The next sandbox checkout implementation must use the separate sandbox API
-`https://api-sb.meld.io` and sandbox widget `https://sb.meldcrypto.com`, with its
-own publishable key, isolated test records and separate webhook configuration.
-Meld's current checkout API mints a per-session `widgetUrl` server-side through
-`POST /crypto/session/widget/url`; it takes the matching private/public keys and
-server-authored `prefill`/`locked` fields. Use the returned URL as supplied rather
-than reconstructing it or appending payment parameters. This endpoint is not
-implemented by this sandbox notice release. See the official
-[checkout guide](https://docs.meld.io/docs/stablecoins/meld-checkout-integration/meld-checkout-guide.md)
-and [sandbox guide](https://docs.meld.io/docs/stablecoins/sandbox-guide.md).
+Core forwards this sandbox credential only when `MELD_ADMIN_SANDBOX_ENABLED=true`.
+Administrative sessions require the trusted proxy IP envelope signed by the BFF;
+the IP never comes from a browser JSON field. Provider failures are generic and
+are not retried automatically. A used administrative request ID cannot create a
+second provider session. Sandbox coverage can differ from live coverage; an
+unsupported route remains unavailable rather than falling back to production.
 
 The existing production administrative path still accepts `MELD_CHECKOUT_URL`
 from server configuration and a live `MELD_API_KEY` from the Core. Those are
@@ -59,15 +80,16 @@ future production settings for the separate Meld account, not prerequisites for
 configuring the already-live Reown project. After changing container
 configuration, restart/roll out the Core API so new secrets reach its process.
 
-The personal wallet's current quote/intent preflight still uses the shared Meld
-backend. Reown being in production does not make that private Meld API live.
-Decouple that preflight through a production-compatible verification and capture
-path before claiming personal top-ups work; do not bypass backend capture or
-substitute sandbox quotes for real amounts.
+## Separate backend histories
 
-Topper and Swapped must be enabled on the Meld account and have a supported
-country, fiat and USDT network route. The application displays only routes and
-quotes actually returned by the provider.
+The personal request table `payments.reown_funding_intent` and administrative test
+table `payments.meld_sandbox_funding_attempt` are separate from the existing paid
+Meld commission ledger. `GET /api/member/wallet-funding/history?walletKind=...`
+returns only the authenticated user's selected history. Both cards label these
+as requests/tests, never confirmed balances. Sandbox activity cannot accrue real
+commissions or satisfy a production purchase. Reown request records remain
+`initiated` until an independent live settlement integration is added; closing
+or returning from the provider does not confirm payment.
 
 ## Webhook
 

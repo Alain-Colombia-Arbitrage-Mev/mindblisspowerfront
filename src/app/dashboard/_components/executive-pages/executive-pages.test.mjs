@@ -8,6 +8,7 @@ import ts from 'typescript';
 import * as paymentDisplay from '../../../../lib/payment-display.mjs';
 import * as deadline from '../../../../lib/browser-request-deadline.mjs';
 import { translateMessage } from '../../../../i18n/translate.mjs';
+import * as fundingContract from '../../../../lib/wallet-funding-contract.mjs';
 
 const require = createRequire(import.meta.url);
 const pageNames = [
@@ -55,6 +56,10 @@ function loadPages({ summary = { loading: true, data: null, error: '' }, health 
     '@/lib/administrative-onramp-client.mjs': {
       startAdministrativeMeldOnramp: async () => { throw Error('Unexpected render-time request'); },
     },
+    '@/lib/wallet-funding-contract.mjs': fundingContract,
+    '@/lib/wallet-funding-client.mjs': { fundingRequestId: () => 'd8a4c010-cc33-44da-a297-8b3c6440f491',
+      readAdministrativeSandboxOptions: async () => { throw Error('Unexpected render-time request'); },
+      readWalletFundingHistory: async () => { throw Error('Unexpected render-time request'); } },
     '@/lib/meld-onramp.mjs': { browserOnrampRegion: () => 'CO' },
     '@/lib/meld-onramp-client.mjs': {
       ONRAMP_COUNTRIES: [['CO', 'Colombia']],
@@ -182,7 +187,7 @@ test('finance loading and failures do not invent an available zero balance', () 
   assert.doesNotMatch(failure, /\$0\.00|Cargando tu wallet/);
 });
 
-test('administrative sandbox clearly labels tests and omits its checkout while personal funding remains separate', () => {
+test('administrative sandbox labels tests and exposes its separate request form without personal quotes', () => {
   const page = loadPages().FinanceDashboardPage;
   const sandbox = render(page, { administrativeEnvironment: 'sandbox' });
   const administrative = sandbox.split('id="administrative-wallet"')[1].split('</section>')[0];
@@ -190,12 +195,13 @@ test('administrative sandbox clearly labels tests and omits its checkout while p
   assert.match(administrative, /Sandbox · Pruebas/);
   assert.match(administrative, /no acredita saldo ni genera comisiones reales/);
   assert.match(administrative, /Tu dirección administrativa/);
-  assert.doesNotMatch(administrative, /mb-onramp-simple|mb-onramp-primary/);
+  assert.match(administrative, /mb-onramp-simple/);
+  assert.match(administrative, /Proveedor de prueba/);
   assert.match(personal, /mb-onramp-simple/);
   assert.doesNotMatch(personal, /Sandbox · Pruebas/);
   const production = render(page, { administrativeEnvironment: 'production' });
   const productionAdministrative = production.split('id="administrative-wallet"')[1].split('</section>')[0];
-  assert.match(productionAdministrative, /mb-onramp-simple/);
+  assert.doesNotMatch(productionAdministrative, /mb-onramp-simple/);
   assert.doesNotMatch(productionAdministrative, /Sandbox · Pruebas/);
 });
 

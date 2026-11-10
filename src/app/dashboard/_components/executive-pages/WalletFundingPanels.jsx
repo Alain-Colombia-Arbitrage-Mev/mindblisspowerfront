@@ -8,7 +8,8 @@ import { useReownWallet } from "@/components/reown/ReownContext";
 import { useI18n } from "@/i18n/LanguageProvider";
 import { ensureAdministrativeWallet, readAdministrativeWallet } from "@/lib/administrative-wallet.mjs";
 import { startAdministrativeMeldOnramp } from "@/lib/administrative-onramp-client.mjs";
-import StablecoinOnrampForm from "./StablecoinOnrampForm";
+import { AdministrativeSandboxFundingForm, PersonalFundingForm } from "./WalletFundingForm";
+import WalletFundingHistory from "./WalletFundingHistory";
 
 const ReownProvider = dynamic(() => import("@/components/reown/ReownProvider"), {
   ssr: false,
@@ -42,8 +43,8 @@ function PersonalWalletFunding() {
 
   async function openProvider(input) {
     setProviderError("");
-    try { await reown.startOnramp({ walletAddress: address, ...input }); }
-    catch { setProviderError(t("walletPage.quoteUnavailable")); }
+    try { return await reown.startOnramp({ walletAddress: address, ...input }); }
+    catch (error) { setProviderError(fundingError(error, t, false)); throw error; }
   }
 
   return (
@@ -57,9 +58,10 @@ function PersonalWalletFunding() {
         onClick={() => void reown.openConnect().catch(() => setProviderError(t("recharge.providerConfiguration")))}>
         <Wallet size={17} aria-hidden="true" /> {t("overview.createWallet")}
       </button> : null}
-      <StablecoinOnrampForm walletAddress={address} disabled={!address} busy={busy} onContinue={openProvider} />
-      <ProviderNote text={t("onramp.simpleProviderNote")} />
-      <WalletActionError message={copyError || providerError} />
+      <PersonalFundingForm disabled={!reown.configured} busy={busy} onContinue={openProvider} />
+      <ProviderNote text={t("funding.personalProviderNote")} />
+      <WalletActionError message={copyError || providerError || (reown.onrampStatus === "error" ? personalOnrampError(reown.onrampError, t) : "")} />
+      <WalletFundingHistory walletKind="personal" refreshKey={reown.onrampStatus === "open"} />
     </section>
   );
 }
@@ -70,6 +72,7 @@ function AdministrativeWalletFunding({ environment }) {
   const [providerError, setProviderError] = useState("");
   const [copyError, setCopyError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [historyRevision, setHistoryRevision] = useState(0);
   const checkoutRequest = useRef(null);
   const assigned = wallet.status === "assigned";
   const sandbox = environment === "sandbox";
@@ -77,16 +80,16 @@ function AdministrativeWalletFunding({ environment }) {
   useEffect(() => () => checkoutRequest.current?.abort(), []);
 
   async function openProvider(input) {
-    if (sandbox || checkoutRequest.current || !assigned) return;
+    if (!sandbox || checkoutRequest.current || !assigned) return;
     const controller = new AbortController();
     checkoutRequest.current = controller;
     setBusy(true);
     setProviderError("");
     try { await startAdministrativeMeldOnramp({ address: wallet.address, ...input }, { signal: controller.signal }); }
-    catch { if (!controller.signal.aborted) setProviderError(t("walletPage.quoteUnavailable")); }
+    catch (error) { if (!controller.signal.aborted) setProviderError(fundingError(error, t, true)); throw error; }
     finally {
       if (checkoutRequest.current === controller) checkoutRequest.current = null;
-      if (!controller.signal.aborted) setBusy(false);
+      if (!controller.signal.aborted) { setBusy(false); setHistoryRevision(value => value + 1); }
     }
   }
 
@@ -111,11 +114,12 @@ function AdministrativeWalletFunding({ environment }) {
           <WalletAddress address={assigned ? wallet.address : ""} label={t("walletPage.administrativeAddress")}
             loading={!assigned} emptyLabel={t("walletPage.administrativeAssigning")}
             onCopyError={() => setCopyError(t("walletPage.administrativeCopyFailed"))} />
-          {!sandbox ? <StablecoinOnrampForm walletAddress={assigned ? wallet.address : ""} disabled={!assigned} busy={busy} onContinue={openProvider} /> : null}
+          {sandbox ? <AdministrativeSandboxFundingForm disabled={!assigned} busy={busy} onContinue={openProvider} /> : null}
           <ProviderNote text={t("walletPage.administrativeSeparation")} />
         </>
       )}
       <WalletActionError message={copyError || providerError} />
+      {sandbox ? <WalletFundingHistory walletKind="administrative" refreshKey={historyRevision} /> : null}
     </section>
   );
 }
@@ -156,6 +160,21 @@ function ProviderNote({ text }) {
 
 function WalletActionError({ message }) {
   return message ? <p className="mb-reown-wallet-error" role="alert">{message}</p> : null;
+}
+
+function fundingError(error, t, sandbox) {
+  const code = error?.message;
+  if (code === "unauthenticated") return t("recharge.providerSession");
+  if (code === "wallet_funding_rate_limited") return t("funding.rateLimited");
+  if (code === "wallet_funding_request_already_used") return t("funding.requestUsed");
+  if (sandbox && code === "wallet_funding_unconfigured") return t("funding.sandboxConfiguration");
+  return t(sandbox ? "funding.sandboxUnavailable" : "funding.requestUnavailable");
+}
+
+function personalOnrampError(code, t) {
+  const keys = { session: "recharge.providerSession", configuration: "recharge.providerConfiguration",
+    mismatch: "recharge.providerMismatch", rejected: "recharge.providerRejected", connection: "recharge.providerConnection" };
+  return t(keys[code] || "funding.requestUnavailable");
 }
 
 function administrativeStatus(status, t) {

@@ -1,0 +1,24 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { buildReownProductionOnrampUrl } from './reown-production-onramp.mjs';
+
+const projectId = 'a'.repeat(32);
+const input = { providerUrl: `https://meldcrypto.com/?publicKey=reown-public&externalCustomerId=${projectId}`,
+  projectId, address: `0x${'1'.repeat(40)}`, checkoutReference: 'd8a4c010-cc33-44da-a297-8b3c6440f491', countryCode: 'CO', amount: 100 };
+test('Reown production retains merchant attribution and records only an initiated session reference', () => {
+  const url = new URL(buildReownProductionOnrampUrl(input));
+  assert.equal(url.searchParams.get('externalCustomerId'), projectId);
+  assert.equal(url.searchParams.get('externalSessionId'), input.checkoutReference);
+  assert.equal(url.searchParams.get('walletAddress'), input.address);
+  assert.equal(url.searchParams.get('destinationCurrencyCode'), 'USDT_POLYGON');
+  assert.equal(url.searchParams.get('sourceAmount'), '100');
+  assert.equal(url.searchParams.get('serviceProviders'), 'TOPPER,SWAPPED');
+});
+test('Reown production cannot point at sandbox, another origin or a foreign merchant', () => {
+  for (const providerUrl of ['https://sb.meldcrypto.com/?publicKey=sandbox', 'https://evil.test/?publicKey=bad',
+    'https://meldcrypto.com/?publicKey=bad&externalCustomerId=someone-else']) {
+    assert.throws(() => buildReownProductionOnrampUrl({ ...input, providerUrl }));
+  }
+  assert.throws(() => buildReownProductionOnrampUrl({ ...input, amount: 49 }));
+  assert.throws(() => buildReownProductionOnrampUrl({ ...input, amount: 50.001 }));
+});

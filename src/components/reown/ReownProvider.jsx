@@ -7,8 +7,9 @@ import { OnRampController } from "@reown/appkit-controllers";
 import { mainnet, polygon } from "@reown/appkit/networks";
 import { BrowserProvider, getAddress } from "ethers";
 import { useMemberSession } from "@/lib/member-session-context";
-import { browserOnrampRegion, buildMeldOnrampUrl } from "@/lib/meld-onramp.mjs";
-import { createOnrampIntent, ONRAMP_CRYPTO } from "@/lib/meld-onramp-client.mjs";
+import { browserOnrampRegion } from "@/lib/meld-onramp.mjs";
+import { buildReownProductionOnrampUrl } from "@/lib/reown-production-onramp.mjs";
+import { createPersonalFundingIntent, fundingRequestId } from "@/lib/wallet-funding-client.mjs";
 import { PERSONAL_WALLET_ASSET, PERSONAL_WALLET_MINIMUM_USD } from "@/lib/personal-wallet.mjs";
 import { readWalletBinding, walletBindingFailure } from "@/lib/wallet-binding.mjs";
 import { ReownContext, useReownWallet } from "./ReownContext";
@@ -98,9 +99,16 @@ function ConfiguredReownProvider({ children }) {
   const onrampIntent = useRef(false);
   const onrampFlow = useRef(null);
   const onrampSelection = useRef(null);
+  const onrampAbort = useRef(null);
+  const mounted = useRef(true);
   const connectModalSeen = useRef(false);
   const bindingRequest = useRef(null);
   const sessionRetryEmail = useRef("");
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; onrampAbort.current?.abort(); };
+  }, []);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -236,27 +244,28 @@ function ConfiguredReownProvider({ children }) {
       if (selection.walletAddress && !sameAddress(selection.walletAddress, verifiedAddress)) {
         throw new Error("wallet_address_mismatch");
       }
+      if (!mounted.current) throw new DOMException("Aborted", "AbortError");
       setOnrampState({ status: "opening", error: "" });
       const locale = navigator.languages?.[0] || navigator.language || "";
       const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
       const countryCode = selection.countryCode || browserOnrampRegion([...(navigator.languages || [locale])], timeZone);
-      const intent = await createOnrampIntent({
-        walletKind: "personal", walletAddress: verifiedAddress, country: countryCode, fiat: "USD", crypto: ONRAMP_CRYPTO,
-        amount: selection.amount, paymentMethodType: selection.paymentMethodType, serviceProvider: selection.serviceProvider,
-      });
       const provider = OnRampController.state.providers.find(item => item.name === "meld");
       if (!provider) throw new Error("onramp_provider_unavailable");
       OnRampController.setSelectedProvider(provider);
-      const checkoutUrl = buildMeldOnrampUrl({
+      const controller = new AbortController();
+      onrampAbort.current = controller;
+      const intent = await createPersonalFundingIntent({
+        requestId: selection.requestId || fundingRequestId(), walletAddress: verifiedAddress, country: countryCode,
+        amount: selection.amount ?? PERSONAL_WALLET_MINIMUM_USD,
+      }, { signal: controller.signal });
+      if (controller.signal.aborted || !mounted.current) throw new DOMException("Aborted", "AbortError");
+      const checkoutUrl = buildReownProductionOnrampUrl({
         providerUrl: OnRampController.state.selectedProvider?.url,
         address: verifiedAddress,
         projectId,
         checkoutReference: intent.checkoutReference,
         countryCode,
-        locale,
-        amount: intent.quote.sourceAmount,
-        paymentMethodType: intent.quote.paymentMethodType,
-        serviceProvider: intent.quote.serviceProvider,
+        amount: intent.requestedAmount,
       });
       const checkout = window.open(checkoutUrl, "_blank");
       if (checkout) checkout.opener = null;
@@ -264,7 +273,7 @@ function ConfiguredReownProvider({ children }) {
       onrampIntent.current = false;
       onrampSelection.current = null;
       setOnrampState({ status: "open", error: "" });
-      return { opened: true, provider: "meld", asset: PERSONAL_WALLET_ASSET, minimumUsd: PERSONAL_WALLET_MINIMUM_USD };
+      return { opened: true, provider: "reown", checkoutReference: intent.checkoutReference, asset: PERSONAL_WALLET_ASSET, minimumUsd: PERSONAL_WALLET_MINIMUM_USD };
     })().catch(error => {
       onrampIntent.current = false;
       onrampSelection.current = null;
@@ -272,6 +281,7 @@ function ConfiguredReownProvider({ children }) {
       throw error;
     }).finally(() => {
       onrampFlow.current = null;
+      onrampAbort.current = null;
     });
     onrampFlow.current = operation;
     return operation;
