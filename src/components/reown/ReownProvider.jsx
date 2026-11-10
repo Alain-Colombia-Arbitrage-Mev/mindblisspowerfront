@@ -7,7 +7,7 @@ import { OnRampController } from "@reown/appkit-controllers";
 import { mainnet, polygon } from "@reown/appkit/networks";
 import { BrowserProvider, getAddress } from "ethers";
 import { useMemberSession } from "@/lib/member-session-context";
-import { browserOnrampRegion } from "@/lib/meld-onramp.mjs";
+import { browserOnrampRegion } from "@/lib/browser-onramp-region.mjs";
 import { buildReownProductionOnrampUrl, reownFundingSelection } from "@/lib/reown-production-onramp.mjs";
 import { createPersonalFundingIntent, fundingRequestId } from "@/lib/wallet-funding-client.mjs";
 import { PERSONAL_WALLET_ASSET, PERSONAL_WALLET_MINIMUM_USD } from "@/lib/personal-wallet.mjs";
@@ -17,6 +17,7 @@ import { ReownContext, useReownWallet } from "./ReownContext";
 
 const projectId = process.env.NEXT_PUBLIC_REOWN_PROJECT_ID?.trim() || "";
 const configured = /^[a-f0-9]{32}$/i.test(projectId);
+const initialWalletTheme = typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
 
 function detectPersonalFundingCountry() {
   const locale = navigator.languages?.[0] || navigator.language || '';
@@ -78,8 +79,8 @@ if (configured) {
       // Funding starts in Mindbliss's country/method-validated, recorded flow.
       onramp: false,
     },
-    themeMode: "dark",
-    themeVariables: themeVariables("dark"),
+    themeMode: initialWalletTheme,
+    themeVariables: themeVariables(initialWalletTheme),
   });
 }
 
@@ -124,7 +125,7 @@ function ConfiguredReownProvider({ children }) {
   useEffect(() => {
     const root = document.documentElement;
     const syncTheme = () => {
-      const mode = root.dataset.theme === "light" ? "light" : "dark";
+      const mode = root.dataset.theme === "dark" ? "dark" : "light";
       appKitThemeRef.current.setThemeMode(mode);
       appKitThemeRef.current.setThemeVariables(themeVariables(mode));
     };

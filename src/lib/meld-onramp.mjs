@@ -58,25 +58,5 @@ function buildOnrampUrl({ providerUrl, address, externalCustomerId, countryCode,
   return url.toString();
 }
 
-/**
- * Prefer an explicit browser locale region. A small timezone fallback covers
- * locales such as es-419 without pretending a country when it is unknown.
- */
-export function browserOnrampRegion(languages = [], timeZone = "") {
-  for (const language of languages) {
-    try {
-      const region = new Intl.Locale(String(language).replace("_", "-")).region || "";
-      if (COUNTRY.test(region)) return region;
-    } catch { /* try the next browser locale */ }
-  }
-  return TIMEZONE_COUNTRIES[timeZone] || "";
-}
-
-const TIMEZONE_COUNTRIES = Object.freeze({
-  "America/Bogota": "CO", "America/Mexico_City": "MX", "America/Lima": "PE",
-  "America/Santiago": "CL", "America/Argentina/Buenos_Aires": "AR", "America/Sao_Paulo": "BR",
-  "America/Caracas": "VE", "America/Guayaquil": "EC", "America/Panama": "PA",
-  "America/Santo_Domingo": "DO", "America/Guatemala": "GT", "America/Tegucigalpa": "HN",
-  "America/El_Salvador": "SV", "America/Managua": "NI", "America/Costa_Rica": "CR",
-  "America/Montevideo": "UY", "America/Asuncion": "PY", "America/La_Paz": "BO",
-});
+// Kept for existing integration helpers; the personal portal imports the neutral utility.
+export { browserOnrampRegion } from './browser-onramp-region.mjs';

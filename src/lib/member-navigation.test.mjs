@@ -6,7 +6,7 @@ test("member pages have Spanish titles for overview, payments and nested message
   assert.equal(memberPageFor("/dashboard").title, "Resumen");
   assert.equal(memberPageFor("/dashboard/payments").title, "Billetera");
   assert.equal(memberPageKeysFor("/dashboard/wallet-personal").title, "nav.personalWallet");
-  assert.equal(memberPageKeysFor("/dashboard/wallet-administrative").title, "nav.administrativeWallet");
+  assert.equal(memberPageKeysFor("/dashboard/wallet-administrative").title, "pages.account");
   assert.equal(
     memberPageFor("/dashboard/communications/news").title,
     "Noticias",

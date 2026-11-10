@@ -17,7 +17,7 @@ export const viewport = {
 };
 
 const themeInitScript = `(() => {
-  let theme = "dark";
+  let theme = "light";
   try {
     const saved = localStorage.getItem("vp-theme");
     if (saved === "light" || saved === "dark") theme = saved;
@@ -31,9 +31,9 @@ const themeInitScript = `(() => {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="es" data-theme="dark" className="dark" suppressHydrationWarning>
+    <html lang="es" data-theme="light" suppressHydrationWarning>
       <head>
-        <meta name="theme-color" content="#0b1219" />
+        <meta name="theme-color" content="#f3f7f8" />
         <script id="vp-theme-init" dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         <link
           rel="preload"

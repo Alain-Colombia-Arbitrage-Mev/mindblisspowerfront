@@ -1,5 +1,4 @@
-import { handleAdministrativeWallet } from '@/lib/administrative-wallet-bff.mjs';
-
+import { retiredWalletRoute } from '@/lib/retired-wallet-route.mjs';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export const POST = request => handleAdministrativeWallet(request, 'ensure');
+export const POST = retiredWalletRoute;

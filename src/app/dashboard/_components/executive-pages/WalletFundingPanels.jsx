@@ -1,18 +1,16 @@
 "use client";
 
-import { ArrowUpRight, Building2, Wallet } from "lucide-react";
+import { ArrowUpRight, Wallet } from "lucide-react";
 import Link from "next/link";
 import { useI18n } from "@/i18n/LanguageProvider";
 import styles from "./wallet-funding.module.css";
 
-/** Navigation only: neither wallet's SDK, requests nor state mount on the summary. */
+/** Personal wallet navigation only; checkout state mounts on its own screen. */
 export default function WalletFundingPanels() {
   const { t } = useI18n();
   return <div className={styles.destinations} aria-label={t("walletPage.fundsTitle")}>
     <WalletDestination icon={Wallet} title={t("walletPage.personalWalletLabel")} copy={t("funding.personalDestination")}
       provider="Reown" href="/dashboard/wallet-personal" />
-    <WalletDestination icon={Building2} title={t("walletPage.administrativeWalletLabel")} copy={t("funding.administrativeDestination")}
-      provider="MELD" href="/dashboard/wallet-administrative" />
   </div>;
 }
 

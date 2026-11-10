@@ -29,10 +29,10 @@ test('Reown production retains merchant attribution and records only an initiate
 });
 
 test('personal checkout enforces its countries and excluded methods before constructing provider URLs', () => {
-  for (const countryCode of ['US', 'MX', 'ES']) {
+  for (const countryCode of ['US', 'MX']) {
     assert.equal(reownFundingSelection({ countryCode, paymentMethodType: 'CREDIT_DEBIT_CARD' }).countryCode, countryCode);
   }
-  for (const countryCode of ['CO', 'PA', 'CA']) {
+  for (const countryCode of ['CO', 'PA', 'CA', 'ES']) {
     assert.throws(() => buildReownProductionOnrampUrl({ ...input, countryCode }), { message: 'wallet_funding_invalid_country' });
   }
   for (const paymentMethodType of ['NETELLER', 'SKRILL']) {

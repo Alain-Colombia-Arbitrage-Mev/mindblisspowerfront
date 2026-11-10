@@ -15,7 +15,6 @@ import SidebarLogo from "./SidebarLogo";
 import SidebarNavItem from "./SidebarNavItem";
 import SidebarUserCard from "./SidebarUserCard";
 import SidebarWalletCard from "./SidebarWalletCard";
-import SidebarAdministrativeWalletCard from "./SidebarAdministrativeWalletCard";
 import { matchesRoute } from "@/lib/member-navigation.mjs";
 import LogoutButton from "./LogoutButton";
 import { useI18n } from "@/i18n/LanguageProvider";
@@ -24,7 +23,7 @@ const NAV_GROUPS = [
   { label: "nav.account", items: [
     { icon: LayoutDashboard, label: "nav.summary", href: "/dashboard", exact: true, also: ["/dashboard/home"] },
     { icon: Layers, label: "nav.memberships", href: "/dashboard/packages" },
-    { icon: Wallet, label: "nav.wallet", href: "/dashboard/payments", also: ["/dashboard/wallet-personal", "/dashboard/wallet-administrative"] },
+    { icon: Wallet, label: "nav.wallet", href: "/dashboard/payments", also: ["/dashboard/wallet-personal"] },
   ] },
   { label: "nav.communityGroup", items: [
     { icon: Users, label: "nav.community", href: "/dashboard/referrals" },
@@ -42,7 +41,6 @@ export default function PanelSidebar({ pathname, member, onNavigate = undefined 
     <div className="flex h-full flex-col" style={{ background: "var(--vp-shell)" }}>
       <SidebarLogo onNavigate={onNavigate} />
       <SidebarWalletCard onNavigate={onNavigate} />
-      <SidebarAdministrativeWalletCard onNavigate={onNavigate} />
 
       <nav aria-label={t("dashboard.memberNavigation")} className="vp-sidebar-nav">
         {NAV_GROUPS.map((group) => (

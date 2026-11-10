@@ -1,5 +1,4 @@
-import { handleMeldOnramp } from '@/lib/meld-onramp-bff.mjs';
-
+import { retiredWalletRoute } from '@/lib/retired-wallet-route.mjs';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export const GET = request => handleMeldOnramp(request, 'availability');
+export const GET = retiredWalletRoute;

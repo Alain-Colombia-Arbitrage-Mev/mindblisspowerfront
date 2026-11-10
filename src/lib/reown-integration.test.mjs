@@ -135,72 +135,50 @@ test("all Reown packages use the same pinned release", () => {
   assert.equal(pkg.dependencies["@reown/appkit-siwx"], undefined);
 });
 
-test("personal and administrative wallets remain visibly separate without loading AppKit in the global shell", () => {
-  const sidebar = read("../components/panel/SidebarWalletCard.jsx");
-  const finance = read("../app/dashboard/_components/executive-pages/FinanceDashboardPage.jsx");
-  const funding = read("../app/dashboard/_components/executive-pages/WalletFundingPanels.jsx");
-  const personal = read("../app/dashboard/_components/executive-pages/PersonalWalletFundingPage.jsx");
-  const administrative = read("../app/dashboard/_components/executive-pages/AdministrativeWalletFundingPage.jsx");
-  const policy = read("./personal-wallet.mjs");
-  assert.match(sidebar, /nav\.personalWallet/);
-  assert.match(sidebar, /\/dashboard\/wallet-personal/);
-  assert.match(finance, /WalletFundingPanels/);
-  assert.match(personal, /id="personal-wallet"/);
-  assert.match(administrative, /id="administrative-wallet"/);
-  assert.match(personal, /<PersonalFundingForm/);
-  assert.match(administrative, /<AdministrativeSandboxFundingForm/);
-  assert.doesNotMatch(funding, /StablecoinOnrampForm/);
-  assert.match(personal, /reown\.startOnramp\(\{ walletAddress: reown\.linkedAddress, \.\.\.input \}\)/);
-  assert.match(administrative, /startAdministrativeMeldOnramp\(\{ address: wallet\.address, \.\.\.input \}/);
-  assert.doesNotMatch(funding, /reown\.startAdministrativeOnramp/);
-  assert.match(administrative, /readAdministrativeWallet/);
-  assert.match(administrative, /ensureAdministrativeWallet/);
-  assert.doesNotMatch(funding, /ReownProvider|FundingForm|useState|useEffect/);
-  assert.doesNotMatch(personal, /Administrative|startAdministrative|SandboxFunding/);
-  assert.doesNotMatch(administrative, /Reown|PersonalFunding/);
-  assert.match(policy, /MINDBLISS_ONRAMP_FEE_BPS = 100/);
-  assert.match(policy, /PERSONAL_WALLET_ASSET = "USDT"/);
-  assert.match(policy, /PERSONAL_WALLET_MELD_ASSET = "USDT_POLYGON"/);
-  assert.match(policy, /PERSONAL_WALLET_MINIMUM_USD = 50/);
-  assert.doesNotMatch(funding, /PERSONAL_WALLET_RECOMMENDED_PROVIDERS|Topper|Swapped/);
-  assert.doesNotMatch(sidebar, /Binance/i);
+test("personal portal renders only its personal wallet and preserves native member authorization", () => {
+ const sidebar=read("../components/panel/PanelSidebar.jsx");
+ const card=read("../components/panel/SidebarWalletCard.jsx");
+ const finance=read("../app/dashboard/_components/executive-pages/FinanceDashboardPage.jsx");
+ const funding=read("../app/dashboard/_components/executive-pages/WalletFundingPanels.jsx");
+ const personal=read("../app/dashboard/_components/executive-pages/PersonalWalletFundingPage.jsx");
+ const retired=read("../app/dashboard/wallet-administrative/page.jsx");
+ const policy=read("./personal-wallet.mjs");
+ assert.match(card,/nav\.personalWallet/);assert.match(card,/\/dashboard\/wallet-personal/);
+ assert.match(finance,/WalletFundingPanels/);assert.match(personal,/id="personal-wallet"/);assert.match(personal,/<PersonalFundingForm/);
+ assert.doesNotMatch(sidebar,/AdministrativeWallet|wallet-administrative/);
+ assert.doesNotMatch(funding,/MELD|administrative|ReownProvider|FundingForm|useState|useEffect/);
+ assert.match(retired,/notFound\(\)/);assert.doesNotMatch(retired,/AdministrativeWalletFundingPage|runtimeEnvironment/);
+ assert.match(personal,/reown\.startOnramp\(\{ walletAddress: reown\.linkedAddress, \.\.\.input \}\)/);
+ assert.doesNotMatch(personal,/Administrative|startAdministrative|SandboxFunding/);
+ assert.match(policy,/MINDBLISS_ONRAMP_FEE_BPS = 100/);assert.match(policy,/PERSONAL_WALLET_ASSET = "USDT"/);
+ assert.match(policy,/PERSONAL_WALLET_MINIMUM_USD = 50/);
 });
 
-test("each wallet owns an independent funding component and keeps one neutral action label", () => {
-  const overview = read("../components/panel/overview/OverviewDiscoveryCard.jsx");
-  const personalSidebar = read("../components/panel/SidebarWalletCard.jsx");
-  const administrativeSidebar = read("../components/panel/SidebarAdministrativeWalletCard.jsx");
-  const funding = read("../app/dashboard/_components/executive-pages/WalletFundingPanels.jsx");
-  const messages = read("../i18n/messages.js");
-  assert.match(overview, /\/dashboard\/wallet-personal/);
-  assert.match(personalSidebar, /nav\.addFunds/);
-  assert.match(administrativeSidebar, /nav\.addFunds/);
-  assert.match(administrativeSidebar, /\/dashboard\/wallet-administrative/);
-  assert.match(funding, /href="\/dashboard\/wallet-personal"/);
-  assert.match(funding, /href="\/dashboard\/wallet-administrative"/);
-  assert.doesNotMatch(funding, /destination ===|WalletDestinationSelector|aria-pressed/);
-  assert.doesNotMatch(overview, /createWallet|openConnect|Buy crypto/);
-  assert.match(messages, /buyCrypto: "Recargar fondos"/);
-  assert.match(messages, /amountLabel: "Monto a recargar"/);
+test("personal funding navigation has one destination and one neutral action label", () => {
+ const overview=read("../components/panel/overview/OverviewDiscoveryCard.jsx");
+ const sidebar=read("../components/panel/SidebarWalletCard.jsx");
+ const funding=read("../app/dashboard/_components/executive-pages/WalletFundingPanels.jsx");
+ const messages=read("../i18n/messages.js");
+ assert.match(overview,/\/dashboard\/wallet-personal/);assert.match(sidebar,/nav\.addFunds/);
+ assert.match(funding,/href="\/dashboard\/wallet-personal"/);
+ assert.doesNotMatch(funding,/wallet-administrative|MELD|destination ===|WalletDestinationSelector|aria-pressed/);
+ assert.doesNotMatch(overview,/createWallet|openConnect|Buy crypto/);
+ assert.match(messages,/buyCrypto: "Recargar fondos"/);assert.match(messages,/amountLabel: "Monto a recargar"/);
 });
 
-test("AppKit is scoped to wallet surfaces and does not slow every dashboard route", () => {
-  const shell = read("../app/dashboard/_components/DashboardShell.jsx");
-  const finance = read("../app/dashboard/_components/executive-pages/FinanceDashboardPage.jsx");
-  const funding = read("../app/dashboard/_components/executive-pages/WalletFundingPanels.jsx");
-  const personal = read("../app/dashboard/_components/executive-pages/PersonalWalletFundingPage.jsx");
-  const administrative = read("../app/dashboard/_components/executive-pages/AdministrativeWalletFundingPage.jsx");
-  const overview = read("../components/panel/overview/OverviewDashboard.jsx");
-  assert.doesNotMatch(shell, /ReownProvider/);
-  assert.doesNotMatch(finance, /ReownProvider/);
-  assert.match(personal, /dynamic\(\(\) => import\("@\/components\/reown\/ReownProvider"\)/);
-  assert.match(personal, /<ReownProvider><PersonalWalletFunding \/><\/ReownProvider>/);
-  assert.doesNotMatch(funding, /ReownProvider|useReownWallet/);
-  assert.doesNotMatch(administrative, /ReownProvider|useReownWallet/);
-  assert.doesNotMatch(read("./administrative-onramp-client.mjs"), /Reown|OnRampController/);
-  assert.doesNotMatch(read("../components/reown/ReownProvider.jsx"), /startAdministrativeOnramp|administrativeOnrampState/);
-  assert.match(overview, /dynamic\(\(\) => import\("\.\/ReownRechargeDialog"\)/);
-  assert.match(overview, /reownLoaded \? <ReownRechargeDialog open=\{rechargeDialog\.open\}/);
+test("AppKit is scoped to personal wallet surfaces and does not slow every dashboard route", () => {
+ const shell=read("../app/dashboard/_components/DashboardShell.jsx");
+ const finance=read("../app/dashboard/_components/executive-pages/FinanceDashboardPage.jsx");
+ const funding=read("../app/dashboard/_components/executive-pages/WalletFundingPanels.jsx");
+ const personal=read("../app/dashboard/_components/executive-pages/PersonalWalletFundingPage.jsx");
+ const overview=read("../components/panel/overview/OverviewDashboard.jsx");
+ assert.doesNotMatch(shell,/ReownProvider/);assert.doesNotMatch(finance,/ReownProvider/);
+ assert.match(personal,/dynamic\(\(\) => import\("@\/components\/reown\/ReownProvider"\)/);
+ assert.match(personal,/<ReownProvider><PersonalWalletFunding \/><\/ReownProvider>/);
+ assert.doesNotMatch(funding,/ReownProvider|useReownWallet/);
+ assert.doesNotMatch(read("../components/reown/ReownProvider.jsx"),/startAdministrativeOnramp|administrativeOnrampState/);
+ assert.match(overview,/dynamic\(\(\) => import\("\.\/ReownRechargeDialog"\)/);
+ assert.match(overview,/reownLoaded \? <ReownRechargeDialog open=\{rechargeDialog\.open\}/);
 });
 
 test("the public Reown identifier is sourced from environment configuration and never hardcoded in application code", () => {

@@ -6,7 +6,7 @@
 .pageHeading h1 { margin: 0; color: var(--vp-text); font-size: 2rem; letter-spacing: -.03em; line-height: 1.2; }
 .pageHeading span { display: block; max-width: 65ch; margin-top: 10px; color: var(--vp-muted); font-size: 14px; line-height: 1.65; }
 .providerBadge { flex: none; margin: 0; padding: 7px 11px; border-radius: 8px; color: var(--vp-muted); background: var(--vp-surface-raised); font-size: 12px; font-weight: 700; }
-.destinations { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-bottom: 24px; }
+.destinations { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; margin-bottom: 24px; }
 .destination { display: grid; gap: 18px; min-width: 0; }
 .destinationHeading, .sectionHeading { display: flex; align-items: center; gap: 12px; }
 .destination h2, .sectionHeading h2, .stateHeading h2 { margin: 0; color: var(--vp-text); font-size: 17px; font-weight: 800; letter-spacing: -.025em; }

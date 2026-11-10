@@ -27,13 +27,13 @@ body:has(> .vp-dashboard-shell) {
   height: 40px;
   border-radius: 14px;
 }
-.vp-dashboard-shell:has(#personal-wallet, #administrative-wallet) .vp-support-launcher {
+.vp-dashboard-shell:has(#personal-wallet) .vp-support-launcher {
   width: 56px;
   min-height: 56px;
   padding: 8px;
 }
-.vp-dashboard-shell:has(#personal-wallet, #administrative-wallet) .vp-support-launcher-copy,
-.vp-dashboard-shell:has(#personal-wallet, #administrative-wallet) .vp-support-launcher > svg {
+.vp-dashboard-shell:has(#personal-wallet) .vp-support-launcher-copy,
+.vp-dashboard-shell:has(#personal-wallet) .vp-support-launcher > svg {
   display: none;
 }
 .vp-dashboard-shell :is(button, a, input):focus-visible,
@@ -129,11 +129,6 @@ body:has(> .vp-dashboard-shell) {
   gap: 7px;
 }
 
-.vp-sidebar-wallet.administrative-card {
-  margin-top: 0;
-  border-color: color-mix(in srgb, var(--vp-accent) 22%, var(--vp-border));
-  background: color-mix(in srgb, var(--vp-accent) 5%, var(--vp-surface));
-}
 
 .vp-sidebar-wallet-address {
   display: flex;
@@ -166,8 +161,6 @@ body:has(> .vp-dashboard-shell) {
   color: var(--vp-on-selected);
 }
 .vp-sidebar-wallet-divider { height: 1px; margin: 3px 0; background: var(--vp-border); }
-.vp-sidebar-administrative-heading { display: flex; align-items: center; gap: 7px; color: var(--vp-accent); font-size: 11px; font-weight: 800; }
-.vp-sidebar-wallet-action.administrative { justify-content: flex-start; padding-inline: 13px; border: 1px solid var(--vp-border); background: var(--vp-bg); }
 .vp-sidebar-account {
   display: flex;
   align-items: center;

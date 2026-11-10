@@ -1,5 +1,23 @@
 # Wallet configuration in Cloudflare
 
+## Current branch split
+
+`rewon` at `app.mindblisspower.com` now exposes the personal Reown wallet only.
+New personal funding permits United States and Mexico, excluding Neteller and
+Skrill. The administrative page, sidebar card, forms, funding endpoints and MELD
+callback are retired from this frontend; they return 404 without forwarding.
+Existing records and the backend administrative wallet assignment remain intact.
+
+The separate `wallet` frontend is deployed to `wallet.mindblisspower.com` and
+exposes the administrative MELD sandbox wallet only. Its branch contains
+`docs/wallet-portal-deployment.md` with the deployment boundaries. Both apps use
+the same backend identities and independent host-only browser sessions. Light
+is the default theme; explicitly chosen dark preferences remain supported.
+
+The older integration notes below describe the shared backend and the previous
+combined portal. Administrative paths in those notes are no longer exposed on
+the `rewon` frontend, and Spain is no longer eligible for new personal funding.
+
 The personal wallet uses Reown AppKit. The administrative wallet uses its
 assigned backend address and a separate Meld checkout. Configure them independently.
 

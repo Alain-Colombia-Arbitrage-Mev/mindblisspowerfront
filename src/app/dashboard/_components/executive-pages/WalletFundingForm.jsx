@@ -3,10 +3,9 @@
 import { CreditCard, Landmark, Loader2, RefreshCw, ShieldCheck, Smartphone, WalletCards } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useI18n } from "@/i18n/LanguageProvider";
-import { browserOnrampRegion } from "@/lib/meld-onramp.mjs";
-import { ONRAMP_COUNTRIES } from "@/lib/meld-onramp-client.mjs";
-import { fundingRequestId, readAdministrativeSandboxOptions, readPersonalFundingOptions } from "@/lib/wallet-funding-client.mjs";
-import { PERSONAL_FUNDING_COUNTRIES, validFundingAmount } from "@/lib/wallet-funding-contract.mjs";
+import { browserOnrampRegion } from "@/lib/browser-onramp-region.mjs";
+import { fundingRequestId, readPersonalFundingOptions } from "@/lib/wallet-funding-client.mjs";
+import { PERSONAL_FUNDING_COUNTRIES, personalFundingMethod, validFundingAmount } from "@/lib/wallet-funding-contract.mjs";
 import styles from "./wallet-funding.module.css";
 
 const EMPTY_OPTIONS = { status: "idle", country: "", sourceCurrencyCode: "USD", paymentMethods: [], routes: [] };
@@ -15,7 +14,7 @@ export function eligiblePaymentMethods(routes, amount, sourceCurrencyCode = "USD
   if (!Array.isArray(routes) || (sourceCurrencyCode === "USD" && !validFundingAmount(amount))) return [];
   const entered = Number.isFinite(amount) && amount > 0;
   return [...new Set(routes.flatMap(route => (route.paymentMethods || [])
-    .filter(item => { const limits = routeLimits(item, sourceCurrencyCode); return limits && (!entered || (amount >= limits.minimumAmount && amount <= limits.maximumAmount)); })
+    .filter(item => { const limits = routeLimits(item, sourceCurrencyCode); return personalFundingMethod(item.method) && limits && (!entered || (amount >= limits.minimumAmount && amount <= limits.maximumAmount)); })
     .map(item => item.method)))];
 }
 
@@ -42,7 +41,8 @@ export function selectedMethodLimits(routes, method, amount, sourceCurrencyCode 
 }
 
 // ISO currencies are choices to consult, not a claim that a provider supports a route.
-const LOCAL_CURRENCIES = { CO: "COP", MX: "MXN", ES: "EUR", GB: "GBP", BR: "BRL", AR: "ARS", CL: "CLP", PE: "PEN", CR: "CRC", DO: "DOP", GT: "GTQ", UY: "UYU" };
+const LOCAL_CURRENCIES = { MX: "MXN" };
+const PERSONAL_COUNTRIES = PERSONAL_FUNDING_COUNTRIES.map(code => [code]);
 export function fundingCurrencyChoices(country) { return [...new Set(["USD", LOCAL_CURRENCIES[country]].filter(Boolean))]; }
 
 /** Personal state and availability never consume the administrative options endpoint. */
@@ -59,7 +59,7 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
   const current = options.country === countryCode && (options.sourceCurrencyCode || "USD") === sourceCurrencyCode;
   const methods = current && options.status === "ready" ? eligiblePaymentMethods(options.routes, Number(amount), sourceCurrencyCode) : [];
   const methodsKey = methods.join(",");
-  const valid = sourceCurrencyCode === "USD" && validFundingAmount(Number(amount)) && /^[A-Z]{2}$/.test(countryCode) && methods.includes(method) && /^0x[0-9a-f]{40}$/i.test(destinationAddress);
+  const valid = sourceCurrencyCode === "USD" && validFundingAmount(Number(amount)) && PERSONAL_FUNDING_COUNTRIES.includes(countryCode) && methods.includes(method) && /^0x[0-9a-f]{40}$/i.test(destinationAddress);
 
   function changeSelection(update, value) {
     update(value);
@@ -95,90 +95,13 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
   return <form className="mb-onramp-simple" onSubmit={event => void submit(event).catch(() => {})} aria-label={t("walletPage.personalWalletLabel")}>
     <div className="mb-onramp-simple-main">
       <div className={styles.formFields}>
-        <FundingCountryField id={id} value={countryCode} countries={ONRAMP_COUNTRIES.filter(([code]) => PERSONAL_FUNDING_COUNTRIES.includes(code))} onChange={value => { changeSelection(setCountryCode, value); if (sourceCurrencyCode !== "USD") setAmount("50"); setSourceCurrencyCode("USD"); }} busy={busy} />
+        <FundingCountryField id={id} value={countryCode} countries={PERSONAL_COUNTRIES} onChange={value => { changeSelection(setCountryCode, value); if (sourceCurrencyCode !== "USD") setAmount("50"); setSourceCurrencyCode("USD"); }} busy={busy} />
         <FundingCurrencyField id={id} country={countryCode} value={sourceCurrencyCode} onChange={value => { changeSelection(setSourceCurrencyCode, value); setAmount(value === "USD" ? "50" : ""); }} busy={busy} />
         <FundingAmountField id={id} amount={amount} sourceCurrencyCode={sourceCurrencyCode} onChange={value => changeSelection(setAmount, value)} busy={busy} />
         <FundingMethodField id={id} value={methods.includes(method) ? method : ""} methods={methods} status={current ? options.status : "loading"}
           countrySelected={Boolean(countryCode)} sourceCurrencyCode={sourceCurrencyCode} minimumUsd={current ? lowestRouteMinimum(options.routes, sourceCurrencyCode) : null}
           limits={current ? selectedMethodLimits(options.routes, method, Number(amount), sourceCurrencyCode) : null} onChange={value => changeSelection(setMethod, value)} onRetry={() => setRevision(value => value + 1)} busy={busy} />
       </div>
-      <FundingDestination address={destinationAddress} />
-      {sourceCurrencyCode !== "USD" ? <p className={styles.hint} role="status">{t("funding.localMinimumPending")}</p> : null}
-      <FundingSubmit disabled={disabled || !valid} busy={busy} />
-    </div>
-  </form>;
-}
-
-/** Both approved providers are discovered only within this administrative sandbox account. */
-export function AdministrativeSandboxFundingForm({ disabled = false, busy = false, onContinue, onSelectionChange = undefined, destinationAddress = "" }) {
-  const { t } = useI18n();
-  const id = useId();
-  const [amount, setAmount] = useState("50");
-  const [countryCode, setCountryCode] = useState("US");
-  const [preferredProvider, setPreferredProvider] = useState("TRANSAK");
-  const [method, setMethod] = useState("");
-  const [options, setOptions] = useState({ status: "idle", country: "", sourceCurrencyCode: "USD", providers: [], failedProviders: [] });
-  const [revision, setRevision] = useState(0);
-  const [sourceCurrencyCode, setSourceCurrencyCode] = useState("USD");
-  const submitting = useRef(false);
-  const current = options.country === countryCode && (options.sourceCurrencyCode || "USD") === sourceCurrencyCode;
-  const eligibleProviders = current && options.status === "ready" ? options.providers
-    .filter(provider => eligiblePaymentMethods(provider.routes, Number(amount), sourceCurrencyCode).length > 0).map(provider => provider.serviceProvider) : [];
-  const serviceProvider = eligibleProviders.includes(preferredProvider) ? preferredProvider : eligibleProviders[0] || "";
-  const discoveryStatus = options.status === "ready" && options.failedProviders.length && !eligibleProviders.length ? "error" : options.status;
-  const partialAvailability = current && discoveryStatus === "ready" && options.failedProviders.length > 0;
-  const selectedOptions = options.providers.find(provider => provider.serviceProvider === serviceProvider);
-  const methods = current && selectedOptions ? eligiblePaymentMethods(selectedOptions.routes, Number(amount), sourceCurrencyCode) : [];
-  const methodsKey = methods.join(",");
-  const valid = sourceCurrencyCode === "USD" && validFundingAmount(Number(amount)) && methods.includes(method) && /^0x[0-9a-f]{40}$/i.test(destinationAddress);
-
-  function changeSelection(update, value) {
-    update(value);
-    onSelectionChange?.();
-  }
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setMethod("");
-    setOptions({ status: "loading", country: countryCode, sourceCurrencyCode, providers: [], failedProviders: [] });
-    const providerNames = ["TRANSAK", "BANXA"];
-    Promise.allSettled(providerNames.map(provider => readAdministrativeSandboxOptions(countryCode, provider, { signal: controller.signal, sourceCurrencyCode }))).then(results => {
-      if (controller.signal.aborted) return;
-      const providers = [], failedProviders = [];
-      results.forEach((result, index) => {
-        if (result.status === "fulfilled") providers.push(result.value);
-        else failedProviders.push(providerNames[index]);
-      });
-      setOptions({ status: "ready", country: countryCode, sourceCurrencyCode, providers, failedProviders });
-    });
-    return () => controller.abort();
-  }, [countryCode, sourceCurrencyCode, revision]);
-
-  useEffect(() => { setMethod(methodsKey.split(",").includes("CREDIT_DEBIT_CARD") ? "CREDIT_DEBIT_CARD" : methodsKey.split(",")[0] || ""); }, [methodsKey, countryCode, serviceProvider, amount]);
-
-  async function submit(event) {
-    event.preventDefault();
-    if (disabled || busy || submitting.current || !valid) return;
-    submitting.current = true;
-    try { await onContinue({ requestId: fundingRequestId(), amount: Number(amount), countryCode, sourceCurrencyCode, serviceProvider, paymentMethodType: method }); }
-    finally { submitting.current = false; }
-  }
-
-  return <form className="mb-onramp-simple" onSubmit={event => void submit(event).catch(() => {})} aria-label={t("walletPage.administrativeWalletLabel")}>
-    <div className="mb-onramp-simple-main">
-      <div className={styles.formFields}>
-        <FundingCountryField id={id} value={countryCode} onChange={value => { changeSelection(setCountryCode, value); if (sourceCurrencyCode !== "USD") setAmount("50"); setSourceCurrencyCode("USD"); }} busy={busy} />
-        <FundingCurrencyField id={id} country={countryCode} value={sourceCurrencyCode} onChange={value => { changeSelection(setSourceCurrencyCode, value); setAmount(value === "USD" ? "50" : ""); }} busy={busy} />
-        <FundingAmountField id={id} amount={amount} sourceCurrencyCode={sourceCurrencyCode} onChange={value => changeSelection(setAmount, value)} busy={busy} />
-        <FundingMethodField id={id} value={methods.includes(method) ? method : ""} methods={methods} status={current ? discoveryStatus : "loading"} partialAvailability={partialAvailability}
-          countrySelected={Boolean(countryCode)} sourceCurrencyCode={sourceCurrencyCode} minimumUsd={current ? lowestRouteMinimum(selectedOptions?.routes || options.providers.flatMap(provider => provider.routes), sourceCurrencyCode) : null}
-          limits={selectedOptions ? selectedMethodLimits(selectedOptions.routes, method, Number(amount), sourceCurrencyCode) : null} onChange={value => changeSelection(setMethod, value)} onRetry={() => setRevision(value => value + 1)} busy={busy} />
-      </div>
-      {eligibleProviders.length > 1 ? <details className={styles.providerChoice}><summary>{t("onramp.processedBy")} {serviceProvider === "TRANSAK" ? "Transak" : "Banxa"}<span>{t("funding.changeProvider")}</span></summary>
-        <label className="mb-onramp-country-picker" htmlFor={`${id}-provider`}><span>{t("funding.providerLabel")}</span>
-          <select id={`${id}-provider`} value={serviceProvider} onChange={event => changeSelection(setPreferredProvider, event.target.value)} disabled={busy}>
-            {eligibleProviders.map(provider => <option key={provider} value={provider}>{provider === "TRANSAK" ? "Transak" : "Banxa"}</option>)}
-          </select></label></details> : serviceProvider ? <p className={styles.processedBy}>{t("onramp.processedBy")} {serviceProvider === "TRANSAK" ? "Transak" : "Banxa"}</p> : null}
       <FundingDestination address={destinationAddress} />
       {sourceCurrencyCode !== "USD" ? <p className={styles.hint} role="status">{t("funding.localMinimumPending")}</p> : null}
       <FundingSubmit disabled={disabled || !valid} busy={busy} />
@@ -210,7 +133,7 @@ function FundingCurrencyField({ id, country, value, onChange, busy }) {
     </select></label>;
 }
 
-function FundingCountryField({ id, value, onChange, busy, label = "", countries = ONRAMP_COUNTRIES }) {
+function FundingCountryField({ id, value, onChange, busy, label = "", countries = PERSONAL_COUNTRIES }) {
   const { t, locale } = useI18n();
   function countryName(code) { try { return new Intl.DisplayNames([locale], { type: "region" }).of(code) || code; } catch { return code; } }
   return <label className={`mb-onramp-country-picker ${styles.countryField}`} htmlFor={`${id}-country`}><span>{label || t("onramp.countryLabel")}</span>

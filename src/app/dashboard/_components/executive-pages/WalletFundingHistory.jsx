@@ -11,6 +11,7 @@ export default function WalletFundingHistory({ walletKind, refreshKey, onSelectR
   const [revision, setRevision] = useState(0);
   const [state, setState] = useState({ loading: true, error: false, records: [] });
   useEffect(() => {
+    if (walletKind !== "personal") return undefined;
     const controller = new AbortController();
     setState({ loading: true, error: false, records: [] });
     readWalletFundingHistory(walletKind, { signal: controller.signal }).then(data => {
@@ -19,10 +20,11 @@ export default function WalletFundingHistory({ walletKind, refreshKey, onSelectR
     return () => controller.abort();
   }, [walletKind, refreshKey, revision]);
 
+  if (walletKind !== "personal") return null;
   const labels = { initiated: "funding.initiated", session_created: "funding.sessionCreated", unavailable: "funding.unavailable", failed: "funding.failed" };
   return <section className={`mb-wallet-funding-history ${styles.history}`} aria-label={t("funding.history")}>
     <h3 className="executive-section-title">{t("funding.history")}</h3>
-    <p className="mb-onramp-disclosure">{walletKind === "personal" ? t("funding.personalHistoryCopy") : t("funding.sandboxHistoryCopy")}</p>
+    <p className="mb-onramp-disclosure">{t("funding.personalHistoryCopy")}</p>
     {state.loading ? <p role="status" className="mb-onramp-disclosure">{t("common.loading")}</p>
       : state.error ? <div role="status"><p className="mb-onramp-disclosure">{t("funding.historyError")}</p><button type="button"
         className="executive-button" onClick={() => setRevision(value => value + 1)}><RefreshCw size={14} aria-hidden="true" />{t("walletPage.retry")}</button></div>

@@ -150,11 +150,11 @@ test('a dollar acknowledgement cannot relabel its requested amount as local fiat
 test('new personal funding allows only configured countries and excludes Neteller and Skrill before transport', async () => {
   const original = globalThis.fetch;
   const valid = { ...input, country: 'US', sourceCurrencyCode: 'USD', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' };
-  assert.deepEqual(PERSONAL_FUNDING_COUNTRIES, ['US', 'MX', 'ES']);
+  assert.deepEqual(PERSONAL_FUNDING_COUNTRIES, ['US', 'MX']);
   for (const country of PERSONAL_FUNDING_COUNTRIES) assert.ok(fundingInput({ ...valid, country }, 'personal'));
   try {
     globalThis.fetch = async () => assert.fail('an excluded country or method reached transport');
-    for (const changed of [{ country: 'CO' }, { country: 'PA' }, { paymentMethodType: 'NETELLER' }, { paymentMethodType: 'SKRILL' }]) {
+    for (const changed of [{ country: 'CO' }, { country: 'PA' }, { country: 'ES' }, { paymentMethodType: 'NETELLER' }, { paymentMethodType: 'SKRILL' }]) {
       await assert.rejects(createPersonalFundingIntent({ ...valid, ...changed }), { message: 'invalid_request' });
     }
     await assert.rejects(readPersonalFundingOptions('CO'), { message: 'invalid_request' });

@@ -1,4 +1,4 @@
-import { handleWalletFunding } from '@/lib/wallet-funding-bff.mjs';
-
+import { retiredWalletRoute } from '@/lib/retired-wallet-route.mjs';
+export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export function GET(request) { return handleWalletFunding(request, 'administrative-status'); }
+export const GET = retiredWalletRoute;
