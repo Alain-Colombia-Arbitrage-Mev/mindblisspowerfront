@@ -27,6 +27,15 @@ body:has(> .vp-dashboard-shell) {
   height: 40px;
   border-radius: 14px;
 }
+.vp-dashboard-shell:has(#personal-wallet, #administrative-wallet) .vp-support-launcher {
+  width: 56px;
+  min-height: 56px;
+  padding: 8px;
+}
+.vp-dashboard-shell:has(#personal-wallet, #administrative-wallet) .vp-support-launcher-copy,
+.vp-dashboard-shell:has(#personal-wallet, #administrative-wallet) .vp-support-launcher > svg {
+  display: none;
+}
 .vp-dashboard-shell :is(button, a, input):focus-visible,
 .vp-nav-drawer :is(button, a, input):focus-visible {
   outline: 2px solid var(--vp-accent);
