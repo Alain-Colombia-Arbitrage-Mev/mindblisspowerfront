@@ -2,6 +2,7 @@ import { betterAuthConfig, betterAuthCookies } from './better-auth-bridge.mjs';
 import { coreFetch, runtimeEnvironment } from './cloudflare-runtime.mjs';
 import { memberMutationError } from './member-mutation-policy.mjs';
 import { boundedServiceRequest } from './private-service-request.mjs';
+import { buildAdministrativeMeldOnrampUrl } from './meld-onramp.mjs';
 
 const COUNTRY = /^[A-Z]{2}$/;
 const METHOD = /^[A-Z0-9_]{2,40}$/;
@@ -107,6 +108,24 @@ export async function handleMeldOnramp(request, action, {
     path = action === 'intent' ? '/api/member/onramp/intent' : '/api/member/onramp/quote';
   }
 
+  const administrative = action === 'intent' && body.walletKind === 'administrative';
+  let administrativeProviderUrl;
+  if (administrative) {
+    try {
+      administrativeProviderUrl = env.MELD_CHECKOUT_URL;
+      if (typeof administrativeProviderUrl !== 'string' || administrativeProviderUrl.length > 8192) throw new Error();
+      // Validate the commercial checkout before the backend creates an intent.
+      // This configuration is independent of the personal Reown connection.
+      buildAdministrativeMeldOnrampUrl({
+        providerUrl: administrativeProviderUrl, address: body.walletAddress,
+        checkoutReference: 'configuration-preflight', countryCode: body.country,
+        amount: body.amount, paymentMethodType: body.paymentMethodType, serviceProvider: body.serviceProvider,
+      });
+    } catch {
+      return reply({ error: 'onramp_unconfigured' }, 503);
+    }
+  }
+
   try {
     const result = await serviceRequest(`${betterAuthConfig(env)}${path}`, {
       method: expectedMethod,
@@ -121,7 +140,23 @@ export async function handleMeldOnramp(request, action, {
       return reply({ error: safe.includes(result.data?.error) ? result.data.error : 'onramp_unavailable' }, status);
     }
     const value = action === 'availability' ? availability(result.data) : action === 'quote' ? quote(result.data) : intent(result.data);
-    return value ? reply(value) : reply({ error: 'onramp_unavailable' }, 502);
+    if (!value || (action === 'intent' && value.walletKind !== body.walletKind)) {
+      return reply({ error: 'onramp_unavailable' }, 502);
+    }
+    if (administrative) {
+      try {
+        const checkoutUrl = buildAdministrativeMeldOnrampUrl({
+          providerUrl: administrativeProviderUrl, address: body.walletAddress,
+          checkoutReference: value.checkoutReference, countryCode: body.country,
+          amount: value.quote.sourceAmount, paymentMethodType: value.quote.paymentMethodType,
+          serviceProvider: value.quote.serviceProvider,
+        });
+        return reply({ ...value, checkoutUrl });
+      } catch {
+        return reply({ error: 'onramp_unavailable' }, 502);
+      }
+    }
+    return reply(value);
   } catch {
     return reply({ error: 'onramp_unavailable' }, 503);
   }

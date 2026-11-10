@@ -7,10 +7,9 @@ import { OnRampController } from "@reown/appkit-controllers";
 import { mainnet, polygon } from "@reown/appkit/networks";
 import { BrowserProvider, getAddress } from "ethers";
 import { useMemberSession } from "@/lib/member-session-context";
-import { browserOnrampRegion, buildAdministrativeMeldOnrampUrl, buildMeldOnrampUrl } from "@/lib/meld-onramp.mjs";
+import { browserOnrampRegion, buildMeldOnrampUrl } from "@/lib/meld-onramp.mjs";
 import { createOnrampIntent, ONRAMP_CRYPTO } from "@/lib/meld-onramp-client.mjs";
 import { PERSONAL_WALLET_ASSET, PERSONAL_WALLET_MINIMUM_USD } from "@/lib/personal-wallet.mjs";
-import { ADMINISTRATIVE_WALLET_ASSET, ADMINISTRATIVE_WALLET_MINIMUM_USD } from "@/lib/administrative-wallet.mjs";
 import { readWalletBinding, walletBindingFailure } from "@/lib/wallet-binding.mjs";
 import { ReownContext, useReownWallet } from "./ReownContext";
 
@@ -29,12 +28,9 @@ const unavailable = Object.freeze({
   isLinking: false,
   onrampStatus: "idle",
   onrampError: "configuration",
-  administrativeOnrampStatus: "idle",
-  administrativeOnrampError: "configuration",
   openConnect: async () => { throw new Error("reown_unavailable"); },
   openOnramp: async () => { throw new Error("reown_unavailable"); },
   startOnramp: async () => { throw new Error("reown_unavailable"); },
-  startAdministrativeOnramp: async () => { throw new Error("reown_unavailable"); },
   reconnectWallet: async () => { throw new Error("reown_unavailable"); },
   linkWallet: async () => { throw new Error("reown_unavailable"); },
   refreshLink: async () => { throw new Error("reown_unavailable"); },
@@ -50,7 +46,7 @@ if (configured) {
     defaultAccountTypes: { eip155: "eoa" },
     metadata: {
       name: "Mindbliss Power",
-      description: "Recarga fondos en tu wallet personal o administrativa de forma segura.",
+      description: "Conecta tu wallet personal y recarga fondos de forma segura.",
       url: "https://app.mindblisspower.com",
       icons: ["https://app.mindblisspower.com/mindbliss/mindbliss-favicon.png"],
     },
@@ -98,7 +94,6 @@ function ConfiguredReownProvider({ children }) {
   const [binding, setBinding] = useState({ status: "loading", address: "", error: "" });
   const [isLinking, setIsLinking] = useState(false);
   const [onrampState, setOnrampState] = useState({ status: "idle", error: "" });
-  const [administrativeOnrampState, setAdministrativeOnrampState] = useState({ status: "idle", error: "" });
   const linking = useRef(null);
   const onrampIntent = useRef(false);
   const onrampFlow = useRef(null);
@@ -329,41 +324,6 @@ function ConfiguredReownProvider({ children }) {
     }
   }, [disconnect, openConnect]);
 
-  const startAdministrativeOnramp = useCallback(async ({ address, amount, countryCode,
-    paymentMethodType, serviceProvider }) => {
-    setAdministrativeOnrampState({ status: "opening", error: "" });
-    try {
-      const provider = OnRampController.state.providers.find(item => item.name === "meld");
-      if (!provider) throw new Error("onramp_provider_unavailable");
-      OnRampController.setSelectedProvider(provider);
-      const locale = navigator.languages?.[0] || navigator.language || "";
-      const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
-      const resolvedCountry = countryCode || browserOnrampRegion([...(navigator.languages || [locale])], timeZone);
-      const intent = await createOnrampIntent({
-        walletKind: "administrative", walletAddress: address, country: resolvedCountry, fiat: "USD", crypto: ONRAMP_CRYPTO,
-        amount, paymentMethodType, serviceProvider,
-      });
-      const checkoutUrl = buildAdministrativeMeldOnrampUrl({
-        providerUrl: OnRampController.state.selectedProvider?.url,
-        address,
-        checkoutReference: intent.checkoutReference,
-        countryCode: resolvedCountry,
-        locale,
-        amount: intent.quote.sourceAmount,
-        paymentMethodType: intent.quote.paymentMethodType,
-        serviceProvider: intent.quote.serviceProvider,
-      });
-      const checkout = window.open(checkoutUrl, "_blank");
-      if (checkout) checkout.opener = null;
-      else window.location.assign(checkoutUrl);
-      setAdministrativeOnrampState({ status: "open", error: "" });
-      return { opened: true, provider: "meld", asset: ADMINISTRATIVE_WALLET_ASSET, minimumUsd: ADMINISTRATIVE_WALLET_MINIMUM_USD };
-    } catch (error) {
-      setAdministrativeOnrampState({ status: "error", error: onrampErrorCode(error) });
-      throw error;
-    }
-  }, []);
-
   useEffect(() => {
     if (!onrampIntent.current || account.isConnected !== true || !currentAddress || !walletProvider) return;
     void runOnramp().catch(() => {});
@@ -409,19 +369,16 @@ function ConfiguredReownProvider({ children }) {
     isLinking,
     onrampStatus: onrampState.status,
     onrampError: onrampState.error,
-    administrativeOnrampStatus: administrativeOnrampState.status,
-    administrativeOnrampError: administrativeOnrampState.error,
     openConnect,
     openOnramp,
     startOnramp,
-    startAdministrativeOnramp,
     reconnectWallet,
     linkWallet,
     refreshLink,
     openAccount,
   }), [account.isConnected, account.status, binding.address, binding.error, binding.status, currentAddress, isLinked, isLinking,
-    administrativeOnrampState.error, administrativeOnrampState.status, linkWallet, onrampState.error, onrampState.status,
-    openAccount, openConnect, openOnramp, reconnectWallet, refreshLink, startAdministrativeOnramp, startOnramp]);
+    linkWallet, onrampState.error, onrampState.status,
+    openAccount, openConnect, openOnramp, reconnectWallet, refreshLink, startOnramp]);
 
   return <ReownContext.Provider value={value}>{children}</ReownContext.Provider>;
 }

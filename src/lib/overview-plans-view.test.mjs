@@ -147,7 +147,7 @@ test("the existing memberships page exposes matching plan anchors without changi
     "@/lib/checkout-policy.mjs": { stripeCheckoutEnabled: () => false, nowpaymentsMembershipsEnabled: () => false },
     "@/lib/membership-price-quote.mjs": { membershipPriceQuote },
     "./ActivatePackageButton": { default: props => React.createElement("button", { "data-stripe": props.stripeEnabled, "data-nowpayments": props.nowpaymentsEnabled }, "Existing checkout") },
-    "./MyPaymentsPanel": { default: () => null }, "./PaymentResultModal": { default: () => null },
+    "./PaymentResultModal": { default: () => null },
     "./PaywallGate": { default: props => { gateProps.push(props); return props.children; } }, "@/hooks/useMemberSummary": { MemberSummaryProvider: children },
   });
   const html = render(await Packages());
@@ -207,7 +207,7 @@ function membershipsWithQuotes(packages, checkoutProps) {
     "@/lib/checkout-policy.mjs": { stripeCheckoutEnabled: () => false, nowpaymentsMembershipsEnabled: () => false },
     "@/lib/membership-price-quote.mjs": { membershipPriceQuote },
     "./ActivatePackageButton": { default: props => { checkoutProps.push(props); return React.createElement("button", {}, "Existing checkout"); } },
-    "./MyPaymentsPanel": { default: () => null }, "./PaymentResultModal": { default: () => null },
+    "./PaymentResultModal": { default: () => null },
     "./PaywallGate": { default: children }, "@/hooks/useMemberSummary": { MemberSummaryProvider: children },
   }).default;
 }

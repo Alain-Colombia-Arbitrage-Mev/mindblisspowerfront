@@ -53,6 +53,11 @@ export default function PaymentResultModal() {
     router.replace("/dashboard/network?tab=tree");
   };
 
+  const goToPayments = () => {
+    setDismissedKey(requestKey);
+    router.replace("/dashboard/packages/purchases");
+  };
+
   const paid = result === "paid";
   const copy = checkoutStatusCopy(activation);
 
@@ -113,7 +118,7 @@ export default function PaymentResultModal() {
               {t("paymentResult.viewNetwork")}
             </button>
           )}
-          <button type="button" className={cn("executive-button w-full justify-center", !paid && "primary")} onClick={close}>
+          <button type="button" className={cn("executive-button w-full justify-center", !paid && "primary")} onClick={paid ? goToPayments : close}>
             {paid ? t("paymentResult.viewPayments") : t("paymentResult.chooseMembership")}
           </button>
         </div>

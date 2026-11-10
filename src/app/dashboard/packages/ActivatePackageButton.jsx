@@ -222,7 +222,7 @@ export default function ActivatePackageButton({ packageId, featured, stripeEnabl
           {error}
         </p>
       )}
-      {error && <a href="#nowpayments-purchases" className="mt-2 inline-block text-xs underline" style={{ color: "var(--vp-accent)" }}>{t("checkout.reviewHistory")}</a>}
+      {error && <a href="/dashboard/packages/purchases#nowpayments-purchases" className="mt-2 inline-block text-xs underline" style={{ color: "var(--vp-accent)" }}>{t("checkout.reviewHistory")}</a>}
       {provider === "nowpayments" && (prepared || processed) && <div className="mt-3">
         <p className="text-xs leading-5" style={{ color: "var(--vp-muted)" }}>
           {t("checkout.retryCopy")}

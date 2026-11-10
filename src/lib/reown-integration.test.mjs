@@ -61,7 +61,8 @@ test("personal and administrative wallets remain visibly separate without loadin
   assert.match(funding, /id="administrative-wallet"/);
   assert.equal((funding.match(/<StablecoinOnrampForm/g) || []).length, 2);
   assert.match(funding, /reown\.startOnramp\(\{ walletAddress: address, \.\.\.input \}\)/);
-  assert.match(funding, /reown\.startAdministrativeOnramp/);
+  assert.match(funding, /startAdministrativeMeldOnramp\(\{ address: wallet\.address, \.\.\.input \}/);
+  assert.doesNotMatch(funding, /reown\.startAdministrativeOnramp/);
   assert.match(funding, /readAdministrativeWallet/);
   assert.match(funding, /ensureAdministrativeWallet/);
   assert.match(funding, /onramp\.simpleProviderNote/);
@@ -94,9 +95,14 @@ test("each wallet owns an independent funding component and keeps one neutral ac
 test("AppKit is scoped to wallet surfaces and does not slow every dashboard route", () => {
   const shell = read("../app/dashboard/_components/DashboardShell.jsx");
   const finance = read("../app/dashboard/_components/executive-pages/FinanceDashboardPage.jsx");
+  const funding = read("../app/dashboard/_components/executive-pages/WalletFundingPanels.jsx");
   const overview = read("../components/panel/overview/OverviewDashboard.jsx");
   assert.doesNotMatch(shell, /ReownProvider/);
-  assert.match(finance, /dynamic\(\(\) => import\("@\/components\/reown\/ReownProvider"\)/);
+  assert.doesNotMatch(finance, /ReownProvider/);
+  assert.match(funding, /dynamic\(\(\) => import\("@\/components\/reown\/ReownProvider"\)/);
+  assert.match(funding, /<ReownProvider><PersonalWalletFunding \/><\/ReownProvider>\s*<AdministrativeWalletFunding \/>/);
+  assert.doesNotMatch(read("./administrative-onramp-client.mjs"), /Reown|OnRampController/);
+  assert.doesNotMatch(read("../components/reown/ReownProvider.jsx"), /startAdministrativeOnramp|administrativeOnrampState/);
   assert.match(overview, /dynamic\(\(\) => import\("\.\/ReownRechargeDialog"\)/);
   assert.match(overview, /reownLoaded \? <ReownRechargeDialog open=\{rechargeDialog\.open\}/);
 });

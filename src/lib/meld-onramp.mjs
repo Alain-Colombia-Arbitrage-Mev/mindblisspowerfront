@@ -36,7 +36,7 @@ export function buildAdministrativeMeldOnrampUrl({ providerUrl, address, checkou
 function buildOnrampUrl({ providerUrl, address, externalCustomerId, countryCode, locale, asset, amount,
   paymentMethodType, serviceProvider, minimumUsd }) {
   const url = new URL(providerUrl || "");
-  if (url.protocol !== "https:" || url.hostname !== "meldcrypto.com" || url.username || url.password || url.hash) {
+  if (url.origin !== "https://meldcrypto.com" || url.pathname !== "/" || url.username || url.password || url.hash) {
     throw new Error("meld_provider_invalid");
   }
   if (!url.searchParams.get("publicKey")) throw new Error("meld_provider_invalid");

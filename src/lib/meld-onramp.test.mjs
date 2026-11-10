@@ -22,7 +22,8 @@ test("Meld checkout is bound to Polygon USDT, the $50 floor, region and a verifi
 });
 
 test("Meld URL rejects foreign origins and invalid wallet context", () => {
-  for (const invalid of ["https://meldcrypto.com.evil.test", "http://meldcrypto.com", "https://user@meldcrypto.com"]) {
+  for (const invalid of ["https://meldcrypto.com.evil.test", "http://meldcrypto.com", "https://user@meldcrypto.com",
+    "https://meldcrypto.com:8443/?publicKey=synthetic", "https://meldcrypto.com/foreign-path?publicKey=synthetic"]) {
     assert.throws(() => buildMeldOnrampUrl({ providerUrl: invalid, address, projectId, checkoutReference, serviceProvider: "TOPPER" }), /meld_provider_invalid/);
   }
   assert.throws(() => buildMeldOnrampUrl({ providerUrl, address: "invalid", projectId, checkoutReference, serviceProvider: "TOPPER" }), /meld_context_invalid/);

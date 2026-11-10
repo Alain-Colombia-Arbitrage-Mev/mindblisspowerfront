@@ -1,12 +1,19 @@
 "use client";
 
 import { Building2, Copy, Loader2, RefreshCw, ShieldCheck, Wallet } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 
 import { useReownWallet } from "@/components/reown/ReownContext";
 import { useI18n } from "@/i18n/LanguageProvider";
 import { ensureAdministrativeWallet, readAdministrativeWallet } from "@/lib/administrative-wallet.mjs";
+import { startAdministrativeMeldOnramp } from "@/lib/administrative-onramp-client.mjs";
 import StablecoinOnrampForm from "./StablecoinOnrampForm";
+
+const ReownProvider = dynamic(() => import("@/components/reown/ReownProvider"), {
+  ssr: false,
+  loading: () => <div className="executive-panel" role="status"><Loader2 className="animate-spin" aria-label="Reown" /></div>,
+});
 
 /** @typedef {{status: "loading" | "assigned" | "pending" | "exhausted" | "error", address: string,
  * checkoutReference: string, assignedAt: string, errorCode: string}} AdministrativeWalletView */
@@ -18,7 +25,7 @@ const EMPTY_ADMINISTRATIVE_WALLET = {
 export default function WalletFundingPanels() {
   return (
     <div className="mb-wallet-funding-grid" aria-label="Wallet funding">
-      <PersonalWalletFunding />
+      <ReownProvider><PersonalWalletFunding /></ReownProvider>
       <AdministrativeWalletFunding />
     </div>
   );
@@ -46,6 +53,10 @@ function PersonalWalletFunding() {
         ready={Boolean(address)} />
       <WalletAddress address={address} label={t("walletPage.personalWalletLabel")} loading={loading}
         emptyLabel={t("walletPage.personalAddressPending")} onCopyError={() => setCopyError(t("walletPage.administrativeCopyFailed"))} />
+      {!address && !loading ? <button type="button" className="executive-button primary" disabled={!reown.configured}
+        onClick={() => void reown.openConnect().catch(() => setProviderError(t("recharge.providerConfiguration")))}>
+        <Wallet size={17} aria-hidden="true" /> {t("overview.createWallet")}
+      </button> : null}
       <StablecoinOnrampForm walletAddress={address} disabled={!address} busy={busy} onContinue={openProvider} />
       <ProviderNote text={t("onramp.simpleProviderNote")} />
       <WalletActionError message={copyError || providerError} />
@@ -55,17 +66,27 @@ function PersonalWalletFunding() {
 
 function AdministrativeWalletFunding() {
   const { t } = useI18n();
-  const reown = useReownWallet();
   const { wallet, load } = useAdministrativeWallet();
   const [providerError, setProviderError] = useState("");
   const [copyError, setCopyError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const checkoutRequest = useRef(null);
   const assigned = wallet.status === "assigned";
-  const busy = reown.administrativeOnrampStatus === "opening";
+
+  useEffect(() => () => checkoutRequest.current?.abort(), []);
 
   async function openProvider(input) {
+    if (checkoutRequest.current || !assigned) return;
+    const controller = new AbortController();
+    checkoutRequest.current = controller;
+    setBusy(true);
     setProviderError("");
-    try { await reown.startAdministrativeOnramp({ address: wallet.address, ...input }); }
-    catch { setProviderError(t("walletPage.quoteUnavailable")); }
+    try { await startAdministrativeMeldOnramp({ address: wallet.address, ...input }, { signal: controller.signal }); }
+    catch { if (!controller.signal.aborted) setProviderError(t("walletPage.quoteUnavailable")); }
+    finally {
+      if (checkoutRequest.current === controller) checkoutRequest.current = null;
+      if (!controller.signal.aborted) setBusy(false);
+    }
   }
 
   return (

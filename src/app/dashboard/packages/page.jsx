@@ -7,7 +7,6 @@ import { runtimeEnvironment } from "@/lib/cloudflare-runtime.mjs";
 import { stripeCheckoutEnabled, nowpaymentsMembershipsEnabled } from "@/lib/checkout-policy.mjs";
 import { membershipPriceQuote } from "@/lib/membership-price-quote.mjs";
 import ActivatePackageButton from "./ActivatePackageButton";
-import MyPaymentsPanel from "./MyPaymentsPanel";
 import PaymentResultModal from "./PaymentResultModal";
 import PaywallGate from "./PaywallGate";
 import { MemberSummaryProvider } from "@/hooks/useMemberSummary";
@@ -55,10 +54,6 @@ export default async function PackagesPage({ searchParams } = {}) {
           <span className="executive-icon-badge">
             <Package size={20} />
           </span>
-        </div>
-
-        <div className="mb-6">
-          <MyPaymentsPanel />
         </div>
 
         {unavailable || packages.length === 0 ? (

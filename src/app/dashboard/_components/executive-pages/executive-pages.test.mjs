@@ -52,6 +52,9 @@ function loadPages({ summary = { loading: true, data: null, error: '' }, health 
       readAdministrativeWallet: async () => { throw Error('Unexpected render-time request'); },
       ensureAdministrativeWallet: async () => { throw Error('Unexpected render-time request'); },
     },
+    '@/lib/administrative-onramp-client.mjs': {
+      startAdministrativeMeldOnramp: async () => { throw Error('Unexpected render-time request'); },
+    },
     '@/lib/meld-onramp.mjs': { browserOnrampRegion: () => 'CO' },
     '@/lib/meld-onramp-client.mjs': {
       ONRAMP_COUNTRIES: [['CO', 'Colombia']],
