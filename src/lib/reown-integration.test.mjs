@@ -100,7 +100,7 @@ test("AppKit is scoped to wallet surfaces and does not slow every dashboard rout
   assert.doesNotMatch(shell, /ReownProvider/);
   assert.doesNotMatch(finance, /ReownProvider/);
   assert.match(funding, /dynamic\(\(\) => import\("@\/components\/reown\/ReownProvider"\)/);
-  assert.match(funding, /<ReownProvider><PersonalWalletFunding \/><\/ReownProvider>\s*<AdministrativeWalletFunding \/>/);
+  assert.match(funding, /<ReownProvider><PersonalWalletFunding \/><\/ReownProvider>\s*<AdministrativeWalletFunding environment=\{administrativeEnvironment\} \/>/);
   assert.doesNotMatch(read("./administrative-onramp-client.mjs"), /Reown|OnRampController/);
   assert.doesNotMatch(read("../components/reown/ReownProvider.jsx"), /startAdministrativeOnramp|administrativeOnrampState/);
   assert.match(overview, /dynamic\(\(\) => import\("\.\/ReownRechargeDialog"\)/);

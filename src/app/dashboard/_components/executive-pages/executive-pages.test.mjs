@@ -182,6 +182,23 @@ test('finance loading and failures do not invent an available zero balance', () 
   assert.doesNotMatch(failure, /\$0\.00|Cargando tu wallet/);
 });
 
+test('administrative sandbox clearly labels tests and omits its checkout while personal funding remains separate', () => {
+  const page = loadPages().FinanceDashboardPage;
+  const sandbox = render(page, { administrativeEnvironment: 'sandbox' });
+  const administrative = sandbox.split('id="administrative-wallet"')[1].split('</section>')[0];
+  const personal = sandbox.split('id="personal-wallet"')[1].split('</section>')[0];
+  assert.match(administrative, /Sandbox · Pruebas/);
+  assert.match(administrative, /no acredita saldo ni genera comisiones reales/);
+  assert.match(administrative, /Tu dirección administrativa/);
+  assert.doesNotMatch(administrative, /mb-onramp-simple|mb-onramp-primary/);
+  assert.match(personal, /mb-onramp-simple/);
+  assert.doesNotMatch(personal, /Sandbox · Pruebas/);
+  const production = render(page, { administrativeEnvironment: 'production' });
+  const productionAdministrative = production.split('id="administrative-wallet"')[1].split('</section>')[0];
+  assert.match(productionAdministrative, /mb-onramp-simple/);
+  assert.doesNotMatch(productionAdministrative, /Sandbox · Pruebas/);
+});
+
 test('advisor failure and member support loading still render their existing states after extraction', () => {
   const pages = loadPages({ health: { loading: false, data: null, error: 'Servicio no disponible' } });
   const advisor = render(pages.AiAdvisorDashboardPage);

@@ -16,6 +16,9 @@ test('rewon is an isolated production Worker with only the exact app custom doma
   assert.deepEqual(rewon.routes, [{ pattern: 'app.mindblisspower.com', custom_domain: true }]);
   assert.equal(rewon.vars.AUTH_PUBLIC_ORIGIN, 'https://app.mindblisspower.com');
   assert.equal(rewon.vars.AUTH_SOCIAL_PROVIDERS, 'google');
+  assert.equal(rewon.vars.ADMINISTRATIVE_ONRAMP_ENVIRONMENT, 'sandbox');
+  assert.equal(config.env.production.vars.ADMINISTRATIVE_ONRAMP_ENVIRONMENT, undefined);
+  assert.equal(config.env.staging.vars.ADMINISTRATIVE_ONRAMP_ENVIRONMENT, undefined);
   assert.equal(config.env.production.vars.AUTH_SOCIAL_PROVIDERS, undefined);
   assert.equal(config.env.staging.vars.AUTH_SOCIAL_PROVIDERS, undefined);
   assert.equal(rewon.vars.AUTH_ALTERNATE_ORIGIN, 'https://mindbliss-portal-rewon.devfidubit.workers.dev');

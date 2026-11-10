@@ -22,30 +22,48 @@ Next.js embeds the public identifier in client JavaScript. Setting a Worker
 runtime variable after compilation cannot repair an artifact built without it;
 rebuild and publish the frontend when changing the Reown project.
 
-## Administrative Meld checkout: frontend runtime
+## Current environments: Reown production and administrative Meld sandbox
 
-Add `MELD_CHECKOUT_URL` to the `mindbliss-portal-rewon` Worker environment. Its
-value is the live Meld checkout URL supplied for this account:
-`https://meldcrypto.com/?publicKey=YOUR_MELD_PUBLIC_KEY`. This is a public checkout
-key, separate from the private API credential. Never put an API secret in this URL.
-The administrative flow must use this URL without connecting a personal wallet.
+The user's Reown project is in production. The user's separate Meld account is
+in sandbox. `ADMINISTRATIVE_ONRAMP_ENVIRONMENT=sandbox` is configured only on the
+`rewon` portal. The `/dashboard/payments` server route passes this public mode to
+the administrative component; it does not change the personal wallet's Reown
+project or environment. Omitting the mode retains the existing production path.
 
-## Private Meld API credential: Core runtime
+The administrative component keeps address assignment and address display, but
+shows a translated sandbox notice instead of the top-up form. The checkout is
+disabled while sandbox persistence is not isolated: the current production
+attempt writer and webhook handler calculate real commission states and have no
+environment discriminator. Do not send sandbox attempts or callbacks to them.
+Sandbox activity must never credit balances or generate real commissions.
 
-Add the live `MELD_API_KEY` as an encrypted secret on
-`mindbliss-core-production`, using Cloudflare Dashboard → Workers & Pages →
-`mindbliss-core-production` → Settings → Variables and Secrets, or run from
-`backend/deploy/cloudflare/core`:
+The available `MELD_API_SANDBOX` credential belongs in an encrypted Core secret,
+not in frontend `NEXT_PUBLIC_*` variables, Git or Docker build arguments. Keeping
+the secret in Cloudflare does not enable a checkout. Do not rename it to
+`MELD_API_KEY` or treat it as a live credential.
 
-```powershell
-npx --no-install wrangler secret put MELD_API_KEY --env production
-```
+The next sandbox checkout implementation must use the separate sandbox API
+`https://api-sb.meld.io` and sandbox widget `https://sb.meldcrypto.com`, with its
+own publishable key, isolated test records and separate webhook configuration.
+Meld's current checkout API mints a per-session `widgetUrl` server-side through
+`POST /crypto/session/widget/url`; it takes the matching private/public keys and
+server-authored `prefill`/`locked` fields. Use the returned URL as supplied rather
+than reconstructing it or appending payment parameters. This endpoint is not
+implemented by this sandbox notice release. See the official
+[checkout guide](https://docs.meld.io/docs/stablecoins/meld-checkout-integration/meld-checkout-guide.md)
+and [sandbox guide](https://docs.meld.io/docs/stablecoins/sandbox-guide.md).
 
-Paste the live key into Wrangler's private prompt. Never place the key in Git,
-frontend `NEXT_PUBLIC_*` variables or a Docker build argument. Production reads
-only `MELD_API_KEY`; staging uses `MELD_API_SANDBOX`. A sandbox key cannot enable
-live payments. After changing container configuration, restart/roll out the Core
-API so the new secret reaches the process.
+The existing production administrative path still accepts `MELD_CHECKOUT_URL`
+from server configuration and a live `MELD_API_KEY` from the Core. Those are
+future production settings for the separate Meld account, not prerequisites for
+configuring the already-live Reown project. After changing container
+configuration, restart/roll out the Core API so new secrets reach its process.
+
+The personal wallet's current quote/intent preflight still uses the shared Meld
+backend. Reown being in production does not make that private Meld API live.
+Decouple that preflight through a production-compatible verification and capture
+path before claiming personal top-ups work; do not bypass backend capture or
+substitute sandbox quotes for real amounts.
 
 Topper and Swapped must be enabled on the Meld account and have a supported
 country, fiat and USDT network route. The application displays only routes and

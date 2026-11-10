@@ -22,11 +22,11 @@ const EMPTY_ADMINISTRATIVE_WALLET = {
   status: "loading", address: "", checkoutReference: "", assignedAt: "", errorCode: "",
 };
 
-export default function WalletFundingPanels() {
+export default function WalletFundingPanels({ administrativeEnvironment = "production" } = {}) {
   return (
     <div className="mb-wallet-funding-grid" aria-label="Wallet funding">
       <ReownProvider><PersonalWalletFunding /></ReownProvider>
-      <AdministrativeWalletFunding />
+      <AdministrativeWalletFunding environment={administrativeEnvironment} />
     </div>
   );
 }
@@ -64,7 +64,7 @@ function PersonalWalletFunding() {
   );
 }
 
-function AdministrativeWalletFunding() {
+function AdministrativeWalletFunding({ environment }) {
   const { t } = useI18n();
   const { wallet, load } = useAdministrativeWallet();
   const [providerError, setProviderError] = useState("");
@@ -72,11 +72,12 @@ function AdministrativeWalletFunding() {
   const [busy, setBusy] = useState(false);
   const checkoutRequest = useRef(null);
   const assigned = wallet.status === "assigned";
+  const sandbox = environment === "sandbox";
 
   useEffect(() => () => checkoutRequest.current?.abort(), []);
 
   async function openProvider(input) {
-    if (checkoutRequest.current || !assigned) return;
+    if (sandbox || checkoutRequest.current || !assigned) return;
     const controller = new AbortController();
     checkoutRequest.current = controller;
     setBusy(true);
@@ -93,6 +94,9 @@ function AdministrativeWalletFunding() {
     <section id="administrative-wallet" className="executive-panel mb-wallet-funding-card administrative" aria-labelledby="administrative-wallet-title">
       <WalletFundingHeader icon={Building2} eyebrow={t("walletPage.administrativeEyebrow")} title={t("walletPage.administrativeTitle")}
         description={t("walletPage.administrativeCopy")} titleId="administrative-wallet-title" status={administrativeStatus(wallet.status, t)} ready={assigned} />
+      {sandbox ? <div className="mb-administrative-wallet-state" role="status">
+        <div><strong>{t("walletPage.administrativeSandboxTitle")}</strong><p>{t("walletPage.administrativeSandboxCopy")}</p></div>
+      </div> : null}
       {wallet.status === "error" ? (
         <div className="mb-administrative-wallet-state error" role="alert">
           <span>{t("walletPage.administrativeLoadError")}</span>
@@ -107,7 +111,7 @@ function AdministrativeWalletFunding() {
           <WalletAddress address={assigned ? wallet.address : ""} label={t("walletPage.administrativeAddress")}
             loading={!assigned} emptyLabel={t("walletPage.administrativeAssigning")}
             onCopyError={() => setCopyError(t("walletPage.administrativeCopyFailed"))} />
-          <StablecoinOnrampForm walletAddress={assigned ? wallet.address : ""} disabled={!assigned} busy={busy} onContinue={openProvider} />
+          {!sandbox ? <StablecoinOnrampForm walletAddress={assigned ? wallet.address : ""} disabled={!assigned} busy={busy} onContinue={openProvider} /> : null}
           <ProviderNote text={t("walletPage.administrativeSeparation")} />
         </>
       )}
