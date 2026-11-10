@@ -188,7 +188,7 @@ function FundingMethodField({ id, value, methods, status, countrySelected, sourc
 function FundingSubmit({ disabled, busy }) {
   const { t } = useI18n();
   return <button className="executive-button primary mb-onramp-primary" type="submit" disabled={disabled || busy}>
-    {busy ? <Loader2 className="animate-spin" size={17} aria-hidden="true" /> : <ShieldCheck size={17} aria-hidden="true" />}{t(busy ? "recharge.connecting" : "walletPage.addFundsAction")}
+    {busy ? <Loader2 className="animate-spin" size={17} aria-hidden="true" /> : <ShieldCheck size={17} aria-hidden="true" />}{t(busy ? "funding.preparingTopUp" : "walletPage.addFundsAction")}
   </button>;
 }
 

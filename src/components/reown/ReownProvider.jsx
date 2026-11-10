@@ -43,6 +43,7 @@ const unavailable = Object.freeze({
   openOnramp: async () => { throw new Error("reown_unavailable"); },
   startOnramp: async () => { throw new Error("reown_unavailable"); },
   cancelOnramp: () => {},
+  clearOnrampError: () => {},
   reconnectWallet: async () => { throw new Error("reown_unavailable"); },
   linkWallet: async () => { throw new Error("reown_unavailable"); },
   refreshLink: async () => { throw new Error("reown_unavailable"); },
@@ -229,6 +230,11 @@ function ConfiguredReownProvider({ children }) {
       try { void Promise.resolve(close()).catch(() => {}); } catch { /* SDK UI cleanup does not disconnect or unlink a wallet. */ }
     }
   }, [appKitState.open, close]);
+
+  const clearOnrampError = useCallback(() => {
+    setOnrampState(current => current.status === "error"
+      ? { ...current, status: "idle", error: "" } : current);
+  }, []);
 
   const openConnect = useCallback(async (parentOperation) => {
     const scope = parentOperation || beginOnrampOperation();
@@ -482,13 +488,14 @@ function ConfiguredReownProvider({ children }) {
     openOnramp,
     startOnramp,
     cancelOnramp,
+    clearOnrampError,
     reconnectWallet,
     linkWallet,
     refreshLink,
     openAccount,
   }), [account.isConnected, account.status, binding.address, binding.error, binding.status, currentAddress, isLinked, isLinking,
     linkWallet, verificationError, fundingRevision, onrampState.error, onrampState.status,
-    cancelOnramp, openAccount, openConnect, openOnramp, reconnectWallet, refreshLink, startOnramp]);
+    cancelOnramp, clearOnrampError, openAccount, openConnect, openOnramp, reconnectWallet, refreshLink, startOnramp]);
 
   return <ReownContext.Provider value={value}>{children}</ReownContext.Provider>;
 }

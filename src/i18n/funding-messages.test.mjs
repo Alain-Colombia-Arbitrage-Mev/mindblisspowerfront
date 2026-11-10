@@ -25,6 +25,10 @@ test('personal funding copy distinguishes USD20 from administrative USD50 and lo
     assert.match(funding.personalSpeiMinimum, /SPEI/);
     assert.match(funding.personalSpeiMinimum, /MXN/);
     assert.match(funding.personalSpeiMinimum, /20/);
+    assert.match(funding.speiTemporarilyUnavailable, /SPEI/);
+    assert.match(funding.speiTemporarilyUnavailable, /MXN/);
+    assert.doesNotMatch(funding.speiTemporarilyUnavailable, /USD|20|50/);
+    assert.ok(funding.preparingTopUp.trim());
     assert.match(funding.amountRange, /50/);
     assert.match(funding.localMinimumPending, /50/);
     assert.equal(funding.personalEnvironment, 'Reown');

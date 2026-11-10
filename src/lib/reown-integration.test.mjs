@@ -80,6 +80,33 @@ test('manual cancellation releases a hung SDK connect and its late result cannot
   assert.deepEqual(runtime.bindings, []);
 });
 
+test('selection changes clear only a previous onramp error and preserve active work and verified ownership', () => {
+  const address = `0x${'1'.repeat(40)}`;
+  const binding = Object.freeze({ status: 'linked', address });
+  const pending = Object.freeze({ active: true, cancel: () => assert.fail('clearing an error cancelled funding') });
+  const scope = {
+    onrampOperation: Object.freeze({ current: pending }),
+    linkingOperation: Object.freeze({ current: pending }),
+    binding, boundAddress: address,
+    setBinding: () => assert.fail('clearing an error changed ownership'),
+    setVerificationError: () => assert.fail('clearing an error changed signature verification'),
+    disconnect: () => assert.fail('clearing an error disconnected a wallet'),
+  };
+  for (const status of ['error', 'idle', 'connecting', 'linking', 'opening', 'open']) {
+    const previous = Object.freeze({ status, error: status === 'error' ? 'valuation' : '', correlation: 'retained' });
+    let state = previous;
+    scope.setOnrampState = update => { state = update(state); };
+    onrampCallback('clearOnrampError', scope)();
+    if (status === 'error') {
+      assert.equal(state.status, 'idle'); assert.equal(state.error, ''); assert.equal(state.correlation, 'retained');
+    } else assert.equal(state, previous);
+    assert.equal(scope.binding, binding); assert.equal(scope.boundAddress, address);
+    assert.equal(scope.onrampOperation.current, pending); assert.equal(scope.linkingOperation.current, pending);
+  }
+  assert.match(read('../components/reown/ReownContext.jsx'), /clearOnrampError: \(\) => \{\}/);
+  assert.match(read('../components/reown/ReownProvider.jsx'), /clearOnrampError: \(\) => \{\}/);
+});
+
 test('a hung SDK connect times out with a recoverable category rather than leaving the button busy', async () => {
   const rpc = deferred();
   const runtime = fundingRuntime({ boundAddress: '', binding: { status: 'unlinked', address: '' },

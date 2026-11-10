@@ -40,7 +40,11 @@ export function PersonalWalletFunding() {
   const [actionBusy, setActionBusy] = useState(false);
   const [selectedReference, setSelectedReference] = useState("");
   const [statusFocusKey, setStatusFocusKey] = useState(0);
-  const clearSelectedStatus = useCallback(() => { setSelectedReference(""); setStatusFocusKey(0); }, []);
+  const clearSelectedStatus = useCallback(() => {
+    setSelectedReference(""); setStatusFocusKey(0);
+    setActionError(""); setActionDiagnostic("");
+    reown.clearOnrampError?.();
+  }, [reown.clearOnrampError]);
   const state = personalWalletState(reown);
   const verified = state === "verified";
   const address = reown.linkedAddress || reown.address || "";
@@ -114,6 +118,6 @@ export function personalOnrampError(code, t) {
     rejected: "recharge.providerRejected", connection: "recharge.providerConnection", link_unavailable: "funding.personalLinkFailed",
     unavailable: "funding.personalLinkFailed", identity: "funding.identityUnavailable", rate_limited: "funding.rateLimited",
     method: "funding.methodUnavailable", intent: "funding.requestRegistrationFailed", cancelled: "funding.requestCancelled", origin: "funding.sessionOriginFailed",
-    provider: "funding.checkoutUnavailable", valuation: "funding.personalLocalMinimumPending", connection_timeout: "funding.connectionTimeout" };
+    provider: "funding.checkoutUnavailable", valuation: "funding.speiTemporarilyUnavailable", connection_timeout: "funding.connectionTimeout" };
   return t(keys[code] || "funding.checkoutUnavailable");
 }

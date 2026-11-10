@@ -564,3 +564,27 @@ test('personal MXN request amounts remain pesos in both history and status prese
   const html = renderToStaticMarkup(WalletFundingStatusView({ view }));
   assert.match(html, /MXN/); assert.doesNotMatch(html, /US\$/);
 });
+
+test('explicit funding edits clear a stale provider error without reconnecting or revoking the verified destination', t => {
+  function PersonalFundingForm() { return null; }
+  let resets = 0;
+  const reown = { configured: true, linkStatus: 'linked', linkedAddress: personalStatus.destination.address,
+    onrampStatus: 'error', onrampError: 'valuation',
+    clearOnrampError() { resets++; this.onrampStatus = 'idle'; this.onrampError = ''; },
+    startOnramp() { assert.fail('a selection edit cannot initiate a request'); } };
+  const shared = load('WalletFundingUI.jsx', { 'lucide-react': icons, 'next/link': {}, '@/i18n/LanguageProvider': i18n });
+  const harness = componentHarness('PersonalWalletFundingPage.jsx', 'PersonalWalletFunding', {
+    'lucide-react': icons, 'next/dynamic': { default: () => () => null }, '@/i18n/LanguageProvider': i18n,
+    '@/components/reown/ReownContext': { useReownWallet: () => reown },
+    '@/lib/personal-funding-errors.mjs': { personalFundingFailure }, './WalletFundingForm': { PersonalFundingForm },
+    './WalletFundingHistory': { default: () => null }, './WalletFundingStatus': { default: () => null }, './WalletFundingUI': shared,
+  });
+  t.after(() => harness.unmount());
+  let tree = harness.render();
+  assert.equal(find(tree, 'WalletActionError').props.message, translateMessage('es', 'funding.speiTemporarilyUnavailable'));
+  find(tree, 'PersonalFundingForm').props.onSelectionChange(); tree = harness.render();
+  assert.equal(resets, 1);
+  assert.equal(find(tree, 'WalletActionError').props.message, '');
+  assert.equal(find(tree, 'PersonalFundingForm').props.destinationAddress, personalStatus.destination.address);
+  assert.equal(find(tree, 'PersonalFundingForm').props.disabled, false);
+});
