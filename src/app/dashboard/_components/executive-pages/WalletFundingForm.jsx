@@ -31,7 +31,7 @@ export function selectedMethodLimits(routes, method, amount) {
 }
 
 /** Personal state and availability never consume the administrative options endpoint. */
-export function PersonalFundingForm({ disabled = false, busy = false, onContinue, destinationAddress = "" }) {
+export function PersonalFundingForm({ disabled = false, busy = false, onContinue, onSelectionChange = undefined, destinationAddress = "" }) {
   const { t } = useI18n();
   const id = useId();
   const [amount, setAmount] = useState("50");
@@ -44,6 +44,11 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
   const methods = current && options.status === "ready" ? eligiblePaymentMethods(options.routes, Number(amount)) : [];
   const methodsKey = methods.join(",");
   const valid = validFundingAmount(Number(amount)) && /^[A-Z]{2}$/.test(countryCode) && methods.includes(method) && /^0x[0-9a-f]{40}$/i.test(destinationAddress);
+
+  function changeSelection(update, value) {
+    update(value);
+    onSelectionChange?.();
+  }
 
   useEffect(() => {
     const detected = browserOnrampRegion([...(navigator.languages || [navigator.language])], Intl.DateTimeFormat().resolvedOptions().timeZone);
@@ -74,11 +79,11 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
   return <form className="mb-onramp-simple" onSubmit={event => void submit(event).catch(() => {})} aria-label={t("walletPage.personalWalletLabel")}>
     <div className="mb-onramp-simple-main">
       <div className={styles.formFields}>
-        <FundingCountryField id={id} value={countryCode} onChange={setCountryCode} busy={busy} />
-        <FundingAmountField id={id} amount={amount} onChange={setAmount} busy={busy} />
+        <FundingCountryField id={id} value={countryCode} onChange={value => changeSelection(setCountryCode, value)} busy={busy} />
+        <FundingAmountField id={id} amount={amount} onChange={value => changeSelection(setAmount, value)} busy={busy} />
         <FundingMethodField id={id} value={methods.includes(method) ? method : ""} methods={methods} status={current ? options.status : "loading"}
           countrySelected={Boolean(countryCode)} minimumUsd={current ? lowestRouteMinimum(options.routes) : null}
-          limits={current ? selectedMethodLimits(options.routes, method, Number(amount)) : null} onChange={setMethod} onRetry={() => setRevision(value => value + 1)} busy={busy} />
+          limits={current ? selectedMethodLimits(options.routes, method, Number(amount)) : null} onChange={value => changeSelection(setMethod, value)} onRetry={() => setRevision(value => value + 1)} busy={busy} />
       </div>
       <FundingDestination address={destinationAddress} />
       <FundingSubmit disabled={disabled || !valid} busy={busy} />

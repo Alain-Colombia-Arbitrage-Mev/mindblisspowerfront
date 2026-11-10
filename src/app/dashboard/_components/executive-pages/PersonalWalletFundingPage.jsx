@@ -2,7 +2,7 @@
 
 import { CheckCircle2, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
 import dynamic from "next/dynamic";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useReownWallet } from "@/components/reown/ReownContext";
 import { useI18n } from "@/i18n/LanguageProvider";
 import { personalFundingFailure } from "@/lib/personal-funding-errors.mjs";
@@ -40,6 +40,7 @@ export function PersonalWalletFunding() {
   const [actionBusy, setActionBusy] = useState(false);
   const [selectedReference, setSelectedReference] = useState("");
   const [statusFocusKey, setStatusFocusKey] = useState(0);
+  const clearSelectedStatus = useCallback(() => { setSelectedReference(""); setStatusFocusKey(0); }, []);
   const state = personalWalletState(reown);
   const verified = state === "verified";
   const address = reown.linkedAddress || reown.address || "";
@@ -75,7 +76,7 @@ export function PersonalWalletFunding() {
   return <WalletFundingScreen title={t("walletPage.personalTitle")} subtitle={t("walletPage.personalCopy")} provider={t("funding.personalEnvironment")}>
     <div className={`${styles.flowLayout}${!verified ? ` ${styles.setupRequired}` : ""}`} id="personal-wallet">
       <section className={`executive-panel ${styles.formPanel}`} aria-label={t("walletPage.addFundsAction")}>
-        <PersonalFundingForm disabled={!verified} busy={busy} onContinue={openProvider} destinationAddress={verified ? reown.linkedAddress : ""} />
+        <PersonalFundingForm disabled={!verified} busy={busy} onContinue={openProvider} onSelectionChange={clearSelectedStatus} destinationAddress={verified ? reown.linkedAddress : ""} />
         {!verified ? <p className={styles.hint}>{t("funding.verifyBeforeFunding")}</p> : null}
         <WalletActionError diagnostic={actionDiagnostic} message={actionError || (reown.onrampStatus === "error" ? personalOnrampError(reown.onrampError, t) : reown.linkError ? personalOnrampError(reown.linkError, t) : "")} />
       </section>

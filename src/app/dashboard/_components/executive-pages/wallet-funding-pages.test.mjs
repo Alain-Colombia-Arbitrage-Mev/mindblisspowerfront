@@ -316,6 +316,36 @@ test('returned canonical payment methods use brand labels without changing their
   assert.equal(harness.exports.paymentMethodLabel('BANK_TRANSFER', t), t('onramp.bankTransfer'));
 });
 
+test('only explicit personal field edits notify the page, never country detection, option loading, retry or automatic method selection', async t => {
+  if (typeof navigator === 'undefined') { Object.defineProperty(globalThis, 'navigator', { value: { language: 'es-CO', languages: ['es-CO'] }, configurable: true }); t.after(() => { delete globalThis.navigator; }); }
+  let selectionChanges = 0, sessions = 0;
+  const routes = [{ paymentMethods: [
+    { method: 'CREDIT_DEBIT_CARD', minimumUsd: 50, maximumUsd: 1000 },
+    { method: 'BANK_TRANSFER', minimumUsd: 50, maximumUsd: 1000 },
+  ] }];
+  const harness = formHarness('PersonalFundingForm', {
+    readPersonalFundingOptions: async country => ({ country, paymentMethods: ['CREDIT_DEBIT_CARD', 'BANK_TRANSFER'], routes }),
+    readAdministrativeSandboxOptions() { assert.fail('administrative discovery called'); },
+  });
+  t.after(() => harness.unmount());
+  const props = { onSelectionChange() { selectionChanges++; }, onContinue: async () => { sessions++; } };
+  harness.render(props); harness.render(props); await flush(); harness.render(props); let tree = harness.render(props);
+  assert.equal(selectionChanges, 0, 'automatic country and default method cannot clear an acknowledged request');
+  find(tree, 'FundingMethodField').props.onRetry();
+  harness.render(props); await flush(); harness.render(props); tree = harness.render(props);
+  assert.equal(selectionChanges, 0, 'retrying an availability read preserves the selected request');
+  find(tree, 'FundingAmountField').props.onChange('100');
+  harness.render(props); tree = harness.render(props);
+  assert.equal(selectionChanges, 1);
+  find(tree, 'FundingCountryField').props.onChange('US');
+  harness.render(props); await flush(); harness.render(props); tree = harness.render(props);
+  assert.equal(selectionChanges, 2);
+  find(tree, 'FundingMethodField').props.onChange('BANK_TRANSFER');
+  harness.render(props);
+  assert.equal(selectionChanges, 3);
+  assert.equal(sessions, 0, 'editing a selection never starts a purchase');
+});
+
 test('administrative user edits notify the page once without retrying a session or changing personal state', async t => {
   let selectionChanges = 0, sessions = 0;
   const routes = [{ paymentMethods: [
@@ -513,11 +543,11 @@ test('each page selects only its own acknowledged request and exposes its backen
   function AdministrativeSandboxFundingForm() { return null; }
   function WalletFundingHistory() { return null; }
   function WalletFundingStatus() { return null; }
-  let personalResult = { pending: true, checkoutReference: statusReference };
+  let personalResult = { pending: true, checkoutReference: statusReference }, personalSessions = 0, administrativeSessions = 0;
   const personal = componentHarness('PersonalWalletFundingPage.jsx', 'PersonalWalletFunding', {
     'lucide-react': icons, 'next/dynamic': { default: () => () => null }, '@/i18n/LanguageProvider': i18n,
     '@/components/reown/ReownContext': { useReownWallet: () => ({ configured: true, isConnected: true, isLinked: true, address: personalStatus.destination.address,
-      linkedAddress: personalStatus.destination.address, linkStatus: 'linked', onrampStatus: 'idle', fundingRevision: 0, startOnramp: async () => personalResult }) },
+      linkedAddress: personalStatus.destination.address, linkStatus: 'linked', onrampStatus: 'idle', fundingRevision: 0, startOnramp: async () => { personalSessions++; return personalResult; } }) },
     '@/lib/personal-funding-errors.mjs': { personalFundingFailure }, './WalletFundingForm': { PersonalFundingForm },
     './WalletFundingHistory': { default: WalletFundingHistory }, './WalletFundingStatus': { default: WalletFundingStatus }, './WalletFundingUI': shared,
   });
@@ -541,7 +571,7 @@ test('each page selects only its own acknowledged request and exposes its backen
   const administrative = componentHarness('AdministrativeWalletFundingPage.jsx', 'default', {
     'lucide-react': icons, '@/i18n/LanguageProvider': i18n,
     '@/lib/administrative-wallet.mjs': { readAdministrativeWallet: async () => ({ status: 'assigned', address: administrativeStatus.destination.address }) },
-    '@/lib/administrative-onramp-client.mjs': { startAdministrativeMeldOnramp: async () => ({ checkoutReference: statusReference }) },
+    '@/lib/administrative-onramp-client.mjs': { startAdministrativeMeldOnramp: async () => { administrativeSessions++; return { checkoutReference: statusReference }; } },
     './WalletFundingForm': { AdministrativeSandboxFundingForm }, './WalletFundingHistory': { default: WalletFundingHistory }, './WalletFundingStatus': { default: WalletFundingStatus }, './WalletFundingUI': shared,
   });
   t.after(() => administrative.unmount());
@@ -553,6 +583,36 @@ test('each page selects only its own acknowledged request and exposes its backen
   assert.equal(find(tree, 'WalletFundingStatus').props.walletKind, 'administrative');
   assert.equal(find(tree, 'WalletFundingStatus').props.checkoutReference, statusReference);
   assert.equal(find(personal.render(), 'WalletFundingStatus').props.checkoutReference, secondStatusReference, 'administrative activity cannot replace the personal selection');
+  find(tree, 'WalletFundingHistory').props.onSelectRequest(secondStatusReference);
+  tree = administrative.render(props);
+  assert.equal(find(tree, 'WalletFundingStatus').props.checkoutReference, secondStatusReference);
+  const administrativeRevision = find(tree, 'WalletFundingHistory').props.refreshKey;
+  const clearAdministrative = find(tree, 'AdministrativeSandboxFundingForm').props.onSelectionChange;
+  clearAdministrative();
+  tree = administrative.render(props);
+  assert.equal(find(tree, 'WalletFundingStatus'), undefined, 'editing the new request removes the old receipt from this screen');
+  assert.equal(find(tree, 'WalletFundingHistory').props.refreshKey, administrativeRevision, 'local dismissal does not mutate or refresh recorded requests');
+  assert.equal(find(tree, 'AdministrativeSandboxFundingForm').props.destinationAddress, administrativeStatus.destination.address);
+  assert.equal(find(tree, 'AdministrativeSandboxFundingForm').props.onSelectionChange, clearAdministrative, 'callback remains stable across renders');
+  assert.equal(find(personal.render(), 'WalletFundingStatus').props.checkoutReference, secondStatusReference);
+  find(tree, 'WalletFundingHistory').props.onSelectRequest(statusReference);
+  tree = administrative.render(props);
+  assert.equal(find(tree, 'WalletFundingStatus').props.checkoutReference, statusReference, 'history can explicitly reopen the original immutable request');
+
+  let personalTree = personal.render();
+  const clearPersonal = find(personalTree, 'PersonalFundingForm').props.onSelectionChange;
+  clearPersonal();
+  personalTree = personal.render();
+  assert.equal(find(personalTree, 'WalletFundingStatus'), undefined);
+  assert.equal(find(personalTree, 'PersonalFundingForm').props.onSelectionChange, clearPersonal);
+  assert.equal(find(personalTree, 'PersonalFundingForm').props.disabled, false, 'editing does not revoke backend wallet verification');
+  assert.equal(find(personalTree, 'PersonalFundingForm').props.destinationAddress, personalStatus.destination.address);
+  assert.equal(find(personalTree, 'WalletFundingHistory').props.refreshKey, 0);
+  assert.equal(find(administrative.render(props), 'WalletFundingStatus').props.checkoutReference, statusReference, 'personal dismissal never clears the administrative receipt');
+  find(personalTree, 'WalletFundingHistory').props.onSelectRequest(secondStatusReference);
+  assert.equal(find(personal.render(), 'WalletFundingStatus').props.checkoutReference, secondStatusReference);
+  assert.equal(personalSessions, 2, 'history and local field edits never post another personal purchase');
+  assert.equal(administrativeSessions, 1, 'history and local field edits never post another administrative purchase');
 });
 
 test('a history status action selects the exact request for a read without changing its recorded payment status', async t => {

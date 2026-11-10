@@ -22,6 +22,7 @@ export default function AdministrativeWalletFundingPage({ environment = "product
   const [historyRevision, setHistoryRevision] = useState(0);
   const [selectedReference, setSelectedReference] = useState("");
   const [statusFocusKey, setStatusFocusKey] = useState(0);
+  const clearSelectionError = useCallback(() => { setProviderError(""); setSelectedReference(""); setStatusFocusKey(0); }, []);
   const checkoutRequest = useRef(null);
   const assigned = wallet.status === "assigned";
   const sandbox = environment === "sandbox";
@@ -51,7 +52,7 @@ export default function AdministrativeWalletFundingPage({ environment = "product
       {sandbox ? <p>{t("funding.sandboxNoticeShort")}</p> : null}</div></div>
     <div className={styles.flowLayout} id="administrative-wallet">
       <section className={`executive-panel ${styles.formPanel}`} aria-label={t("walletPage.addFundsAction")}>
-        {sandbox ? <AdministrativeSandboxFundingForm disabled={!assigned} busy={busy} onContinue={openProvider} onSelectionChange={() => setProviderError("")} destinationAddress={assigned ? wallet.address : ""} /> : null}
+        {sandbox ? <AdministrativeSandboxFundingForm disabled={!assigned} busy={busy} onContinue={openProvider} onSelectionChange={clearSelectionError} destinationAddress={assigned ? wallet.address : ""} /> : null}
         <WalletActionError message={providerError} />
       </section>
       <aside className={styles.details} aria-label={t("funding.destinationDetails")}>
