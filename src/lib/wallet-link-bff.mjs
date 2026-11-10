@@ -84,10 +84,17 @@ export async function handleWalletLink(request, action, {
     }, fetchImpl);
     if (!result.ok) {
       const status = [400, 401, 403, 409, 413, 429, 503].includes(result.status) ? result.status : 502;
+      console.warn('[wallet-link]', JSON.stringify({ action, phase: 'upstream_response', status: result.status,
+        code: safeErrors.has(result.data?.error) ? result.data.error : 'unclassified' }));
       return reply({ error: safeErrors.has(result.data?.error) ? result.data.error : 'wallet_link_unavailable' }, status);
     }
-    return validSuccess(action, result.data) ? reply(result.data) : reply({ error: 'wallet_link_unavailable' }, 502);
-  } catch {
+    if (validSuccess(action, result.data)) return reply(result.data);
+    console.warn('[wallet-link]', JSON.stringify({ action, phase: 'response_contract', status: result.status || 200, code: 'unclassified' }));
+    return reply({ error: 'wallet_link_unavailable' }, 502);
+  } catch (error) {
+    const code = ['service_request_cancelled', 'private_api_unavailable', 'worker_request_scope_required'].includes(error?.message)
+      ? error.message : 'unclassified';
+    console.warn('[wallet-link]', JSON.stringify({ action, phase: 'transport', status: 0, code }));
     return reply({ error: 'wallet_link_unavailable' }, 503);
   }
 }

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createHash, createHmac } from 'node:crypto';
 import { handleWalletFunding } from './wallet-funding-bff.mjs';
+import { handleWalletLink } from './wallet-link-bff.mjs';
 
 const env = { AUTH_PROVIDER: 'better-auth', AUTH_BFF_SHARED_SECRET: 's'.repeat(32),
   AUTH_PUBLIC_ORIGIN: 'https://app.example.test', BETTER_AUTH_BACKEND_URL: 'https://auth.core.internal', NODE_ENV: 'production' };
@@ -125,4 +126,21 @@ test('personal options authenticate and reject crossed countries, sandbox method
   }
   assert.equal((await handleWalletFunding(new Request(get.url), 'personal-options', { env,
     serviceRequest: async () => assert.fail('unauthenticated discovery transport') })).status, 401);
+});
+
+test('private wallet diagnostics never serialize provider payloads, identities or credentials', async () => {
+  const original = console.warn;
+  const captured = [];
+  console.warn = (...args) => { captured.push(args.join(' ')); };
+  const upstream = async () => ({ ok: false, status: 503,
+    data: { error: 'private-provider-token', cookie: 'private-session', walletAddress: input.walletAddress } });
+  try {
+    await handleWalletFunding(request(), 'personal', { env, serviceRequest: upstream });
+    await handleWalletLink(new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/wallet-link`, {
+      headers: { cookie: 'better-auth.session_token=synthetic' },
+    }), 'status', { env, serviceRequest: upstream });
+    assert.equal(captured.length, 2);
+    assert.match(captured.join('\n'), /upstream_response/);
+    assert.doesNotMatch(captured.join('\n'), /private-provider-token|private-session|0x1{40}/);
+  } finally { console.warn = original; }
 });

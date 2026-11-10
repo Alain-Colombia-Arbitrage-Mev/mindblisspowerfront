@@ -7,6 +7,9 @@ import { administrativeSandboxOptions, personalProductionOptions, fundingAcknowl
 import { browserRequestDeadline } from './browser-request-deadline.mjs';
 
 const reply = (body, status = 200) => Response.json(body, { status, headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' } });
+const diagnostic = (action, phase, status, code = 'unclassified') => {
+  console.warn('[wallet-funding]', JSON.stringify({ action, phase, status, code }));
+};
 
 async function readInput(request) {
   const reader = request.body?.getReader();
@@ -101,18 +104,24 @@ export async function handleWalletFunding(request, action, {
         'wallet_funding_forbidden', 'wallet_funding_rate_limited', 'wallet_funding_request_already_used',
         'wallet_funding_unconfigured', 'wallet_funding_provider_unavailable', 'wallet_funding_unavailable',
         'wallet_funding_method_unavailable', 'wallet_funding_amount_out_of_range', 'wallet_funding_amount_unavailable']);
+      diagnostic(action, 'upstream_response', result.status, safeErrors.has(result.data?.error) ? result.data.error : 'unclassified');
       return reply({ error: safeErrors.has(result.data?.error) ? result.data.error : 'funding_unavailable' },
         [400, 401, 403, 409, 413, 429, 503].includes(result.status) ? result.status : 502);
     }
     const safe = action === 'personal-options' ? personalProductionOptions(result.data)
       : action === 'options' ? administrativeSandboxOptions(result.data)
       : action === 'history' ? fundingHistory(result.data, kind) : fundingAcknowledgement(result.data, kind);
-    if (!safe) return reply({ error: 'funding_unavailable' }, 502);
+    if (!safe) { diagnostic(action, 'response_contract', result.status || 200); return reply({ error: 'funding_unavailable' }, 502); }
     if (body && (!('requestedAmount' in safe) || !('checkoutReference' in safe) || safe.requestedAmount !== body.amount
       || safe.checkoutReference !== body.requestId || (kind === 'personal' && (!('paymentMethodType' in safe)
         || safe.paymentMethodType !== body.paymentMethodType)))) return reply({ error: 'funding_unavailable' }, 502);
     if (optionsContext && (!('country' in safe) || safe.country !== optionsContext.country
       || (action === 'options' && (!('serviceProvider' in safe) || safe.serviceProvider !== optionsContext.serviceProvider)))) return reply({ error: 'funding_unavailable' }, 502);
     return reply(safe);
-  } catch { return reply({ error: 'funding_unavailable' }, 503); }
+  } catch (error) {
+    const code = ['service_request_cancelled', 'private_api_unavailable', 'worker_request_scope_required'].includes(error?.message)
+      ? error.message : 'unclassified';
+    diagnostic(action, 'transport', 0, code);
+    return reply({ error: 'funding_unavailable' }, 503);
+  }
 }
