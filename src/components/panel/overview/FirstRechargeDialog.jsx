@@ -41,6 +41,16 @@ export default function FirstRechargeDialog({ open, initialStep = "welcome", onO
       setProviderError(t("recharge.providerUnavailable"));
     }
   };
+  const reconnectWallet = async () => {
+    setProviderError("");
+    try {
+      await reown.reconnectWallet();
+    } catch {
+      setProviderError(t("recharge.providerUnavailable"));
+    }
+  };
+  const onrampBusy = ["connecting", "linking", "opening"].includes(reown.onrampStatus);
+  const onrampMessage = errorMessage(t, reown.onrampError) || providerError;
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -78,10 +88,10 @@ export default function FirstRechargeDialog({ open, initialStep = "welcome", onO
                 <Dialog.Description id="recharge-methods-description">{t("recharge.methodsCopy")}</Dialog.Description>
               </div>
               <div className="mb-recharge-methods">
-                <RechargeMethod icon={CreditCard} title={t("recharge.buyTitle")} copy={t("recharge.buyCopy")} action={t("recharge.buyAction")} onClick={openCryptoProvider} />
+                <RechargeMethod icon={CreditCard} title={t("recharge.buyTitle")} copy={t("recharge.buyCopy")} action={onrampBusy ? t("recharge.connecting") : t("recharge.buyAction")} onClick={openCryptoProvider} disabled={onrampBusy} />
                 <RechargeMethod icon={ArrowDownLeft} title={t("recharge.receiveTitle")} copy={t("recharge.receiveCopy")} action={t("recharge.receiveAction")} href="/dashboard/payments#wallet-steps" onNavigate={close} />
               </div>
-              {providerError || reown.onrampError ? <p className="mb-recharge-error" role="alert">{providerError || t("recharge.providerUnavailable")}</p> : null}
+              {onrampMessage ? <div className="mb-recharge-error" role="alert"><span>{onrampMessage}</span>{reown.onrampError === "mismatch" ? <button type="button" onClick={reconnectWallet}>{t("recharge.reconnectWallet")}</button> : null}</div> : null}
               <button type="button" className="mb-recharge-secondary" onClick={close}>{t("recharge.later")}</button>
             </>
           ) : (
@@ -121,7 +131,7 @@ function CloseButton({ label, onClick }) {
   return <Dialog.Close asChild><button type="button" className="mb-recharge-close" aria-label={label} onClick={onClick}><X size={18} aria-hidden="true" /></button></Dialog.Close>;
 }
 
-function RechargeMethod({ icon: Icon, title, copy, action, href = "", onNavigate = undefined, onClick = undefined }) {
+function RechargeMethod({ icon: Icon, title, copy, action, href = "", onNavigate = undefined, onClick = undefined, disabled = false }) {
   const content = (
     <>
       <span className="mb-recharge-method-icon"><Icon size={22} aria-hidden="true" /></span>
@@ -130,5 +140,18 @@ function RechargeMethod({ icon: Icon, title, copy, action, href = "", onNavigate
   );
 
   if (href) return <Link className="mb-recharge-method" href={href} onClick={onNavigate}>{content}</Link>;
-  return <button className="mb-recharge-method" type="button" onClick={onClick}>{content}</button>;
+  return <button className="mb-recharge-method" type="button" onClick={onClick} disabled={disabled}>{content}</button>;
+}
+
+function errorMessage(t, code) {
+  const keys = {
+    configuration: "recharge.providerConfiguration",
+    connection: "recharge.providerConnection",
+    mismatch: "recharge.providerMismatch",
+    session: "recharge.providerSession",
+    origin: "recharge.providerConfiguration",
+    rejected: "recharge.providerRejected",
+    provider: "recharge.providerUnavailable",
+  };
+  return code && keys[code] ? t(keys[code]) : "";
 }

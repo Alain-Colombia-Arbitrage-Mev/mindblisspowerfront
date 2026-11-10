@@ -16,6 +16,7 @@ const copy = {
   'recharge.buyCopy': 'Revisa las opciones.', 'recharge.buyAction': 'Comprar cripto',
   'recharge.receiveTitle': 'Recibir desde otra wallet', 'recharge.receiveCopy': 'Verifica activo y red.',
   'recharge.receiveAction': 'Ver cómo recibir', 'recharge.providerUnavailable': 'Reown no disponible.', 'recharge.later': 'Lo haré después',
+  'recharge.providerMismatch': 'Wallet distinta.', 'recharge.reconnectWallet': 'Reconectar wallet vinculada',
   'recharge.reminderEyebrow': 'Tu wallet · Primera recarga', 'recharge.balanceAvailable': 'Saldo disponible',
   'recharge.reminderTitle': '¿Tu primera recarga?', 'recharge.reminderCopy': 'Añade saldo.',
   'recharge.recharge': 'Recargar mi wallet', 'recharge.continue': 'Seguir explorando',
@@ -39,7 +40,9 @@ const i18n = { useI18n: () => ({ t: key => copy[key] ?? key }) };
 const link = ({ children, href, ...props }) => React.createElement('a', { href, ...props }, children);
 let onrampCalls = 0;
 let onrampResult = { opened: true };
-const reown = { useReownWallet: () => ({ configured: true, onrampStatus: 'idle', onrampError: false, startOnramp: async () => { onrampCalls += 1; return onrampResult; } }) };
+let onrampError = '';
+let reconnectCalls = 0;
+const reown = { useReownWallet: () => ({ configured: true, onrampStatus: 'idle', onrampError, startOnramp: async () => { onrampCalls += 1; return onrampResult; }, reconnectWallet: async () => { reconnectCalls += 1; return { pending: true }; } }) };
 
 function view(file) {
   return registrationViewHarness(`../../components/panel/overview/${file}`, {
@@ -56,6 +59,7 @@ function button(tree, label) {
 test('the first-recharge popup advances through the Pen welcome and opens Reown on-ramp', async () => {
   onrampCalls = 0;
   onrampResult = { opened: true };
+  onrampError = '';
   let closed = 0;
   const harness = view('FirstRechargeDialog.jsx');
   const props = { open: true, initialStep: 'welcome', onOpenChange(value) { if (value === false) closed += 1; } };
@@ -70,6 +74,18 @@ test('the first-recharge popup advances through the Pen welcome and opens Reown 
   await cryptoMethod.props.onClick();
   assert.equal(onrampCalls, 1);
   assert.equal(closed, 1);
+  harness.unmount();
+});
+
+test('a different restored wallet offers an explicit reconnect instead of a generic outage', async () => {
+  onrampError = 'mismatch';
+  reconnectCalls = 0;
+  const harness = view('FirstRechargeDialog.jsx');
+  const tree = harness.render({ open: true, initialStep: 'methods', onOpenChange() {} });
+  assert.match(renderToStaticMarkup(tree), /Wallet distinta/);
+  await button(tree, 'Reconectar wallet vinculada').props.onClick();
+  assert.equal(reconnectCalls, 1);
+  onrampError = '';
   harness.unmount();
 });
 

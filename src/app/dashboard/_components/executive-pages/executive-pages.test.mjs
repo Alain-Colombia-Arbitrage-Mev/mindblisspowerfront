@@ -39,6 +39,10 @@ function loadPages({ summary = { loading: true, data: null, error: '' }, health 
     '@/lib/payment-display.mjs': paymentDisplay,
     '@/lib/browser-request-deadline.mjs': deadline,
     '@/lib/member-read.mjs': { isRecoverySummary: data => data?.recovery_mode === true },
+    '@/lib/personal-wallet.mjs': {
+      MINDBLISS_ONRAMP_FEE_PERCENT: 1,
+      PERSONAL_WALLET_ASSET: 'USDC',
+    },
     '@/i18n/LanguageProvider': { useI18n: () => ({ locale: 'es', dir: 'ltr', t: (key, values) => translateMessage('es', key, values) }) },
     '@/lib/useNetworkHealth': { useNetworkHealth: () => health },
     '@/lib/useSustainability': { useSustainability: () => ({ loading: false, data: null, error: '' }) },

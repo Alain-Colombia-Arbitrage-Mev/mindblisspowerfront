@@ -15,7 +15,7 @@ export const messages = {
       account: "CUENTA", summary: "Resumen", memberships: "Membresías", wallet: "Billetera",
       communityGroup: "COMUNIDAD", community: "Comunidad", referrals: "Referidos por niveles", ranks: "Rangos",
       settings: "AJUSTES", profile: "Mi perfil", personalAccount: "Cuenta personal", helpCenter: "Centro de ayuda y soporte",
-      logout: "Cerrar sesión", myWallet: "Mi wallet", openWallet: "Abrir wallet",
+      logout: "Cerrar sesión", myWallet: "Mi wallet", personalWallet: "Wallet personal", openWallet: "Abrir", buyCrypto: "Comprar",
     },
     overview: {
       title: "Tu espacio Mindbliss", subtitle: "Tu wallet, tus compras de cripto y tus membresías.",
@@ -38,7 +38,7 @@ export const messages = {
       stepMethod: "Elige tu método", stepReview: "Revisa importe, activo y red", stepConfirm: "Confirma la recarga", start: "Hacer mi primera recarga", notNow: "Ahora no",
       methodsEyebrow: "Recarga a tu manera", methodsTitle: "Tu wallet está lista.\nHaz tu primera recarga.", methodsCopy: "Elige una opción. Antes de enviar, confirma el activo, la red y el importe.",
       buyTitle: "Comprar cripto", buyCopy: "Compra cripto con moneda local y revisa las opciones del proveedor.", buyAction: "Comprar cripto",
-      receiveTitle: "Recibir desde otra wallet", receiveCopy: "Revisa cómo configurar tu wallet y verifica siempre el activo y la red.", receiveAction: "Ver cómo recibir", providerUnavailable: "La conexión segura con Reown no está disponible en este momento. Intenta nuevamente más tarde.", later: "Lo haré después",
+      receiveTitle: "Recibir desde otra wallet", receiveCopy: "Revisa cómo configurar tu wallet y verifica siempre el activo y la red.", receiveAction: "Ver cómo recibir", providerUnavailable: "No pudimos abrir el proveedor de compra. Intenta nuevamente.", providerConfiguration: "La conexión de Reown necesita configuración. Contacta a soporte si el problema continúa.", providerConnection: "La wallet tardó demasiado en reconectarse. Intenta nuevamente.", providerMismatch: "Esta cuenta ya tiene otra wallet vinculada. Reconecta la wallet original para continuar.", providerSession: "Tu sesión expiró. Inicia sesión nuevamente antes de recargar.", providerRejected: "La firma de la wallet fue cancelada. Apruébala para continuar.", reconnectWallet: "Reconectar wallet vinculada", connecting: "Conectando de forma segura…", later: "Lo haré después",
       reminderEyebrow: "Tu wallet · Primera recarga", balanceAvailable: "Saldo disponible", reminderTitle: "¿Tu primera recarga?\nEmpieza por aquí.", reminderCopy: "Añade saldo para tu próxima membresía.\nEn el siguiente paso eliges cómo recargar.", recharge: "Recargar mi wallet", continue: "Seguir explorando",
     },
     walletIntro: {
@@ -51,6 +51,8 @@ export const messages = {
       balance: "Saldo de wallet", balanceCopy: "saldo confirmado", activeMemberships: "Membresías activas", activeMembershipsCopy: "membresías confirmadas", registeredPayments: "Pagos registrados", registeredPaymentsCopy: "operaciones en el historial", pendingPayments: "Pagos pendientes", pendingPaymentsCopy: "en proceso de confirmación", recoveryNotice: "Algunos importes históricos siguen en revisión y no se suman al saldo de wallet.",
       connected: "Wallet Reown conectada", verified: "Wallet verificada", notConnected: "Crea o conecta tu wallet", walletAddress: "Dirección conectada", walletCreationCopy: "Usa email, Google, Apple o una wallet externa. Reown creará una wallet no custodial cuando sea necesario.", manageWallet: "Administrar wallet", onrampAction: "Recargar con onramp", linkAction: "Verificar y vincular", linking: "Esperando firma…", linkHint: "Firma una verificación única para vincular esta dirección a tu sesión. No mueve fondos ni permite iniciar sesión con la wallet.", linkError: "No pudimos verificar esta wallet. Confirma la firma o intenta con la dirección ya vinculada a tu cuenta.",
       topUpTitle: "Recargar saldo", topUpCopy: "Añade saldo eligiendo una opción disponible y revisa siempre el importe antes de confirmar.", onlyTopUps: "Solo recargas", onlyTopUpsCopy: "La wallet permite añadir saldo y no incluye transferencias salientes.", topUpAction: "Elegir recarga", history: "Historial de compras", noMovements: "Aún no tienes compras registradas.", profileSubtitle: "Gestiona tus datos personales y la seguridad de tu cuenta.",
+      personalEyebrow: "Wallet personal", personalTitle: "Recargar wallet personal", personalCopy: "Tu wallet no custodial para recibir las compras de cripto que tú confirmes.", startingAmount: "Importe inicial recomendado", startingAmountCopy: "Abrimos el proveedor desde este importe para reducir cotizaciones inválidas. El mínimo final depende de tu país y método de pago.", recommendedProviders: "Opciones recomendadas sin cuenta de exchange: {providers}. Revisa siempre la cotización antes de continuar.", administrativeEyebrow: "Operación Mindbliss", administrativeTitle: "Wallet administrativa", administrativeCopy: "Quedará separada de tu wallet personal y se conectará más adelante con un proveedor empresarial.", comingSoon: "Próximamente",
+      simpleReadyTitle: "Tu wallet personal está lista", simpleNewTitle: "Wallet lista al continuar", simpleFlowCopy: "La conectaremos y verificaremos automáticamente al recargar.", simpleLinkedCopy: "Verificada y lista para recibir tu compra.", simpleTopUpAction: "Ver cotización", automaticVerification: "La verificación es automática y no mueve fondos.", simpleProviderNote: "Reown abre la cotización administrada por Meld. Confirma importe, activo, red y total antes de pagar. Sin retiros.", managedByMeld: "{asset} · Cotización administrada por Reown y Meld", mindblissFee: "Comisión Mindbliss ({percent}%)", feeDisclosure: "Meld la incluye en la cotización final; no se suma otra vez en Mindbliss.", topUpPersonalAction: "Ver cotización en Meld",
     },
     support: {
       needHelp: "¿Necesitas ayuda?", talk: "Habla con soporte", openHelp: "Ayuda abierta", closeHelp: "Cerrar ayuda",
@@ -89,7 +91,7 @@ export const messages = {
       account: "ACCOUNT", summary: "Overview", memberships: "Memberships", wallet: "Wallet",
       communityGroup: "COMMUNITY", community: "Community", referrals: "Level referrals", ranks: "Ranks",
       settings: "SETTINGS", profile: "My profile", personalAccount: "Personal account", helpCenter: "Help and support center",
-      logout: "Sign out", myWallet: "My wallet", openWallet: "Open wallet",
+      logout: "Sign out", myWallet: "My wallet", personalWallet: "Personal wallet", openWallet: "Open", buyCrypto: "Buy crypto",
     },
     overview: {
       title: "Your Mindbliss space", subtitle: "Your wallet, crypto purchases and memberships.",
@@ -112,7 +114,7 @@ export const messages = {
       stepMethod: "Choose your method", stepReview: "Review amount, asset and network", stepConfirm: "Confirm the top-up", start: "Make my first top-up", notNow: "Not now",
       methodsEyebrow: "Top up your way", methodsTitle: "Your wallet is ready.\nMake your first top-up.", methodsCopy: "Choose an option. Before sending, confirm the asset, network and amount.",
       buyTitle: "Buy crypto", buyCopy: "Buy crypto with local currency and review the provider options.", buyAction: "Buy crypto",
-      receiveTitle: "Receive from another wallet", receiveCopy: "Review how to configure your wallet and always verify the asset and network.", receiveAction: "See how to receive", providerUnavailable: "The secure Reown connection is currently unavailable. Please try again later.", later: "I'll do it later",
+      receiveTitle: "Receive from another wallet", receiveCopy: "Review how to configure your wallet and always verify the asset and network.", receiveAction: "See how to receive", providerUnavailable: "We could not open the purchase provider. Please try again.", providerConfiguration: "The Reown connection needs configuration. Contact support if the problem continues.", providerConnection: "The wallet took too long to reconnect. Please try again.", providerMismatch: "This account already has another wallet linked. Reconnect the original wallet to continue.", providerSession: "Your session expired. Sign in again before adding funds.", providerRejected: "The wallet signature was cancelled. Approve it to continue.", reconnectWallet: "Reconnect linked wallet", connecting: "Connecting securely…", later: "I'll do it later",
       reminderEyebrow: "Your wallet · First top-up", balanceAvailable: "Available balance", reminderTitle: "Your first top-up?\nStart here.", reminderCopy: "Add funds for your next membership.\nOn the next step, choose how to top up.", recharge: "Top up my wallet", continue: "Keep exploring",
     },
     walletIntro: {
@@ -125,6 +127,8 @@ export const messages = {
       balance: "Wallet balance", balanceCopy: "confirmed balance", activeMemberships: "Active memberships", activeMembershipsCopy: "confirmed memberships", registeredPayments: "Recorded payments", registeredPaymentsCopy: "operations in your history", pendingPayments: "Pending payments", pendingPaymentsCopy: "awaiting confirmation", recoveryNotice: "Some historical amounts remain under review and are not added to the wallet balance.",
       connected: "Reown wallet connected", verified: "Wallet verified", notConnected: "Create or connect your wallet", walletAddress: "Connected address", walletCreationCopy: "Use email, Google, Apple or an external wallet. Reown will create a non-custodial wallet when needed.", manageWallet: "Manage wallet", onrampAction: "Add funds with onramp", linkAction: "Verify and link", linking: "Waiting for signature…", linkHint: "Sign a one-time verification to link this address to your session. It cannot move funds or sign you in with the wallet.", linkError: "We could not verify this wallet. Confirm the signature or use the address already linked to your account.",
       topUpTitle: "Add funds", topUpCopy: "Choose an available option to add funds and always review the amount before confirming.", onlyTopUps: "Top-ups only", onlyTopUpsCopy: "The wallet accepts added funds and does not include outgoing transfers.", topUpAction: "Choose top-up", history: "Purchase history", noMovements: "You do not have any recorded purchases yet.", profileSubtitle: "Manage your personal information and account security.",
+      personalEyebrow: "Personal wallet", personalTitle: "Top up your personal wallet", personalCopy: "Your non-custodial wallet for receiving crypto purchases that you approve.", startingAmount: "Recommended starting amount", startingAmountCopy: "We open the provider at this amount to reduce invalid quotes. The final minimum depends on your country and payment method.", recommendedProviders: "Recommended options without an exchange account: {providers}. Always review the quote before continuing.", administrativeEyebrow: "Mindbliss operations", administrativeTitle: "Administrative wallet", administrativeCopy: "It remains separate from your personal wallet and will later connect to an enterprise provider.", comingSoon: "Coming soon",
+      simpleReadyTitle: "Your personal wallet is ready", simpleNewTitle: "Wallet ready when you continue", simpleFlowCopy: "We connect and verify it automatically when you top up.", simpleLinkedCopy: "Verified and ready to receive your purchase.", simpleTopUpAction: "View quote", automaticVerification: "Verification is automatic and does not move funds.", simpleProviderNote: "Reown opens the quote managed by Meld. Confirm the amount, asset, network and total before paying. No withdrawals.", managedByMeld: "{asset} · Quote managed by Reown and Meld", mindblissFee: "Mindbliss fee ({percent}%)", feeDisclosure: "Meld includes it in the final quote; Mindbliss does not add it again.", topUpPersonalAction: "View quote in Meld",
     },
     support: {
       needHelp: "Need help?", talk: "Talk to support", openHelp: "Help is open", closeHelp: "Close help",
@@ -163,7 +167,7 @@ export const messages = {
       account: "الحساب", summary: "الملخص", memberships: "العضويات", wallet: "المحفظة",
       communityGroup: "المجتمع", community: "المجتمع", referrals: "الإحالات حسب المستوى", ranks: "الرتب",
       settings: "الإعدادات", profile: "ملفي الشخصي", personalAccount: "حساب شخصي", helpCenter: "مركز المساعدة والدعم",
-      logout: "تسجيل الخروج", myWallet: "محفظتي", openWallet: "فتح المحفظة",
+      logout: "تسجيل الخروج", myWallet: "محفظتي", personalWallet: "المحفظة الشخصية", openWallet: "فتح", buyCrypto: "شراء العملات",
     },
     overview: {
       title: "مساحتك في Mindbliss", subtitle: "محفظتك ومشتريات العملات الرقمية وعضوياتك.",
@@ -186,7 +190,7 @@ export const messages = {
       stepMethod: "اختر الطريقة", stepReview: "راجع المبلغ والأصل والشبكة", stepConfirm: "أكّد الشحن", start: "إجراء أول شحن", notNow: "ليس الآن",
       methodsEyebrow: "اشحن بطريقتك", methodsTitle: "محفظتك جاهزة.\nابدأ شحنك الأول.", methodsCopy: "اختر خياراً، وتأكد من الأصل والشبكة والمبلغ قبل الإرسال.",
       buyTitle: "شراء العملات الرقمية", buyCopy: "اشترِ العملات الرقمية بعملتك المحلية وراجع خيارات مزود الخدمة.", buyAction: "شراء العملات الرقمية",
-      receiveTitle: "الاستقبال من محفظة أخرى", receiveCopy: "راجع إعداد المحفظة وتأكد دائماً من الأصل والشبكة.", receiveAction: "طريقة الاستقبال", providerUnavailable: "اتصال Reown الآمن غير متاح حالياً. حاول مرة أخرى لاحقاً.", later: "سأفعل ذلك لاحقاً",
+      receiveTitle: "الاستقبال من محفظة أخرى", receiveCopy: "راجع إعداد المحفظة وتأكد دائماً من الأصل والشبكة.", receiveAction: "طريقة الاستقبال", providerUnavailable: "تعذر فتح مزود الشراء. حاول مرة أخرى.", providerConfiguration: "يحتاج اتصال Reown إلى إعداد. تواصل مع الدعم إذا استمرت المشكلة.", providerConnection: "استغرقت إعادة اتصال المحفظة وقتاً طويلاً. حاول مرة أخرى.", providerMismatch: "يوجد لهذه الحساب محفظة أخرى مرتبطة. أعد توصيل المحفظة الأصلية للمتابعة.", providerSession: "انتهت جلستك. سجّل الدخول مرة أخرى قبل إضافة الرصيد.", providerRejected: "تم إلغاء توقيع المحفظة. وافق عليه للمتابعة.", reconnectWallet: "إعادة توصيل المحفظة المرتبطة", connecting: "جارٍ الاتصال بأمان…", later: "سأفعل ذلك لاحقاً",
       reminderEyebrow: "محفظتك · الشحن الأول", balanceAvailable: "الرصيد المتاح", reminderTitle: "هل هذا شحنك الأول؟\nابدأ من هنا.", reminderCopy: "أضف رصيداً لعضويتك التالية.\nفي الخطوة التالية تختار طريقة الشحن.", recharge: "شحن محفظتي", continue: "متابعة الاستكشاف",
     },
     walletIntro: {
@@ -199,6 +203,8 @@ export const messages = {
       balance: "رصيد المحفظة", balanceCopy: "رصيد مؤكد", activeMemberships: "العضويات النشطة", activeMembershipsCopy: "عضويات مؤكدة", registeredPayments: "المدفوعات المسجلة", registeredPaymentsCopy: "عمليات في السجل", pendingPayments: "مدفوعات معلقة", pendingPaymentsCopy: "بانتظار التأكيد", recoveryNotice: "بعض المبالغ التاريخية قيد المراجعة ولا تُضاف إلى رصيد المحفظة.",
       connected: "محفظة Reown متصلة", verified: "تم التحقق من المحفظة", notConnected: "أنشئ محفظتك أو صِلها", walletAddress: "العنوان المتصل", walletCreationCopy: "استخدم البريد الإلكتروني أو Google أو Apple أو محفظة خارجية. سينشئ Reown محفظة غير وصائية عند الحاجة.", manageWallet: "إدارة المحفظة", onrampAction: "الشحن عبر onramp", linkAction: "التحقق والربط", linking: "بانتظار التوقيع…", linkHint: "وقّع تحققاً لمرة واحدة لربط العنوان بجلستك. لا ينقل أموالاً ولا يسمح بتسجيل الدخول بالمحفظة.", linkError: "تعذر التحقق من هذه المحفظة. أكّد التوقيع أو استخدم العنوان المرتبط مسبقاً بحسابك.",
       topUpTitle: "شحن الرصيد", topUpCopy: "اختر خياراً متاحاً لإضافة الرصيد وراجع المبلغ دائماً قبل التأكيد.", onlyTopUps: "للشحن فقط", onlyTopUpsCopy: "تتيح المحفظة إضافة الرصيد ولا تشمل التحويلات الصادرة.", topUpAction: "اختيار طريقة الشحن", history: "سجل المشتريات", noMovements: "لا توجد مشتريات مسجلة بعد.", profileSubtitle: "أدر معلوماتك الشخصية وأمان حسابك.",
+      personalEyebrow: "المحفظة الشخصية", personalTitle: "إيداع في محفظتك الشخصية", personalCopy: "محفظتك غير الوصائية لاستلام مشتريات العملات الرقمية التي توافق عليها.", startingAmount: "المبلغ المبدئي الموصى به", startingAmountCopy: "نفتح المزود بهذا المبلغ لتقليل عروض الأسعار غير الصالحة. يعتمد الحد النهائي على بلدك وطريقة الدفع.", recommendedProviders: "خيارات موصى بها دون حساب منصة تداول: {providers}. راجع عرض السعر دائماً قبل المتابعة.", administrativeEyebrow: "عمليات Mindbliss", administrativeTitle: "المحفظة الإدارية", administrativeCopy: "تبقى منفصلة عن محفظتك الشخصية وسيتم ربطها لاحقاً بمزود مؤسسي.", comingSoon: "قريباً",
+      simpleReadyTitle: "محفظتك الشخصية جاهزة", simpleNewTitle: "ستصبح المحفظة جاهزة عند المتابعة", simpleFlowCopy: "سنربطها ونتحقق منها تلقائياً عند الشحن.", simpleLinkedCopy: "تم التحقق منها وهي جاهزة لاستلام عملية الشراء.", simpleTopUpAction: "عرض السعر", automaticVerification: "التحقق تلقائي ولا ينقل أي أموال.", simpleProviderNote: "يفتح Reown عرض السعر المُدار عبر Meld. أكّد المبلغ والأصل والشبكة والإجمالي قبل الدفع. لا توجد سحوبات.", managedByMeld: "{asset} · عرض سعر مُدار عبر Reown وMeld", mindblissFee: "رسوم Mindbliss ({percent}%)", feeDisclosure: "يُدرجها Meld في عرض السعر النهائي ولا تضيفها Mindbliss مرة أخرى.", topUpPersonalAction: "عرض السعر في Meld",
     },
     support: {
       needHelp: "هل تحتاج إلى مساعدة؟", talk: "تحدث مع الدعم", openHelp: "المساعدة مفتوحة", closeHelp: "إغلاق المساعدة",
@@ -237,7 +243,7 @@ export const messages = {
       account: "账户", summary: "概览", memberships: "会员方案", wallet: "钱包",
       communityGroup: "社区", community: "社区", referrals: "分层推荐", ranks: "等级",
       settings: "设置", profile: "我的资料", personalAccount: "个人账户", helpCenter: "帮助与支持中心",
-      logout: "退出登录", myWallet: "我的钱包", openWallet: "打开钱包",
+      logout: "退出登录", myWallet: "我的钱包", personalWallet: "个人钱包", openWallet: "打开", buyCrypto: "购买加密货币",
     },
     overview: {
       title: "你的 Mindbliss 空间", subtitle: "你的钱包、加密货币购买和会员方案。",
@@ -260,7 +266,7 @@ export const messages = {
       stepMethod: "选择充值方式", stepReview: "确认金额、资产和网络", stepConfirm: "确认充值", start: "开始首次充值", notNow: "暂时不要",
       methodsEyebrow: "按你的方式充值", methodsTitle: "钱包已准备好。\n开始首次充值。", methodsCopy: "选择一个选项。发送前请确认资产、网络和金额。",
       buyTitle: "购买加密货币", buyCopy: "使用本地货币购买加密货币，并查看服务商选项。", buyAction: "购买加密货币",
-      receiveTitle: "从其他钱包接收", receiveCopy: "查看钱包配置方式，并始终核对资产和网络。", receiveAction: "查看接收方式", providerUnavailable: "Reown 安全连接目前不可用，请稍后重试。", later: "稍后再做",
+      receiveTitle: "从其他钱包接收", receiveCopy: "查看钱包配置方式，并始终核对资产和网络。", receiveAction: "查看接收方式", providerUnavailable: "无法打开购买服务商，请重试。", providerConfiguration: "Reown 连接需要配置。如果问题持续，请联系支持。", providerConnection: "钱包重新连接超时，请重试。", providerMismatch: "此账户已关联另一个钱包。请重新连接原钱包以继续。", providerSession: "你的会话已过期。充值前请重新登录。", providerRejected: "钱包签名已取消。请批准签名以继续。", reconnectWallet: "重新连接已关联钱包", connecting: "正在安全连接…", later: "稍后再做",
       reminderEyebrow: "你的钱包 · 首次充值", balanceAvailable: "可用余额", reminderTitle: "第一次充值？\n从这里开始。", reminderCopy: "为下一项会员方案添加余额。\n下一步选择充值方式。", recharge: "为钱包充值", continue: "继续浏览",
     },
     walletIntro: {
@@ -273,6 +279,8 @@ export const messages = {
       balance: "钱包余额", balanceCopy: "已确认余额", activeMemberships: "有效会员方案", activeMembershipsCopy: "已确认会员方案", registeredPayments: "已记录付款", registeredPaymentsCopy: "历史记录中的操作", pendingPayments: "待确认付款", pendingPaymentsCopy: "正在等待确认", recoveryNotice: "部分历史金额仍在审核中，不会计入钱包余额。",
       connected: "Reown 钱包已连接", verified: "钱包已验证", notConnected: "创建或连接你的钱包", walletAddress: "已连接地址", walletCreationCopy: "可使用电子邮件、Google、Apple 或外部钱包。需要时，Reown 会创建非托管钱包。", manageWallet: "管理钱包", onrampAction: "通过 onramp 充值", linkAction: "验证并绑定", linking: "等待签名…", linkHint: "完成一次性签名验证，将此地址绑定到当前会话。该签名不会转移资金，也不能用于钱包登录。", linkError: "无法验证此钱包。请确认签名，或使用已绑定到你账户的地址。",
       topUpTitle: "余额充值", topUpCopy: "选择可用方式添加余额，并在确认前仔细检查金额。", onlyTopUps: "仅支持充值", onlyTopUpsCopy: "此钱包用于添加余额，不包含对外转账。", topUpAction: "选择充值方式", history: "购买记录", noMovements: "目前没有已记录的购买。", profileSubtitle: "管理个人信息和账户安全。",
+      personalEyebrow: "个人钱包", personalTitle: "为个人钱包充值", personalCopy: "用于接收你确认购买的加密货币的非托管钱包。", startingAmount: "建议起始金额", startingAmountCopy: "我们从此金额打开服务商，以减少无效报价。最终最低金额取决于你的国家和付款方式。", recommendedProviders: "无需交易所账户的建议选项：{providers}。继续前请务必检查报价。", administrativeEyebrow: "Mindbliss 运营", administrativeTitle: "管理钱包", administrativeCopy: "它与个人钱包保持分离，之后将连接企业服务商。", comingSoon: "即将推出",
+      simpleReadyTitle: "你的个人钱包已准备好", simpleNewTitle: "继续后钱包即可使用", simpleFlowCopy: "充值时我们会自动连接并验证钱包。", simpleLinkedCopy: "已验证，可接收你购买的资产。", simpleTopUpAction: "查看报价", automaticVerification: "验证自动完成，不会转移资金。", simpleProviderNote: "Reown 会打开由 Meld 管理的报价。付款前请确认金额、资产、网络和总额。不支持提现。", managedByMeld: "{asset} · 由 Reown 和 Meld 管理报价", mindblissFee: "Mindbliss 费用（{percent}%）", feeDisclosure: "Meld 会将其计入最终报价；Mindbliss 不会重复加收。", topUpPersonalAction: "在 Meld 中查看报价",
     },
     support: {
       needHelp: "需要帮助？", talk: "联系支持", openHelp: "帮助已打开", closeHelp: "关闭帮助",

@@ -23,7 +23,7 @@ const NAV_GROUPS = [
   { label: "nav.account", items: [
     { icon: LayoutDashboard, label: "nav.summary", href: "/dashboard", exact: true, also: ["/dashboard/home"] },
     { icon: Package, label: "nav.memberships", href: "/dashboard/packages" },
-    { icon: Wallet, label: "nav.wallet", href: "/dashboard/payments" },
+    { icon: Wallet, label: "nav.personalWallet", href: "/dashboard/payments" },
   ] },
   { label: "nav.communityGroup", items: [
     { icon: Users, label: "nav.community", href: "/dashboard/referrals" },

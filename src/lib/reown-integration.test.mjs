@@ -8,7 +8,8 @@ test("Reown creates EVM wallets, links one signed address and never replaces mem
   const provider = read("../components/reown/ReownProvider.jsx");
   const dashboardGate = read("../app/dashboard/layout.jsx");
   assert.match(provider, /new EthersAdapter\(\)/);
-  assert.match(provider, /networks: \[mainnet\]/);
+  assert.match(provider, /networks: \[polygon, mainnet\]/);
+  assert.match(provider, /defaultNetwork: polygon/);
   assert.match(provider, /defaultAccountTypes: \{ eip155: "eoa" \}/);
   assert.match(provider, /email: true/);
   assert.match(provider, /socials: \["google", "apple"\]/);
@@ -17,7 +18,12 @@ test("Reown creates EVM wallets, links one signed address and never replaces mem
   assert.match(provider, /onramp: true/);
   assert.match(provider, /allowUnsupportedChain: false/);
   assert.match(provider, /view: "OnRampProviders"/);
+  assert.match(provider, /provider: "meld"/);
+  assert.doesNotMatch(provider, /\/api\/member\/onramp\/session|app\.topperpay\.com|widget\.swapped\.com|Binance/i);
   assert.match(provider, /onrampIntent\.current = true/);
+  assert.match(provider, /const connectionReady = account\.isConnected === true/);
+  assert.match(provider, /await disconnect\(\{ namespace: "eip155" \}\)/);
+  assert.match(provider, /setOnrampState\(\{ status: "error", error: "connection" \}\)/);
   assert.match(provider, /void runOnramp\(\)\.catch/);
   assert.match(provider, /signMessage\(challenge\.message\)/);
   assert.match(provider, /\/api\/member\/wallet-link\/challenge/);
@@ -36,6 +42,23 @@ test("all Reown packages use the same pinned release", () => {
   assert.equal(pkg.dependencies["@reown/appkit"], "1.8.24");
   assert.equal(pkg.dependencies["@reown/appkit-adapter-ethers"], "1.8.24");
   assert.equal(pkg.dependencies["@reown/appkit-siwx"], undefined);
+});
+
+test("personal and administrative wallets remain visibly separate without loading AppKit in the global shell", () => {
+  const sidebar = read("../components/panel/SidebarWalletCard.jsx");
+  const finance = read("../app/dashboard/_components/executive-pages/FinanceDashboardPage.jsx");
+  const policy = read("./personal-wallet.mjs");
+  assert.match(sidebar, /nav\.personalWallet/);
+  assert.match(sidebar, /\/dashboard\/payments#personal-wallet/);
+  assert.match(sidebar, /\/dashboard\/payments#wallet-topup/);
+  assert.match(finance, /id="personal-wallet"/);
+  assert.match(finance, /mb-administrative-wallet/);
+  assert.match(finance, /reown\.startOnramp\(\)/);
+  assert.match(finance, /walletPage\.managedByMeld/);
+  assert.match(finance, /MINDBLISS_ONRAMP_FEE_PERCENT/);
+  assert.match(policy, /MINDBLISS_ONRAMP_FEE_BPS = 100/);
+  assert.doesNotMatch(finance, /PERSONAL_WALLET_RECOMMENDED_PROVIDERS|Topper|Swapped/);
+  assert.doesNotMatch(sidebar, /Binance/i);
 });
 
 test("AppKit is scoped to wallet surfaces and does not slow every dashboard route", () => {

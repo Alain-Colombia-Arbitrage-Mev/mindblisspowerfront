@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createAppKit, useAppKit, useAppKitAccount, useAppKitProvider, useAppKitState, useAppKitTheme } from "@reown/appkit/react";
+import { createAppKit, useAppKit, useAppKitAccount, useAppKitProvider, useAppKitState, useAppKitTheme, useDisconnect } from "@reown/appkit/react";
 import { EthersAdapter } from "@reown/appkit-adapter-ethers";
-import { mainnet } from "@reown/appkit/networks";
+import { mainnet, polygon } from "@reown/appkit/networks";
 import { BrowserProvider, getAddress } from "ethers";
 import { ReownContext, useReownWallet } from "./ReownContext";
 
@@ -20,10 +20,11 @@ const unavailable = Object.freeze({
   isLinked: false,
   isLinking: false,
   onrampStatus: "idle",
-  onrampError: false,
+  onrampError: "configuration",
   openConnect: async () => { throw new Error("reown_unavailable"); },
   openOnramp: async () => { throw new Error("reown_unavailable"); },
   startOnramp: async () => { throw new Error("reown_unavailable"); },
+  reconnectWallet: async () => { throw new Error("reown_unavailable"); },
   linkWallet: async () => { throw new Error("reown_unavailable"); },
   openAccount: async () => { throw new Error("reown_unavailable"); },
 });
@@ -32,8 +33,8 @@ if (configured) {
   createAppKit({
     adapters: [new EthersAdapter()],
     projectId,
-    networks: [mainnet],
-    defaultNetwork: mainnet,
+    networks: [polygon, mainnet],
+    defaultNetwork: polygon,
     defaultAccountTypes: { eip155: "eoa" },
     metadata: {
       name: "Mindbliss Power",
@@ -75,6 +76,7 @@ export default function ReownProvider({ children }) {
 function ConfiguredReownProvider({ children }) {
   const { open } = useAppKit();
   const appKitState = useAppKitState();
+  const { disconnect } = useDisconnect();
   const account = useAppKitAccount({ namespace: "eip155" });
   const { walletProvider } = useAppKitProvider("eip155");
   const appKitTheme = useAppKitTheme();
@@ -82,7 +84,7 @@ function ConfiguredReownProvider({ children }) {
   appKitThemeRef.current = appKitTheme;
   const [binding, setBinding] = useState({ status: "loading", address: "" });
   const [isLinking, setIsLinking] = useState(false);
-  const [onrampState, setOnrampState] = useState({ status: "idle", error: false });
+  const [onrampState, setOnrampState] = useState({ status: "idle", error: "" });
   const linking = useRef(null);
   const onrampIntent = useRef(false);
   const onrampFlow = useRef(null);
@@ -169,16 +171,16 @@ function ConfiguredReownProvider({ children }) {
     if (onrampFlow.current) return onrampFlow.current;
     const operation = (async () => {
       if (account.isConnected !== true || !currentAddress || !walletProvider) throw new Error("wallet_not_connected");
-      setOnrampState({ status: "linking", error: false });
+      setOnrampState({ status: "linking", error: "" });
       if (!isLinked) await linkWallet();
-      setOnrampState({ status: "opening", error: false });
+      setOnrampState({ status: "opening", error: "" });
       await open({ view: "OnRampProviders" });
       onrampIntent.current = false;
-      setOnrampState({ status: "open", error: false });
-      return { opened: true };
+      setOnrampState({ status: "open", error: "" });
+      return { opened: true, provider: "meld" };
     })().catch(error => {
       onrampIntent.current = false;
-      setOnrampState({ status: "error", error: true });
+      setOnrampState({ status: "error", error: onrampErrorCode(error) });
       throw error;
     }).finally(() => {
       onrampFlow.current = null;
@@ -190,24 +192,52 @@ function ConfiguredReownProvider({ children }) {
   const openOnramp = useCallback(() => runOnramp(), [runOnramp]);
 
   const startOnramp = useCallback(async () => {
-    setOnrampState({ status: account.isConnected === true ? "linking" : "connecting", error: false });
-    if (account.isConnected === true) return runOnramp();
+    const connectionReady = account.isConnected === true && Boolean(currentAddress) && Boolean(walletProvider);
+    setOnrampState({ status: connectionReady ? "linking" : "connecting", error: "" });
+    if (connectionReady) return runOnramp();
     onrampIntent.current = true;
     connectModalSeen.current = false;
+    if (account.isConnected === true) return { pending: true };
     try {
       await openConnect();
       return { pending: true };
     } catch (error) {
       onrampIntent.current = false;
-      setOnrampState({ status: "error", error: true });
+      setOnrampState({ status: "error", error: onrampErrorCode(error) });
       throw error;
     }
-  }, [account.isConnected, openConnect, runOnramp]);
+  }, [account.isConnected, currentAddress, openConnect, runOnramp, walletProvider]);
+
+  const reconnectWallet = useCallback(async () => {
+    onrampIntent.current = true;
+    connectModalSeen.current = false;
+    setOnrampState({ status: "connecting", error: "" });
+    try {
+      await disconnect({ namespace: "eip155" });
+      await openConnect();
+      return { pending: true };
+    } catch (error) {
+      onrampIntent.current = false;
+      setOnrampState({ status: "error", error: onrampErrorCode(error) });
+      throw error;
+    }
+  }, [disconnect, openConnect]);
 
   useEffect(() => {
     if (!onrampIntent.current || account.isConnected !== true || !currentAddress || !walletProvider) return;
     void runOnramp().catch(() => {});
   }, [account.isConnected, currentAddress, runOnramp, walletProvider]);
+
+  useEffect(() => {
+    if (!onrampIntent.current || onrampState.status !== "connecting" || account.isConnected !== true
+      || (currentAddress && walletProvider)) return;
+    const timeout = window.setTimeout(() => {
+      if (!onrampIntent.current) return;
+      onrampIntent.current = false;
+      setOnrampState({ status: "error", error: "connection" });
+    }, 10_000);
+    return () => window.clearTimeout(timeout);
+  }, [account.isConnected, currentAddress, onrampState.status, walletProvider]);
 
   useEffect(() => {
     if (!onrampIntent.current || onrampState.status !== "connecting") return;
@@ -218,7 +248,7 @@ function ConfiguredReownProvider({ children }) {
     if (connectModalSeen.current && account.isConnected !== true) {
       onrampIntent.current = false;
       connectModalSeen.current = false;
-      setOnrampState({ status: "idle", error: false });
+      setOnrampState({ status: "idle", error: "" });
     }
   }, [account.isConnected, appKitState.open, onrampState.status]);
   const openAccount = useCallback(
@@ -240,10 +270,11 @@ function ConfiguredReownProvider({ children }) {
     openConnect,
     openOnramp,
     startOnramp,
+    reconnectWallet,
     linkWallet,
     openAccount,
   }), [account.isConnected, account.status, binding.address, binding.status, currentAddress, isLinked, isLinking,
-    linkWallet, onrampState.error, onrampState.status, openAccount, openConnect, openOnramp, startOnramp]);
+    linkWallet, onrampState.error, onrampState.status, openAccount, openConnect, openOnramp, reconnectWallet, startOnramp]);
 
   return <ReownContext.Provider value={value}>{children}</ReownContext.Provider>;
 }
@@ -280,4 +311,16 @@ async function walletRequest(path, body) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(typeof data?.error === "string" ? data.error : "wallet_link_unavailable");
   return data;
+}
+
+function onrampErrorCode(error) {
+  const message = typeof error?.message === "string" ? error.message.toLowerCase() : "";
+  if (message.includes("wallet_already_linked") || message.includes("wallet_address_mismatch")
+    || message.includes("wallet_address_in_use")) return "mismatch";
+  if (message.includes("unauthenticated")) return "session";
+  if (message.includes("invalid_origin")) return "origin";
+  if (message.includes("user rejected") || message.includes("action_rejected") || message.includes("denied")) return "rejected";
+  if (message.includes("wallet_not_connected") || message.includes("provider is undefined")) return "connection";
+  if (message.includes("reown_unavailable")) return "configuration";
+  return "provider";
 }

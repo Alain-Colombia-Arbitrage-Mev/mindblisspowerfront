@@ -83,10 +83,21 @@
   border-radius: 20px;
   background: var(--vp-surface-raised);
   color: var(--vp-text);
-  text-decoration: none;
 }
 .vp-sidebar-wallet:hover {
   border-color: var(--vp-accent-border);
+}
+.vp-sidebar-wallet-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--vp-accent);
+}
+.vp-sidebar-wallet-heading > span {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
 }
 .vp-sidebar-wallet-label {
   color: var(--vp-muted);
@@ -94,8 +105,14 @@
   font-weight: 700;
 }
 .vp-sidebar-wallet strong {
+  color: var(--vp-text);
   font-size: 21px;
   line-height: 1.15;
+}
+.vp-sidebar-wallet-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 7px;
 }
 .vp-sidebar-wallet-action {
   display: flex;
@@ -108,6 +125,11 @@
   color: var(--vp-text);
   font-size: 11px;
   font-weight: 700;
+  text-decoration: none;
+}
+.vp-sidebar-wallet-action.primary {
+  background: var(--vp-selected);
+  color: var(--vp-on-selected);
 }
 .vp-sidebar-account {
   display: flex;
@@ -1139,12 +1161,15 @@
   transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
 }
 .mb-recharge-method:hover { transform: translateY(-1px); border-color: var(--vp-accent-border); background: var(--vp-accent-muted); }
+.mb-recharge-method:disabled { cursor: progress; opacity: .72; transform: none; }
 .mb-recharge-method-icon { width: 44px; height: 44px; border-radius: 12px; }
 .mb-recharge-method-copy { display: grid; min-width: 0; gap: 6px; }
 .mb-recharge-method-copy strong { font-size: 20px; font-weight: 650; letter-spacing: -.02em; }
 .mb-recharge-method-copy > span { color: var(--vp-muted); font-size: 15px; line-height: 1.5; }
 .mb-recharge-method-copy b { display: inline-flex; align-items: center; gap: 8px; color: var(--vp-link); font-size: 13px; }
 .mb-recharge-error {
+  display: grid;
+  gap: 9px;
   margin: 0;
   padding: 10px 12px;
   border: 1px solid var(--vp-danger-border);
@@ -1154,6 +1179,19 @@
   font-size: 13px;
   line-height: 1.45;
 }
+.mb-recharge-error button {
+  width: fit-content;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 750;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.mb-recharge-error button:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; border-radius: 3px; }
 .mb-recharge-balance {
   display: grid;
   justify-items: center;

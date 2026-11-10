@@ -133,3 +133,22 @@ del upload. El código instalado confirma que `--config wrangler.jsonc` evita
 esa autodetección; se validó dry-run y se publicó el artefacto ya probado con
 la configuración explícita de producción y `--keep-vars`, sin proporcionar
 credenciales locales de DB ni saltarse la validación de despliegue.
+
+## Recarga de wallet personal: Reown y Meld
+
+La recarga personal usa el on-ramp administrado por Reown AppKit, que abre Meld
+como agregador. El proyecto no guarda claves privadas de Topper o Swapped ni
+crea una segunda sesión de proveedor. Antes de abrir Meld, la dirección debe
+estar conectada y vinculada mediante una firma única a la sesión Better Auth.
+Conectar una wallet por sí solo nunca concede acceso al panel.
+
+La UI informa una comisión Mindbliss del 1%. Este porcentaje se configura como
+`partner fee` en la cuenta comercial Reown/Meld y debe aparecer dentro de la
+cotización final de Meld; Mindbliss no lo suma de nuevo en el navegador. La
+selección de proveedores descendentes, incluyendo excluir Binance y mantener
+sólo los aprobados, también pertenece a la configuración comercial de Meld y no
+a un parámetro controlado por el cliente.
+
+Antes de conciliar dinero real, el backend debe recibir webhooks firmados e
+idempotentes para registrar órdenes, comisiones, reembolsos y contracargos. Una
+redirección o cierre del popup nunca prueba que una compra haya finalizado.

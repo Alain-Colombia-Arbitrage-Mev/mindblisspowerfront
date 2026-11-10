@@ -1,6 +1,6 @@
 "use client";
 
-import { CreditCard, Info, Loader2, PlusCircle, ReceiptText, Wallet } from "lucide-react";
+import { Building2, CreditCard, Info, Loader2, PlusCircle, ReceiptText, ShieldCheck, Wallet } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useState } from "react";
 
@@ -13,6 +13,7 @@ import StripeSalesHistory from "../../packages/StripeSalesHistory";
 import { MetricCard, PageHeader, StatusPill } from "./executive-ui";
 import WalletGettingStarted from "./WalletGettingStarted";
 import { useReownWallet } from "@/components/reown/ReownContext";
+import { MINDBLISS_ONRAMP_FEE_PERCENT, PERSONAL_WALLET_ASSET } from "@/lib/personal-wallet.mjs";
 
 const ReownProvider = dynamic(() => import("@/components/reown/ReownProvider"), {
   ssr: false,
@@ -41,11 +42,14 @@ function FinanceDashboardContent() {
     <section className="executive-page">
       <div className="executive-container">
         <PageHeader eyebrow={t("walletPage.eyebrow")} title={t("walletPage.title")} subtitle={t("walletPage.subtitle")} />
-        <WalletGettingStarted />
+        <section id="personal-wallet" className="mb-personal-wallet-section">
+          <TopUpPanel />
+        </section>
 
         <div id="wallet-finance" className="mb-wallet-finance">
           {state.loading ? <FinanceLoading /> : state.error ? <FinanceError onRetry={reload} /> : <FinanceContent data={state.data || {}} />}
         </div>
+        <AdministrativeWalletPanel />
       </div>
     </section>
   );
@@ -136,9 +140,7 @@ function FinanceContent({ data }) {
 
       <NOWPaymentsBalances data={data.nowpayments} />
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[390px_minmax(0,1fr)]">
-        <TopUpPanel />
-        <div className="executive-panel">
+      <div className="executive-panel mt-6">
           <div className="mb-5 flex flex-col justify-between gap-4 md:flex-row md:items-center">
             <h2 className="executive-section-title mb-0">
               <ReceiptText size={18} style={{ color: "var(--vp-accent)" }} />
@@ -164,7 +166,6 @@ function FinanceContent({ data }) {
               </table>
             )}
           </div>
-        </div>
       </div>
     </>
   );
@@ -174,6 +175,7 @@ function TopUpPanel() {
   const { t } = useI18n();
   const reown = useReownWallet();
   const [providerError, setProviderError] = useState("");
+  const busy = ["connecting", "linking", "opening"].includes(reown.onrampStatus);
   const openProvider = async () => {
     setProviderError("");
     try {
@@ -184,21 +186,49 @@ function TopUpPanel() {
   };
 
   return (
-    <div className="executive-panel">
-      <h2 className="executive-section-title">
-        <PlusCircle size={18} style={{ color: "var(--vp-accent)" }} />
-        {t("walletPage.topUpTitle")}
-      </h2>
-      <p className="mb-5 text-sm leading-6" style={{ color: "var(--vp-muted)" }}>{t("walletPage.topUpCopy")}</p>
-      <div className="rounded-2xl p-4" style={{ background: "var(--vp-bg)", border: "1px solid var(--vp-border)" }}>
-        <p className="m-0 text-sm font-semibold" style={{ color: "var(--vp-text)" }}>{t("walletPage.onlyTopUps")}</p>
-        <p className="m-0 mt-2 text-xs leading-5" style={{ color: "var(--vp-muted)" }}>{t("walletPage.onlyTopUpsCopy")}</p>
+    <div id="wallet-topup" className="executive-panel mb-wallet-topup-card" style={{ scrollMarginTop: 20 }}>
+      <div className="mb-wallet-topup-heading">
+        <span><PlusCircle size={20} aria-hidden="true" /></span>
+        <div>
+          <p>{t("walletPage.personalEyebrow")}</p>
+          <h2>{t("walletPage.personalTitle")}</h2>
+          <small>{t("walletPage.personalCopy")}</small>
+        </div>
       </div>
-      <button className="executive-button primary mt-5 w-full" type="button" onClick={openProvider}>
+      <WalletGettingStarted />
+      <p className="mb-wallet-network-note">
+        <ShieldCheck size={15} aria-hidden="true" />
+        {t("walletPage.managedByMeld", { asset: PERSONAL_WALLET_ASSET })}
+      </p>
+      <div className="mb-wallet-fee-summary">
+        <span>{t("walletPage.mindblissFee", { percent: MINDBLISS_ONRAMP_FEE_PERCENT })}</span>
+        <strong>{MINDBLISS_ONRAMP_FEE_PERCENT}%</strong>
+        <small>{t("walletPage.feeDisclosure")}</small>
+      </div>
+      <button className="executive-button primary mt-3 w-full" type="button" onClick={openProvider} disabled={busy}>
         <PlusCircle size={16} aria-hidden="true" />
-        {t("walletPage.topUpAction")}
+        {busy ? t("recharge.connecting") : t("walletPage.topUpPersonalAction")}
       </button>
+      <div className="mb-wallet-provider-note">
+        <ShieldCheck size={16} aria-hidden="true" />
+        <p>{t("walletPage.simpleProviderNote")}</p>
+      </div>
       {providerError ? <p className="mt-3 text-xs" role="alert" style={{ color: "var(--vp-danger)" }}>{providerError}</p> : null}
     </div>
+  );
+}
+
+function AdministrativeWalletPanel() {
+  const { t } = useI18n();
+  return (
+    <section className="mb-administrative-wallet" aria-labelledby="administrative-wallet-title">
+      <span className="mb-administrative-wallet-icon"><Building2 size={20} aria-hidden="true" /></span>
+      <div>
+        <p>{t("walletPage.administrativeEyebrow")}</p>
+        <h2 id="administrative-wallet-title">{t("walletPage.administrativeTitle")}</h2>
+        <small>{t("walletPage.administrativeCopy")}</small>
+      </div>
+      <span className="mb-administrative-wallet-status">{t("walletPage.comingSoon")}</span>
+    </section>
   );
 }
