@@ -48,5 +48,7 @@ export function administrativeFundingError(error, t) {
   if (code === "wallet_funding_method_unavailable") return t("funding.methodReloadRequired");
   if (code === "wallet_funding_amount_unavailable") return t("funding.amountUnavailable");
   if (code === "wallet_funding_unconfigured") return t("funding.sandboxConfiguration");
+  if (code === "wallet_funding_provider_authentication_unavailable") return t("funding.sandboxProviderAuthentication");
+  if (code === "wallet_funding_valuation_unavailable") return t("funding.localMinimumPending");
   return t("funding.sandboxUnavailable");
 }

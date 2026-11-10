@@ -1,4 +1,4 @@
-import { administrativeSandboxOptions, personalProductionOptions, fundingAcknowledgement, fundingHistory, fundingInput, fundingStatus, FUNDING_UUID } from './wallet-funding-contract.mjs';
+import { administrativeSandboxOptions, personalProductionOptions, fundingAcknowledgement, fundingHistory, fundingInput, fundingStatus, fundingCurrencyCode, FUNDING_UUID } from './wallet-funding-contract.mjs';
 import { browserRequestDeadline } from './browser-request-deadline.mjs';
 
 export function fundingRequestId() { return crypto.randomUUID(); }
@@ -15,25 +15,25 @@ export async function createAdministrativeSandboxSession(input, options = {}) {
   return createFunding(input, 'administrative', '/api/member/wallet-funding/administrative/session', options);
 }
 
-/** @param {string} country @param {string} serviceProvider @param {{signal?: AbortSignal}} [options] */
-export async function readAdministrativeSandboxOptions(country, serviceProvider, { signal } = {}) {
-  if (!administrativeSandboxOptions({ walletKind: 'administrative', environment: 'sandbox', provider: 'meld', country, serviceProvider, paymentMethods: [], routes: [] })) {
+/** @param {string} country @param {string} serviceProvider @param {{signal?: AbortSignal, sourceCurrencyCode?: string}} [options] */
+export async function readAdministrativeSandboxOptions(country, serviceProvider, { signal, sourceCurrencyCode = 'USD' } = {}) {
+  if (!administrativeSandboxOptions({ walletKind: 'administrative', environment: 'sandbox', provider: 'meld', country, sourceCurrencyCode, serviceProvider, paymentMethods: [], routes: [] })) {
     throw new Error('invalid_request');
   }
-  const data = administrativeSandboxOptions(await request(`/api/member/wallet-funding/administrative/options?country=${country}&serviceProvider=${serviceProvider}`,
+  const data = administrativeSandboxOptions(await request(`/api/member/wallet-funding/administrative/options?country=${country}&sourceCurrencyCode=${sourceCurrencyCode}&serviceProvider=${serviceProvider}`,
     { method: 'GET', signal }));
-  if (!data || data.country !== country || data.serviceProvider !== serviceProvider) throw new Error('funding_unavailable');
+  if (!data || data.country !== country || data.sourceCurrencyCode !== sourceCurrencyCode || data.serviceProvider !== serviceProvider) throw new Error('funding_unavailable');
   return data;
 }
 
 /** Production discovery uses Reown's merchant configuration, never administrative MELD credentials. */
-/** @param {string} country @param {{signal?: AbortSignal}} [options] */
-export async function readPersonalFundingOptions(country, { signal } = {}) {
-  if (!personalProductionOptions({ walletKind: 'personal', environment: 'production', provider: 'reown', country, paymentMethods: [], routes: [] })) {
+/** @param {string} country @param {{signal?: AbortSignal, sourceCurrencyCode?: string}} [options] */
+export async function readPersonalFundingOptions(country, { signal, sourceCurrencyCode = 'USD' } = {}) {
+  if (!personalProductionOptions({ walletKind: 'personal', environment: 'production', provider: 'reown', country, sourceCurrencyCode, paymentMethods: [], routes: [] })) {
     throw new Error('invalid_request');
   }
-  const data = personalProductionOptions(await request(`/api/member/wallet-funding/personal/options?country=${country}`, { method: 'GET', signal }));
-  if (!data || data.country !== country) throw new Error('funding_unavailable');
+  const data = personalProductionOptions(await request(`/api/member/wallet-funding/personal/options?country=${country}&sourceCurrencyCode=${sourceCurrencyCode}`, { method: 'GET', signal }));
+  if (!data || data.country !== country || data.sourceCurrencyCode !== sourceCurrencyCode) throw new Error('funding_unavailable');
   return data;
 }
 
@@ -63,6 +63,9 @@ export async function readWalletFundingStatus(kind, checkoutReference, { signal 
 async function createFunding(input, kind, path, { signal } = {}) {
   const body = fundingInput(input, kind);
   if (!body) throw new Error('invalid_request');
+  // Local routes can be discovered, but no unverified USD valuation may create
+  // a checkout or be stored as a dollar-denominated funding request.
+  if (fundingCurrencyCode(body.sourceCurrencyCode) !== 'USD') throw new Error('wallet_funding_valuation_unavailable');
   const data = fundingAcknowledgement(await request(path, { method: 'POST', signal, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }), kind);
   if (!data || data.requestedAmount !== body.amount || data.checkoutReference !== body.requestId
     || (kind === 'personal' && (!('paymentMethodType' in data) || data.paymentMethodType !== body.paymentMethodType))) throw new Error('funding_unavailable');

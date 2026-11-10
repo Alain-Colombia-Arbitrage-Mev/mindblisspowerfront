@@ -3,7 +3,7 @@ import { betterAuthConfig, betterAuthCookies, trustedAuthClientIp } from './bett
 import { coreFetch, runtimeEnvironment } from './cloudflare-runtime.mjs';
 import { memberMutationError } from './member-mutation-policy.mjs';
 import { boundedServiceRequest } from './private-service-request.mjs';
-import { administrativeSandboxOptions, personalProductionOptions, fundingAcknowledgement, fundingHistory, fundingInput, fundingStatus, FUNDING_UUID } from './wallet-funding-contract.mjs';
+import { administrativeSandboxOptions, personalProductionOptions, fundingAcknowledgement, fundingHistory, fundingInput, fundingStatus, fundingCurrencyCode, FUNDING_UUID } from './wallet-funding-contract.mjs';
 import { browserRequestDeadline } from './browser-request-deadline.mjs';
 
 const reply = (body, status = 200) => Response.json(body, { status, headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' } });
@@ -62,19 +62,22 @@ export async function handleWalletFunding(request, action, {
   } else if (action === 'personal-options') {
     const url = new URL(request.url);
     const country = url.searchParams.get('country');
-    optionsContext = personalProductionOptions({ walletKind: 'personal', environment: 'production', provider: 'reown', country, paymentMethods: [], routes: [] });
-    if (!optionsContext || [...url.searchParams.keys()].some(key => key !== 'country')
-      || url.searchParams.getAll('country').length !== 1) return reply({ error: 'invalid_request' }, 400);
-    path = `/api/member/wallet-funding/personal/options?country=${country}`;
+    const sourceCurrencyCode = url.searchParams.has('sourceCurrencyCode') ? url.searchParams.get('sourceCurrencyCode') : 'USD';
+    optionsContext = personalProductionOptions({ walletKind: 'personal', environment: 'production', provider: 'reown', country, sourceCurrencyCode, paymentMethods: [], routes: [] });
+    if (!optionsContext || [...url.searchParams.keys()].some(key => !['country', 'sourceCurrencyCode'].includes(key))
+      || url.searchParams.getAll('country').length !== 1 || url.searchParams.getAll('sourceCurrencyCode').length > 1) return reply({ error: 'invalid_request' }, 400);
+    path = `/api/member/wallet-funding/personal/options?country=${country}&sourceCurrencyCode=${sourceCurrencyCode}`;
   } else if (action === 'options') {
     const url = new URL(request.url);
     const country = url.searchParams.get('country');
+    const sourceCurrencyCode = url.searchParams.has('sourceCurrencyCode') ? url.searchParams.get('sourceCurrencyCode') : 'USD';
     const serviceProvider = url.searchParams.get('serviceProvider');
     optionsContext = administrativeSandboxOptions({ walletKind: 'administrative', environment: 'sandbox', provider: 'meld',
-      country, serviceProvider, paymentMethods: [], routes: [] });
-    if (!optionsContext || [...url.searchParams.keys()].some(key => !['country', 'serviceProvider'].includes(key))
-      || url.searchParams.getAll('country').length !== 1 || url.searchParams.getAll('serviceProvider').length !== 1) return reply({ error: 'invalid_request' }, 400);
-    path = `/api/member/wallet-funding/administrative/options?country=${country}&serviceProvider=${serviceProvider}`;
+      country, sourceCurrencyCode, serviceProvider, paymentMethods: [], routes: [] });
+    if (!optionsContext || [...url.searchParams.keys()].some(key => !['country', 'sourceCurrencyCode', 'serviceProvider'].includes(key))
+      || url.searchParams.getAll('country').length !== 1 || url.searchParams.getAll('sourceCurrencyCode').length > 1
+      || url.searchParams.getAll('serviceProvider').length !== 1) return reply({ error: 'invalid_request' }, 400);
+    path = `/api/member/wallet-funding/administrative/options?country=${country}&sourceCurrencyCode=${sourceCurrencyCode}&serviceProvider=${serviceProvider}`;
   } else if (action === 'history') {
     const url = new URL(request.url);
     kind = url.searchParams.get('walletKind');
@@ -90,6 +93,7 @@ export async function handleWalletFunding(request, action, {
       body = fundingInput(await readInput(request), kind);
     } catch (error) { return reply({ error: error?.message === 'request_too_large' ? 'request_too_large' : 'invalid_request' }, error?.message === 'request_too_large' ? 413 : 400); }
     if (!body) return reply({ error: 'invalid_request' }, 400);
+    if (fundingCurrencyCode(body.sourceCurrencyCode) !== 'USD') return reply({ error: 'wallet_funding_valuation_unavailable' }, 503);
     path = kind === 'personal' ? '/api/member/wallet-funding/personal/intent' : '/api/member/wallet-funding/administrative/session';
   }
   try {
@@ -114,6 +118,7 @@ export async function handleWalletFunding(request, action, {
       const safeErrors = new Set(['invalid_request', 'unauthenticated', 'invalid_origin', 'wallet_not_linked', 'wallet_not_assigned',
         'wallet_funding_forbidden', 'wallet_funding_rate_limited', 'wallet_funding_request_already_used',
         'wallet_funding_unconfigured', 'wallet_funding_provider_unavailable', 'wallet_funding_unavailable',
+        'wallet_funding_provider_authentication_unavailable', 'wallet_funding_valuation_unavailable',
         'wallet_funding_method_unavailable', 'wallet_funding_amount_out_of_range', 'wallet_funding_amount_unavailable']);
       diagnostic(action, 'upstream_response', result.status, safeErrors.has(result.data?.error) ? result.data.error : 'unclassified');
       return reply({ error: safeErrors.has(result.data?.error) ? result.data.error : 'funding_unavailable',
@@ -130,6 +135,7 @@ export async function handleWalletFunding(request, action, {
       || safe.checkoutReference !== body.requestId || (kind === 'personal' && (!('paymentMethodType' in safe)
         || safe.paymentMethodType !== body.paymentMethodType)))) return reply({ error: 'funding_unavailable' }, 502);
     if (optionsContext && (!('country' in safe) || safe.country !== optionsContext.country
+      || !('sourceCurrencyCode' in safe) || safe.sourceCurrencyCode !== optionsContext.sourceCurrencyCode
       || (action === 'options' && (!('serviceProvider' in safe) || safe.serviceProvider !== optionsContext.serviceProvider)))) return reply({ error: 'funding_unavailable' }, 502);
     return reply(safe);
   } catch (error) {

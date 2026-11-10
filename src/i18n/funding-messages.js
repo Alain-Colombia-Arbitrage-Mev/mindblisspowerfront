@@ -1,5 +1,9 @@
 export const fundingMessages = {
   es: { funding: {
+    currencyLabel: "Moneda de pago", speiPayment: "SPEI · transferencia bancaria",
+    localAmountRequired: "Introduce un monto válido en la moneda seleccionada.",
+    localMinimumPending: "Esta moneda requiere verificar con el proveedor el mínimo equivalente a 50 USD antes de continuar. Puedes elegir USD mientras se habilita esa validación.",
+    sandboxProviderAuthentication: "MELD no pudo autenticar la conexión de prueba con este proveedor. Requiere una revisión de su integración; cambiar el país o el monto no resuelve este error. Usa otro proveedor disponible.",
     methodsPartiallyLoaded: "No pudimos consultar todas las opciones. Puedes continuar con las que aparecen o reintentar.",
     changeProvider: "Cambiar", providerLabel: "Proveedor", methodCount: "{count} opciones de pago", methodRange: "Límites: {minimum}–{maximum}.", providerFinalReview: "El proveedor confirma disponibilidad y comisiones antes de pagar.", sandboxNoticeShort: "Esta recarga es una prueba. No se usan fondos reales.",
     statusRequestUnavailable: "Opción no disponible", statusRequestUnavailableCopy: "No se pudo preparar la compra para esta combinación. No se inició una compra desde esta solicitud. Revisa el país, el monto y el método antes de reintentar.",
@@ -46,6 +50,10 @@ export const fundingMessages = {
     sandboxUnavailable: "No pudimos abrir una sesión de prueba para este país, monto y proveedor. Prueba otra combinación.",
   } },
   en: { funding: {
+    currencyLabel: "Payment currency", speiPayment: "SPEI · bank transfer",
+    localAmountRequired: "Enter a valid amount in the selected currency.",
+    localMinimumPending: "This currency requires provider verification of the 50 USD equivalent minimum before continuing. You can choose USD while that verification becomes available.",
+    sandboxProviderAuthentication: "MELD could not authenticate the test connection with this provider. Its integration needs review; changing the country or amount will not resolve this error. Use another available provider.",
     methodsPartiallyLoaded: "We could not check every option. You can continue with those shown or retry.",
     changeProvider: "Change", providerLabel: "Provider", methodCount: "{count} payment options", methodRange: "Limits: {minimum}–{maximum}.", providerFinalReview: "The provider confirms availability and fees before you pay.", sandboxNoticeShort: "This is a test top-up. No real funds are used.",
     statusRequestUnavailable: "Option unavailable", statusRequestUnavailableCopy: "We could not prepare a purchase for this combination. No purchase started from this request. Review the country, amount and method before retrying.",
@@ -92,6 +100,10 @@ export const fundingMessages = {
     sandboxUnavailable: "We could not open a test session for this country, amount and provider. Try another combination.",
   } },
   ar: { funding: {
+    currencyLabel: "عملة الدفع", speiPayment: "SPEI · تحويل بنكي",
+    localAmountRequired: "أدخل مبلغًا صالحًا بالعملة المحددة.",
+    localMinimumPending: "تتطلب هذه العملة التحقق مع المزوّد من الحد الأدنى المكافئ لـ50 دولارًا قبل المتابعة. يمكنك اختيار الدولار حتى يتوفر هذا التحقق.",
+    sandboxProviderAuthentication: "تعذر على MELD مصادقة اتصال الاختبار بهذا المزوّد. يجب مراجعة التكامل؛ تغيير البلد أو المبلغ لن يحل الخطأ. استخدم مزوّدًا آخر متاحًا.",
     methodsPartiallyLoaded: "تعذر التحقق من جميع الخيارات. يمكنك المتابعة بالخيارات المعروضة أو إعادة المحاولة.",
     changeProvider: "تغيير", providerLabel: "المزوّد", methodCount: "{count} خيارات للدفع", methodRange: "الحدود: {minimum}–{maximum}.", providerFinalReview: "يؤكد المزوّد التوافر والرسوم قبل الدفع.", sandboxNoticeShort: "هذا الشحن للاختبار. لا تُستخدم أموال حقيقية.",
     statusRequestUnavailable: "الخيار غير متاح", statusRequestUnavailableCopy: "تعذر إعداد شراء لهذه الخيارات. لم تبدأ عملية شراء من هذا الطلب. راجع البلد والمبلغ وطريقة الدفع قبل إعادة المحاولة.",
@@ -138,6 +150,10 @@ export const fundingMessages = {
     sandboxUnavailable: "تعذر فتح جلسة اختبار لهذا البلد والمبلغ والمزوّد. جرّب مجموعة أخرى.",
   } },
   zh: { funding: {
+    currencyLabel: "付款币种", speiPayment: "SPEI · 银行转账",
+    localAmountRequired: "请输入所选币种的有效金额。",
+    localMinimumPending: "继续前需通过服务商验证该币种金额是否达到等值50美元的最低限额。在支持此验证前，您可以选择美元。",
+    sandboxProviderAuthentication: "MELD无法验证与该服务商的测试连接。需要检查其集成；更改国家或金额无法解决此错误。请选择其他可用服务商。",
     methodsPartiallyLoaded: "无法查询所有选项。你可以使用已显示的选项继续，或重试查询。",
     changeProvider: "更改", providerLabel: "服务商", methodCount: "{count} 种支付选项", methodRange: "限额：{minimum}–{maximum}。", providerFinalReview: "支付前，服务商会确认可用性和费用。", sandboxNoticeShort: "此充值为测试，不使用真实资金。",
     statusRequestUnavailable: "选项不可用", statusRequestUnavailableCopy: "无法为当前组合准备购买。此请求未发起购买，请检查国家/地区、金额和支付方式后重试。",

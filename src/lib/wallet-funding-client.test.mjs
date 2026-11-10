@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readAdministrativeSandboxOptions, readPersonalFundingOptions, createPersonalFundingIntent } from './wallet-funding-client.mjs';
 
-const options = { walletKind: 'administrative', environment: 'sandbox', provider: 'meld', country: 'US',
+const options = { walletKind: 'administrative', environment: 'sandbox', provider: 'meld', country: 'US', sourceCurrencyCode: 'USD',
   serviceProvider: 'TRANSAK', paymentMethods: ['CREDIT_DEBIT_CARD'], routes: [{ serviceProvider: 'TRANSAK',
-    paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', minimumUsd: 20, maximumUsd: 15000 }] }] };
+    paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount: 20, maximumAmount: 15000, minimumUsd: 20, maximumUsd: 15000 }] }] };
 
 test('administrative methods never borrow personal provider options or invent an empty fallback', async () => {
   const original = globalThis.fetch;
@@ -14,7 +14,7 @@ test('administrative methods never borrow personal provider options or invent an
     const result = await readAdministrativeSandboxOptions('US', 'TRANSAK');
     assert.deepEqual(result.paymentMethods, []);
     assert.equal(calls.length, 1);
-    assert.equal(calls[0].path, '/api/member/wallet-funding/administrative/options?country=US&serviceProvider=TRANSAK');
+    assert.equal(calls[0].path, '/api/member/wallet-funding/administrative/options?country=US&sourceCurrencyCode=USD&serviceProvider=TRANSAK');
     assert.equal(calls[0].init.credentials, 'same-origin');
     assert.equal(calls[0].init.cache, 'no-store');
     await assert.rejects(readAdministrativeSandboxOptions('US', 'TOPPER'), { message: 'invalid_request' });
@@ -24,14 +24,14 @@ test('administrative methods never borrow personal provider options or invent an
 
 test('personal country methods reject sandbox payloads and do not fall back to administrative discovery', async () => {
   const original = globalThis.fetch;
-  const personal = { walletKind: 'personal', environment: 'production', provider: 'reown', country: 'CO',
+  const personal = { walletKind: 'personal', environment: 'production', provider: 'reown', country: 'CO', sourceCurrencyCode: 'USD',
     paymentMethods: ['CREDIT_DEBIT_CARD'], routes: [{ serviceProvider: 'TOPPER',
-      paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', minimumUsd: 10, maximumUsd: 25000 }] }] };
+      paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount: 10, maximumAmount: 25000, minimumUsd: 10, maximumUsd: 25000 }] }] };
   const paths = [];
   try {
     globalThis.fetch = async path => { paths.push(path); return Response.json(personal); };
     assert.deepEqual(await readPersonalFundingOptions('CO'), personal);
-    assert.deepEqual(paths, ['/api/member/wallet-funding/personal/options?country=CO']);
+    assert.deepEqual(paths, ['/api/member/wallet-funding/personal/options?country=CO&sourceCurrencyCode=USD']);
     globalThis.fetch = async () => Response.json(options);
     await assert.rejects(readPersonalFundingOptions('CO'), { message: 'funding_unavailable' });
     globalThis.fetch = async () => Response.json({ ...personal, routes: [{ ...personal.routes[0], serviceProvider: 'TRANSAK' }] });

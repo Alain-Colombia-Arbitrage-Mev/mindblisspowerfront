@@ -23,9 +23,10 @@
 .formPanel :global(.mb-onramp-disclosure), .formPanel :global(.mb-onramp-amount-fieldset > small) { color: var(--vp-muted); font-size: 12px; line-height: 1.6; text-align: start; }
 .formPanel :global(.mb-onramp-amount-fieldset) { margin-bottom: 20px; }
 .formPanel :global(.mb-onramp-country-picker) { margin-bottom: 18px; }
-.formFields { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "country" "amount" "method"; gap: 20px; }
-.formFields .countryField, .formFields .amountField { min-width: 0; margin: 0; }
+.formFields { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "country" "currency" "amount" "method"; gap: 20px; }
+.formFields .countryField, .formFields .currencyField, .formFields .amountField { min-width: 0; margin: 0; }
 .countryField { grid-area: country; align-content: start; }
+.currencyField { grid-area: currency; align-content: start; }
 .amountField { grid-area: amount; }
 .methodField { grid-area: method; min-width: 0; margin: 0; padding: 0; border: 0; }
 .methodField legend { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; width: 100%; margin-bottom: 10px; }
@@ -94,4 +95,4 @@
 @media (max-width: 1150px) { .flowLayout { grid-template-columns: minmax(0, 1fr); } .setupRequired .details { grid-row: 1; } }
 @media (max-width: 640px) { .destinations { grid-template-columns: minmax(0, 1fr); } .screen { gap: 18px; } .destination > a { width: 100%; } .sectionHeading { align-items: start; } .pageHeading { flex-direction: column; } .pageHeading h1 { font-size: 1.75rem; } .hint, .sectionHeading p, .destination p, .pageHeading span { font-size: 14px; } }
 @media (max-width: 430px) { .statusDetails > div { grid-template-columns: minmax(0, 1fr); gap: 5px; } .destinationReview input { font-size: 16px; } }
-@media (min-width: 700px) { .formFields { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: "country amount" "method method"; gap: 18px 20px; } .methodChoices { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 700px) { .formFields { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: "country currency" "amount amount" "method method"; gap: 18px 20px; } .methodChoices { grid-template-columns: repeat(3, minmax(0, 1fr)); } }

@@ -1,6 +1,7 @@
 export const FUNDING_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ADDRESS = /^0x[0-9a-f]{40}$/i;
 const COUNTRY = /^[A-Z]{2}$/;
+const CURRENCY = /^[A-Z]{3}$/;
 const METHOD = /^[A-Z0-9_]{2,40}$/;
 const PROVIDERS = new Set(['TRANSAK', 'BANXA']);
 const PERSONAL_PROVIDERS = new Set(['TOPPER', 'SWAPPED']);
@@ -13,12 +14,24 @@ export function validFundingAmount(value) {
     && Math.abs(value * 100 - Math.round(value * 100)) < 0.000001;
 }
 
+/** Currency syntax is not eligibility: the selected provider must return a route. */
+export function fundingCurrencyCode(value = 'USD') {
+  return typeof value === 'string' && CURRENCY.test(value) ? value : null;
+}
+
+function validFiatAmount(value) {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= 1_000_000_000
+    && Math.abs(value * 100 - Math.round(value * 100)) < 0.000001;
+}
+
 export function fundingInput(value, kind) {
   if (!value || typeof value !== 'object' || Array.isArray(value) || !['personal', 'administrative'].includes(kind)) return null;
-  const keys = ['requestId', 'walletAddress', 'country', 'amount', 'paymentMethodType', ...(kind === 'administrative' ? ['serviceProvider'] : [])];
+  const currency = fundingCurrencyCode(value.sourceCurrencyCode);
+  const keys = ['requestId', 'walletAddress', 'country', 'amount', 'paymentMethodType', 'sourceCurrencyCode', ...(kind === 'administrative' ? ['serviceProvider'] : [])];
   if (Object.keys(value).some(key => !keys.includes(key)) || !FUNDING_UUID.test(value.requestId || '')
-    || !ADDRESS.test(value.walletAddress || '') || !COUNTRY.test(value.country || '') || !validFundingAmount(value.amount)
-    || !METHOD.test(value.paymentMethodType || '')) return null;
+    || !ADDRESS.test(value.walletAddress || '') || !COUNTRY.test(value.country || '') || !currency
+    || !(currency === 'USD' ? validFundingAmount(value.amount) : validFiatAmount(value.amount))
+    || typeof value.paymentMethodType !== 'string' || !METHOD.test(value.paymentMethodType)) return null;
   if (kind === 'administrative' && !PROVIDERS.has(value.serviceProvider)) return null;
   return Object.fromEntries(keys.filter(key => value[key] !== undefined).map(key => [key, value[key]]));
 }
@@ -40,6 +53,7 @@ export function fundingAcknowledgement(value, kind) {
   if (!value || typeof value !== 'object' || Array.isArray(value) || value.walletKind !== kind
     || value.environment !== environment || value.provider !== provider || value.status !== status
     || !FUNDING_UUID.test(value.checkoutReference || '') || !validFundingAmount(value.requestedAmount)
+    || fundingCurrencyCode(value.sourceCurrencyCode) !== 'USD'
     || typeof value.createdAt !== 'string' || value.createdAt.length > 64 || !Number.isFinite(Date.parse(value.createdAt))) return null;
   const safe = { checkoutReference: value.checkoutReference, walletKind: kind, environment, provider, status,
     requestedAmount: value.requestedAmount, createdAt: value.createdAt };
@@ -114,8 +128,9 @@ function fundingOptions(value, kind) {
   const environment = administrative ? 'sandbox' : 'production';
   const provider = administrative ? 'meld' : 'reown';
   const providers = administrative ? PROVIDERS : PERSONAL_PROVIDERS;
+  const sourceCurrencyCode = fundingCurrencyCode(value?.sourceCurrencyCode);
   if (!value || typeof value !== 'object' || Array.isArray(value) || value.walletKind !== kind
-    || value.environment !== environment || value.provider !== provider || !COUNTRY.test(value.country || '')
+    || value.environment !== environment || value.provider !== provider || !COUNTRY.test(value.country || '') || !sourceCurrencyCode
     || !Array.isArray(value.paymentMethods) || value.paymentMethods.length > 40
     || value.paymentMethods.some(method => typeof method !== 'string' || !METHOD.test(method))
     || new Set(value.paymentMethods).size !== value.paymentMethods.length
@@ -124,9 +139,22 @@ function fundingOptions(value, kind) {
     if (!route || !providers.has(route.serviceProvider) || !Array.isArray(route.paymentMethods)
       || route.paymentMethods.length < 1 || route.paymentMethods.length > 40) return null;
     const paymentMethods = route.paymentMethods.map(method => {
-      if (!method || !METHOD.test(method.method || '') || !Number.isFinite(method.minimumUsd) || method.minimumUsd < 0
-        || !Number.isFinite(method.maximumUsd) || method.maximumUsd < method.minimumUsd) return null;
-      return { method: method.method, minimumUsd: method.minimumUsd, maximumUsd: method.maximumUsd };
+      if (!method || typeof method !== 'object' || Array.isArray(method)
+        || typeof method.method !== 'string' || !METHOD.test(method.method)) return null;
+      const canonical = method.currencyCode !== undefined || method.minimumAmount !== undefined || method.maximumAmount !== undefined;
+      const legacy = method.minimumUsd !== undefined || method.maximumUsd !== undefined;
+      // Legacy USD limits are accepted only for USD. A local-fiat limit must
+      // identify its currency and cannot borrow values labelled as dollars.
+      if (!canonical && sourceCurrencyCode !== 'USD') return null;
+      const currencyCode = canonical ? method.currencyCode : 'USD';
+      const minimumAmount = canonical ? method.minimumAmount : method.minimumUsd;
+      const maximumAmount = canonical ? method.maximumAmount : method.maximumUsd;
+      if (currencyCode !== sourceCurrencyCode || !Number.isFinite(minimumAmount) || minimumAmount < 0
+        || !Number.isFinite(maximumAmount) || maximumAmount < minimumAmount || maximumAmount > 1_000_000_000
+        || (legacy && (currencyCode !== 'USD' || (canonical
+          && (method.minimumUsd !== minimumAmount || method.maximumUsd !== maximumAmount))))) return null;
+      return { method: method.method, currencyCode, minimumAmount, maximumAmount,
+        ...(currencyCode === 'USD' ? { minimumUsd: minimumAmount, maximumUsd: maximumAmount } : {}) };
     });
     if (paymentMethods.some(method => !method) || new Set(paymentMethods.map(method => method.method)).size !== paymentMethods.length) return null;
     return { serviceProvider: route.serviceProvider, paymentMethods };
@@ -134,5 +162,5 @@ function fundingOptions(value, kind) {
   if (routes.some(route => !route) || new Set(routes.map(route => route.serviceProvider)).size !== routes.length) return null;
   const methods = new Set(routes.flatMap(route => route.paymentMethods.map(method => method.method)));
   if (methods.size !== value.paymentMethods.length || value.paymentMethods.some(method => !methods.has(method))) return null;
-  return { walletKind: kind, environment, provider, country: value.country, paymentMethods: [...value.paymentMethods], routes };
+  return { walletKind: kind, environment, provider, country: value.country, sourceCurrencyCode, paymentMethods: [...value.paymentMethods], routes };
 }

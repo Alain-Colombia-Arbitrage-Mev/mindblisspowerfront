@@ -320,6 +320,8 @@ test('every administrative failure remains in its own recovery flow, including u
     ['wallet_funding_method_unavailable', 'funding.methodReloadRequired'],
     ['wallet_funding_amount_unavailable', 'funding.amountUnavailable'],
     ['wallet_funding_unconfigured', 'funding.sandboxConfiguration'],
+    ['wallet_funding_provider_authentication_unavailable', 'funding.sandboxProviderAuthentication'],
+    ['wallet_funding_valuation_unavailable', 'funding.localMinimumPending'],
     ['wallet_funding_provider_unavailable', 'funding.sandboxUnavailable'],
     ['funding_unavailable', 'funding.sandboxUnavailable'],
     ['unrecognized-provider-failure', 'funding.sandboxUnavailable'],
@@ -726,7 +728,7 @@ test('all returned production methods remain visible and selectable, including P
   assert.match(renderToStaticMarkup(view), /7 opciones de pago/);
   assert.doesNotMatch(renderToStaticMarkup(view), /PSE/);
   const group = React.Children.toArray(tree.props.children.props.children)[0];
-  assert.deepEqual(React.Children.toArray(group.props.children).map(node => node.type.name), ['FundingCountryField', 'FundingAmountField', 'FundingMethodField']);
+  assert.deepEqual(React.Children.toArray(group.props.children).map(node => node.type.name), ['FundingCountryField', 'FundingCurrencyField', 'FundingAmountField', 'FundingMethodField']);
   find(tree, 'FundingCountryField').props.onChange('US');
   harness.render(props); await flush(); harness.render(props); tree = harness.render(props);
   field = find(tree, 'FundingMethodField'); view = field.type(field.props);
@@ -772,4 +774,68 @@ test('history-driven status focus uses native focus and scrolling, respects redu
   assert.deepEqual(scrolled[1], { block: 'start', behavior: 'smooth' });
   assert.equal(reads.every(read => read.kind === 'personal' && read.reference === statusReference), true);
   assert.equal(reads[0].signal.aborted, true);
+});
+
+test('personal MXN discovery cancels USD responses, shows only matching SPEI limits and preserves the unverified USD minimum gate', async t => {
+  const calls = [], submitted = [];
+  const harness = formHarness('PersonalFundingForm', {
+    readPersonalFundingOptions(country, { signal, sourceCurrencyCode }) { return new Promise(resolve => calls.push({ country, signal, sourceCurrencyCode, resolve })); },
+    readAdministrativeSandboxOptions() { assert.fail('personal funding must not read administrative routes'); },
+  });
+  t.after(() => harness.unmount());
+  const props = { onContinue: async input => submitted.push(input) };
+  harness.render(props); let tree = harness.render(props);
+  find(tree, 'FundingCountryField').props.onChange('MX');
+  harness.render(props); tree = harness.render(props);
+  find(tree, 'FundingCurrencyField').props.onChange('MXN');
+  harness.render(props); tree = harness.render(props);
+  const latest = calls.at(-1);
+  assert.equal(latest.sourceCurrencyCode, 'MXN');
+  assert.equal(find(tree, 'FundingAmountField').props.amount, '', 'changing currency must not relabel USD 50 as MXN 50');
+  for (const old of calls.slice(0, -1)) {
+    assert.equal(old.signal.aborted, true);
+    old.resolve({ country: old.country, sourceCurrencyCode: old.sourceCurrencyCode, routes: [{ paymentMethods: [{ method: 'PAYPAL', minimumUsd: 50, maximumUsd: 5000 }] }] });
+  }
+  latest.resolve({ country: 'MX', sourceCurrencyCode: 'MXN', routes: [{ paymentMethods: [
+    { method: 'SPEI', currencyCode: 'MXN', minimumAmount: 150, maximumAmount: 100000 },
+    { method: 'PAYPAL', currencyCode: 'USD', minimumAmount: 50, maximumAmount: 5000 },
+  ] }] });
+  await flush(); harness.render(props); tree = harness.render(props);
+  const method = find(tree, 'FundingMethodField');
+  assert.deepEqual(method.props.methods, ['SPEI']);
+  assert.deepEqual(method.props.limits, { minimumAmount: 150, maximumAmount: 100000 });
+  assert.match(renderToStaticMarkup(method.type(method.props)), /SPEI.*transferencia bancaria/);
+  find(tree, 'FundingAmountField').props.onChange('1200');
+  harness.render(props); tree = harness.render(props);
+  assert.equal(find(tree, 'FundingSubmit').props.disabled, true);
+  tree.props.onSubmit({ preventDefault() {} }); await flush();
+  assert.equal(submitted.length, 0, 'a local route cannot fabricate a verified USD reference');
+  find(tree, 'FundingCurrencyField').props.onChange('USD');
+  harness.render(props); tree = harness.render(props);
+  assert.equal(find(tree, 'FundingAmountField').props.amount, '50');
+  assert.deepEqual(find(tree, 'FundingMethodField').props.methods, [], 'old MXN methods disappear before USD lookup completes');
+});
+
+test('administrative MXN methods stay within sandbox provider and currency context', async t => {
+  const calls = [], submitted = [];
+  const harness = formHarness('AdministrativeSandboxFundingForm', {
+    readPersonalFundingOptions() { assert.fail('administrative discovery cannot use Reown production'); },
+    readAdministrativeSandboxOptions(country, provider, { signal, sourceCurrencyCode }) { return new Promise(resolve => calls.push({ country, provider, signal, sourceCurrencyCode, resolve })); },
+  });
+  t.after(() => harness.unmount());
+  const props = { onContinue: async input => submitted.push(input) };
+  harness.render(props); let tree = harness.render(props);
+  find(tree, 'FundingCountryField').props.onChange('MX'); harness.render(props); tree = harness.render(props);
+  find(tree, 'FundingCurrencyField').props.onChange('MXN'); harness.render(props);
+  const local = calls.filter(call => call.sourceCurrencyCode === 'MXN');
+  assert.deepEqual(local.map(call => call.provider), ['TRANSAK', 'BANXA']);
+  for (const call of local) call.resolve({ country: 'MX', sourceCurrencyCode: 'MXN', serviceProvider: call.provider,
+    routes: call.provider === 'TRANSAK' ? [{ paymentMethods: [{ method: 'SPEI', currencyCode: 'MXN', minimumAmount: 200, maximumAmount: 20000 }] }] : [] });
+  await flush(); harness.render(props); tree = harness.render(props);
+  assert.deepEqual(find(tree, 'FundingMethodField').props.methods, ['SPEI']);
+  assert.equal(find(tree, 'FundingMethodField').props.sourceCurrencyCode, 'MXN');
+  find(tree, 'FundingAmountField').props.onChange('1200'); harness.render(props); tree = harness.render(props);
+  tree.props.onSubmit({ preventDefault() {} }); await flush();
+  assert.equal(submitted.length, 0);
+  assert.equal(calls.filter(call => call.sourceCurrencyCode !== 'MXN').every(call => call.signal.aborted), true);
 });

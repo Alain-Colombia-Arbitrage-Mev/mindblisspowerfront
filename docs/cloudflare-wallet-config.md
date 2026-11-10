@@ -141,9 +141,28 @@ limits to each amount; it does not create card methods for an unavailable route.
 
 The user's decision on 2026-11-10 is to leave conversion, fees and local payment
 processing to each on-ramp provider. Do not introduce a separate Mindbliss FX
-service as a prerequisite for local payment methods. The current release still
-uses USD amounts and USD limits throughout discovery, checkout locks and request
-records; it does not yet implement a currency-aware MXN/SPEI flow.
+service as a prerequisite for local payment methods. Discovery now accepts
+`sourceCurrencyCode` (USD by default) and validates each method's `currencyCode`,
+`minimumAmount` and `maximumAmount` against that selected fiat. Personal discovery
+still uses only Reown's production account; administrative discovery still uses
+only its own sandbox credential and approved provider. The UI clears the old
+amount when changing currency and aborts superseded country/currency requests.
+
+Mexico/MXN discovery can expose SPEI when that provider returns a valid route.
+This is not an enabled purchase: non-USD checkout remains blocked in the form,
+client, BFF and backend until the required USD minimum policy is resolved. The
+documented pre-checkout quote does not guarantee a `fiatAmountInUsd` field;
+authenticated transaction details provide that valuation later. The user's
+decision about validating the threshold before checkout versus before credit is
+pending. No local amount is written into a field representing dollars, and no
+currency migration or settlement change has been applied for this release.
+
+Administrative session failures with the exact safe MELD code
+`SERVICE_PROVIDER_AUTHENTICATION_EXCEPTION` map to
+`wallet_funding_provider_authentication_unavailable`. The attempt is retained as
+unavailable, while the UI explains that the provider's test connection needs
+review; it does not suggest that a different amount or country repairs shared
+provider credentials. Other upstream messages and credentials remain private.
 
 Future local-currency support must keep amount and currency together in each
 wallet's own provider discovery, checkout and records. Use the provider's actual
