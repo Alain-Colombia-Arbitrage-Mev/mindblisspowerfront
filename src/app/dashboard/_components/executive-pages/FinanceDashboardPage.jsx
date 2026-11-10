@@ -21,11 +21,11 @@ const PAYMENT_STATUS = {
   refunded: { label: "financePage.statusRefunded", tone: "muted" },
 };
 
-export function FinanceDashboardPage({ administrativeEnvironment = "production" } = {}) {
-  return <FinanceDashboardContent administrativeEnvironment={administrativeEnvironment} />;
+export function FinanceDashboardPage() {
+  return <FinanceDashboardContent />;
 }
 
-function FinanceDashboardContent({ administrativeEnvironment }) {
+function FinanceDashboardContent() {
   const { t } = useI18n();
   const { state, reload } = useMemberSummary();
 
@@ -33,7 +33,7 @@ function FinanceDashboardContent({ administrativeEnvironment }) {
     <section className="executive-page">
       <div className="executive-container">
         <PageHeader eyebrow={t("walletPage.eyebrow")} title={t("walletPage.title")} subtitle={t("walletPage.subtitle")} />
-        <WalletFundingPanels administrativeEnvironment={administrativeEnvironment} />
+        <WalletFundingPanels />
 
         <div id="wallet-finance" className="mb-wallet-finance">
           {state.loading ? <FinanceLoading /> : state.error ? <FinanceError onRetry={reload} /> : <FinanceContent data={state.data || {}} />}

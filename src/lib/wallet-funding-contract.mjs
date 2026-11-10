@@ -3,6 +3,7 @@ const ADDRESS = /^0x[0-9a-f]{40}$/i;
 const COUNTRY = /^[A-Z]{2}$/;
 const METHOD = /^[A-Z0-9_]{2,40}$/;
 const PROVIDERS = new Set(['TRANSAK', 'BANXA']);
+const PERSONAL_PROVIDERS = new Set(['TOPPER', 'SWAPPED']);
 const STATUSES = new Set(['initiated', 'session_created', 'unavailable', 'failed']);
 
 export function validFundingAmount(value) {
@@ -12,11 +13,11 @@ export function validFundingAmount(value) {
 
 export function fundingInput(value, kind) {
   if (!value || typeof value !== 'object' || Array.isArray(value) || !['personal', 'administrative'].includes(kind)) return null;
-  const keys = ['requestId', 'walletAddress', 'country', 'amount', ...(kind === 'administrative' ? ['serviceProvider', 'paymentMethodType'] : [])];
+  const keys = ['requestId', 'walletAddress', 'country', 'amount', 'paymentMethodType', ...(kind === 'administrative' ? ['serviceProvider'] : [])];
   if (Object.keys(value).some(key => !keys.includes(key)) || !FUNDING_UUID.test(value.requestId || '')
-    || !ADDRESS.test(value.walletAddress || '') || !COUNTRY.test(value.country || '') || !validFundingAmount(value.amount)) return null;
-  if (kind === 'administrative' && (!PROVIDERS.has(value.serviceProvider)
-    || (value.paymentMethodType !== undefined && !METHOD.test(value.paymentMethodType)))) return null;
+    || !ADDRESS.test(value.walletAddress || '') || !COUNTRY.test(value.country || '') || !validFundingAmount(value.amount)
+    || !METHOD.test(value.paymentMethodType || '')) return null;
+  if (kind === 'administrative' && !PROVIDERS.has(value.serviceProvider)) return null;
   return Object.fromEntries(keys.filter(key => value[key] !== undefined).map(key => [key, value[key]]));
 }
 
@@ -45,7 +46,11 @@ export function fundingAcknowledgement(value, kind) {
     if (!checkoutUrl) return null;
     return { ...safe, checkoutUrl };
   }
-  return safe;
+  if (!METHOD.test(value.paymentMethodType || '') || !Array.isArray(value.allowedProviders)
+    || value.allowedProviders.length < 1 || value.allowedProviders.length > 2
+    || value.allowedProviders.some(provider => !PERSONAL_PROVIDERS.has(provider))
+    || new Set(value.allowedProviders).size !== value.allowedProviders.length) return null;
+  return { ...safe, paymentMethodType: value.paymentMethodType, allowedProviders: [...value.allowedProviders] };
 }
 
 export function fundingHistory(value, kind) {
@@ -67,11 +72,37 @@ export function fundingHistory(value, kind) {
 }
 
 export function administrativeSandboxOptions(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value) || value.walletKind !== 'administrative'
-    || value.environment !== 'sandbox' || value.provider !== 'meld' || !COUNTRY.test(value.country || '')
-    || !PROVIDERS.has(value.serviceProvider) || !Array.isArray(value.paymentMethods) || value.paymentMethods.length > 20
+  const safe = fundingOptions(value, 'administrative');
+  if (!safe || !PROVIDERS.has(value.serviceProvider) || safe.routes.some(route => route.serviceProvider !== value.serviceProvider)) return null;
+  return { ...safe, serviceProvider: value.serviceProvider };
+}
+
+export function personalProductionOptions(value) { return fundingOptions(value, 'personal'); }
+
+function fundingOptions(value, kind) {
+  const administrative = kind === 'administrative';
+  const environment = administrative ? 'sandbox' : 'production';
+  const provider = administrative ? 'meld' : 'reown';
+  const providers = administrative ? PROVIDERS : PERSONAL_PROVIDERS;
+  if (!value || typeof value !== 'object' || Array.isArray(value) || value.walletKind !== kind
+    || value.environment !== environment || value.provider !== provider || !COUNTRY.test(value.country || '')
+    || !Array.isArray(value.paymentMethods) || value.paymentMethods.length > 40
     || value.paymentMethods.some(method => typeof method !== 'string' || !METHOD.test(method))
-    || new Set(value.paymentMethods).size !== value.paymentMethods.length) return null;
-  return { walletKind: 'administrative', environment: 'sandbox', provider: 'meld', country: value.country,
-    serviceProvider: value.serviceProvider, paymentMethods: [...value.paymentMethods] };
+    || new Set(value.paymentMethods).size !== value.paymentMethods.length
+    || !Array.isArray(value.routes) || value.routes.length > 2) return null;
+  const routes = value.routes.map(route => {
+    if (!route || !providers.has(route.serviceProvider) || !Array.isArray(route.paymentMethods)
+      || route.paymentMethods.length < 1 || route.paymentMethods.length > 40) return null;
+    const paymentMethods = route.paymentMethods.map(method => {
+      if (!method || !METHOD.test(method.method || '') || !Number.isFinite(method.minimumUsd) || method.minimumUsd < 0
+        || !Number.isFinite(method.maximumUsd) || method.maximumUsd < method.minimumUsd) return null;
+      return { method: method.method, minimumUsd: method.minimumUsd, maximumUsd: method.maximumUsd };
+    });
+    if (paymentMethods.some(method => !method) || new Set(paymentMethods.map(method => method.method)).size !== paymentMethods.length) return null;
+    return { serviceProvider: route.serviceProvider, paymentMethods };
+  });
+  if (routes.some(route => !route) || new Set(routes.map(route => route.serviceProvider)).size !== routes.length) return null;
+  const methods = new Set(routes.flatMap(route => route.paymentMethods.map(method => method.method)));
+  if (methods.size !== value.paymentMethods.length || value.paymentMethods.some(method => !methods.has(method))) return null;
+  return { walletKind: kind, environment, provider, country: value.country, paymentMethods: [...value.paymentMethods], routes };
 }

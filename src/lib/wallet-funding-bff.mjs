@@ -3,7 +3,7 @@ import { betterAuthConfig, betterAuthCookies, trustedAuthClientIp } from './bett
 import { coreFetch, runtimeEnvironment } from './cloudflare-runtime.mjs';
 import { memberMutationError } from './member-mutation-policy.mjs';
 import { boundedServiceRequest } from './private-service-request.mjs';
-import { administrativeSandboxOptions, fundingAcknowledgement, fundingHistory, fundingInput } from './wallet-funding-contract.mjs';
+import { administrativeSandboxOptions, personalProductionOptions, fundingAcknowledgement, fundingHistory, fundingInput } from './wallet-funding-contract.mjs';
 import { browserRequestDeadline } from './browser-request-deadline.mjs';
 
 const reply = (body, status = 200) => Response.json(body, { status, headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' } });
@@ -37,8 +37,8 @@ async function readInput(request) {
 export async function handleWalletFunding(request, action, {
   env = runtimeEnvironment(), fetchImpl = coreFetch, serviceRequest = boundedServiceRequest,
 } = {}) {
-  if (!['personal', 'administrative', 'history', 'options'].includes(action)) return reply({ error: 'invalid_request' }, 400);
-  const method = ['history', 'options'].includes(action) ? 'GET' : 'POST';
+  if (!['personal', 'administrative', 'history', 'options', 'personal-options'].includes(action)) return reply({ error: 'invalid_request' }, 400);
+  const method = ['history', 'options', 'personal-options'].includes(action) ? 'GET' : 'POST';
   if (request.method !== method) return reply({ error: 'method_not_allowed' }, 405);
   const cookie = betterAuthCookies(request.headers.get('cookie') || '');
   if (!cookie.split(';').some(part => /^(?:__Secure-)?better-auth\.session_token=[^;\s,]+$/.test(part.trim()))) return reply({ error: 'unauthenticated' }, 401);
@@ -46,12 +46,19 @@ export async function handleWalletFunding(request, action, {
   let body;
   let path;
   let optionsContext;
-  if (action === 'options') {
+  if (action === 'personal-options') {
+    const url = new URL(request.url);
+    const country = url.searchParams.get('country');
+    optionsContext = personalProductionOptions({ walletKind: 'personal', environment: 'production', provider: 'reown', country, paymentMethods: [], routes: [] });
+    if (!optionsContext || [...url.searchParams.keys()].some(key => key !== 'country')
+      || url.searchParams.getAll('country').length !== 1) return reply({ error: 'invalid_request' }, 400);
+    path = `/api/member/wallet-funding/personal/options?country=${country}`;
+  } else if (action === 'options') {
     const url = new URL(request.url);
     const country = url.searchParams.get('country');
     const serviceProvider = url.searchParams.get('serviceProvider');
     optionsContext = administrativeSandboxOptions({ walletKind: 'administrative', environment: 'sandbox', provider: 'meld',
-      country, serviceProvider, paymentMethods: [] });
+      country, serviceProvider, paymentMethods: [], routes: [] });
     if (!optionsContext || [...url.searchParams.keys()].some(key => !['country', 'serviceProvider'].includes(key))
       || url.searchParams.getAll('country').length !== 1 || url.searchParams.getAll('serviceProvider').length !== 1) return reply({ error: 'invalid_request' }, 400);
     path = `/api/member/wallet-funding/administrative/options?country=${country}&serviceProvider=${serviceProvider}`;
@@ -92,14 +99,20 @@ export async function handleWalletFunding(request, action, {
     if (!result.ok) {
       const safeErrors = new Set(['invalid_request', 'unauthenticated', 'invalid_origin', 'wallet_not_linked', 'wallet_not_assigned',
         'wallet_funding_forbidden', 'wallet_funding_rate_limited', 'wallet_funding_request_already_used',
-        'wallet_funding_unconfigured', 'wallet_funding_provider_unavailable', 'wallet_funding_unavailable']);
+        'wallet_funding_unconfigured', 'wallet_funding_provider_unavailable', 'wallet_funding_unavailable',
+        'wallet_funding_method_unavailable', 'wallet_funding_amount_out_of_range', 'wallet_funding_amount_unavailable']);
       return reply({ error: safeErrors.has(result.data?.error) ? result.data.error : 'funding_unavailable' },
         [400, 401, 403, 409, 413, 429, 503].includes(result.status) ? result.status : 502);
     }
-    const safe = action === 'options' ? administrativeSandboxOptions(result.data)
+    const safe = action === 'personal-options' ? personalProductionOptions(result.data)
+      : action === 'options' ? administrativeSandboxOptions(result.data)
       : action === 'history' ? fundingHistory(result.data, kind) : fundingAcknowledgement(result.data, kind);
-    if (!safe || (body && (safe.requestedAmount !== body.amount || safe.checkoutReference !== body.requestId))) return reply({ error: 'funding_unavailable' }, 502);
-    if (optionsContext && (safe.country !== optionsContext.country || safe.serviceProvider !== optionsContext.serviceProvider)) return reply({ error: 'funding_unavailable' }, 502);
+    if (!safe) return reply({ error: 'funding_unavailable' }, 502);
+    if (body && (!('requestedAmount' in safe) || !('checkoutReference' in safe) || safe.requestedAmount !== body.amount
+      || safe.checkoutReference !== body.requestId || (kind === 'personal' && (!('paymentMethodType' in safe)
+        || safe.paymentMethodType !== body.paymentMethodType)))) return reply({ error: 'funding_unavailable' }, 502);
+    if (optionsContext && (!('country' in safe) || safe.country !== optionsContext.country
+      || (action === 'options' && (!('serviceProvider' in safe) || safe.serviceProvider !== optionsContext.serviceProvider)))) return reply({ error: 'funding_unavailable' }, 502);
     return reply(safe);
   } catch { return reply({ error: 'funding_unavailable' }, 503); }
 }

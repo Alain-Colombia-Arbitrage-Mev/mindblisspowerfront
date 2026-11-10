@@ -1,15 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readAdministrativeSandboxOptions } from './wallet-funding-client.mjs';
+import { readAdministrativeSandboxOptions, readPersonalFundingOptions, createPersonalFundingIntent } from './wallet-funding-client.mjs';
 
 const options = { walletKind: 'administrative', environment: 'sandbox', provider: 'meld', country: 'US',
-  serviceProvider: 'TRANSAK', paymentMethods: ['CREDIT_DEBIT_CARD'] };
+  serviceProvider: 'TRANSAK', paymentMethods: ['CREDIT_DEBIT_CARD'], routes: [{ serviceProvider: 'TRANSAK',
+    paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', minimumUsd: 20, maximumUsd: 15000 }] }] };
 
 test('administrative methods never borrow personal provider options or invent an empty fallback', async () => {
   const original = globalThis.fetch;
   const calls = [];
   try {
-    globalThis.fetch = async (path, init) => { calls.push({ path, init }); return Response.json({ ...options, paymentMethods: [] }); };
+    globalThis.fetch = async (path, init) => { calls.push({ path, init }); return Response.json({ ...options, paymentMethods: [], routes: [] }); };
     const result = await readAdministrativeSandboxOptions('US', 'TRANSAK');
     assert.deepEqual(result.paymentMethods, []);
     assert.equal(calls.length, 1);
@@ -18,6 +19,35 @@ test('administrative methods never borrow personal provider options or invent an
     assert.equal(calls[0].init.cache, 'no-store');
     await assert.rejects(readAdministrativeSandboxOptions('US', 'TOPPER'), { message: 'invalid_request' });
     assert.equal(calls.length, 1);
+  } finally { globalThis.fetch = original; }
+});
+
+test('personal country methods reject sandbox payloads and do not fall back to administrative discovery', async () => {
+  const original = globalThis.fetch;
+  const personal = { walletKind: 'personal', environment: 'production', provider: 'reown', country: 'CO',
+    paymentMethods: ['CREDIT_DEBIT_CARD'], routes: [{ serviceProvider: 'TOPPER',
+      paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', minimumUsd: 10, maximumUsd: 25000 }] }] };
+  const paths = [];
+  try {
+    globalThis.fetch = async path => { paths.push(path); return Response.json(personal); };
+    assert.deepEqual(await readPersonalFundingOptions('CO'), personal);
+    assert.deepEqual(paths, ['/api/member/wallet-funding/personal/options?country=CO']);
+    globalThis.fetch = async () => Response.json(options);
+    await assert.rejects(readPersonalFundingOptions('CO'), { message: 'funding_unavailable' });
+    globalThis.fetch = async () => Response.json({ ...personal, routes: [{ ...personal.routes[0], serviceProvider: 'TRANSAK' }] });
+    await assert.rejects(readPersonalFundingOptions('CO'), { message: 'funding_unavailable' });
+  } finally { globalThis.fetch = original; }
+});
+
+test('a personal intent cannot silently change the requested payment method', async () => {
+  const original = globalThis.fetch;
+  const input = { requestId: 'd8a4c010-cc33-44da-a297-8b3c6440f491', walletAddress: `0x${'1'.repeat(40)}`,
+    country: 'CO', amount: 50, paymentMethodType: 'CREDIT_DEBIT_CARD' };
+  try {
+    globalThis.fetch = async () => Response.json({ checkoutReference: input.requestId, walletKind: 'personal',
+      environment: 'production', provider: 'reown', status: 'initiated', requestedAmount: 50,
+      createdAt: '2026-11-10T15:00:00Z', paymentMethodType: 'APPLE_PAY', allowedProviders: ['TOPPER'] });
+    await assert.rejects(createPersonalFundingIntent(input), { message: 'funding_unavailable' });
   } finally { globalThis.fetch = original; }
 });
 

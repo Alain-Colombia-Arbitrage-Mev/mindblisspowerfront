@@ -6,10 +6,11 @@ import { handleWalletFunding } from './wallet-funding-bff.mjs';
 const env = { AUTH_PROVIDER: 'better-auth', AUTH_BFF_SHARED_SECRET: 's'.repeat(32),
   AUTH_PUBLIC_ORIGIN: 'https://app.example.test', BETTER_AUTH_BACKEND_URL: 'https://auth.core.internal', NODE_ENV: 'production' };
 const requestId = 'd8a4c010-cc33-44da-a297-8b3c6440f491';
-const input = { requestId, walletAddress: `0x${'1'.repeat(40)}`, country: 'CO', amount: 100 };
+const input = { requestId, walletAddress: `0x${'1'.repeat(40)}`, country: 'CO', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' };
 const ack = kind => ({ checkoutReference: requestId, walletKind: kind, environment: kind === 'personal' ? 'production' : 'sandbox',
   provider: kind === 'personal' ? 'reown' : 'meld', status: kind === 'personal' ? 'initiated' : 'session_created',
-  requestedAmount: 100, createdAt: '2026-11-10T15:00:00.000Z', ...(kind === 'administrative' ? { checkoutUrl: 'https://sb.meldcrypto.com/?token=synthetic' } : {}) });
+  requestedAmount: 100, createdAt: '2026-11-10T15:00:00.000Z', ...(kind === 'administrative' ? { checkoutUrl: 'https://sb.meldcrypto.com/?token=synthetic' }
+    : { paymentMethodType: input.paymentMethodType, allowedProviders: ['TOPPER', 'SWAPPED'] }) });
 const request = (body = input, headers = {}) => new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/wallet-funding/personal/intent`, {
   method: 'POST', headers: { cookie: 'better-auth.session_token=synthetic-session', origin: env.AUTH_PUBLIC_ORIGIN,
     'sec-fetch-site': 'same-origin', 'content-type': 'application/json', 'cf-connecting-ip': '198.51.100.10', ...headers }, body: JSON.stringify(body),
@@ -87,7 +88,8 @@ test('wallet and environment acknowledgements cannot cross funding histories or 
 
 test('administrative methods use only the selected sandbox country and provider, with no personal fallback', async () => {
   const options = { walletKind: 'administrative', environment: 'sandbox', provider: 'meld', country: 'US', serviceProvider: 'TRANSAK',
-    paymentMethods: ['CREDIT_DEBIT_CARD', 'APPLE_PAY'] };
+    paymentMethods: ['CREDIT_DEBIT_CARD', 'APPLE_PAY'], routes: [{ serviceProvider: 'TRANSAK', paymentMethods: [
+      { method: 'CREDIT_DEBIT_CARD', minimumUsd: 20, maximumUsd: 15000 }, { method: 'APPLE_PAY', minimumUsd: 20, maximumUsd: 15000 }] }] };
   const get = new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/wallet-funding/administrative/options?country=US&serviceProvider=TRANSAK`,
     { headers: { cookie: 'better-auth.session_token=synthetic' } });
   const response = await handleWalletFunding(get, 'options', { env, serviceRequest: async (url, init) => {
@@ -100,6 +102,27 @@ test('administrative methods use only the selected sandbox country and provider,
     { ...options, paymentMethods: ['CARD', 'CARD'] }, { ...options, paymentMethods: ['<script>'] }]) {
     assert.equal((await handleWalletFunding(get, 'options', { env, serviceRequest: async () => ({ ok: true, data }) })).status, 502);
   }
-  const empty = await handleWalletFunding(get, 'options', { env, serviceRequest: async () => ({ ok: true, data: { ...options, paymentMethods: [] } }) });
+  const empty = await handleWalletFunding(get, 'options', { env, serviceRequest: async () => ({ ok: true, data: { ...options, paymentMethods: [], routes: [] } }) });
   assert.deepEqual((await empty.json()).paymentMethods, []);
+});
+
+test('personal options authenticate and reject crossed countries, sandbox methods and unknown limits', async () => {
+  const options = { walletKind: 'personal', environment: 'production', provider: 'reown', country: 'CO',
+    paymentMethods: ['CREDIT_DEBIT_CARD'], routes: [{ serviceProvider: 'SWAPPED', paymentMethods: [
+      { method: 'CREDIT_DEBIT_CARD', minimumUsd: 10, maximumUsd: 10000 }] }] };
+  const get = new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/wallet-funding/personal/options?country=CO`,
+    { headers: { cookie: 'better-auth.session_token=synthetic' } });
+  const response = await handleWalletFunding(get, 'personal-options', { env, serviceRequest: async (url, init) => {
+    assert.equal(url, 'https://auth.core.internal/api/member/wallet-funding/personal/options?country=CO');
+    assert.equal(init.method, 'GET'); assert.equal(init.body, undefined);
+    return { ok: true, data: { ...options, secret: 'must-not-leak' } };
+  } });
+  assert.deepEqual(await response.json(), options);
+  for (const data of [{ ...options, environment: 'sandbox' }, { ...options, country: 'US' },
+    { ...options, routes: [{ ...options.routes[0], serviceProvider: 'BANXA' }] },
+    { ...options, routes: [{ ...options.routes[0], paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', minimumUsd: null, maximumUsd: 10000 }] }] }]) {
+    assert.equal((await handleWalletFunding(get, 'personal-options', { env, serviceRequest: async () => ({ ok: true, data }) })).status, 502);
+  }
+  assert.equal((await handleWalletFunding(new Request(get.url), 'personal-options', { env,
+    serviceRequest: async () => assert.fail('unauthenticated discovery transport') })).status, 401);
 });

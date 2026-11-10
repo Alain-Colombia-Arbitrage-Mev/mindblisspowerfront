@@ -1,11 +1,13 @@
-import { administrativeSandboxOptions, fundingAcknowledgement, fundingHistory, fundingInput } from './wallet-funding-contract.mjs';
+import { administrativeSandboxOptions, personalProductionOptions, fundingAcknowledgement, fundingHistory, fundingInput } from './wallet-funding-contract.mjs';
 import { browserRequestDeadline } from './browser-request-deadline.mjs';
 
 export function fundingRequestId() { return crypto.randomUUID(); }
 
 /** @param {Record<string, unknown>} input @param {{signal?: AbortSignal}} [options] */
 export async function createPersonalFundingIntent(input, options = {}) {
-  return createFunding(input, 'personal', '/api/member/wallet-funding/personal/intent', options);
+  const data = await createFunding(input, 'personal', '/api/member/wallet-funding/personal/intent', options);
+  if (!('paymentMethodType' in data) || !('allowedProviders' in data)) throw new Error('funding_unavailable');
+  return data;
 }
 
 /** @param {Record<string, unknown>} input @param {{signal?: AbortSignal}} [options] */
@@ -15,12 +17,23 @@ export async function createAdministrativeSandboxSession(input, options = {}) {
 
 /** @param {string} country @param {string} serviceProvider @param {{signal?: AbortSignal}} [options] */
 export async function readAdministrativeSandboxOptions(country, serviceProvider, { signal } = {}) {
-  if (!administrativeSandboxOptions({ walletKind: 'administrative', environment: 'sandbox', provider: 'meld', country, serviceProvider, paymentMethods: [] })) {
+  if (!administrativeSandboxOptions({ walletKind: 'administrative', environment: 'sandbox', provider: 'meld', country, serviceProvider, paymentMethods: [], routes: [] })) {
     throw new Error('invalid_request');
   }
   const data = administrativeSandboxOptions(await request(`/api/member/wallet-funding/administrative/options?country=${country}&serviceProvider=${serviceProvider}`,
     { method: 'GET', signal }));
   if (!data || data.country !== country || data.serviceProvider !== serviceProvider) throw new Error('funding_unavailable');
+  return data;
+}
+
+/** Production discovery uses Reown's merchant configuration, never administrative MELD credentials. */
+/** @param {string} country @param {{signal?: AbortSignal}} [options] */
+export async function readPersonalFundingOptions(country, { signal } = {}) {
+  if (!personalProductionOptions({ walletKind: 'personal', environment: 'production', provider: 'reown', country, paymentMethods: [], routes: [] })) {
+    throw new Error('invalid_request');
+  }
+  const data = personalProductionOptions(await request(`/api/member/wallet-funding/personal/options?country=${country}`, { method: 'GET', signal }));
+  if (!data || data.country !== country) throw new Error('funding_unavailable');
   return data;
 }
 
@@ -37,7 +50,8 @@ async function createFunding(input, kind, path, { signal } = {}) {
   const body = fundingInput(input, kind);
   if (!body) throw new Error('invalid_request');
   const data = fundingAcknowledgement(await request(path, { method: 'POST', signal, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }), kind);
-  if (!data || data.requestedAmount !== body.amount || data.checkoutReference !== body.requestId) throw new Error('funding_unavailable');
+  if (!data || data.requestedAmount !== body.amount || data.checkoutReference !== body.requestId
+    || (kind === 'personal' && (!('paymentMethodType' in data) || data.paymentMethodType !== body.paymentMethodType))) throw new Error('funding_unavailable');
   return data;
 }
 

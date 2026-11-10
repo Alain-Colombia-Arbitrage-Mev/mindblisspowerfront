@@ -10,10 +10,19 @@ import { readAdministrativeWallet } from "@/lib/administrative-wallet.mjs";
 export default function SidebarAdministrativeWalletCard({ onNavigate }) {
   const { t } = useI18n();
   const [address, setAddress] = useState("");
+  const [status, setStatus] = useState("loading");
   useEffect(() => {
-    const controller = new AbortController();
-    readAdministrativeWallet({ signal: controller.signal }).then(result => setAddress(result.status === "assigned" ? result.address : "")).catch(() => {});
-    return () => controller.abort();
+    let controller;
+    const read = () => {
+      controller?.abort(); controller = new AbortController();
+      const request = controller;
+      readAdministrativeWallet({ signal: request.signal }).then(result => {
+        if (request.signal.aborted) return;
+        setAddress(result.status === "assigned" ? result.address : ""); setStatus(result.status);
+      }).catch(() => { if (!request.signal.aborted) setStatus("error"); });
+    };
+    read(); window.addEventListener("vp:administrative-wallet-assigned", read);
+    return () => { controller?.abort(); window.removeEventListener("vp:administrative-wallet-assigned", read); };
   }, []);
   const copy = async () => { if (address) await navigator.clipboard.writeText(address).catch(() => {}); };
   return (
@@ -23,10 +32,10 @@ export default function SidebarAdministrativeWalletCard({ onNavigate }) {
         <Building2 size={18} aria-hidden="true" />
       </div>
       <div className="vp-sidebar-wallet-address">
-        <code title={address || undefined}>{address ? compactAddress(address) : t("walletPage.administrativeAssigning")}</code>
+        <code title={address || undefined}>{address ? compactAddress(address) : t(status === "error" ? "walletPage.administrativeLoadError" : status === "exhausted" ? "walletPage.administrativeUnavailable" : "walletPage.administrativeAssigning")}</code>
         {address ? <button type="button" onClick={copy} aria-label={t("walletPage.copyAddress")}><Copy size={12} aria-hidden="true" /></button> : null}
       </div>
-      <Link href="/dashboard/payments#administrative-wallet" onClick={onNavigate} className="vp-sidebar-wallet-action administrative">
+      <Link href="/dashboard/wallet-administrative" onClick={onNavigate} className="vp-sidebar-wallet-action administrative">
         <CreditCard size={14} aria-hidden="true" />{t("nav.addFunds")}
       </Link>
     </section>

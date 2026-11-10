@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { matchesRoute, memberPageFor } from "./member-navigation.mjs";
+import { matchesRoute, memberPageFor, memberPageKeysFor } from "./member-navigation.mjs";
 
 test("member pages have Spanish titles for overview, payments and nested messages", () => {
   assert.equal(memberPageFor("/dashboard").title, "Resumen");
   assert.equal(memberPageFor("/dashboard/payments").title, "Billetera");
+  assert.equal(memberPageKeysFor("/dashboard/wallet-personal").title, "nav.personalWallet");
+  assert.equal(memberPageKeysFor("/dashboard/wallet-administrative").title, "nav.administrativeWallet");
   assert.equal(
     memberPageFor("/dashboard/communications/news").title,
     "Noticias",

@@ -12,7 +12,7 @@ export default function OverviewDiscoveryCard() {
           <h2>{t("overview.buyCrypto")}</h2>
           <p>{t("overview.buyCryptoCopy")}</p>
         </div>
-        <Link className="executive-button primary" href="/dashboard/payments#personal-wallet">
+        <Link className="executive-button primary" href="/dashboard/wallet-personal">
           {t("overview.createAndBuy")} <ArrowRight size={14} />
         </Link>
       </section>

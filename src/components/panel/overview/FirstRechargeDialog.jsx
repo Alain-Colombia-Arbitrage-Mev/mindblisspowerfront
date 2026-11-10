@@ -61,8 +61,8 @@ export default function FirstRechargeDialog({ open, initialStep = "welcome", onO
                 <Dialog.Description id="recharge-methods-description">{t("recharge.methodsCopy")}</Dialog.Description>
               </div>
               <div className="mb-recharge-methods">
-                <RechargeMethod icon={CreditCard} title={t("recharge.buyTitle")} copy={t("recharge.buyCopy")} action={t("recharge.buyAction")} href="/dashboard/payments#personal-wallet" onNavigate={close} />
-                <RechargeMethod icon={ArrowDownLeft} title={t("recharge.receiveTitle")} copy={t("recharge.receiveCopy")} action={t("recharge.receiveAction")} href="/dashboard/payments#wallet-steps" onNavigate={close} />
+                <RechargeMethod icon={CreditCard} title={t("recharge.buyTitle")} copy={t("recharge.buyCopy")} action={t("recharge.buyAction")} href="/dashboard/wallet-personal" onNavigate={close} />
+                <RechargeMethod icon={ArrowDownLeft} title={t("recharge.receiveTitle")} copy={t("recharge.receiveCopy")} action={t("recharge.receiveAction")} href="/dashboard/wallet-personal#personal-wallet" onNavigate={close} />
               </div>
               <button type="button" className="mb-recharge-secondary" onClick={close}>{t("recharge.later")}</button>
             </>

@@ -4,7 +4,8 @@ import { buildReownProductionOnrampUrl } from './reown-production-onramp.mjs';
 
 const projectId = 'a'.repeat(32);
 const input = { providerUrl: `https://meldcrypto.com/?publicKey=reown-public&externalCustomerId=${projectId}`,
-  projectId, address: `0x${'1'.repeat(40)}`, checkoutReference: 'd8a4c010-cc33-44da-a297-8b3c6440f491', countryCode: 'CO', amount: 100 };
+  projectId, address: `0x${'1'.repeat(40)}`, checkoutReference: 'd8a4c010-cc33-44da-a297-8b3c6440f491', countryCode: 'CO', amount: 100,
+  paymentMethodType: 'CREDIT_DEBIT_CARD', allowedProviders: ['TOPPER', 'SWAPPED'] };
 test('Reown production retains merchant attribution and records only an initiated session reference', () => {
   const url = new URL(buildReownProductionOnrampUrl(input));
   assert.equal(url.searchParams.get('externalCustomerId'), projectId);
@@ -13,6 +14,11 @@ test('Reown production retains merchant attribution and records only an initiate
   assert.equal(url.searchParams.get('destinationCurrencyCode'), 'USDT_POLYGON');
   assert.equal(url.searchParams.get('sourceAmount'), '100');
   assert.equal(url.searchParams.get('serviceProviders'), 'TOPPER,SWAPPED');
+  assert.equal(url.searchParams.get('paymentMethodType'), input.paymentMethodType);
+  assert.equal(url.searchParams.get('paymentMethodTypeLocked'), input.paymentMethodType);
+  assert.equal(url.searchParams.get('sourceAmountLocked'), '100');
+  assert.equal(url.searchParams.get('countryCodeLocked'), 'CO');
+  assert.equal(url.searchParams.get('walletAddressLocked'), input.address);
 });
 test('Reown production cannot point at sandbox, another origin or a foreign merchant', () => {
   for (const providerUrl of ['https://sb.meldcrypto.com/?publicKey=sandbox', 'https://evil.test/?publicKey=bad',
@@ -21,4 +27,6 @@ test('Reown production cannot point at sandbox, another origin or a foreign merc
   }
   assert.throws(() => buildReownProductionOnrampUrl({ ...input, amount: 49 }));
   assert.throws(() => buildReownProductionOnrampUrl({ ...input, amount: 50.001 }));
+  assert.throws(() => buildReownProductionOnrampUrl({ ...input, paymentMethodType: '' }));
+  assert.throws(() => buildReownProductionOnrampUrl({ ...input, allowedProviders: ['BANXA'] }));
 });

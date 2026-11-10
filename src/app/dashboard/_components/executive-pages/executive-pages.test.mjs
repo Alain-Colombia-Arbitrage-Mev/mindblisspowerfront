@@ -78,7 +78,7 @@ function loadPages({ summary = { loading: true, data: null, error: '' }, health 
       useReownWallet: () => ({ configured: true, isConnected: false, isLinked: false, startOnramp: async () => {}, openOnramp: async () => {} }),
     },
     'next/dynamic': { default: () => ({ children }) => children },
-    'next/link': { default: ({ children, ...props }) => React.createElement('a', props, children) },
+    'next/link': { default: ({ children, prefetch: _prefetch, ...props }) => React.createElement('a', props, children) },
   };
   function load(url) {
     const key = url.href;
@@ -89,6 +89,7 @@ function loadPages({ summary = { loading: true, data: null, error: '' }, health 
     cache.set(key, module.exports);
     new Function('require', 'module', 'exports', code)(id => {
       if (Object.hasOwn(mocks, id)) return mocks[id];
+      if (id.endsWith('.module.css')) return { default: new Proxy({}, { get: (_target, key) => key }) };
       if (id.endsWith('/StripeSalesHistory') || id.endsWith('/SupportTicketForm')) return { default: emptyComponent };
       if (id.endsWith('/profile-model.mjs')) return { requestProfile: async () => { throw Error('Unexpected render-time request'); } };
       if (id.startsWith('.')) return load(new URL(/\.(?:mjs|jsx)$/.test(id) ? id : `${id}.jsx`, url));
@@ -187,22 +188,12 @@ test('finance loading and failures do not invent an available zero balance', () 
   assert.doesNotMatch(failure, /\$0\.00|Cargando tu wallet/);
 });
 
-test('administrative sandbox labels tests and exposes its separate request form without personal quotes', () => {
+test('financial summary offers separate wallet screens without mounting either funding form', () => {
   const page = loadPages().FinanceDashboardPage;
-  const sandbox = render(page, { administrativeEnvironment: 'sandbox' });
-  const administrative = sandbox.split('id="administrative-wallet"')[1].split('</section>')[0];
-  const personal = sandbox.split('id="personal-wallet"')[1].split('</section>')[0];
-  assert.match(administrative, /Sandbox · Pruebas/);
-  assert.match(administrative, /no acredita saldo ni genera comisiones reales/);
-  assert.match(administrative, /Tu dirección administrativa/);
-  assert.match(administrative, /mb-onramp-simple/);
-  assert.match(administrative, /Proveedor de prueba/);
-  assert.match(personal, /mb-onramp-simple/);
-  assert.doesNotMatch(personal, /Sandbox · Pruebas/);
-  const production = render(page, { administrativeEnvironment: 'production' });
-  const productionAdministrative = production.split('id="administrative-wallet"')[1].split('</section>')[0];
-  assert.doesNotMatch(productionAdministrative, /mb-onramp-simple/);
-  assert.doesNotMatch(productionAdministrative, /Sandbox · Pruebas/);
+  const html = render(page);
+  assert.match(html, /href="\/dashboard\/wallet-personal"/);
+  assert.match(html, /href="\/dashboard\/wallet-administrative"/);
+  assert.doesNotMatch(html, /<form|Proveedor de prueba|id="personal-wallet"|id="administrative-wallet"/);
 });
 
 test('advisor failure and member support loading still render their existing states after extraction', () => {

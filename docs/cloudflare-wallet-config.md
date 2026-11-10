@@ -26,32 +26,51 @@ rebuild and publish the frontend when changing the Reown project.
 
 The user's Reown project is in production. The user's separate Meld account is
 in sandbox. `ADMINISTRATIVE_ONRAMP_ENVIRONMENT=sandbox` is configured only on the
-`rewon` portal. The `/dashboard/payments` server route passes this public mode to
+`rewon` portal. The `/dashboard/wallet-administrative` server route passes this public mode to
 the administrative component; it does not change the personal wallet's Reown
 project or environment. Omitting the mode retains the existing production path.
+
+The two funding screens are `/dashboard/wallet-personal` and
+`/dashboard/wallet-administrative`. `/dashboard/payments` remains the financial
+summary and contains links only. It does not mount either funding form or AppKit.
+Connecting an AppKit address is not proof of ownership: the personal screen
+requires the native session, a single-use signature challenge and the backend
+binding before enabling funding.
 
 The personal card records an initiated funding request through
 `POST /api/member/wallet-funding/personal/intent` after proving its linked wallet.
 That path uses no private Meld credential or quote. Reown supplies its own live
 checkout configuration. Mindbliss keeps Reown's `externalCustomerId` attribution
 and adds only its recorded session reference, requested USD amount, USDT Polygon,
-country and the requested Topper/Swapped filter. The provider confirms availability,
+country, selected payment method and the requested Topper/Swapped filter. Documented
+checkout locks carry actual field values, not boolean flags. The `serviceProviders`
+URL parameter is only a compatibility hint; it is not a documented hard provider
+restriction. Reown/Meld controls the final provider UI. The provider confirms availability,
 received amount and fees; an initiated record does not confirm a paid transaction.
 No synthetic quote or 1% collected commission is displayed or calculated here.
 
 The administrative card retains address assignment and displays the translated
 sandbox notice alongside a separate test form. Its initial test country is US,
 independent of the personal wallet's detected country. Transak and Banxa are the
-only administrative sandbox choices approved for this release; the personal
-Reown flow remains restricted to its Topper/Swapped filter. Method and session
-data are never shared between cards.
+only administrative sandbox choices approved for this release. Personal discovery
+and backend request eligibility allow only Topper/Swapped production routes.
+Method, form, session and history state are never shared between screens.
+
+`GET /api/member/wallet-funding/personal/options?country=CO` reads production
+routes using the public Meld checkout key published by the pinned Reown SDK.
+It does not read the administrative secret. Discovery is authenticated at the
+Mindbliss BFF and returns only canonical methods and USD limits for the selected
+country, USD and USDT Polygon. No global unauthenticated fallback is used.
 
 `GET /api/member/wallet-funding/administrative/options?country=US&serviceProvider=TRANSAK`
-reads payment methods from the administrative sandbox account only. The method
+reads payment methods and USD limits from the administrative sandbox account only. Each method
 selector resets and cancels its previous request when country or provider changes.
 Loading, empty and failed reads disable checkout and offer an explicit retry;
-they never default to invented card methods. Personal payment methods are selected
-inside Reown's production checkout and do not use this options endpoint.
+they never default to invented card methods. Amount changes discard the previous
+method and filter methods against their returned limits. Both POST endpoints
+require `paymentMethodType` and revalidate the current country/method/amount on
+the server. Personal requests echo the method and eligible production providers.
+Migration 94 records the requested method; historical unknown values remain NULL.
 
 `POST /api/member/wallet-funding/administrative/session` creates the test attempt
 and mints a provider widget through `https://api-sb.meld.io/crypto/session/widget`.

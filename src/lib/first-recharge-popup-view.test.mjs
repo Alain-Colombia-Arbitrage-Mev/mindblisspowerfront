@@ -60,8 +60,8 @@ test('the first-recharge popup advances through the Pen welcome and routes to th
   const html = renderToStaticMarkup(methods);
   assert.match(html, /Recargar fondos/);
   assert.equal(find(methods, node => node?.props?.href === '/dashboard/packages'), undefined);
-  assert.equal(find(methods, node => node?.props?.href === '/dashboard/payments#wallet-steps').props.href, '/dashboard/payments#wallet-steps');
-  const cryptoMethod = find(methods, node => node?.type?.name === 'RechargeMethod' && node?.props?.href === '/dashboard/payments#personal-wallet');
+  assert.equal(find(methods, node => node?.props?.href === '/dashboard/wallet-personal#personal-wallet').props.href, '/dashboard/wallet-personal#personal-wallet');
+  const cryptoMethod = find(methods, node => node?.type?.name === 'RechargeMethod' && node?.props?.href === '/dashboard/wallet-personal');
   cryptoMethod.props.onNavigate();
   assert.equal(closed, 1);
   harness.unmount();
@@ -70,7 +70,7 @@ test('the first-recharge popup advances through the Pen welcome and routes to th
 test('the popup never opens a provider before backend route and quote validation', () => {
   const harness = view('FirstRechargeDialog.jsx');
   const tree = harness.render({ open: true, initialStep: 'methods', onOpenChange() {} });
-  assert.match(renderToStaticMarkup(tree), /dashboard\/payments#personal-wallet/);
+  assert.match(renderToStaticMarkup(tree), /dashboard\/wallet-personal/);
   assert.equal(find(tree, node => node?.type?.name === 'RechargeMethod' && typeof node?.props?.onClick === 'function'), undefined);
   harness.unmount();
 });
