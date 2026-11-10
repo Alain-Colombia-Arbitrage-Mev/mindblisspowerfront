@@ -13,7 +13,7 @@ import StripeSalesHistory from "../../packages/StripeSalesHistory";
 import { MetricCard, PageHeader, StatusPill } from "./executive-ui";
 import WalletGettingStarted from "./WalletGettingStarted";
 import { useReownWallet } from "@/components/reown/ReownContext";
-import { MINDBLISS_ONRAMP_FEE_PERCENT, PERSONAL_WALLET_ASSET } from "@/lib/personal-wallet.mjs";
+import { MINDBLISS_ONRAMP_FEE_PERCENT, PERSONAL_WALLET_ASSET, PERSONAL_WALLET_MINIMUM_USD } from "@/lib/personal-wallet.mjs";
 
 const ReownProvider = dynamic(() => import("@/components/reown/ReownProvider"), {
   ssr: false,
@@ -101,8 +101,8 @@ function FinanceError({ onRetry }) {
         <Info size={22} aria-hidden="true" />
       </span>
       <div>
-        <p className="text-base font-bold" style={{ color: "var(--vp-text)" }}>{t("walletPage.syncing")}</p>
-        <p className="mt-1 text-sm" style={{ color: "var(--vp-muted)" }}>{t("walletPage.syncingCopy")}</p>
+        <p className="text-base font-bold" style={{ color: "var(--vp-text)" }}>{t("walletPage.summaryUnavailable")}</p>
+        <p className="mt-1 text-sm" style={{ color: "var(--vp-muted)" }}>{t("walletPage.summaryUnavailableCopy")}</p>
       </div>
       <button className="executive-button primary" type="button" onClick={onRetry}>{t("walletPage.retry")}</button>
     </div>
@@ -201,6 +201,9 @@ function TopUpPanel() {
         {t("walletPage.managedByMeld", { asset: PERSONAL_WALLET_ASSET })}
       </p>
       <div className="mb-wallet-fee-summary">
+        <span>{t("walletPage.minimumTopUp")}</span>
+        <strong>${PERSONAL_WALLET_MINIMUM_USD} USD</strong>
+        <small>{t("walletPage.minimumTopUpCopy", { asset: PERSONAL_WALLET_ASSET })}</small>
         <span>{t("walletPage.mindblissFee", { percent: MINDBLISS_ONRAMP_FEE_PERCENT })}</span>
         <strong>{MINDBLISS_ONRAMP_FEE_PERCENT}%</strong>
         <small>{t("walletPage.feeDisclosure")}</small>

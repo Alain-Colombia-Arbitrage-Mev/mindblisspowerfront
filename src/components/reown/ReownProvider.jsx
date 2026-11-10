@@ -3,8 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createAppKit, useAppKit, useAppKitAccount, useAppKitProvider, useAppKitState, useAppKitTheme, useDisconnect } from "@reown/appkit/react";
 import { EthersAdapter } from "@reown/appkit-adapter-ethers";
+import { OnRampController } from "@reown/appkit-controllers";
 import { mainnet, polygon } from "@reown/appkit/networks";
 import { BrowserProvider, getAddress } from "ethers";
+import { useMemberSession } from "@/lib/member-session-context";
+import { browserOnrampRegion, buildMeldOnrampUrl } from "@/lib/meld-onramp.mjs";
+import { PERSONAL_WALLET_ASSET, PERSONAL_WALLET_MINIMUM_USD } from "@/lib/personal-wallet.mjs";
+import { readWalletBinding, walletBindingFailure } from "@/lib/wallet-binding.mjs";
 import { ReownContext, useReownWallet } from "./ReownContext";
 
 const projectId = process.env.NEXT_PUBLIC_REOWN_PROJECT_ID?.trim() || "";
@@ -17,6 +22,7 @@ const unavailable = Object.freeze({
   status: "unavailable",
   linkedAddress: "",
   linkStatus: "unavailable",
+  linkError: "configuration",
   isLinked: false,
   isLinking: false,
   onrampStatus: "idle",
@@ -26,6 +32,7 @@ const unavailable = Object.freeze({
   startOnramp: async () => { throw new Error("reown_unavailable"); },
   reconnectWallet: async () => { throw new Error("reown_unavailable"); },
   linkWallet: async () => { throw new Error("reown_unavailable"); },
+  refreshLink: async () => { throw new Error("reown_unavailable"); },
   openAccount: async () => { throw new Error("reown_unavailable"); },
 });
 
@@ -80,15 +87,18 @@ function ConfiguredReownProvider({ children }) {
   const account = useAppKitAccount({ namespace: "eip155" });
   const { walletProvider } = useAppKitProvider("eip155");
   const appKitTheme = useAppKitTheme();
+  const memberSession = useMemberSession();
   const appKitThemeRef = useRef(appKitTheme);
   appKitThemeRef.current = appKitTheme;
-  const [binding, setBinding] = useState({ status: "loading", address: "" });
+  const [binding, setBinding] = useState({ status: "loading", address: "", error: "" });
   const [isLinking, setIsLinking] = useState(false);
   const [onrampState, setOnrampState] = useState({ status: "idle", error: "" });
   const linking = useRef(null);
   const onrampIntent = useRef(false);
   const onrampFlow = useRef(null);
   const connectModalSeen = useRef(false);
+  const bindingRequest = useRef(null);
+  const sessionRetryEmail = useRef("");
 
   useEffect(() => {
     const root = document.documentElement;
@@ -104,21 +114,52 @@ function ConfiguredReownProvider({ children }) {
     return () => observer.disconnect();
   }, []);
 
-  useEffect(() => {
+  const refreshLink = useCallback(() => {
+    if (bindingRequest.current) return bindingRequest.current.promise;
     const controller = new AbortController();
-    fetch("/api/member/wallet-link", { cache: "no-store", credentials: "same-origin", signal: controller.signal })
-      .then(async response => {
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(data?.error || "wallet_link_unavailable");
-        setBinding(data.linked === true && isAddress(data.address)
-          ? { status: "linked", address: getAddress(data.address) }
-          : { status: "unlinked", address: "" });
+    setBinding(current => ({ status: "loading", address: current.address, error: "" }));
+    const request = { controller, promise: null };
+    request.promise = readWalletBinding({ signal: controller.signal })
+      .then(data => {
+        const next = data.linked
+          ? { status: "linked", address: getAddress(data.address), error: "" }
+          : { status: "unlinked", address: "", error: "" };
+        setBinding(next);
+        return next;
       })
       .catch(error => {
-        if (error?.name !== "AbortError") setBinding({ status: "error", address: "" });
-      });
-    return () => controller.abort();
+        const failure = walletBindingFailure(error);
+        if (failure !== "aborted") setBinding({ status: "error", address: "", error: failure });
+        throw error;
+      })
+      .finally(() => { if (bindingRequest.current === request) bindingRequest.current = null; });
+    bindingRequest.current = request;
+    return request.promise;
   }, []);
+
+  useEffect(() => {
+    void refreshLink().catch(() => {});
+    return () => bindingRequest.current?.controller.abort();
+  }, [refreshLink]);
+
+  // The dashboard session projection loads independently from AppKit. If the
+  // first status read raced session establishment, retry once when that verified
+  // projection becomes available instead of leaving the wallet stuck in error.
+  useEffect(() => {
+    const email = typeof memberSession?.email === "string" ? memberSession.email.trim().toLowerCase() : "";
+    if (email && email !== sessionRetryEmail.current && binding.status === "error") {
+      sessionRetryEmail.current = email;
+      void refreshLink().catch(() => {});
+    }
+  }, [binding.status, memberSession?.email, refreshLink]);
+
+  useEffect(() => {
+    const retryWhenOnline = () => {
+      if (binding.status === "error") void refreshLink().catch(() => {});
+    };
+    window.addEventListener("online", retryWhenOnline);
+    return () => window.removeEventListener("online", retryWhenOnline);
+  }, [binding.status, refreshLink]);
 
   const openConnect = useCallback(
     () => open({ view: "Connect", namespace: "eip155" }),
@@ -140,7 +181,7 @@ function ConfiguredReownProvider({ children }) {
       const challenge = await walletRequest("/api/member/wallet-link/challenge", { address: currentAddress });
       if (challenge.linked === true) {
         if (!sameAddress(challenge.address, currentAddress)) throw new Error("wallet_address_mismatch");
-        const linked = { status: "linked", address: getAddress(challenge.address) };
+        const linked = { status: "linked", address: getAddress(challenge.address), error: "" };
         setBinding(linked);
         return challenge;
       }
@@ -157,7 +198,7 @@ function ConfiguredReownProvider({ children }) {
         signature,
       });
       if (confirmed.linked !== true || !sameAddress(confirmed.address, currentAddress)) throw new Error("wallet_link_unconfirmed");
-      setBinding({ status: "linked", address: getAddress(confirmed.address) });
+      setBinding({ status: "linked", address: getAddress(confirmed.address), error: "" });
       return confirmed;
     })().finally(() => {
       linking.current = null;
@@ -172,12 +213,27 @@ function ConfiguredReownProvider({ children }) {
     const operation = (async () => {
       if (account.isConnected !== true || !currentAddress || !walletProvider) throw new Error("wallet_not_connected");
       setOnrampState({ status: "linking", error: "" });
+      if (["loading", "error"].includes(binding.status)) await refreshLink();
       if (!isLinked) await linkWallet();
       setOnrampState({ status: "opening", error: "" });
-      await open({ view: "OnRampProviders" });
+      const provider = OnRampController.state.providers.find(item => item.name === "meld");
+      if (!provider) throw new Error("onramp_provider_unavailable");
+      OnRampController.setSelectedProvider(provider);
+      const locale = navigator.languages?.[0] || navigator.language || "";
+      const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+      const checkoutUrl = buildMeldOnrampUrl({
+        providerUrl: OnRampController.state.selectedProvider?.url,
+        address: currentAddress,
+        projectId,
+        countryCode: browserOnrampRegion([...(navigator.languages || [locale])], timeZone),
+        locale,
+      });
+      const checkout = window.open(checkoutUrl, "_blank");
+      if (checkout) checkout.opener = null;
+      else window.location.assign(checkoutUrl);
       onrampIntent.current = false;
       setOnrampState({ status: "open", error: "" });
-      return { opened: true, provider: "meld" };
+      return { opened: true, provider: "meld", asset: PERSONAL_WALLET_ASSET, minimumUsd: PERSONAL_WALLET_MINIMUM_USD };
     })().catch(error => {
       onrampIntent.current = false;
       setOnrampState({ status: "error", error: onrampErrorCode(error) });
@@ -187,7 +243,7 @@ function ConfiguredReownProvider({ children }) {
     });
     onrampFlow.current = operation;
     return operation;
-  }, [account.isConnected, currentAddress, isLinked, linkWallet, open, walletProvider]);
+  }, [account.isConnected, binding.status, currentAddress, isLinked, linkWallet, refreshLink, walletProvider]);
 
   const openOnramp = useCallback(() => runOnramp(), [runOnramp]);
 
@@ -263,6 +319,7 @@ function ConfiguredReownProvider({ children }) {
     status: account.status || "disconnected",
     linkedAddress: binding.address,
     linkStatus: binding.status,
+    linkError: binding.error,
     isLinked,
     isLinking,
     onrampStatus: onrampState.status,
@@ -272,9 +329,10 @@ function ConfiguredReownProvider({ children }) {
     startOnramp,
     reconnectWallet,
     linkWallet,
+    refreshLink,
     openAccount,
-  }), [account.isConnected, account.status, binding.address, binding.status, currentAddress, isLinked, isLinking,
-    linkWallet, onrampState.error, onrampState.status, openAccount, openConnect, openOnramp, reconnectWallet, startOnramp]);
+  }), [account.isConnected, account.status, binding.address, binding.error, binding.status, currentAddress, isLinked, isLinking,
+    linkWallet, onrampState.error, onrampState.status, openAccount, openConnect, openOnramp, reconnectWallet, refreshLink, startOnramp]);
 
   return <ReownContext.Provider value={value}>{children}</ReownContext.Provider>;
 }

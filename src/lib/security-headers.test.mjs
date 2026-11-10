@@ -49,13 +49,14 @@ test('enforced policy leaves hydration, styles and hosted navigation intact; str
   assert.doesNotMatch(CANDIDATE_CSP, /report-uri|report-to|report-sample|unsafe-eval/);
 });
 
-test('uploaded static files get the same safe policy without wildcard cache rules or HSTS assumptions', () => {
+test('uploaded static files get a controlled security-only prefix without wildcard cache or HSTS assumptions', () => {
   const output = generateStaticCacheHeaders(['_next/static/chunks/fixture.js']);
   assert.match(output, /content-security-policy: base-uri 'self'; object-src 'none'; frame-ancestors 'none'/i);
   assert.match(output, /x-frame-options: DENY/i);
   assert.match(output, /referrer-policy: strict-origin-when-cross-origin/i);
   assert.doesNotMatch(output, /strict-transport-security|includeSubDomains|preload/);
-  assert.equal(output.split('\n').filter(line => line.startsWith('/')).length, 1);
+  assert.equal(output.split('\n').filter(line => line.startsWith('/')).length, 2);
+  assert.doesNotMatch(output, /\/_next\/static\/\*\n {2}Cache-Control/);
 });
 
 test('every explicit edge response passes request context through the security wrapper', () => {

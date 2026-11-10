@@ -95,7 +95,7 @@ const syntheticEnv = {
         return Response.json(referralPreference);
       }
       const body = JSON.parse(options.body || '{}');
-      if (options.method !== 'POST' || JSON.stringify(body) !== JSON.stringify({ email: 'fixture@example.test', ref: 'SYNTHETIC-SPONSOR', preferred_side: 'R' })) {
+      if (options.method !== 'POST' || JSON.stringify(body) !== JSON.stringify({ email: 'fixture@example.test', ref: 'SYNTHETIC-SPONSOR', preferred_side: '' })) {
         throw new Error('invalid_synthetic_referral_preference');
       }
       metrics.referralPreferenceWrites++;

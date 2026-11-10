@@ -20,21 +20,22 @@ function fixture(t, files) {
   return { root, assets };
 }
 
-test('only exact existing public build files get cache rules; no wildcard or private namespace rules', t => {
+test('only existing public build files get cache rules; the controlled Next wildcard adds security only', t => {
   const { assets } = fixture(t, ['_headers', 'BUILD_ID', 'robots.txt', 'index.html',
     '_next/static/chunks/hash.js', '_next/static/chunks/hash.css', '_next/static/build/_buildManifest.js',
     '_next/static/media/font.woff2', 'fonts/font.woff2', 'fonts/README.md', 'fonts/OFL.txt', 'mindbliss/logo.png']);
   const result = prepareStaticCacheHeaders(assets);
-  assert.equal(result.rules, 8);
+  assert.equal(result.rules, 9);
   const output = readFileSync(join(assets, '_headers'), 'utf8');
   const rules = output.split('\n').filter(line => line.startsWith('/'));
   assert.deepEqual(rules, ['/_next/static/build/_buildManifest.js', '/_next/static/chunks/hash.css',
-    '/_next/static/chunks/hash.js', '/_next/static/media/font.woff2', '/fonts/OFL.txt', '/fonts/README.md',
+    '/_next/static/chunks/hash.js', '/_next/static/media/font.woff2', '/_next/static/*', '/fonts/OFL.txt', '/fonts/README.md',
     '/fonts/font.woff2', '/mindbliss/logo.png']);
   assert.match(output, /\/_next\/static\/chunks\/hash\.js\n {2}Cache-Control: public, max-age=31536000, immutable/);
   assert.match(output, /\/fonts\/OFL\.txt\n {2}Cache-Control: public, max-age=3600, must-revalidate/);
   assert.match(output, /\/mindbliss\/logo\.png\n {2}Cache-Control: public, max-age=3600, must-revalidate/);
-  assert.doesNotMatch(output, /\*|\/index\.html|\/robots\.txt|\/BUILD_ID|\/_headers/);
+  assert.match(output, /\/_next\/static\/\*[\s\S]*?\n {2}x-content-type-options: nosniff/);
+  assert.doesNotMatch(output, /\/_next\/static\/\*\n {2}Cache-Control|\/(?:fonts|mindbliss)\/\*|\/index\.html|\/robots\.txt|\/BUILD_ID|\/_headers/);
   for (const line of output.split('\n')) assert.ok(line.length <= 2000);
 });
 
@@ -52,10 +53,15 @@ test('missing static-looking paths have no matching header rule and cannot inher
 test('manifest output is deterministic, deduplicated and bounded to 100 rules', () => {
   const paths = Array.from({ length: 100 }, (_, index) => '_next/static/chunks/hash-' + index + '.js');
   const output = generateStaticCacheHeaders(paths.concat(paths).reverse());
-  assert.equal(output.split('\n').filter(line => line.startsWith('/')).length, 100);
+  assert.equal(output.split('\n').filter(line => line.startsWith('/')).length, 1);
   assert.equal(output, generateStaticCacheHeaders(paths));
-  assert.throws(() => generateStaticCacheHeaders(paths.concat('_next/static/chunks/overflow.js')), /rule_limit_exceeded_101_maximum_100/);
-  assert.throws(() => generateStaticCacheHeaders(['_next/static/' + 'a'.repeat(2000) + '.js']), /line_limit_exceeded/);
+  assert.equal(generateStaticCacheHeaders(paths.concat('_next/static/chunks/overflow.js'))
+    .split('\n').filter(line => line.startsWith('/')).length, 1);
+  assert.equal(generateStaticCacheHeaders(paths.slice(0, 99))
+    .split('\n').filter(line => line.startsWith('/')).length, 100);
+  const stable = Array.from({ length: 101 }, (_, index) => 'mindbliss/image-' + index + '.png');
+  assert.throws(() => generateStaticCacheHeaders(stable), /rule_limit_exceeded_101_maximum_100/);
+  assert.throws(() => generateStaticCacheHeaders(['mindbliss/' + 'a'.repeat(2000) + '.png']), /line_limit_exceeded/);
 });
 
 test('wildcards, placeholders, encoded paths, traversal, control characters and absolute paths fail closed', () => {

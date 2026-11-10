@@ -41,7 +41,7 @@ function loadPages({ summary = { loading: true, data: null, error: '' }, health 
     '@/lib/member-read.mjs': { isRecoverySummary: data => data?.recovery_mode === true },
     '@/lib/personal-wallet.mjs': {
       MINDBLISS_ONRAMP_FEE_PERCENT: 1,
-      PERSONAL_WALLET_ASSET: 'USDC',
+      PERSONAL_WALLET_ASSET: 'USDT',
     },
     '@/i18n/LanguageProvider': { useI18n: () => ({ locale: 'es', dir: 'ltr', t: (key, values) => translateMessage('es', key, values) }) },
     '@/lib/useNetworkHealth': { useNetworkHealth: () => health },

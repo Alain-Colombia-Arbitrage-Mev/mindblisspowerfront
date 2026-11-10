@@ -17,7 +17,8 @@ test("Reown creates EVM wallets, links one signed address and never replaces mem
   assert.match(provider, /analytics: false/);
   assert.match(provider, /onramp: true/);
   assert.match(provider, /allowUnsupportedChain: false/);
-  assert.match(provider, /view: "OnRampProviders"/);
+  assert.match(provider, /buildMeldOnrampUrl/);
+  assert.match(provider, /OnRampController\.setSelectedProvider/);
   assert.match(provider, /provider: "meld"/);
   assert.doesNotMatch(provider, /\/api\/member\/onramp\/session|app\.topperpay\.com|widget\.swapped\.com|Binance/i);
   assert.match(provider, /onrampIntent\.current = true/);
@@ -41,6 +42,7 @@ test("all Reown packages use the same pinned release", () => {
   const pkg = JSON.parse(read("../../package.json"));
   assert.equal(pkg.dependencies["@reown/appkit"], "1.8.24");
   assert.equal(pkg.dependencies["@reown/appkit-adapter-ethers"], "1.8.24");
+  assert.equal(pkg.dependencies["@reown/appkit-controllers"], "1.8.24");
   assert.equal(pkg.dependencies["@reown/appkit-siwx"], undefined);
 });
 
@@ -57,6 +59,8 @@ test("personal and administrative wallets remain visibly separate without loadin
   assert.match(finance, /walletPage\.managedByMeld/);
   assert.match(finance, /MINDBLISS_ONRAMP_FEE_PERCENT/);
   assert.match(policy, /MINDBLISS_ONRAMP_FEE_BPS = 100/);
+  assert.match(policy, /PERSONAL_WALLET_ASSET = "USDT"/);
+  assert.match(policy, /PERSONAL_WALLET_MINIMUM_USD = 50/);
   assert.doesNotMatch(finance, /PERSONAL_WALLET_RECOMMENDED_PROVIDERS|Topper|Swapped/);
   assert.doesNotMatch(sidebar, /Binance/i);
 });

@@ -49,6 +49,7 @@ function view(file) {
     'next/link': { default: link }, 'lucide-react': icons,
     '@radix-ui/react-dialog': radix, '@/i18n/LanguageProvider': i18n,
     '@/components/reown/ReownContext': reown,
+    '@/lib/personal-wallet.mjs': { PERSONAL_WALLET_ASSET: 'USDT' },
   });
 }
 
@@ -108,7 +109,7 @@ test('the empty-balance reminder can continue to methods and every dismiss actio
   const harness = view('FirstRechargeDialog.jsx');
   const props = { open: true, initialStep: 'reminder', onOpenChange(value) { if (value === false) closed += 1; } };
   let tree = harness.render(props);
-  assert.match(renderToStaticMarkup(tree), /0\.00.*USDC.*¿Tu primera recarga/s);
+  assert.match(renderToStaticMarkup(tree), /0\.00.*USDT.*¿Tu primera recarga/s);
   button(tree, 'Seguir explorando').props.onClick();
   assert.equal(closed, 1);
   button(tree, 'Recargar mi wallet').props.onClick();

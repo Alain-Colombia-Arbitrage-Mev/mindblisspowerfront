@@ -1,5 +1,6 @@
 import { ArrowUpRight, Plus } from "lucide-react";
 import { useI18n } from "@/i18n/LanguageProvider";
+import { PERSONAL_WALLET_ASSET } from "@/lib/personal-wallet.mjs";
 
 export default function EarningsCard({ total = "—", ready = false, historical = false, preview = false, onRecharge }) {
   const { t } = useI18n();
@@ -11,7 +12,7 @@ export default function EarningsCard({ total = "—", ready = false, historical 
       </div>
       <div>
         <p className="mb-wallet-label">{t("overview.totalBalance")}</p>
-        <div className="mb-wallet-balance"><strong>{total}</strong><span>USDC</span></div>
+        <div className="mb-wallet-balance"><strong>{total}</strong><span>{PERSONAL_WALLET_ASSET}</span></div>
       </div>
       <p className="mb-wallet-copy">{preview ? t("overview.demoCopy") : t("overview.emptyWalletCopy")}</p>
       <div className="mb-wallet-actions">

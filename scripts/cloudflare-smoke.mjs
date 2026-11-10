@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createHmac } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 
 // Run only inside the isolated build image, with --network none and tmpfs state.
 const worker = spawn(process.execPath, ['node_modules/wrangler/bin/wrangler.js', 'dev', 'cloudflare-smoke-worker.mjs',
@@ -86,8 +87,8 @@ try {
   assert.equal(traced.traceCalls, 2); assert.equal(traced.traceEvents, 1);
   assert.equal(traced.privateCalls, resendMetricsBefore.privateCalls, 'durable email metadata never calls auth, DB or Payments');
   for (const [path, destination] of [
-    ['/?ref=SYNTHETIC-SPONSOR&side=L', '/register?ref=SYNTHETIC-SPONSOR&side=L'],
-    ['/?ref=SYNTHETIC-SPONSOR&side=R&email=private%40example.test&next=https%3A%2F%2Fevil.example.test', '/register?ref=SYNTHETIC-SPONSOR&side=R'],
+    ['/?ref=SYNTHETIC-SPONSOR&side=L', '/register?ref=SYNTHETIC-SPONSOR'],
+    ['/?ref=SYNTHETIC-SPONSOR&side=R&email=private%40example.test&next=https%3A%2F%2Fevil.example.test', '/register?ref=SYNTHETIC-SPONSOR'],
     ['/', '/dashboard'],
   ]) {
     const response = await fetch(`http://127.0.0.1:8787${path}`, { redirect: 'manual', signal: AbortSignal.timeout(8000) });
@@ -99,8 +100,8 @@ try {
     probes++;
   }
   for (const [path, destination, message] of [
-    ['/register?ref=SYNTHETIC-SPONSOR&side=R', '/login?mode=code&ref=SYNTHETIC-SPONSOR&side=R', 'the built registration page preserves the referral when returning to access'],
-    ['/login?ref=SYNTHETIC-SPONSOR&side=R', '/register?ref=SYNTHETIC-SPONSOR&side=R', 'the built access page preserves the referral when continuing to registration'],
+    ['/register?ref=SYNTHETIC-SPONSOR&side=R', '/login?mode=code&ref=SYNTHETIC-SPONSOR', 'the built registration page preserves only the referral when returning to access'],
+    ['/login?ref=SYNTHETIC-SPONSOR&side=R', '/register?ref=SYNTHETIC-SPONSOR', 'the built access page preserves only the referral when continuing to registration'],
   ]) {
     const response = await fetch(`http://127.0.0.1:8787${path}`, { redirect: 'manual', signal: AbortSignal.timeout(8000) });
     assert.equal(response.status, 200);
@@ -147,7 +148,13 @@ try {
     probes++;
   }
   assert.ok(staticChunk, 'the built page references a real uploaded JS chunk');
-  for (const [path, expected] of [[staticChunk, 'public, max-age=31536000, immutable'],
+  const exactStaticRules = readFileSync('.open-next/assets/_headers', 'utf8')
+    .split('\n').filter(line => line.startsWith('/'));
+  const staticChunkPath = staticChunk.split('?', 1)[0];
+  const staticChunkCache = exactStaticRules.includes(staticChunkPath)
+    ? 'public, max-age=31536000, immutable'
+    : 'public, max-age=0, must-revalidate';
+  for (const [path, expected] of [[staticChunk, staticChunkCache],
     ['/mindbliss/mindbliss-symbol.png', 'public, max-age=3600, must-revalidate']]) {
     const asset = await fetch(`http://127.0.0.1:8787${path}`, { signal: AbortSignal.timeout(8000) });
     assert.equal(asset.status, 200, path);
@@ -332,10 +339,12 @@ try {
       assert.equal(dashboard.status, 200);
       assert.match(html, /class="vp-dashboard-shell"/);
       assert.match(html, /id="member-main"/);
-      assert.match(html, />Plan Fixture 1</);
+      assert.match(html, />Tu espacio Mindbliss</);
+      assert.match(html, />Mis membresías</);
+      assert.match(html, />Wallet personal<\/span><strong>— (?:<!-- -->)?USDT</);
       assert.doesNotMatch(html, /MBP-LOGIN-(?:SERVICE|VERIFY)/);
     } else {
-      assert.doesNotMatch(html, /class="vp-dashboard-shell"|id="member-main"|>Plan Fixture 1</,
+      assert.doesNotMatch(html, /class="vp-dashboard-shell"|id="member-main"|>Tu espacio Mindbliss</,
         'invalid or unavailable identities never receive the dashboard shell or rendered private child');
       if (outcome === 'anonymous' || outcome === 'invalid-jwt') {
         assert.equal(dashboard.status, 307);
@@ -395,21 +404,18 @@ try {
   const savedAttribution = await post(attributionPath,
     { ref: 'SYNTHETIC-SPONSOR', preferred_side: 'R', expected_email: 'fixture@example.test' }, cookie);
   assert.equal(savedAttribution.status, 200);
-  assert.deepEqual(await savedAttribution.json(), { ok: true, ref: 'SYNTHETIC-SPONSOR', preferred_side: 'R', positioned: false }); probes++;
-  for (const path of ['/__overview_fixture/dashboard', '/__overview_fixture/dashboard/home']) {
+  assert.deepEqual(await savedAttribution.json(), { ok: true, ref: 'SYNTHETIC-SPONSOR', preferred_side: '', positioned: false }); probes++;
+  for (const path of ['/__overview_fixture/dashboard']) {
     const overview = await fetch(`http://127.0.0.1:8787${path}`, {
       headers: sessionHeaders, redirect: 'manual', signal: AbortSignal.timeout(12000),
     });
     assert.equal(overview.status, 200, path);
     const html = await overview.text();
-    assert.match(html, /Planes de membresía/);
+    assert.match(html, />Tu espacio Mindbliss</);
+    assert.match(html, />Mis membresías</);
+    assert.match(html, />Wallet personal<\/span><strong>— (?:<!-- -->)?USDT</);
     assert.doesNotMatch(html, /href="\/dashboard\/kyc"|Verificación de identidad/);
-    for (let id = 1; id <= 13; id++) {
-      assert.ok(html.includes(`>Plan Fixture ${id}<`), `server-rendered catalog name ${id}`);
-      assert.ok(html.includes(`href="/dashboard/packages?plan=${id}#plan-${id}"`), `safe catalog destination ${id}`);
-      assert.ok(html.includes(`aria-label="Comprar plan Plan Fixture ${id}"`), `purchase catalog label ${id}`);
-    }
-    assert.doesNotMatch(html, /999999|11001|postgres:\/\/synthetic/);
+    assert.doesNotMatch(html, /Plan Fixture|999999|11001|postgres:\/\/synthetic/);
     assert.match(overview.headers.get('cache-control'), /no-store/);
     probes++;
   }

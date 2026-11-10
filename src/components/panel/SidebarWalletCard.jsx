@@ -2,6 +2,7 @@ import { ArrowUpRight, CreditCard, Wallet } from "lucide-react";
 
 import Link from "./IntentLink";
 import { useI18n } from "@/i18n/LanguageProvider";
+import { PERSONAL_WALLET_ASSET } from "@/lib/personal-wallet.mjs";
 
 export default function SidebarWalletCard({ onNavigate }) {
   const { t } = useI18n();
@@ -10,7 +11,7 @@ export default function SidebarWalletCard({ onNavigate }) {
       <div className="vp-sidebar-wallet-heading">
         <span>
           <span className="vp-sidebar-wallet-label">{t("nav.personalWallet")}</span>
-          <strong>— USDC</strong>
+          <strong>— {PERSONAL_WALLET_ASSET}</strong>
         </span>
         <Wallet size={18} aria-hidden="true" />
       </div>

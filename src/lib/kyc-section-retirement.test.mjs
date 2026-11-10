@@ -22,6 +22,7 @@ function moduleAt(relative, mocks = {}) {
     if (id === "lucide-react") return new Proxy({}, { get: () => icon });
     if (id === "./IntentLink") return { default: Link };
     if (id === "@/lib/member-navigation.mjs") return { matchesRoute };
+    if (id === "@/lib/personal-wallet.mjs") return { PERSONAL_WALLET_ASSET: "USDT" };
     if (id === "@/i18n/LanguageProvider") return { useI18n: () => ({ t: key => ({
       "nav.account": "CUENTA", "nav.summary": "Resumen", "nav.memberships": "Membresías", "nav.wallet": "Billetera",
       "nav.communityGroup": "COMUNIDAD", "nav.community": "Comunidad", "nav.referrals": "Referidos por niveles", "nav.ranks": "Rangos",

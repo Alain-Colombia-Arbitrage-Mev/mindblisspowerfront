@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 
 import { useI18n } from "@/i18n/LanguageProvider";
 import { useReownWallet } from "@/components/reown/ReownContext";
+import { PERSONAL_WALLET_ASSET } from "@/lib/personal-wallet.mjs";
 
 const VALID_STEPS = new Set(["welcome", "methods", "reminder"]);
 
@@ -103,7 +104,7 @@ export default function FirstRechargeDialog({ open, initialStep = "welcome", onO
               <div className="mb-recharge-balance" aria-label={t("recharge.balanceAvailable")}>
                 <span className="mb-recharge-balance-icon"><Plus size={24} aria-hidden="true" /></span>
                 <small>{t("recharge.balanceAvailable")}</small>
-                <div><strong>0.00</strong><span>USDC</span></div>
+                <div><strong>0.00</strong><span>{PERSONAL_WALLET_ASSET}</span></div>
               </div>
               <div className="mb-recharge-copy mb-recharge-copy--centered">
                 <Dialog.Title>{t("recharge.reminderTitle")}</Dialog.Title>

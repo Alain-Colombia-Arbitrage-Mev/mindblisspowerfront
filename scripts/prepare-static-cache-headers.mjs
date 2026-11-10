@@ -56,18 +56,28 @@ function policyFor(path) {
   return cacheControl;
 }
 
-// Pure manifest generation. Paths must name existing uploaded files supplied by
-// the filesystem collector, not URL prefixes or extension wildcards.
+// Pure manifest generation. Cache policies must name existing uploaded files
+// supplied by the filesystem collector. The one controlled Next prefix rule
+// adds security headers only; it never adds a cache lifetime. If a build has
+// more hashed assets than Cloudflare's rule budget, omit their optional exact
+// browser-cache overrides instead of caching wildcard 404s or failing deployment.
 export function generateStaticCacheHeaders(assetPaths) {
   if (!Array.isArray(assetPaths)) fail('invalid_asset_manifest');
   const rules = [];
+  const nextRules = [];
   const security = [...applySecurityHeaders(new Headers()).entries()]
     .map(([name, value]) => '  ' + name + ': ' + value).join('\n');
   for (const path of [...new Set(assetPaths)].sort()) {
     const cacheControl = policyFor(path);
-    if (cacheControl) rules.push('/' + path + '\n  Cache-Control: ' + cacheControl + '\n' + security);
+    if (!cacheControl) continue;
+    const isNextAsset = path.startsWith('_next/static/');
+    const rule = '/' + path + '\n  Cache-Control: ' + cacheControl + (isNextAsset ? '' : '\n' + security);
+    if (isNextAsset) nextRules.push(rule);
+    else rules.push(rule);
   }
+  if (nextRules.length) rules.unshift('/_next/static/*\n' + security);
   if (rules.length > MAX_STATIC_CACHE_RULES) fail('rule_limit_exceeded_' + rules.length + '_maximum_' + MAX_STATIC_CACHE_RULES);
+  if (nextRules.length <= MAX_STATIC_CACHE_RULES - rules.length) rules.unshift(...nextRules);
   const output = '# Generated from existing public build assets only. Do not edit.\n\n' + rules.join('\n\n') + '\n';
   if (output.split('\n').some(line => line.length > MAX_STATIC_CACHE_HEADER_LINE)) fail('line_limit_exceeded');
   return output;

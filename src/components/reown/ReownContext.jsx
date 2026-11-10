@@ -10,6 +10,7 @@ export const ReownContext = createContext(Object.freeze({
   status: "unavailable",
   linkedAddress: "",
   linkStatus: "unavailable",
+  linkError: "",
   isLinked: false,
   isLinking: false,
   onrampStatus: "idle",
@@ -19,6 +20,7 @@ export const ReownContext = createContext(Object.freeze({
   startOnramp: async () => { throw new Error("reown_unavailable"); },
   reconnectWallet: async () => { throw new Error("reown_unavailable"); },
   linkWallet: async () => { throw new Error("reown_unavailable"); },
+  refreshLink: async () => { throw new Error("reown_unavailable"); },
   openAccount: async () => { throw new Error("reown_unavailable"); },
 }));
 
@@ -33,6 +35,7 @@ export const ReownContext = createContext(Object.freeze({
  * @property {string} status
  * @property {string} linkedAddress
  * @property {string} linkStatus
+ * @property {string} linkError
  * @property {boolean} isLinked
  * @property {boolean} isLinking
  * @property {string} onrampStatus
@@ -42,6 +45,7 @@ export const ReownContext = createContext(Object.freeze({
  * @property {() => Promise<unknown>} startOnramp
  * @property {() => Promise<unknown>} reconnectWallet
  * @property {() => Promise<unknown>} linkWallet
+ * @property {() => Promise<unknown>} refreshLink
  * @property {() => Promise<unknown>} openAccount
  */
 export function useReownWallet() {
