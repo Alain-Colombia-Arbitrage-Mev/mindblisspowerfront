@@ -164,9 +164,8 @@ function OnrampState({ state, t }) {
   if (state.availabilityStatus === "unavailable" || state.quoteStatus === "unavailable") {
     return <p className="mb-onramp-message warning" role="status">{t("onramp.noVerifiedOption")}</p>;
   }
-  if (state.availabilityStatus === "error" || state.quoteStatus === "error") {
-    return <p className="mb-onramp-message warning" role="status">{t("onramp.noVerifiedOption")}</p>;
-  }
+  if (state.availabilityStatus === "error") return <p className="mb-onramp-message warning" role="alert">{t("walletPage.availabilityError")}</p>;
+  if (state.quoteStatus === "error") return <p className="mb-onramp-message warning" role="alert">{t("walletPage.quoteUnavailable")}</p>;
   return null;
 }
 

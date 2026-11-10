@@ -4,8 +4,6 @@ import { useEffect } from "react";
 
 const CUSTOMER_APP_HOST = "app.mindblisspower.com";
 const ADMIN_APP_HOST = "admin.mindblisspower.com";
-const DEFAULT_BASE_URL = "https://soporte.mindblisspower.com";
-const DEFAULT_WEBSITE_TOKEN = "F6FdM8HdY2GaPJ8Ps9dKFn69";
 const SCRIPT_ID = "mindbliss-chatwoot-sdk";
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 
@@ -31,11 +29,8 @@ export default function ChatwootWidget() {
     if (!shouldLoadChatwoot(window.location.hostname)) return;
     if (window.__mindblissChatwootLoaded) return;
 
-    const baseUrl = (
-      process.env.NEXT_PUBLIC_CHATWOOT_BASE_URL || DEFAULT_BASE_URL
-    ).replace(/\/+$/, "");
-    const websiteToken =
-      process.env.NEXT_PUBLIC_CHATWOOT_WEBSITE_TOKEN || DEFAULT_WEBSITE_TOKEN;
+    const baseUrl = String(process.env.NEXT_PUBLIC_CHATWOOT_BASE_URL || "").trim().replace(/\/+$/, "");
+    const websiteToken = String(process.env.NEXT_PUBLIC_CHATWOOT_WEBSITE_TOKEN || "").trim();
 
     if (!baseUrl || !websiteToken) return;
 
@@ -70,7 +65,7 @@ export default function ChatwootWidget() {
     script.onload = initializeChatwoot;
     script.onerror = () => {
       window.__mindblissChatwootLoaded = false;
-      console.warn("Mindbliss support chat failed to load.");
+      document.getElementById(SCRIPT_ID)?.remove();
     };
 
     document.body.appendChild(script);

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { applySecurityHeaders, CANDIDATE_CSP, DOCUMENT_CSP } from './security-headers.mjs';
+import { applySecurityHeaders, DOCUMENT_CSP } from './security-headers.mjs';
 import { privateCloudflareResponse } from './cloudflare-portal-guard.mjs';
 import { generateStaticCacheHeaders } from '../../scripts/prepare-static-cache-headers.mjs';
 
@@ -16,7 +16,7 @@ test('all dynamic statuses retain security, private cache, cookies, body and rou
     assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
     assert.equal(response.headers.get('x-frame-options'), 'DENY');
     assert.equal(response.headers.get('content-security-policy'), DOCUMENT_CSP);
-    assert.equal(response.headers.get('content-security-policy-report-only'), CANDIDATE_CSP);
+    assert.equal(response.headers.has('content-security-policy-report-only'), false);
     assert.equal(response.headers.get('referrer-policy'), 'strict-origin-when-cross-origin');
     assert.match(response.headers.get('permissions-policy'), /camera=\(\).*microphone=\(\)/);
     assert.equal(response.headers.get('strict-transport-security'), 'max-age=86400');
@@ -42,11 +42,12 @@ test('HSTS is staged on exact trusted HTTPS hosts, never forwarded headers, prel
   }
 });
 
-test('enforced policy leaves hydration, styles and hosted navigation intact; stricter policy only observes', () => {
+test('enforced policy leaves hydration and provider flows intact without a non-reporting report-only policy', () => {
   assert.doesNotMatch(DOCUMENT_CSP, /(?:default|script|style|connect|form-action|navigate-to)-src|unsafe-eval|nonce-/);
   assert.match(DOCUMENT_CSP, /frame-ancestors 'none'/);
-  assert.match(CANDIDATE_CSP, /script-src 'self'/);
-  assert.doesNotMatch(CANDIDATE_CSP, /report-uri|report-to|report-sample|unsafe-eval/);
+  const headers = applySecurityHeaders(new Headers({ 'content-security-policy-report-only': "default-src 'none'" }),
+    new Request('https://app.mindblisspower.com/dashboard'));
+  assert.equal(headers.has('content-security-policy-report-only'), false);
 });
 
 test('uploaded static files get a controlled security-only prefix without wildcard cache or HSTS assumptions', () => {

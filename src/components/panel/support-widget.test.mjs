@@ -25,4 +25,6 @@ test('Chatwoot loads with the member support widget without drawing a duplicate 
   assert.match(widget, /<ChatwootWidget\s*\/>/);
   assert.match(chatwoot, /hideMessageBubble:\s*true/);
   assert.match(chatwoot, /__mindblissChatwootLoaded/);
+  assert.match(chatwoot, /NEXT_PUBLIC_CHATWOOT_BASE_URL\s*\|\|\s*""/);
+  assert.doesNotMatch(chatwoot, /soporte\.mindblisspower\.com|F6FdM8HdY2GaPJ8Ps9dKFn69/);
 });

@@ -1,15 +1,13 @@
 // Deliberately independent of Next, environment variables and user input.
-// Do not enforce script/style restrictions until hydration and provider flows
-// have been validated. The candidate policy is observation-only (no reports
-// containing URLs/user data are sent to an external collector).
+// Do not advertise a report-only policy without a same-origin reporting
+// endpoint: browsers cannot deliver it and only emit misleading console noise.
 export const DOCUMENT_CSP = "base-uri 'self'; object-src 'none'; frame-ancestors 'none'";
-export const CANDIDATE_CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self'; frame-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'";
 const productionHosts = new Set(['mindblisspower.com', 'admin.mindblisspower.com', 'app.mindblisspower.com',
   'mindbliss-portal-rewon.devfidubit.workers.dev']);
 
 export function applySecurityHeaders(headers, request) {
   headers.set('Content-Security-Policy', DOCUMENT_CSP);
-  headers.set('Content-Security-Policy-Report-Only', CANDIDATE_CSP);
+  headers.delete('Content-Security-Policy-Report-Only');
   headers.set('X-Frame-Options', 'DENY');
   headers.set('X-Content-Type-Options', 'nosniff');
   headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');

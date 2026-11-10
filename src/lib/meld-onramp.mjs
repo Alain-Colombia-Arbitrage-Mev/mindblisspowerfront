@@ -14,7 +14,7 @@ const LOCALE = /^[a-z]{2,3}(?:-[A-Z]{2})?$/;
 const CUSTOMER_REFERENCE = /^[A-Za-z0-9_-]{8,128}$/;
 const PAYMENT_METHOD = /^[A-Z0-9_]{2,40}$/;
 const PROVIDER = /^[A-Z0-9_]{2,40}$/;
-const BLOCKED_PROVIDERS = new Set(["BINANCECONNECT", "BINANCEPAY"]);
+const ALLOWED_PROVIDERS = new Set(["TOPPER", "SWAPPED"]);
 
 /** Build only the trusted Meld checkout URL obtained from Reown's controller. */
 export function buildMeldOnrampUrl({ providerUrl, address, projectId, checkoutReference, countryCode = "", locale = "",
@@ -46,7 +46,7 @@ function buildOnrampUrl({ providerUrl, address, externalCustomerId, countryCode,
   const normalizedAmount = Number(amount);
   if (!Number.isFinite(normalizedAmount) || normalizedAmount < minimumUsd || normalizedAmount > 25_000) throw new Error("meld_context_invalid");
   if (paymentMethodType && !PAYMENT_METHOD.test(paymentMethodType)) throw new Error("meld_context_invalid");
-  if (!PROVIDER.test(serviceProvider || "") || BLOCKED_PROVIDERS.has(serviceProvider)) throw new Error("meld_context_invalid");
+  if (!PROVIDER.test(serviceProvider || "") || !ALLOWED_PROVIDERS.has(serviceProvider)) throw new Error("meld_context_invalid");
   url.searchParams.set("sourceAmount", String(normalizedAmount));
   url.searchParams.set("walletAddress", address);
   if (externalCustomerId) url.searchParams.set("externalCustomerId", externalCustomerId);

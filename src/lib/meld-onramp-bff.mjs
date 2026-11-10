@@ -9,7 +9,7 @@ const PROVIDER = /^[A-Z0-9_]{2,40}$/;
 const ADDRESS = /^0x[0-9a-f]{40}$/i;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const CRYPTO = 'USDT_POLYGON';
-const BLOCKED_PROVIDERS = new Set(['BINANCECONNECT', 'BINANCEPAY']);
+const ALLOWED_PROVIDERS = new Set(['TOPPER', 'SWAPPED']);
 const headers = { 'Cache-Control': 'private, no-store' };
 const reply = (body, status = 200) => Response.json(body, { status, headers });
 
@@ -37,7 +37,7 @@ function availability(value) {
 function safeQuote(item) {
   const numeric = ['sourceAmount', 'destinationAmount', 'totalFee', 'transactionFee', 'networkFee', 'partnerFee'];
   if (!item || typeof item !== 'object' || Array.isArray(item) || !PROVIDER.test(item.serviceProvider || '')
-    || BLOCKED_PROVIDERS.has(item.serviceProvider)
+    || !ALLOWED_PROVIDERS.has(item.serviceProvider)
     || !METHOD.test(item.paymentMethodType || '') || numeric.some(key => typeof item[key] !== 'number' || !Number.isFinite(item[key]))) return null;
   return Object.fromEntries(['serviceProvider', 'paymentMethodType', ...numeric].map(key => [key, item[key]]));
 }
@@ -96,7 +96,7 @@ export async function handleMeldOnramp(request, action, {
       || (body.walletAddress !== undefined && !ADDRESS.test(body.walletAddress))) return reply({ error: 'invalid_request' }, 400);
     if (action === 'intent' && (!['personal', 'administrative'].includes(body.walletKind)
       || !ADDRESS.test(body.walletAddress || '') || !METHOD.test(body.paymentMethodType || '')
-      || !PROVIDER.test(body.serviceProvider || '') || BLOCKED_PROVIDERS.has(body.serviceProvider))) {
+      || !PROVIDER.test(body.serviceProvider || '') || !ALLOWED_PROVIDERS.has(body.serviceProvider))) {
       return reply({ error: 'invalid_request' }, 400);
     }
     const keys = Object.keys(body);
