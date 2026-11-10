@@ -44,5 +44,5 @@
 .history :global(.executive-table td:nth-child(2)) { white-space: nowrap; }
 .history :global(.mb-onramp-disclosure) { margin-bottom: 16px; color: var(--vp-muted); text-align: start; font-size: 12px; line-height: 1.6; }
 :global([dir="rtl"]) .back svg { transform: scaleX(-1); }
-@media (max-width: 1150px) { .flowLayout { grid-template-columns: minmax(0, 1fr); } .details { grid-row: 1; } }
+@media (max-width: 1150px) { .flowLayout { grid-template-columns: minmax(0, 1fr); } .setupRequired .details { grid-row: 1; } }
 @media (max-width: 640px) { .destinations { grid-template-columns: minmax(0, 1fr); } .screen { gap: 18px; } .destination > a { width: 100%; } .sectionHeading { align-items: start; } .pageHeading { flex-direction: column; } .pageHeading h1 { font-size: 1.75rem; } .hint, .sectionHeading p, .destination p, .pageHeading span { font-size: 14px; } }

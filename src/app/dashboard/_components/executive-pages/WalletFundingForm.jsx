@@ -185,7 +185,9 @@ function FundingSubmit({ disabled, busy }) {
   </button>;
 }
 
-function paymentMethodLabel(code, t) {
+export function paymentMethodLabel(code, t) {
+  const brands = { ASTROPAY: "AstroPay", NETELLER: "Neteller", PAYSAFECARD: "PaysafeCard", SKRILL: "Skrill" };
+  if (Object.hasOwn(brands, code)) return brands[code];
   if (["CREDIT_DEBIT_CARD", "CARD", "VISA", "MASTERCARD"].includes(code)) return t("onramp.cardPayment");
   if (code === "APPLE_PAY") return "Apple Pay";
   if (code === "GOOGLE_PAY") return "Google Pay";

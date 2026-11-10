@@ -64,7 +64,7 @@ export function PersonalWalletFunding() {
     connected: "walletPage.connectedPending", verifying: "funding.verifyingWallet", verified: "funding.walletVerified", disconnected: "funding.connectWallet" }[state];
 
   return <WalletFundingScreen title={t("walletPage.personalTitle")} subtitle={t("walletPage.personalCopy")} provider={t("funding.personalEnvironment")}>
-    <div className={styles.flowLayout} id="personal-wallet">
+    <div className={`${styles.flowLayout}${!verified ? ` ${styles.setupRequired}` : ""}`} id="personal-wallet">
       <section className={`executive-panel ${styles.formPanel}`} aria-labelledby="personal-funding-title">
         <div className={styles.sectionHeading}><span className="mb-wallet-funding-icon"><Wallet size={20} aria-hidden="true" /></span>
           <div><h2 id="personal-funding-title">{t("walletPage.addFundsAction")}</h2><p>{t("funding.personalFormCopy")}</p></div></div>

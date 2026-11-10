@@ -227,3 +227,30 @@ test('wallet failure markup exposes only the exact safe diagnostic enum while pr
   }
   assert.equal(WalletActionError({ message: '', diagnostic: 'gateway_rejected' }), null);
 });
+
+test('narrow wallet layouts prioritize funding after assignment and constrain long shell titles beside controls', () => {
+  const styles = readFileSync(new URL('wallet-funding.module.css', import.meta.url), 'utf8');
+  const personal = readFileSync(new URL('PersonalWalletFundingPage.jsx', import.meta.url), 'utf8');
+  const administrative = readFileSync(new URL('AdministrativeWalletFundingPage.jsx', import.meta.url), 'utf8');
+  const header = readFileSync(new URL('../../../../components/panel/PanelHeader.jsx', import.meta.url), 'utf8');
+  const shell = readFileSync(new URL('../../../../components/panel/panel-shell.css', import.meta.url), 'utf8');
+  assert.match(styles, /\.setupRequired \.details\s*\{\s*grid-row:\s*1/);
+  assert.doesNotMatch(styles, /(?:^|[;}])\s*\.details\s*\{\s*grid-row:\s*1/);
+  assert.match(personal, /!verified \? ` \$\{styles\.setupRequired\}`/);
+  assert.doesNotMatch(administrative, /styles\.setupRequired/);
+  assert.ok(administrative.indexOf('styles.formPanel') < administrative.indexOf('styles.details'));
+  assert.match(header, /className="vp-panel-title"/);
+  assert.match(header, /<h1 title=\{title\}>\{title\}<\/h1>/);
+  assert.match(shell, /\.vp-panel-title\s*\{[^}]*min-width:\s*0;[^}]*overflow:\s*hidden/s);
+  assert.match(shell, /\.vp-panel-heading h1\s*\{[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap/s);
+});
+
+test('returned canonical payment methods use brand labels without changing their submitted identifiers', () => {
+  const harness = formHarness('PersonalFundingForm', {});
+  const t = key => translateMessage('es', key);
+  assert.deepEqual(['ASTROPAY', 'NETELLER', 'PAYSAFECARD', 'SKRILL'].map(code => harness.exports.paymentMethodLabel(code, t)), ['AstroPay', 'Neteller', 'PaysafeCard', 'Skrill']);
+  assert.equal(harness.exports.paymentMethodLabel('CREDIT_DEBIT_CARD', t), t('onramp.cardPayment'));
+  assert.equal(harness.exports.paymentMethodLabel('APPLE_PAY', t), 'Apple Pay');
+  assert.equal(harness.exports.paymentMethodLabel('GOOGLE_PAY', t), 'Google Pay');
+  assert.equal(harness.exports.paymentMethodLabel('BANK_TRANSFER', t), t('onramp.bankTransfer'));
+});

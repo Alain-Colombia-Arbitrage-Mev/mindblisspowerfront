@@ -28,9 +28,9 @@ export default function PanelHeader({
         >
           <Menu size={20} />
         </button>
-        {!overview ? <div className="min-w-0">
+        {!overview ? <div className="vp-panel-title">
           <p className="vp-panel-section">{section}</p>
-          <h1>{title}</h1>
+          <h1 title={title}>{title}</h1>
         </div> : null}
       </div>
       <div className="vp-panel-actions">
