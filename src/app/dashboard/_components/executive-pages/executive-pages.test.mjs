@@ -38,10 +38,12 @@ function loadPages({ summary = { loading: true, data: null, error: '' }, health 
     '@/lib/payment-display.mjs': paymentDisplay,
     '@/lib/browser-request-deadline.mjs': deadline,
     '@/lib/member-read.mjs': { isRecoverySummary: data => data?.recovery_mode === true },
+    '@/i18n/LanguageProvider': { useI18n: () => ({ locale: 'es', t: key => key }) },
     '@/lib/useNetworkHealth': { useNetworkHealth: () => health },
     '@/lib/useSustainability': { useSustainability: () => ({ loading: false, data: null, error: '' }) },
     '@/lib/rank-catalog.mjs': { readRankCatalog: async () => { throw Error('Unexpected render-time request'); } },
     '@/components/member/ReferralModule': { default: emptyComponent },
+    './CommunityInviteCard': { default: emptyComponent },
     '@/components/panel/NOWPaymentsBalances': { default: emptyComponent },
   };
   function load(url) {
@@ -129,6 +131,16 @@ test('legacy Cognito profile presentation is retained without issuing verificati
   assert.match(html, /Enviar SMS/);
 });
 
+test('phone verification keeps provider and configuration diagnostics out of the customer UI', () => {
+  const profile = readFileSync(new URL('ProfileDashboardPage.jsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(profile, /text:\s*d\.(?:error|message)/);
+  for (const route of ['../../../api/auth/cognito/phone/request/route.js', '../../../api/auth/cognito/phone/confirm/route.js']) {
+    const source = readFileSync(new URL(route, import.meta.url), 'utf8');
+    assert.doesNotMatch(source, /error:\s*error\.message/);
+    assert.match(source, /phone_verification_unavailable/);
+  }
+});
+
 test('finance loading and failures do not invent an available zero balance', () => {
   const loading = render(loadPages().FinanceDashboardPage);
   assert.match(loading, /Cargando tu saldo/);
@@ -140,7 +152,9 @@ test('finance loading and failures do not invent an available zero balance', () 
 
 test('advisor failure and member support loading still render their existing states after extraction', () => {
   const pages = loadPages({ health: { loading: false, data: null, error: 'Servicio no disponible' } });
-  assert.match(render(pages.AiAdvisorDashboardPage), /Error al cargar datos: Servicio no disponible/);
+  const advisor = render(pages.AiAdvisorDashboardPage);
+  assert.match(advisor, /Análisis temporalmente no disponible/);
+  assert.doesNotMatch(advisor, /Servicio no disponible|Error al cargar datos/);
   const support = render(pages.SupportDashboardPage);
   assert.match(support, /Cargando tus tickets/);
   assert.doesNotMatch(support, /Aún no tienes tickets/);

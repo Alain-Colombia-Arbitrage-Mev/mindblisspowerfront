@@ -47,7 +47,7 @@ export async function POST(request) {
       return NextResponse.json({
         ok: true,
         mode: "demo",
-        redirectTo: "/dashboard/profile",
+        redirectTo: "/dashboard",
         user: buildDemoUser(email),
       });
     }

@@ -1,8 +1,5 @@
-import { Suspense } from "react";
-
-import OverviewDashboard from "@/components/panel/overview/OverviewDashboard";
-import OverviewPlans, { OverviewPlansLoading } from "@/components/panel/overview/OverviewPlans";
+import { redirect } from "next/navigation";
 
 export default function HomePage() {
-  return <OverviewDashboard plans={<Suspense fallback={<OverviewPlansLoading />}><OverviewPlans /></Suspense>} />;
+  redirect("/dashboard");
 }

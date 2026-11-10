@@ -129,7 +129,7 @@ export function AiAdvisorDashboardPage() {
   if (healthError || !healthData?.analysis) {
     const errorConfig = {
       ...moduleConfigs.ai,
-      subtitle: healthError ? `Error al cargar datos: ${healthError}` : "No se pudo obtener el veredicto de red.",
+      subtitle: "Análisis temporalmente no disponible. Los indicadores permanecerán ocultos hasta confirmar los datos.",
       metrics: [
         { label: "Sanidad", value: "—", detail: "sin datos", icon: ShieldCheck, tone: "muted" },
         { label: "Riesgos", value: "—", detail: "sin datos", icon: Activity, tone: "muted" },
@@ -187,7 +187,7 @@ export function AiAdvisorDashboardPage() {
               {sustLoading
                 ? "Cargando escenarios proyectados…"
                 : sustError
-                ? `Error al cargar proyecciones: ${sustError}`
+                ? "Proyecciones en sincronización. Vuelve a consultar más tarde."
                 : projected.length === 0
                 ? "Sin datos de proyección disponibles."
                 : "Simulación de sostenibilidad en condiciones de carga creciente."}

@@ -20,7 +20,7 @@ export default function CreateMenu({ options, onSelect }) {
     <div className="relative" ref={ref}>
       <button
         className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold"
-        style={{ background: "var(--vp-accent)", color: "#000000", border: 0, cursor: "pointer" }}
+        style={{ background: "var(--vp-action)", color: "var(--vp-on-action)", border: 0, cursor: "pointer" }}
         type="button"
         onClick={() => setOpen((current) => !current)}
       >

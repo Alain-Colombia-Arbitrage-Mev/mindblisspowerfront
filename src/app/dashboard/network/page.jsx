@@ -140,16 +140,16 @@ function DetailTile({ icon: Icon, label, value, accent = false }) {
 function ReadIssues({ state, onRetry }) {
   const issues = [["Pagos", state.summaryError], ["Enlaces de red", state.referralError]].filter(([, error]) => error);
   if (!issues.length) return null;
-  return <div role="alert" className="flex flex-wrap items-center gap-3 border-y py-3 text-sm" style={{ borderColor: "var(--vp-amber-border)", color: "var(--vp-amber)" }}>
+  return <div role="status" className="flex flex-wrap items-center gap-3 border-y py-3 text-sm" style={{ borderColor: "var(--vp-info-border)", color: "var(--vp-info)" }}>
     <ShieldAlert size={18} /><div className="min-w-0 flex-1">{issues.map(([label, error]) => <p key={label} className="m-0">{label}: {error.message}</p>)}</div>
-    <button type="button" className="executive-button" onClick={onRetry} disabled={state.refreshing}><RefreshCw size={16} />Reintentar</button>
+    <button type="button" className="executive-button" onClick={onRetry} disabled={state.refreshing}><RefreshCw size={16} />Actualizar</button>
   </div>;
 }
 
 function networkReadFailure(previous, error) {
   const next = treeRefreshFailure(previous, error.status, error.message);
   if (next.refreshError && error.status === 503 && error.code === "authentication_unavailable") {
-    return { ...next, refreshError: `${error.message} Se conserva la última lectura sin actualizar.` };
+    return { ...next, refreshError: `${error.message} Se mantiene visible la última lectura confirmada.` };
   }
   return next;
 }

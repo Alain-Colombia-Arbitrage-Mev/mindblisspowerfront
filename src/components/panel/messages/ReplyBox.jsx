@@ -35,7 +35,7 @@ export default function ReplyBox({ onSend }) {
         />
         <button
           className="shrink-0 rounded-md px-4 py-1.5 text-xs font-semibold"
-          style={{ background: "var(--vp-accent)", color: "#000000", border: 0, cursor: "pointer" }}
+          style={{ background: "var(--vp-action)", color: "var(--vp-on-action)", border: 0, cursor: "pointer" }}
           type="button"
           onClick={send}
         >

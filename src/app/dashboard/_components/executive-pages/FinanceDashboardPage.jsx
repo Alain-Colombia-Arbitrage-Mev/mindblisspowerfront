@@ -11,7 +11,7 @@ import { formatPaymentMoney as money, formatPaymentDate as fmtMoneyDate, withdra
 import StripeSalesHistory from "../../packages/StripeSalesHistory";
 import NOWPaymentsBalances from "@/components/panel/NOWPaymentsBalances";
 
-import { Activity, AlertTriangle, ArrowDownToLine, CreditCard, DollarSign, Download, Loader2, TrendingUp, UserPlus, Wallet } from "lucide-react";
+import { Activity, ArrowDownToLine, CreditCard, DollarSign, Download, Info, Loader2, TrendingUp, UserPlus, Wallet } from "lucide-react";
 
 import { PageHeader, MetricCard, Field, StatusPill } from './executive-ui';
 import WalletGettingStarted from "./WalletGettingStarted";
@@ -90,13 +90,13 @@ function FinanceLoading() {
 function FinanceError({ onRetry }) {
   return (
     <div className="executive-panel flex flex-col items-center justify-center gap-4 py-16 text-center">
-      <span className="flex h-12 w-12 items-center justify-center rounded-full" style={{ background: "var(--vp-danger-muted)", border: "1px solid var(--vp-danger-border)", color: "var(--vp-danger)" }}>
-        <AlertTriangle size={22} />
+      <span className="flex h-12 w-12 items-center justify-center rounded-full" style={{ background: "var(--vp-info-muted)", border: "1px solid var(--vp-info-border)", color: "var(--vp-info)" }}>
+        <Info size={22} />
       </span>
       <div>
-        <p className="text-base font-bold" style={{ color: "var(--vp-text)" }}>No pudimos cargar tu saldo</p>
+        <p className="text-base font-bold" style={{ color: "var(--vp-text)" }}>Saldo en sincronización</p>
         <p className="mt-1 text-sm" style={{ color: "var(--vp-muted)" }}>
-          Ocurrió un problema al consultar tu billetera. No podemos confirmar su saldo; vuelve a consultar más tarde.
+          No mostramos importes hasta confirmar los datos. Puedes volver a actualizar en unos minutos.
         </p>
       </div>
       <button className="executive-button primary" type="button" onClick={onRetry}>

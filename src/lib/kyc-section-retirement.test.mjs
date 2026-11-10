@@ -22,6 +22,11 @@ function moduleAt(relative, mocks = {}) {
     if (id === "lucide-react") return new Proxy({}, { get: () => icon });
     if (id === "./IntentLink") return { default: Link };
     if (id === "@/lib/member-navigation.mjs") return { matchesRoute };
+    if (id === "@/i18n/LanguageProvider") return { useI18n: () => ({ t: key => ({
+      "nav.account": "CUENTA", "nav.summary": "Resumen", "nav.memberships": "Membresías", "nav.wallet": "Billetera y retiros",
+      "nav.communityGroup": "COMUNIDAD", "nav.community": "Comunidad", "nav.referrals": "Referidos por niveles", "nav.ranks": "Rangos",
+      "nav.settings": "AJUSTES", "nav.profile": "Mi perfil", "nav.logout": "Cerrar sesión", "nav.myWallet": "Mi wallet",
+    }[key] || key) }) };
     if (id === './LogoutButton') return moduleAt('../components/panel/LogoutButton.jsx', {
       '@/lib/member-logout.mjs': { logoutMember: async () => {} },
       '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' ') },

@@ -11,7 +11,7 @@ export default function LegacyDashboardCleanup() {
 
     if (userAuth === 'true' && userId) {
       // Redirect to new member platform
-      navigate('/dashboard/home', { replace: true });
+      navigate('/dashboard', { replace: true });
     } else {
       // Redirect to login
       navigate('/login', { replace: true });

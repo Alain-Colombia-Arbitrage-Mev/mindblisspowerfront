@@ -51,17 +51,19 @@ const loginMocks = {
 
 test('the real AuthShell renders the approved identity card and compact access landmarks', t => {
   t.mock.method(globalThis, 'fetch', () => assert.fail('rendering an auth shell cannot query or send an OTP'));
-  const AuthShell = compile('./AuthShell.jsx', { 'next/link': { default: link }, 'lucide-react': icons, './ThemeToggle': { default: () => null }, './AuthSupportWidget': { default: () => React.createElement('button', null, '¿Necesitas ayuda?') } }).default;
+  const AuthShell = compile('./AuthShell.jsx', { 'next/link': { default: link }, 'lucide-react': icons, './ThemeToggle': { default: () => null }, './AuthSupportWidget': { default: () => React.createElement('button', null, '¿Necesitas ayuda?') },
+    '@/i18n/LanguageSwitcher': { default: () => null }, './AuthLocalizedContent': {
+      AuthIdentityCopy: ({ title, description }) => React.createElement('div', null, React.createElement('h1', null, title), React.createElement('p', null, description)),
+      AuthLegal: () => null,
+    } }).default;
   const tree = AuthShell({ activePath: '/login', eyebrow: 'Acceso', title: 'Tu equipo ya está adentro.', description: 'Descripción de marca',
     sideKpis: [{ value: '24/7', label: 'portal' }], children: React.createElement('form', { 'aria-label': 'Acceso seguro' }),
     loginHref: '/login?ref=Sponsor&side=R', registrationHref: '/register?ref=Sponsor&side=R' });
   assert.equal(tree.type, 'main'); hasClasses(tree, 'auth-shell');
   const brand = find(tree, node => node?.type === 'aside');
   hasClasses(brand, 'auth-identity');
-  const heading = find(tree, node => node?.type === 'h1');
-  assert.equal(heading.props.children, 'Tu equipo ya está adentro.');
-  const description = find(tree, node => node?.type === 'p' && node.props.children === 'Descripción de marca');
-  assert.ok(description);
+  const localizedIdentity = find(tree, node => node?.props?.title === 'Tu equipo ya está adentro.');
+  assert.equal(localizedIdentity.props.description, 'Descripción de marca');
   const column = find(tree, node => node?.type === 'section');
   hasClasses(column, 'auth-access-area');
   const content = find(tree, node => classes(node).has('auth-content'));
@@ -81,7 +83,7 @@ test('mobile auth safe-area and keyboard styles are scoped, preserve zoom and do
   for (const decl of insets) {
     for (const selector of decl.parent.selector.split(',')) assert.match(selector.trim(), /^(?:(?:\.auth-shell--long )?\.auth-(?:wordmark|identity-copy|access-tools|content|legal)|\.auth-shell \.vp-support-launcher)$/);
     assert.equal(decl.parent.parent.name, 'media');
-    assert.ok(['(max-width: 860px)', '(max-width: 380px)'].includes(decl.parent.parent.params));
+    assert.ok(['(max-width: 719px)', '(max-width: 380px)'].includes(decl.parent.parent.params));
   }
   const authRules = [];
   css.walkRules(rule => { if (rule.selector.includes('.auth-')) authRules.push(rule); });
@@ -94,7 +96,7 @@ test('mobile auth safe-area and keyboard styles are scoped, preserve zoom and do
       if (decl.prop === 'touch-action') assert.notEqual(decl.value, 'none');
     }
   }
-  const layout = compile('../layout.jsx', { '../index.css': {} });
+  const layout = compile('../layout.jsx', { '../index.css': {}, '@/i18n/LanguageProvider': { LanguageProvider: ({ children }) => children } });
   assert.equal(layout.viewport.width, 'device-width'); assert.equal(layout.viewport.initialScale, 1);
   assert.notEqual(layout.viewport.userScalable, false); assert.equal(layout.viewport.maximumScale, undefined);
   for (const file of ['./AuthShell.jsx', '../login/page.jsx', '../forgot-password/page.jsx']) {

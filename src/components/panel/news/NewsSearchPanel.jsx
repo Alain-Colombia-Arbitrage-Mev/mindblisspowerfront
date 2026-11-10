@@ -56,7 +56,7 @@ export default function NewsSearchPanel({ onSearch, onRestore }) {
           </button>
           <button
             className="rounded-lg px-4 py-2 text-xs font-semibold"
-            style={{ background: "var(--vp-accent)", border: 0, color: "#000000", cursor: "pointer" }}
+            style={{ background: "var(--vp-action)", border: 0, color: "var(--vp-on-action)", cursor: "pointer" }}
             type="button"
             onClick={onSearch}
           >

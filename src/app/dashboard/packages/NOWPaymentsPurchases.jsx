@@ -15,7 +15,7 @@ import styles from './nowpayments-purchases.module.css';
 export default function NOWPaymentsPurchases({ onChange }) {
   const [history, setHistory] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [historyIssue, setHistoryIssue] = useState(null);
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState('');
   const [cancelTarget, setCancelTarget] = useState(null);
@@ -27,13 +27,13 @@ export default function NOWPaymentsPurchases({ onChange }) {
     readRequest.current?.abort(); readRequest.current = null;
     actionRequest.current?.abort(); actionRequest.current = null;
     locked.current = false;
-    setHistory(null); setCheckResults({}); setCancelTarget(null); setNotice(''); setBusy(''); setLoading(false);
+    setHistory(null); setCheckResults({}); setCancelTarget(null); setNotice(''); setHistoryIssue(null); setBusy(''); setLoading(false);
   }, []);
   const load = useCallback(async () => {
     readRequest.current?.abort();
     const controller = new AbortController(); readRequest.current = controller;
     historyFresh.current = false;
-    setLoading(true); setError('');
+    setLoading(true); setHistoryIssue(null);
     try {
       const value = await readNOWPaymentsPurchases({ signal: controller.signal });
       if (!controller.signal.aborted) {
@@ -42,8 +42,9 @@ export default function NOWPaymentsPurchases({ onChange }) {
       }
     } catch (failure) {
       if (!controller.signal.aborted) {
-        if ([401, 403].includes(failure?.status)) discardDeniedAccess();
-        setError(nowpaymentsHistoryError(failure));
+        const restricted = [401, 403].includes(failure?.status);
+        if (restricted) discardDeniedAccess();
+        setHistoryIssue({ restricted, message: nowpaymentsHistoryError(failure) });
       }
     } finally { if (!controller.signal.aborted) setLoading(false); }
   }, [discardDeniedAccess]);
@@ -86,9 +87,15 @@ export default function NOWPaymentsPurchases({ onChange }) {
         if (action === 'check') {
           const result = nowpaymentsPurchaseCheckError(failure);
           setCheckResults(previous => ({ ...previous, [item.order_id]: { ...previous[item.order_id], phase: 'error', result, checkedAt: null } }));
-          if ([401, 403].includes(failure?.status)) { discardDeniedAccess(); setError(result.description); }
+          if ([401, 403].includes(failure?.status)) {
+            discardDeniedAccess();
+            setHistoryIssue({ restricted: true, message: nowpaymentsHistoryError(failure) });
+          }
         } else {
-          if ([401, 403].includes(failure?.status)) { discardDeniedAccess(); setError(nowpaymentsHistoryError(failure)); }
+          if ([401, 403].includes(failure?.status)) {
+            discardDeniedAccess();
+            setHistoryIssue({ restricted: true, message: nowpaymentsHistoryError(failure) });
+          }
           else setNotice(nowpaymentsPurchaseError(failure?.code, failure?.status));
         }
       }
@@ -113,9 +120,12 @@ export default function NOWPaymentsPurchases({ onChange }) {
       <p><strong>Evita pagos duplicados.</strong> Continuar el pago utiliza la misma factura, sin crear otra compra. El regreso del proveedor no prueba el pago ni la activación.</p>
     </div>
     {loading && <div role="status" className={styles.message}><Loader2 size={18} className={styles.spinner} aria-hidden="true" /><p>Consultando compras NOWPayments…</p></div>}
-    {error && <div role="alert" className={cn(styles.message, styles.error)}><AlertCircle size={18} aria-hidden="true" /><p>{error}</p></div>}
+    {historyIssue && <div role={historyIssue.restricted ? 'alert' : 'status'} className={cn(styles.message, historyIssue.restricted ? styles.error : styles.syncPending)}>
+      {historyIssue.restricted ? <AlertCircle size={18} aria-hidden="true" /> : <Clock3 size={18} aria-hidden="true" />}
+      <div><strong>{historyIssue.restricted ? 'Acceso al historial no disponible' : 'Historial en sincronización'}</strong><p>{historyIssue.message}</p></div>
+    </div>}
     {notice && <div role="status" className={cn(styles.message, styles.notice)}><Info size={18} aria-hidden="true" /><p>{notice}</p></div>}
-    {history?.purchases.length === 0 && !error && <div className={styles.empty}>
+    {history?.purchases.length === 0 && !historyIssue && <div className={styles.empty}>
       <span className={styles.emptyIcon}><ShoppingBag size={23} aria-hidden="true" /></span>
       <h3>Aún no tienes compras</h3>
       <p>No hay compras de membresías NOWPayments registradas en tu cuenta.</p>
@@ -143,9 +153,9 @@ export default function NOWPaymentsPurchases({ onChange }) {
           {item.payment_status === 'cancelled_local' && <p className={styles.cancelledNote}><Info size={14} aria-hidden="true" />No pagues la factura anterior; un pago tardío requiere revisión.</p>}
           <div className={styles.purchaseFooter}>
             <div className={styles.actions}>
-              {item.can_resume && <button type="button" className={cn(styles.action, styles.primary)} disabled={Boolean(busy) || loading || Boolean(error) || Boolean(checkResults[item.order_id]?.blockPayment)} onClick={() => void perform('resume', item)} aria-label={`Continuar pago de ${item.package_name}, orden ${item.order_id}`}>Continuar pago</button>}
+              {item.can_resume && <button type="button" className={cn(styles.action, styles.primary)} disabled={Boolean(busy) || loading || Boolean(historyIssue) || Boolean(checkResults[item.order_id]?.blockPayment)} onClick={() => void perform('resume', item)} aria-label={`Continuar pago de ${item.package_name}, orden ${item.order_id}`}>Continuar pago</button>}
               <button type="button" className={styles.action} disabled={Boolean(busy) || loading} onClick={() => void perform('check', item)} aria-label={`Consultar estado de ${item.package_name}, orden ${item.order_id}`} aria-describedby={checkResults[item.order_id] ? `payment-check-${item.order_id}` : undefined} aria-busy={busy === item.order_id && checkResults[item.order_id]?.phase === 'loading'}>Ver estado</button>
-              {item.can_cancel && <button type="button" className={cn(styles.action, styles.tertiary)} disabled={Boolean(busy) || loading || Boolean(error) || Boolean(checkResults[item.order_id]?.blockPayment)} onClick={event => { returnFocus.current = event.currentTarget; setCancelTarget(item); }} aria-label={`Cancelar intención de ${item.package_name}, orden ${item.order_id}`}>Cancelar intención</button>}
+              {item.can_cancel && <button type="button" className={cn(styles.action, styles.tertiary)} disabled={Boolean(busy) || loading || Boolean(historyIssue) || Boolean(checkResults[item.order_id]?.blockPayment)} onClick={event => { returnFocus.current = event.currentTarget; setCancelTarget(item); }} aria-label={`Cancelar intención de ${item.package_name}, orden ${item.order_id}`}>Cancelar intención</button>}
             </div>
             {busy === item.order_id && checkResults[item.order_id]?.phase !== 'loading' && <p className={styles.busy} role="status"><Loader2 size={14} className={styles.spinner} aria-hidden="true" />Procesando tu solicitud…</p>}
             {checkResults[item.order_id] && <PurchaseCheckResult orderId={item.order_id} check={checkResults[item.order_id]} />}
@@ -172,7 +182,7 @@ export default function NOWPaymentsPurchases({ onChange }) {
           {notice && !busy && <p role="alert" className={styles.dialogError}>{notice}</p>}
           <div className={styles.dialogActions}>
             <AlertDialog.Cancel asChild><button type="button" className={styles.action} disabled={Boolean(busy)}>Conservar compra</button></AlertDialog.Cancel>
-            <AlertDialog.Action asChild><button type="button" className={cn(styles.action, styles.danger)} disabled={Boolean(busy) || loading || Boolean(error)} onClick={event => { event.preventDefault(); void perform('cancel', cancelTarget); }}>{busy ? 'Confirmando cancelación…' : 'Confirmar cancelación local'}</button></AlertDialog.Action>
+            <AlertDialog.Action asChild><button type="button" className={cn(styles.action, styles.danger)} disabled={Boolean(busy) || loading || Boolean(historyIssue)} onClick={event => { event.preventDefault(); void perform('cancel', cancelTarget); }}>{busy ? 'Confirmando cancelación…' : 'Confirmar cancelación local'}</button></AlertDialog.Action>
           </div>
         </AlertDialog.Content>
       </AlertDialog.Portal>

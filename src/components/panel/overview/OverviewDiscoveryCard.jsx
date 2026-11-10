@@ -1,28 +1,28 @@
 import Link from "next/link";
 import { ArrowRight, BadgeDollarSign, WalletCards } from "lucide-react";
+import { useI18n } from "@/i18n/LanguageProvider";
 
 export default function OverviewDiscoveryCard() {
+  const { t } = useI18n();
   return (
     <div className="mb-overview-discovery" aria-label="Wallet y membresías">
       <section className="executive-card mb-buy-crypto-card">
-        <WalletCards size={26} aria-hidden="true" />
+        <div className="mb-discovery-top"><span><WalletCards size={20} aria-hidden="true" /></span><b>{t("overview.buyCryptoTag")}</b></div>
         <div>
-          <h2>Compra cripto</h2>
-          <p>Primero crea tu wallet; después elige qué cripto comprar.</p>
+          <h2>{t("overview.buyCrypto")}</h2>
+          <p>{t("overview.buyCryptoCopy")}</p>
         </div>
         <Link className="executive-button primary" href="/dashboard/withdrawals">
-          Crear wallet y comprar <ArrowRight size={14} />
+          {t("overview.createAndBuy")} <ArrowRight size={14} />
         </Link>
       </section>
 
       <section className="executive-card mb-plans-discovery-card">
-        <div className="mb-plans-discovery-title">
-          <BadgeDollarSign size={22} aria-hidden="true" />
-          <h2>Desde $50 USD</h2>
-        </div>
-        <p>Compara los importes y las condiciones de cada plan antes de elegir.</p>
+        <div className="mb-plans-discovery-title"><BadgeDollarSign size={18} aria-hidden="true" /><span>{t("overview.exploreMemberships")}</span></div>
+        <h2>{t("overview.plansFrom")}</h2>
+        <p>{t("overview.compareCopy")}</p>
         <Link className="executive-button" href="/dashboard/packages">
-          Comparar membresías <ArrowRight size={14} />
+          {t("overview.compare")} <ArrowRight size={14} />
         </Link>
       </section>
     </div>

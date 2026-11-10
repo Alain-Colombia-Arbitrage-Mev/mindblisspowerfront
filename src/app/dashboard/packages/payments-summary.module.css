@@ -14,10 +14,10 @@
 .loading { display: flex; align-items: center; gap: .65rem; color: var(--vp-muted); font-size: .8rem; }
 .skeletons { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .8rem; margin-top: 1rem; }
 .skeletons span { height: 100px; border: 1px solid var(--vp-border); border-radius: 15px; background: var(--vp-surface-raised); }
-.error { display: flex; align-items: flex-start; gap: .75rem; color: var(--vp-muted); }
-.error > svg { color: var(--vp-amber); flex-shrink: 0; margin-top: .15rem; }
-.error h3 { color: var(--vp-text); font-weight: 650; font-size: .87rem; margin: 0; }
-.error p { font-size: .76rem; line-height: 1.8; margin: .4rem 0 0; }
+.availability { display: flex; align-items: flex-start; gap: .75rem; color: var(--vp-muted); }
+.availability > svg { color: var(--vp-info); flex-shrink: 0; margin-top: .15rem; }
+.availability h3 { color: var(--vp-text); font-weight: 650; font-size: .87rem; margin: 0; }
+.availability p { font-size: .76rem; line-height: 1.8; margin: .4rem 0 0; }
 .retry { margin-top: 1rem; min-height: 44px; }
 .retry:focus-visible { outline: 2px solid var(--vp-accent); outline-offset: 3px; }
 .row { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .85rem 1rem; flex-wrap: wrap; }

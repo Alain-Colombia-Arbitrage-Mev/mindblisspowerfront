@@ -70,7 +70,7 @@ test("authentication infrastructure unavailability is retryable 503, never an ex
   } }), error => {
     assert.equal(error.status, 503);
     assert.equal(error.code, "authentication_unavailable");
-    assert.match(error.message, /servicio de acceso.*temporalmente.*Reintenta/);
+    assert.match(error.message, /sincronización de acceso.*pendiente.*Actualiza/i);
     assert.doesNotMatch(error.message, /expir|iniciar sesi|c[oó]digo|private|provider/i);
     return true;
   });

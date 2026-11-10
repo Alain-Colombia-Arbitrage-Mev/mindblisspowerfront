@@ -44,6 +44,7 @@ export default function ChatwootWidget() {
       position: "right",
       type: "standard",
       launcherTitle: "",
+      hideMessageBubble: true,
     };
 
     const initializeChatwoot = () => {

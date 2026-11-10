@@ -121,14 +121,14 @@ function ExecutiveModulePage({ config, extra = null }) {
               <input className="executive-input leading-icon" placeholder="Buscar..." type="search" />
             </div>
           </div>
-          <ExecutiveTable columns={config.columns} rows={config.rows} />
+          <ExecutiveTable columns={config.columns} rows={config.rows} emptyMessage={config.tableMessage} />
         </div>
       </div>
     </section>
   );
 }
 
-function ExecutiveTable({ columns, rows }) {
+function ExecutiveTable({ columns, rows, emptyMessage = "Aún no hay registros disponibles." }) {
   return (
     <div className="executive-table-wrap">
       <table className="executive-table">
@@ -140,7 +140,9 @@ function ExecutiveTable({ columns, rows }) {
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, index) => (
+          {rows.length === 0 ? (
+            <tr><td colSpan={columns.length} className="py-10 text-center" style={{ color: "var(--vp-muted)" }}>{emptyMessage}</td></tr>
+          ) : rows.map((row, index) => (
             <tr key={`${row[0]}-${index}`}>
               {row.map((cell, cellIndex) => (
                 <td key={`${row[0]}-${cellIndex}`}>

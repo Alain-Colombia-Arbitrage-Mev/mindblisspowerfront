@@ -1,4 +1,5 @@
 import "../index.css";
+import { LanguageProvider } from "@/i18n/LanguageProvider";
 
 export const metadata = {
   title: "Mindbliss Power",
@@ -28,7 +29,7 @@ export default function RootLayout({ children }) {
         />
       </head>
       <body>
-        {children}
+        <LanguageProvider>{children}</LanguageProvider>
       </body>
     </html>
   );

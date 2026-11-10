@@ -42,9 +42,9 @@ function messageFor(status, code) {
   if (status === 401) return "No pudimos confirmar una sesión activa en este navegador. Vuelve a iniciar sesión para consultar tus datos.";
   if (status === 403) return code === "account_suspended" ? "Esta cuenta tiene el acceso a la red restringido." : "No tienes permiso para consultar estos datos.";
   if (status === 429) return "Demasiadas consultas. Intenta de nuevo mas tarde.";
-  if (status === 503 && code === "authentication_unavailable") return "El servicio de acceso no está disponible temporalmente. Reintenta la consulta en unos instantes.";
-  if (status === 503) return "El servicio no esta disponible o no esta configurado.";
-  return "No se pudieron consultar los datos. Intenta de nuevo.";
+  if (status === 503 && code === "authentication_unavailable") return "La sincronización de acceso está pendiente. Actualiza la consulta en unos instantes.";
+  if (status === 503) return "Los datos están en sincronización. Actualiza la consulta en unos instantes.";
+  return "Los datos aún no están disponibles. Intenta actualizar nuevamente.";
 }
 
 /** @param {string} url

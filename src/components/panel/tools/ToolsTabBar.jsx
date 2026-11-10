@@ -14,7 +14,7 @@ export default function ToolsTabBar({ tabs, active, onChange }) {
             className="whitespace-nowrap rounded-lg px-4 py-2 text-xs font-medium"
             style={
               isActive
-                ? { background: "var(--vp-accent)", color: "#000000", border: 0, fontWeight: 600, cursor: "pointer" }
+                ? { background: "var(--vp-action)", color: "var(--vp-on-action)", border: 0, fontWeight: 600, cursor: "pointer" }
                 : { background: "transparent", color: "var(--vp-muted)", border: 0, cursor: "pointer" }
             }
             type="button"

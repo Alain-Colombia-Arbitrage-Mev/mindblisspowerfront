@@ -44,6 +44,7 @@ test('canonical access denial is a private403 without misreporting logout or que
   })(sessionRequest('?view=access'));
   assert.equal(response.status, 403);
   assert.equal(response.headers.get('cache-control'), 'private, no-store');
+  assert.equal(response.headers.get('vary'), 'Cookie');
   assert.equal(response.headers.get('set-cookie'), null);
   assert.deepEqual(await response.json(), { authenticated: false, mode: 'better-auth', error: 'account_access_restricted' });
 });
@@ -53,6 +54,7 @@ for (const stage of ['token', 'verification']) {
     const response = await sessionRoute({ [stage === 'token' ? 'tokenError' : 'verificationError']: new AuthServiceUnavailable() })(sessionRequest());
     assert.equal(response.status, 503);
     assert.equal(response.headers.get('cache-control'), 'private, no-store');
+    assert.equal(response.headers.get('vary'), 'Cookie');
     assert.equal(response.headers.get('set-cookie'), null);
     assert.deepEqual(await response.json(), { error: 'authentication_unavailable' });
   });
@@ -86,6 +88,7 @@ test('explicit Better Auth access view never starts optional payments enrichment
   const response = await responsePromise;
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('cache-control'), 'private, no-store');
+  assert.equal(response.headers.get('vary'), 'Cookie');
   assert.deepEqual(await response.json(), {
     authenticated: true, mode: 'better-auth', name: 'Synthetic Member', email: 'synthetic@example.test',
     subject: 'synthetic-subject', givenName: null, referralCode: null, isAdmin: false,

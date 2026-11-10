@@ -394,11 +394,15 @@ test('the actual login page exposes recovery in both modes without putting a pri
         betterAuthSocialProviders: () => [],
       },
       '../register/registration-model.mjs': { registrationLoginUrl, registrationUrl },
+      './LoginLocalizedCopy': { LoginHeading: () => null, LoginAccountLinks: ({ registrationHref }) => React.createElement(React.Fragment, null,
+        React.createElement('a', { href: registrationHref }, 'Crear cuenta'),
+        React.createElement('a', { href: '/forgot-password' }, enabled ? 'Crear o cambiar contraseña' : 'Recuperar contraseña')) },
     });
     const tree = await page({ searchParams: Promise.resolve({ email, mode: 'password' }) });
-    const recoveryLink = find(tree, node => node?.props?.href === '/forgot-password');
-    assert.ok(recoveryLink);
-    assert.equal(recoveryLink.props.children, enabled ? 'Crear o cambiar contraseña' : 'Recuperar contraseña');
-    assert.equal(recoveryLink.props.href.includes(email), false);
+    const accountLinks = find(tree, node => node?.props?.emailOtpOnly === enabled && typeof node.type === 'function');
+    assert.ok(accountLinks);
+    const localizedSource = readFileSync(new URL('../login/LoginLocalizedCopy.jsx', import.meta.url), 'utf8');
+    assert.match(localizedSource, /href="\/forgot-password"/);
+    assert.doesNotMatch(localizedSource, /forgot-password\?[^"']*email/);
   }
 });

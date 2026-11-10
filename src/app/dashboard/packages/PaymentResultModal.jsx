@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CheckCircle2, Clock3, Loader2, Network, XCircle } from "lucide-react";
+import * as Dialog from "@radix-ui/react-dialog";
 import { cn } from "@/lib/utils";
 import { useCheckoutActivation } from "@/hooks/useCheckoutActivation";
 import { checkoutStatusCopy } from "@/lib/checkout-status.mjs";
@@ -54,26 +55,23 @@ export default function PaymentResultModal() {
   const copy = checkoutStatusCopy(activation);
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center p-6"
-      style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}
-      onClick={close}
-    >
-      <div
-        className="w-full max-w-md rounded-3xl p-8 text-center"
-        style={{
-          background: "var(--vp-surface)",
-          border: `1px solid ${paid ? "var(--vp-amber-border, rgba(250,204,21,0.35))" : "var(--vp-border)"}`,
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Dialog.Root open onOpenChange={(open) => { if (!open) close(); }}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" />
+        <Dialog.Content
+          className="fixed left-1/2 top-1/2 z-50 max-h-[calc(100dvh-2rem)] w-[calc(100%_-_2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-[18px] p-6 text-center shadow-2xl sm:p-8"
+          style={{
+            background: "var(--vp-surface)",
+            border: `1px solid ${paid ? "var(--vp-action-border)" : "var(--vp-border)"}`,
+            overscrollBehavior: "contain",
+          }}
+          onCloseAutoFocus={(event) => { event.preventDefault(); document.getElementById("memberships-title")?.focus(); }}
+        >
         <span
           className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full"
           style={{
-            background: paid ? "rgba(250, 204, 21, 0.12)" : "rgba(239, 68, 68, 0.10)",
-            border: `1px solid ${paid ? "rgba(250, 204, 21, 0.3)" : "rgba(239, 68, 68, 0.3)"}`,
+            background: paid ? "var(--vp-action-muted)" : "var(--vp-danger-muted)",
+            border: `1px solid ${paid ? "var(--vp-action-border)" : "var(--vp-danger-border)"}`,
           }}
         >
           {paid && activation.checking ? (
@@ -83,16 +81,16 @@ export default function PaymentResultModal() {
           ) : paid ? (
             <Clock3 size={30} style={{ color: "var(--vp-accent)" }} />
           ) : (
-            <XCircle size={30} style={{ color: "#ef4444" }} />
+            <XCircle size={30} style={{ color: "var(--vp-danger)" }} />
           )}
         </span>
 
-        <h2 className="m-0 text-2xl font-bold" style={{ color: "var(--vp-text)" }}>
+        <Dialog.Title className="m-0 text-2xl font-bold" style={{ color: "var(--vp-text)" }}>
           {paid ? copy.title : "Tu compra quedó pendiente"}
-        </h2>
-        <p className="mt-3 text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
+        </Dialog.Title>
+        <Dialog.Description className="mt-3 text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
           {paid ? copy.description : "La compra no se completó en esta pantalla. Si observaste un cargo, revisa Mis pagos antes de volver a intentarlo."}
-        </p>
+        </Dialog.Description>
 
         {paid && (
           <div className="mt-5 grid gap-2 text-left sm:grid-cols-2">
@@ -116,8 +114,9 @@ export default function PaymentResultModal() {
             {paid ? "Ver mis pagos" : "Elegir mi membresía"}
           </button>
         </div>
-      </div>
-    </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 

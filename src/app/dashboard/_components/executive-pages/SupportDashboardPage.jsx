@@ -113,12 +113,13 @@ export function SupportDashboardPage() {
           )}
 
           {state === "error" && (
-            <div className="flex flex-col items-start gap-3 py-8">
-              <span className="text-sm font-semibold" style={{ color: "#f87171" }}>
-                No pudimos cargar tus tickets.
-              </span>
+            <div role="status" className="flex flex-col items-start gap-3 rounded-xl px-4 py-5" style={{ background: "var(--vp-info-muted)", border: "1px solid var(--vp-info-border)" }}>
+              <span className="text-sm font-semibold" style={{ color: "var(--vp-info)" }}>Tickets en sincronización</span>
+              <p className="m-0 text-xs leading-6" style={{ color: "var(--vp-muted)" }}>
+                Puedes seguir usando soporte. El historial aparecerá cuando finalice la actualización.
+              </p>
               <button className="executive-button" type="button" onClick={load}>
-                Reintentar
+                Actualizar tickets
               </button>
             </div>
           )}

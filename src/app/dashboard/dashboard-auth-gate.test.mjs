@@ -30,6 +30,7 @@ function gate({ token = 'synthetic-private-token', claims = null, tokenError,
     'next/link': { default: ({ children, ...props }) => React.createElement('a', props, children) },
     'lucide-react': new Proxy({}, { get: () => () => null }),
     './ThemeToggle': { default: () => null }, './AuthSupportWidget': { default: () => null },
+    '@/i18n/LanguageSwitcher': { default: () => null }, './AuthLocalizedContent': { AuthIdentityCopy: () => null, AuthLegal: () => null },
   });
   function DashboardShell({ authMode, children }) {
     calls.shell++;

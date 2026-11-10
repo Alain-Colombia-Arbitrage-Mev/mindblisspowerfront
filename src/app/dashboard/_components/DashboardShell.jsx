@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import PanelHeader from "@/components/panel/PanelHeader";
 import PanelSidebar from "@/components/panel/PanelSidebar";
 import NavigationDrawer from "@/components/panel/NavigationDrawer";
+import SupportWidget from "@/components/panel/SupportWidget";
 import { memberPageFor } from "@/lib/member-navigation.mjs";
 import { MemberSessionContext } from "@/lib/member-session-context";
 import { browserReferralChoice, chooseBrowserReferral, pendingVerifiedReferral, readVerifiedReferral, retryVerifiedReferral } from '@/lib/referral-sync.mjs';
@@ -126,6 +127,7 @@ export default function DashboardShell({ authMode: _authMode, children }) {
   }
 
   const { title, section } = memberPageFor(pathname);
+  const overview = pathname === "/dashboard" || pathname === "/dashboard/home";
 
   return (
     <MemberSessionContext.Provider value={member}>
@@ -148,6 +150,7 @@ export default function DashboardShell({ authMode: _authMode, children }) {
           <PanelHeader
             title={title}
             section={section}
+            overview={overview}
             mobileMenuOpen={mobileMenuOpen}
             onToggleMobileMenu={() => setMobileMenuOpen((current) => !current)}
           />
@@ -169,13 +172,7 @@ export default function DashboardShell({ authMode: _authMode, children }) {
             </div>
           </main>
         </div>
-        <a className="vp-support-launcher" href="/dashboard/support" aria-label="Abrir centro de soporte">
-          <span className="vp-support-launcher-icon" aria-hidden="true">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 13a8 8 0 0 1 16 0"/><path d="M18 19c0 1.1-.9 2-2 2h-3"/><path d="M4 13v4a2 2 0 0 0 2 2h1v-8H6a2 2 0 0 0-2 2Z"/><path d="M20 13v4a2 2 0 0 1-2 2h-1v-8h1a2 2 0 0 1 2 2Z"/></svg>
-          </span>
-          <span className="vp-support-launcher-copy"><strong>¿Necesitas ayuda?</strong><small>Habla con soporte</small></span>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>
-        </a>
+        <SupportWidget />
       </div>
     </MemberSessionContext.Provider>
   );

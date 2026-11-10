@@ -49,7 +49,7 @@ test('the public support widget opens and submits one bounded access-help reques
 
 test('mobile support stays available in the header without covering auth actions', () => {
   const css = readFileSync(new URL('../../index.css', import.meta.url), 'utf8');
-  assert.match(css, /@media \(max-width: 860px\)[\s\S]*?\.auth-support-trigger--header\s*\{[\s\S]*?display:\s*inline-flex;/);
-  assert.match(css, /@media \(max-width: 860px\)[\s\S]*?\.auth-shell \.vp-support-launcher\s*\{\s*display:\s*none;/);
+  assert.match(css, /@media \(max-width: 719px\)[\s\S]*?\.auth-support-trigger--header\s*\{[\s\S]*?display:\s*inline-flex;/);
+  assert.match(css, /@media \(max-width: 719px\)[\s\S]*?\.auth-shell \.vp-support-launcher\s*\{\s*display:\s*none;/);
   assert.match(css, /\.auth-support-dialog\s*\{[\s\S]*?max-height:[^;]+;/);
 });

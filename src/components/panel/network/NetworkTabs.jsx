@@ -19,8 +19,8 @@ export default function NetworkTabs({ active, onChange }) {
             style={
               isActive
                 ? {
-                    background: "var(--vp-accent)",
-                    color: "#000000",
+                    background: "var(--vp-action)",
+                    color: "var(--vp-on-action)",
                     border: 0,
                     fontWeight: 700,
                     cursor: "pointer",

@@ -8,6 +8,12 @@ const nextConfig = {
   reactStrictMode: true,
   output: "standalone",
   outputFileTracingRoot: projectRoot,
+  experimental: {
+    // Keep page-data generation bounded on Windows and in CI. Next otherwise
+    // creates one worker per logical CPU, which can exhaust the available
+    // commit limit before a single page fails to compile.
+    cpus: 2,
+  },
   turbopack: {
     root: projectRoot,
   },

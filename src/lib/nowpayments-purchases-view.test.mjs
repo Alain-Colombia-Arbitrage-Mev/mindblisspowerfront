@@ -82,7 +82,8 @@ test('failed history is never empty success, stale rows cannot be acted upon and
   const view = historyView(); await view.mount();
   view.fail(new Error('private@example.test')); await button(view.tree(), 'Actualizar historial').props.onClick(); await settle();
   let tree = view.tree(), html = renderToStaticMarkup(tree);
-  assert.match(html, /role="alert"/); assert.match(html, /no confirman el estado actual/); assert.match(html, /Synthetic plan/);
+  assert.match(html, /role="status"/); assert.match(html, /Historial en sincronización/); assert.match(html, /Synthetic plan/);
+  assert.doesNotMatch(html, /No pudimos actualizar|role="alert"/);
   assert.doesNotMatch(html, /private@example|No hay compras/); assert.equal(button(tree, 'Continuar pago').props.disabled, true);
   view.fail(Object.assign(new Error('denied'), { status: 401 })); await button(view.tree(), 'Actualizar historial').props.onClick(); await settle();
   html = renderToStaticMarkup(view.tree()); assert.doesNotMatch(html, /Synthetic plan|Continuar pago|No hay compras/);
@@ -306,7 +307,7 @@ test('query failures remain local, specific and non-financial while denied sessi
 
 test('history distinguishes missing sessions, restricted access and temporary authentication outages without replaying a payment', async () => {
   for (const [status, code, expected] of [[401, 'unauthenticated', /Vuelve a iniciar sesión/],
-    [403, 'account_suspended', /No tienes autorización/], [503, 'authentication_unavailable', /servicio de acceso.*temporalmente/]]) {
+    [403, 'account_suspended', /No tienes autorización/], [503, 'authentication_unavailable', /sincronización de acceso.*pendiente/i]]) {
     const view = historyView(); await view.mount();
     const previous = view.tree(), resume = button(previous, 'Continuar pago').props.onClick;
     view.fail(Object.assign(new Error('must-not-leak-private-diagnostic'), { status, code }));
@@ -389,7 +390,8 @@ test('a stale history after 503 still permits the safe owner-status read but nev
   tree = view.tree(); const html = renderToStaticMarkup(orderArticle(tree));
   assert.match(html, /Estado del historial/); assert.match(html, /Pendiente de pago/);
   assert.match(html, /Pendiente de confirmación/); assert.match(html, /Consulta realizada:/);
-  assert.match(renderToStaticMarkup(tree), /Los registros anteriores, si aparecen, no confirman el estado actual/);
+  assert.match(renderToStaticMarkup(tree), /Sincronización pendiente/);
+  assert.doesNotMatch(renderToStaticMarkup(tree), /No pudimos actualizar el historial/);
   assert.doesNotMatch(renderToStaticMarkup(tree), /private unavailable diagnostic|Membresía activada/);
   assert.equal(orderButton(tree, 'Consultar estado').props.disabled, false);
   assert.equal(orderButton(tree, 'Continuar pago').props.disabled, true);

@@ -323,14 +323,14 @@ export default function OnboardingPage() {
       visualAlt="Equipo Mindbliss compartiendo en un sofá"
     >
       <section
-        className="w-full rounded-xl p-6 sm:p-8"
+        className="auth-onboarding-card w-full rounded-xl p-6 sm:p-8"
         style={{
           background: "var(--vp-surface)",
           border: "1px solid var(--vp-border)",
           boxShadow: "var(--vp-shadow)",
         }}
       >
-        <div className="mb-6 flex items-start justify-between gap-4">
+        <div className="auth-onboarding-heading mb-6 flex items-start justify-between gap-4">
           <div className="flex items-start gap-4">
             <div
               className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-lg"
@@ -356,7 +356,7 @@ export default function OnboardingPage() {
           </div>
         </div>
 
-        <div className="mb-7 h-2 rounded-full" style={{ background: "var(--vp-surface-raised)" }}>
+        <div className="auth-onboarding-progress mb-7 h-2 rounded-full" style={{ background: "var(--vp-surface-raised)" }}>
           <div
             className="h-2 rounded-full transition-all"
             style={{
@@ -366,7 +366,7 @@ export default function OnboardingPage() {
           />
         </div>
 
-        <div className="mb-7 grid grid-cols-4 gap-2">
+        <div className="auth-onboarding-steps mb-7 grid grid-cols-4 gap-2">
           {steps.map((step, index) => {
             const StepIcon = step.icon;
             const active = index === activeStep;
@@ -396,7 +396,7 @@ export default function OnboardingPage() {
           })}
         </div>
 
-        <div className="min-h-[360px]">
+        <div className="auth-onboarding-step min-h-[360px]">
           {activeStep === 0 && (
             <div className="space-y-5">
               <div
@@ -617,7 +617,7 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        <div className="mt-7 flex flex-col-reverse gap-3 border-t pt-5 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: "var(--vp-border)" }}>
+        <div className="auth-onboarding-actions mt-7 flex flex-col-reverse gap-3 border-t pt-5 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: "var(--vp-border)" }}>
           <div className="flex gap-3">
             <Link
               href="/register"
@@ -652,9 +652,9 @@ export default function OnboardingPage() {
             disabled={!loaded || !data.email || identityStatus !== "authenticated" || saving}
             className="flex min-h-12 items-center justify-center gap-2 rounded-lg px-5 py-3 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50"
             style={{
-              color: "var(--vp-shell)",
-              background: "var(--vp-accent)",
-              border: "1px solid var(--vp-accent-strong)",
+              color: "var(--vp-on-action)",
+              background: "var(--vp-action)",
+              border: "1px solid var(--vp-action-border)",
             }}
           >
             {saving ? "Guardando de forma segura…" : activeStep === steps.length - 1 ? "Guardar y entrar" : "Continuar"}

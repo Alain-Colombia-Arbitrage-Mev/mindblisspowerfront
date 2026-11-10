@@ -52,10 +52,12 @@ test('payments summary offers explicit login only for true 401; forbidden and te
     }) });
     await resource.load(); state = resource.getSnapshot();
     const markup = renderToStaticMarkup(React.createElement(Panel));
-    assert.match(markup, /No pudimos cargar el resumen/); assert.match(markup, /Independent purchase history/);
+    assert.match(markup, status === 401 ? /Inicia sesión para ver tu resumen/
+      : status === 403 ? /Resumen no disponible para esta cuenta/ : /Resumen en sincronización/);
+    assert.match(markup, /Independent purchase history/);
     assert.doesNotMatch(markup, /expir|must-not-leak|synthetic money/);
-    if (status === 401) { assert.match(markup, /href="\/login"/); assert.doesNotMatch(markup, /Reintentar pagos/); }
-    else { assert.match(markup, /Reintentar pagos/); assert.doesNotMatch(markup, /href="\/login"|Vuelve a iniciar sesión/); }
+    if (status === 401) { assert.match(markup, /href="\/login"/); assert.doesNotMatch(markup, /Actualizar resumen/); }
+    else { assert.match(markup, /Actualizar resumen/); assert.doesNotMatch(markup, /href="\/login"|Vuelve a iniciar sesión/); }
     assert.equal(calls, 1); assert.equal(reloads, 0);
     resource.cancel();
   }

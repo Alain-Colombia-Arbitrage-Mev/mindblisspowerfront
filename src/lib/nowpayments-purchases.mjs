@@ -56,8 +56,8 @@ export const nowpaymentsPurchaseLabel = item => item?.fulfillment_status === 'ac
 export function nowpaymentsHistoryError(failure) {
   if (failure?.status === 401) return 'No pudimos confirmar una sesión activa en este navegador. Vuelve a iniciar sesión para consultar tus compras. No repitas ningún pago por este aviso.';
   if (failure?.status === 403) return 'No tienes autorización para consultar estas compras. Contacta al soporte para revisar el acceso de la cuenta. No repitas ningún pago por este aviso.';
-  if (failure?.status === 503 && failure?.code === 'authentication_unavailable') return 'El servicio de acceso no está disponible temporalmente. Puedes actualizar el historial en unos instantes; no necesitas solicitar otro código ni repetir un pago. Los registros anteriores, si aparecen, no confirman el estado actual.';
-  return 'No pudimos actualizar el historial NOWPayments. Los registros anteriores, si aparecen, no confirman el estado actual.';
+  if (failure?.status === 503 && failure?.code === 'authentication_unavailable') return 'La sincronización de acceso está pendiente. Puedes actualizar el historial en unos instantes; no necesitas solicitar otro código ni repetir un pago.';
+  return 'Sincronización pendiente. El historial se actualizará cuando el servicio vuelva a estar disponible.';
 }
 
 export function nowpaymentsPurchaseError(code, status = 0) {

@@ -22,7 +22,7 @@ function load(name, mocks = {}) {
 }
 
 test('root layout preloads the local brand font without remote styles or the disabled chat widget', () => {
-  const Layout = load('../app/layout.jsx', { '../index.css': {} });
+  const Layout = load('../app/layout.jsx', { '../index.css': {}, '@/i18n/LanguageProvider': { LanguageProvider: ({ children }) => children } });
   const html = renderToStaticMarkup(React.createElement(Layout, null, 'synthetic-content'));
   assert.match(html, /rel="preload"[^>]*href="\/fonts\/manrope-latin-wght\.woff2"[^>]*as="font"/);
   assert.match(html, /crossorigin="anonymous"/i);
@@ -57,6 +57,8 @@ test('static auth shell renders the approved identity panel and eager photo with
     'lucide-react': new Proxy({}, { get: () => () => React.createElement('span', { 'aria-hidden': true }) }),
     './ThemeToggle': { default: () => null },
     './AuthSupportWidget': { default: () => null },
+    '@/i18n/LanguageSwitcher': { default: () => null },
+    './AuthLocalizedContent': { AuthIdentityCopy: ({ title }) => React.createElement('h1', null, title), AuthLegal: () => null },
   });
   const html = renderToStaticMarkup(React.createElement(AuthShell, {
     activePath: '/login', eyebrow: 'Acceso', title: 'Bienvenido',

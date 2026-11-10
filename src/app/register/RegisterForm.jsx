@@ -522,8 +522,8 @@ export default function RegisterForm() {
               className="flex min-h-12 w-full items-center justify-center gap-2 rounded-lg px-5 py-3 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-60"
               style={{
                 color: "#fff",
-                background: "var(--vp-accent)",
-                border: "1px solid var(--vp-accent-strong)",
+                background: "var(--vp-action)",
+                border: "1px solid var(--vp-action-border)",
               }}
             >
               {loading ? <Loader2 className="animate-spin" size={16} /> : <ArrowRight size={16} />}
@@ -748,8 +748,8 @@ export default function RegisterForm() {
             className="flex min-h-12 w-full items-center justify-center gap-2 rounded-lg px-5 py-3 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-60"
             style={{
               color: "#fff",
-              background: "var(--vp-accent)",
-              border: "1px solid var(--vp-accent-strong)",
+              background: "var(--vp-action)",
+              border: "1px solid var(--vp-action-border)",
             }}
           >
             {loading ? <Loader2 className="animate-spin" size={16} /> : <ArrowRight size={16} />}
@@ -794,14 +794,14 @@ export default function RegisterForm() {
 function BannedModal() {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-6"
-      style={{ background: "rgba(2,6,23,0.82)", backdropFilter: "blur(6px)" }}
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4 sm:p-6"
+      style={{ background: "rgba(2,6,23,0.82)", backdropFilter: "blur(6px)", overscrollBehavior: "contain" }}
       role="alertdialog"
       aria-modal="true"
     >
       <div
-        className="w-full max-w-md rounded-2xl p-8 text-center"
-        style={{ background: "var(--vp-surface)", border: "1px solid var(--vp-danger, #dc2626)", boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}
+        className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl p-6 text-center sm:p-8"
+        style={{ background: "var(--vp-surface)", border: "1px solid var(--vp-danger, #dc2626)", boxShadow: "0 20px 60px rgba(0,0,0,0.5)", overscrollBehavior: "contain" }}
       >
         <div
           className="mx-auto mb-5 inline-flex h-16 w-16 items-center justify-center rounded-full"

@@ -74,6 +74,8 @@ test('known HTTP status outranks misleading sign-in codes and no temporary purch
     assert.match(nowpaymentsPurchaseError(code, 403), /No tienes autorización/);
     assert.doesNotMatch(nowpaymentsPurchaseError(code, 403), /Vuelve a iniciar sesión/);
   }
-  assert.match(nowpaymentsHistoryError({ status: 503, code: 'authentication_unavailable' }), /servicio de acceso.*temporalmente/);
+  assert.match(nowpaymentsHistoryError({ status: 503, code: 'authentication_unavailable' }), /sincronización de acceso.*pendiente/i);
+  assert.match(nowpaymentsHistoryError({ status: 503 }), /Sincronización pendiente/);
+  assert.doesNotMatch(nowpaymentsHistoryError({ status: 503 }), /No pudimos actualizar|diagnostic|NOWPayments/i);
   assert.match(nowpaymentsPurchaseError('unauthenticated'), /Vuelve a iniciar sesión/, 'legacy code-only callers keep their explicit behavior');
 });

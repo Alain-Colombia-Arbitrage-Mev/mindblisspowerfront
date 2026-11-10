@@ -26,8 +26,8 @@ export async function POST(request) {
   let config;
   try {
     config = getCognitoIdentityProviderConfig(process.env);
-  } catch (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch {
+    return NextResponse.json({ error: "phone_verification_unavailable" }, { status: 503 });
   }
 
   const verify = await requestPhoneVerification({

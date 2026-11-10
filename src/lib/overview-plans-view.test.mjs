@@ -16,7 +16,15 @@ function moduleAt(relative, mocks = {}) {
   const code = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
   const module = { exports: {} };
   new Function("require", "module", "exports", code)(id => id === "lucide-react" ? new Proxy({}, { get: () => icon })
-    : id === "next/link" ? { default: Link } : Object.hasOwn(mocks, id) ? mocks[id] : require(id), module, module.exports);
+    : id === "next/link" ? { default: Link }
+    : id === "@/i18n/LanguageProvider" ? { useI18n: () => ({ t: key => ({
+      "overview.title": "Tu espacio Mindbliss", "overview.subtitle": "Tu wallet, tus compras de cripto y tus membresías.",
+      "overview.myMemberships": "Mis membresías", "overview.pending": "Por consultar", "overview.memberships": "membresías registradas",
+      "overview.reviewMembership": "Revisar mi membresía", "overview.quickAccess": "Accesos rápidos", "overview.payments": "Mis pagos",
+      "overview.completeProfile": "Completar mi perfil", "overview.question": "¿Tienes una consulta? Abre Soporte para elegir un canal de atención.",
+      "common.update": "Actualizar",
+    }[key] || key) }) }
+    : Object.hasOwn(mocks, id) ? mocks[id] : require(id), module, module.exports);
   return module.exports;
 }
 const render = element => renderToStaticMarkup(element);
@@ -95,39 +103,40 @@ test("overview rejects malformed catalog rows and duplicate IDs instead of publi
   }
 });
 
-test("both summary routes stream the server catalog slot without adding a catalog client request", () => {
+test("the canonical summary route renders the Pen overview and the legacy home route redirects to it", () => {
   const Overview = () => null;
-  const Plans = () => null;
-  const Loading = () => null;
-  for (const route of ["../app/dashboard/page.jsx", "../app/dashboard/home/page.jsx"]) {
-    const { default: Page } = moduleAt(route, {
-      "@/components/panel/overview/OverviewDashboard": { default: Overview },
-      "@/components/panel/overview/OverviewPlans": { default: Plans, OverviewPlansLoading: Loading },
-    });
-    const page = Page();
-    assert.equal(page.type, Overview);
-    assert.equal(page.props.plans.type, React.Suspense);
-    assert.equal(page.props.plans.props.children.type, Plans);
-    assert.equal(page.props.plans.props.fallback.type, Loading);
-  }
+  const { default: Page } = moduleAt("../app/dashboard/page.jsx", {
+    "@/components/panel/overview/OverviewDashboard": { default: Overview },
+  });
+  assert.equal(Page().type, Overview);
+  assert.equal(Object.keys(Page().props).length, 0);
+  const destinations = [];
+  const { default: Home } = moduleAt("../app/dashboard/home/page.jsx", {
+    "next/navigation": { redirect: destination => destinations.push(destination) },
+  });
+  Home();
+  assert.deepEqual(destinations, ["/dashboard"]);
   const source = readFileSync(new URL("../components/panel/overview/OverviewPlans.jsx", import.meta.url), "utf8");
   assert.doesNotMatch(source, /["']use client["']|useEffect|setInterval|\bfetch\s*\(|runtimeEnvironment|process\.env/);
 });
 
-test("actual summary places the plans slot after wallet discovery and before secondary support", () => {
+test("actual summary follows the Pen bento and omits the retired long-form sections", () => {
   const react = { ...React, useState: initial => [initial, () => {}], useRef: () => ({ current: null }), useCallback: callback => callback, useEffect: () => {} };
   const mocks = { react,
-    "next/navigation": { useRouter: () => ({ push() { throw new Error("Unexpected transition during render"); } }) },
-    "@/components/panel/PanelFooter": { default: marker("footer") },
-    "@/components/panel/NOWPaymentsBalances": { default: marker("NOWPaymentsBalances") },
+    "@/app/_components/ThemeToggle": { default: marker("ThemeToggle") },
     "@/lib/member-read.mjs": { readMemberParts: () => { throw new Error("Unexpected request"); }, validMemberTree: () => true, validMemberSummary: () => true },
     "@/lib/payment-display.mjs": { formatPaymentMoney: () => "not-called" },
   };
-  for (const name of ["EarningsCard", "OverviewDiscoveryCard", "PositionSnapshotCard", "RecentSignupsCard", "ShortcutPill", "TopRanksCard"]) mocks[`./${name}`] = { default: marker(name) };
+  for (const name of ["EarningsCard", "OverviewDiscoveryCard", "PositionSnapshotCard"]) mocks[`./${name}`] = { default: marker(name) };
   const { default: Dashboard } = moduleAt("../components/panel/overview/OverviewDashboard.jsx", mocks);
-  const html = render(React.createElement(Dashboard, { plans: React.createElement("p", { "data-test": "plans-slot" }, "planes") }));
-  assert.ok(html.indexOf("OverviewDiscoveryCard") < html.indexOf("plans-slot"));
-  assert.ok(html.indexOf("plans-slot") < html.indexOf("Centro de soporte"));
+  const html = render(React.createElement(Dashboard));
+  assert.match(html, /Tu espacio Mindbliss/);
+  assert.match(html, /Tu wallet, tus compras de cripto y tus membresías/);
+  assert.match(html, /OverviewDiscoveryCard/);
+  assert.match(html, /Mis membresías/);
+  assert.match(html, /Accesos rápidos/);
+  assert.match(html, /Abre Soporte para elegir un canal/);
+  assert.doesNotMatch(html, /plans-slot|RecentSignupsCard|TopRanksCard|NOWPaymentsBalances|Centro de soporte/);
 });
 
 test("the existing memberships page exposes matching plan anchors without changing checkout controls", async () => {

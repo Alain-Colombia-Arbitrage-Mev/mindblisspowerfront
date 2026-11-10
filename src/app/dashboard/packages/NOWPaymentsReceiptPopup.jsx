@@ -25,12 +25,12 @@ export default function NOWPaymentsReceiptPopup({ orderId = '' }) {
   return (
     <Dialog.Root open onOpenChange={open => { if (!open) close(); }}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }} />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%_-_3rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-3xl p-8 text-center"
-          style={{ background: 'var(--vp-surface)', border: '1px solid var(--vp-amber-border, rgba(250,204,21,0.35))' }}
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[calc(100dvh-2rem)] w-[calc(100%_-_2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-[18px] p-6 text-center shadow-2xl sm:p-8"
+          style={{ background: 'var(--vp-surface)', border: '1px solid var(--vp-action-border)', overscrollBehavior: 'contain' }}
           onCloseAutoFocus={event => { event.preventDefault(); document.getElementById('memberships-title')?.focus(); }}>
           <span className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full" aria-hidden="true"
-            style={{ background: 'rgba(250,204,21,0.12)', border: '1px solid rgba(250,204,21,0.3)' }}>
+            style={{ background: 'var(--vp-action-muted)', border: '1px solid var(--vp-action-border)' }}>
             <CheckCircle2 size={30} style={{ color: 'var(--vp-accent)' }} />
           </span>
           <Dialog.Title className="m-0 text-2xl font-bold" style={{ color: 'var(--vp-text)' }}>{active ? 'Membresía activada' : 'Pago recibido y verificado'}</Dialog.Title>

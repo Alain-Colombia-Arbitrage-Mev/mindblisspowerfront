@@ -39,7 +39,7 @@ export default function MemberLayout() {
     if (loading) return;
     const userType = getUserType();
     if (!isRouteAccessible(location.pathname, userType)) {
-      navigate('/dashboard/home', { replace: true });
+      navigate('/dashboard', { replace: true });
       return;
     }
     trackRouteVisit(location.pathname);

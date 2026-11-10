@@ -2,8 +2,10 @@
 
 import { Moon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useI18n } from "@/i18n/LanguageProvider";
 
 export default function ThemeToggle() {
+  const { t } = useI18n();
   const [theme, setTheme] = useState("dark");
 
   useEffect(() => {
@@ -29,7 +31,7 @@ export default function ThemeToggle() {
     }
   }
 
-  const nextLabel = theme === "dark" ? "Activar tema claro" : "Activar tema oscuro";
+  const nextLabel = theme === "dark" ? t("theme.enableLight") : t("theme.enableDark");
 
   return (
     <button
@@ -47,7 +49,7 @@ export default function ThemeToggle() {
         <span className="vp-theme-glyph vp-theme-glyph--sun"><Sun size={15} /></span>
         <span className="vp-theme-glyph vp-theme-glyph--moon"><Moon size={15} /></span>
       </span>
-      <span className="vp-theme-label">{theme === "dark" ? "Oscuro" : "Claro"}</span>
+      <span className="vp-theme-label">{theme === "dark" ? t("theme.dark") : t("theme.light")}</span>
     </button>
   );
 }

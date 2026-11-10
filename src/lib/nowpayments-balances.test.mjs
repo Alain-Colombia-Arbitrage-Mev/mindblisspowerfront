@@ -114,10 +114,12 @@ test('the redesign keeps each exact backend amount beside its semantic label and
  for(const column of ['Capital','Vencimiento del bloqueo (Bogotá)','Comisión calculada','Crédito líquido','Vencimiento (Bogotá)','Estado']) assert.ok(html.includes(`data-label="${column}"`));
 });
 
-test('all requested portal surfaces consume only the nested NOW read model and checkout has a notice, not fabricated consent',()=>{
- for(const path of ['../components/panel/overview/OverviewDashboard.jsx','../app/dashboard/packages/MyPaymentsPanel.jsx','../app/dashboard/_components/executive-pages/FinanceDashboardPage.jsx']) {
+test('financial detail surfaces consume only the nested NOW read model while the Pen summary stays compact',()=>{
+ for(const path of ['../app/dashboard/packages/MyPaymentsPanel.jsx','../app/dashboard/_components/executive-pages/FinanceDashboardPage.jsx']) {
   const page=readFileSync(new URL(path,import.meta.url),'utf8');assert.match(page,/NOWPaymentsBalances data=\{(?:summary\?|d|data)\.nowpayments\}/);
  }
+ const overview=readFileSync(new URL('../components/panel/overview/OverviewDashboard.jsx',import.meta.url),'utf8');
+ assert.doesNotMatch(overview,/NOWPaymentsBalances|nowpayments\.(?:commissions|membership)|principal_locked_usd|roi_locked_usd/);
  const page=readFileSync(new URL('../app/dashboard/packages/page.jsx',import.meta.url),'utf8');
  assert.match(page,/un mes calendario desde su generación, no 30 días/);
  assert.match(page,/capital de la membresía y el ROI del CD permanecen bloqueados durante 365 días/);

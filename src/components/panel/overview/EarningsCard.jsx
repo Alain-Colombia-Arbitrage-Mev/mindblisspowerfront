@@ -1,35 +1,24 @@
 import Link from "next/link";
-import { ArrowUpRight, Network, Plus, Wallet } from "lucide-react";
-import StatRow from "./StatRow";
+import { ArrowDownLeft, ArrowUpRight, Plus } from "lucide-react";
+import { useI18n } from "@/i18n/LanguageProvider";
 
-export default function EarningsCard({ total = "Pendiente de cálculo", wallet = "Pendiente de cálculo", directNetwork = 0, networkReady = true, historical = false }) {
+export default function EarningsCard({ total = "—", ready = false, historical = false, preview = false }) {
+  const { t } = useI18n();
   return (
-    <section
-      className="mb-wallet-card relative flex flex-col overflow-hidden rounded-3xl p-6"
-      style={{ background: "var(--vp-surface)", border: "1px solid var(--vp-border)" }}
-    >
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="m-0 text-sm font-bold" style={{ color: "var(--vp-text)" }}>Mi wallet</p>
-          <p className="m-0 mt-1 text-[11px]" style={{ color: "var(--vp-muted)" }}>
-            {historical ? "Histórico Stripe, en revisión" : "Saldo disponible"}
-          </p>
-          <p className="vp-overview-balance m-0 mt-2">
-            {total}
-          </p>
-        </div>
-        <span className="executive-status info">USDC</span>
+    <section className="mb-wallet-card">
+      <div className="mb-wallet-heading">
+        <h2>{t("overview.wallet")}</h2>
+        <span>{preview ? t("overview.demo") : historical ? t("overview.underReview") : ready ? t("overview.active") : t("overview.uncreated")}</span>
       </div>
-
-      <div className="mt-4 flex flex-col gap-2">
-        <StatRow icon={Wallet} label="Disponible para retiro" value={wallet} />
-        <StatRow icon={Network} label="Conexiones de primer nivel" value={networkReady ? directNetwork : "—"} />
+      <div>
+        <p className="mb-wallet-label">{t("overview.totalBalance")}</p>
+        <div className="mb-wallet-balance"><strong>{total}</strong><span>USDC</span></div>
       </div>
-
-      <div className="mt-auto grid grid-cols-3 gap-2 pt-5">
-        <Link className="executive-button primary px-2" href="/dashboard/withdrawals"><Plus size={14} />Recargar</Link>
-        <Link className="executive-button px-2" href="/dashboard/network"><Network size={14} />Mi red</Link>
-        <Link className="executive-button px-2" href="/dashboard/withdrawals">Abrir<ArrowUpRight size={14} /></Link>
+      <p className="mb-wallet-copy">{preview ? t("overview.demoCopy") : t("overview.emptyWalletCopy")}</p>
+      <div className="mb-wallet-actions">
+        <Link className="executive-button primary" href="/dashboard/withdrawals"><Plus size={14} />{t("overview.createWallet")}</Link>
+        <Link className="executive-button" href="/dashboard/withdrawals"><ArrowDownLeft size={14} />{t("overview.receive")}</Link>
+        <Link className="executive-button" href="/dashboard/support">{t("overview.howItWorks")}<ArrowUpRight size={14} /></Link>
       </div>
     </section>
   );

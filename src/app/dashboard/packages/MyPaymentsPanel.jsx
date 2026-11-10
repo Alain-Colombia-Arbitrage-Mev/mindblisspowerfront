@@ -38,12 +38,20 @@ function PaymentsSummary({ state, load }) {
   if (state.loading) {
     return <Card><div role="status" aria-live="polite" aria-busy="true" className={styles.loading}><Loader2 size={18} className="animate-spin" aria-hidden="true" /> Cargando pagos…</div><div className={styles.skeletons} aria-hidden="true"><span /><span /><span /></div></Card>;
   }
-  if (state.error || !state.data) return <Card>
-    <div role="alert" className={styles.error}><AlertTriangle size={21} aria-hidden="true" /><div><h3>No pudimos cargar el resumen</h3><p>{state.error || "No se pudieron cargar los pagos. Intenta de nuevo."}</p></div></div>
+  if (state.error || !state.data) {
+    const restricted = [401, 403].includes(state.errorStatus);
+    const title = state.errorStatus === 401 ? "Inicia sesión para ver tu resumen"
+      : state.errorStatus === 403 ? "Resumen no disponible para esta cuenta" : "Resumen en sincronización";
+    const message = state.errorStatus === 401 ? "Tu sesión debe estar activa para consultar datos financieros."
+      : state.errorStatus === 403 ? "El acceso está restringido. Contacta al soporte si necesitas revisar tu cuenta."
+        : "Puedes seguir consultando las membresías. Los importes aparecerán cuando finalice la actualización.";
+    return <Card>
+    <div role={restricted ? "alert" : "status"} className={styles.availability}><Clock size={21} aria-hidden="true" /><div><h3>{title}</h3><p>{message}</p></div></div>
     {state.errorStatus === 401
       ? <a href="/login" className={`executive-button ${styles.retry}`}>Iniciar sesión</a>
-      : <button type="button" onClick={load} className={`executive-button ${styles.retry}`}>Reintentar pagos</button>}
+      : <button type="button" onClick={load} className={`executive-button ${styles.retry}`}>Actualizar resumen</button>}
   </Card>;
+  }
 
   const d = state.data;
   const recovered = isRecoverySummary(d);

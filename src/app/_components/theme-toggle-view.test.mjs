@@ -10,7 +10,8 @@ test('theme control exposes a real switch with both visual states and a current-
   assert.match(component, /aria-checked=\{theme === "dark"\}/);
   assert.match(component, /vp-theme-glyph--sun/);
   assert.match(component, /vp-theme-glyph--moon/);
-  assert.match(component, /theme === "dark" \? "Oscuro" : "Claro"/);
+  assert.match(component, /theme === "dark" \? t\("theme\.dark"\) : t\("theme\.light"\)/);
+  assert.match(component, /theme === "dark" \? t\("theme\.enableLight"\) : t\("theme\.enableDark"\)/);
   assert.match(component, /localStorage\.setItem\("vp-theme", next\)/);
 });
 

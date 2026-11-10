@@ -127,6 +127,19 @@
   color: var(--vp-danger);
 }
 
+.syncPending {
+  border-color: var(--vp-info-border);
+  background: var(--vp-info-muted);
+  color: var(--vp-info);
+}
+
+.message strong {
+  display: block;
+  margin-bottom: 2px;
+  color: inherit;
+  font-weight: 650;
+}
+
 .notice {
   color: var(--vp-text-soft);
 }
@@ -478,6 +491,7 @@
   max-height: calc(100dvh - 32px);
   padding: 24px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   border: 1px solid var(--vp-border-strong);
   border-radius: 24px;
   background: var(--vp-surface);

@@ -6,6 +6,16 @@ import ts from 'typescript';
 import * as deadline from '../../lib/browser-request-deadline.mjs';
 
 const require = createRequire(import.meta.url);
+const radixPassthrough = ({ children }) => children;
+const radixDialogStub = {
+  Root: radixPassthrough,
+  Portal: radixPassthrough,
+  Overlay: radixPassthrough,
+  Content: radixPassthrough,
+  Title: radixPassthrough,
+  Description: radixPassthrough,
+  Close: radixPassthrough,
+};
 
 // Exercise real JSX event handlers without a browser, network or real messages.
 export function registrationViewHarness(filename, mocks) {
@@ -45,6 +55,8 @@ export function registrationViewHarness(filename, mocks) {
     if (id === 'react') return hooks;
     if (Object.hasOwn(mocks, id)) return mocks[id];
     if (id === './SocialLoginButtons') return { default: () => null };
+    if (id === '@/components/panel/SupportWidget') return { default: () => null };
+    if (id === '@radix-ui/react-dialog') return radixDialogStub;
     if (id === '@/lib/browser-request-deadline.mjs') return deadline;
     if (id === 'react/jsx-runtime') return require(id);
     assert.fail(`Unexpected test dependency: ${id}`);

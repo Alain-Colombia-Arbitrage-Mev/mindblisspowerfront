@@ -60,7 +60,7 @@ export async function POST(request) {
     const response = NextResponse.json({
       ok: true,
       mode: "demo",
-      redirectTo: "/dashboard/profile",
+      redirectTo: "/dashboard",
       user: buildDemoUser(email),
     });
     // The dashboard is server-gated even in development. Install a signed,

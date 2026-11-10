@@ -23,6 +23,16 @@ function normalizeProfilePhone(value) {
   return /^\+[1-9]\d{7,14}$/.test(phone) ? phone : '';
 }
 
+function phoneVerificationFailure(status, action) {
+  if (status === 401) return "Vuelve a iniciar sesión para continuar con la validación del teléfono.";
+  if (status === 403) return "La validación del teléfono no está habilitada para esta cuenta.";
+  if (status === 429) return "Espera unos minutos antes de volver a intentarlo.";
+  if (status === 400) return action === "confirm"
+    ? "Revisa el código SMS o solicita uno nuevo."
+    : "Revisa el teléfono en formato internacional.";
+  return "La validación por SMS está temporalmente en sincronización. Intenta más tarde.";
+}
+
 export function ProfileDashboardPage({ authMode = 'cognito' }) {
   const modernAuth = authMode === 'better-auth';
   const session = useMemberSession();
@@ -127,7 +137,7 @@ export function ProfileDashboardPage({ authMode = 'cognito' }) {
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok || !d.ok) {
-        setPhoneVerify((current) => ({ ...current, sending: false, type: "err", text: d.error || "No se pudo enviar el SMS de verificación." }));
+        setPhoneVerify((current) => ({ ...current, sending: false, type: "err", text: phoneVerificationFailure(r.status, "request") }));
         return;
       }
       setForm((current) => ({ ...current, phone: d.phone || phone }));
@@ -153,10 +163,10 @@ export function ProfileDashboardPage({ authMode = 'cognito' }) {
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok || !d.ok) {
-        setPhoneVerify((current) => ({ ...current, confirming: false, type: "err", text: d.error || "No se pudo validar el teléfono." }));
+        setPhoneVerify((current) => ({ ...current, confirming: false, type: "err", text: phoneVerificationFailure(r.status, "confirm") }));
         return;
       }
-      setPhoneVerify({ sending: false, confirming: false, pending: false, code: "", type: "ok", text: d.message || "Teléfono validado." });
+      setPhoneVerify({ sending: false, confirming: false, pending: false, code: "", type: "ok", text: "Teléfono validado." });
     } catch {
       setPhoneVerify((current) => ({ ...current, confirming: false, type: "err", text: "Sin conexión. Intenta de nuevo." }));
     }
@@ -193,7 +203,7 @@ export function ProfileDashboardPage({ authMode = 'cognito' }) {
         />
 
         {profileState === 'loading' ? <p role="status" className="executive-panel">Cargando los datos guardados de tu perfil…</p> : null}
-        {profileState === 'error' ? <div role="alert" className="executive-panel"><p>No pudimos cargar tu perfil. La edición y el guardado están bloqueados para proteger los datos existentes.</p><button className="executive-button mt-3" type="button" onClick={() => { void loadProfile(); }}>Volver a cargar mi perfil</button></div> : null}
+        {profileState === 'error' ? <div role="status" className="executive-panel" style={{ borderColor: "var(--vp-info-border)" }}><p className="font-semibold" style={{ color: "var(--vp-text)" }}>Perfil en sincronización</p><p className="mt-2 text-sm" style={{ color: "var(--vp-muted)" }}>La edición permanece bloqueada hasta confirmar los datos guardados.</p><button className="executive-button mt-3" type="button" onClick={() => { void loadProfile(); }}>Actualizar perfil</button></div> : null}
 
         <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
           <div className="space-y-6">

@@ -16,6 +16,7 @@ function page(enabled = true) {
       betterAuthEnabled: () => enabled,
       betterAuthSocialProviders: () => enabled ? ['google'] : [],
     },
+    './LoginLocalizedCopy': { LoginHeading: () => null, LoginAccountLinks: () => null },
     '../register/registration-model.mjs': { registrationLoginUrl, registrationUrl }, 'react/jsx-runtime': { jsx: element, jsxs: element } };
   const module = { exports: {} };
   new Function('require', 'module', 'exports', compiled)(name => {

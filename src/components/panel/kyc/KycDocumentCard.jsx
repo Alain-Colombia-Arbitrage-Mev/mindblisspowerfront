@@ -124,7 +124,7 @@ export default function KycDocumentCard({ docType, currentDocument, onUploaded }
         style={
           locked
             ? { background: "var(--vp-surface-raised)", color: "var(--vp-subtle)", border: 0, cursor: "not-allowed" }
-            : { background: "var(--vp-accent)", color: "#000000", border: 0, cursor: "pointer" }
+            : { background: "var(--vp-action)", color: "var(--vp-on-action)", border: 0, cursor: "pointer" }
         }
         type="button"
         onClick={() => inputRef.current?.click()}

@@ -63,7 +63,8 @@ test('payment errors and absent payloads provide an operable retry instead of a 
     let retries = 0;
     const Component = payments({ loading: false, data: null, error }, () => { retries++; });
     const html = render(Component);
-    assert.match(html, /role="alert"/); assert.match(html, /Reintentar pagos/); assert.doesNotMatch(html, /\$0\.00/);
+    assert.match(html, /role="status"/); assert.match(html, /Resumen en sincronización/);
+    assert.match(html, /Actualizar resumen/); assert.doesNotMatch(html, /\$0\.00|Servicio no disponible/);
     const summary = React.Children.toArray(Component().props.children)[0];
     const card = summary.type(summary.props);
     const retry = React.Children.toArray(card.props.children).find(child => child.type === 'button');

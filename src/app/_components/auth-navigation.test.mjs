@@ -10,6 +10,7 @@ function shell(props) {
   const code = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
   const module = { exports: {} }, mocks = { 'next/link': { default: ({ children, ...props }) => React.createElement('a', props, children) }, 'lucide-react': new Proxy({}, { get: () => () => null }),
     './ThemeToggle': { default: () => null }, './AuthSupportWidget': { default: props => React.createElement('button', { className: `support-${props.variant || 'floating'}` }, 'Soporte') },
+    '@/i18n/LanguageSwitcher': { default: () => null }, './AuthLocalizedContent': { AuthIdentityCopy: () => null, AuthLegal: () => null },
     'react/jsx-runtime': { jsx: (type, props, key) => React.createElement(type, { ...props, key }), jsxs: (type, props, key) => React.createElement(type, { ...props, key }) } };
   new Function('require', 'module', 'exports', code)(name => {
     assert.ok(Object.hasOwn(mocks, name), `Unexpected auth navigation dependency: ${name}`); return mocks[name];

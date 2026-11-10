@@ -12,7 +12,7 @@ export default function MessageFolders({ folders, activeFolder, onSelectFolder, 
     >
       <button
         className="flex h-[42px] w-full items-center justify-center gap-2 rounded-lg text-sm font-semibold"
-        style={{ background: "var(--vp-accent)", color: "#000000", border: 0, cursor: "pointer" }}
+        style={{ background: "var(--vp-action)", color: "var(--vp-on-action)", border: 0, cursor: "pointer" }}
         type="button"
         disabled={!onCompose}
         onClick={onCompose}

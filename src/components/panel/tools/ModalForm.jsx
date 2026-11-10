@@ -1,6 +1,7 @@
 "use client";
 
 import { Calendar } from "lucide-react";
+import * as Dialog from "@radix-ui/react-dialog";
 
 const fieldStyle = {
   background: "var(--vp-surface)",
@@ -75,19 +76,17 @@ export default function ModalForm({ option, onClose }) {
   if (!option) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(0, 0, 0, 0.7)", backdropFilter: "blur(4px)" }}
-      onClick={onClose}
-    >
-      <div
-        className={`w-full rounded-2xl border p-8 shadow-2xl ${option.wide ? "max-w-2xl" : "max-w-md"}`}
-        style={{ background: "var(--vp-shell)", borderColor: "var(--vp-border)" }}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <h3 className="m-0 mb-6 text-lg font-bold uppercase tracking-wide" style={{ color: "var(--vp-accent)" }}>
+    <Dialog.Root open={Boolean(option)} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" />
+        <Dialog.Content
+          className={`fixed left-1/2 top-1/2 z-50 max-h-[calc(100dvh-2rem)] w-[calc(100%_-_2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-[18px] border p-5 shadow-2xl sm:p-8 ${option.wide ? "max-w-2xl" : "max-w-md"}`}
+          style={{ background: "var(--vp-shell)", borderColor: "var(--vp-border)", overscrollBehavior: "contain" }}
+        >
+        <Dialog.Title className="m-0 mb-1 text-lg font-bold uppercase tracking-wide" style={{ color: "var(--vp-accent)" }}>
           {option.label}
-        </h3>
+        </Dialog.Title>
+        <Dialog.Description className="mb-5" style={{ color: "var(--vp-muted)" }}>Completa los campos y revisa la información antes de guardar.</Dialog.Description>
         <form
           className={option.wide ? "grid grid-cols-1 gap-4 md:grid-cols-2" : "space-y-4"}
           onSubmit={(event) => {
@@ -100,25 +99,26 @@ export default function ModalForm({ option, onClose }) {
               <Field field={field} />
             </div>
           ))}
-          <div className={`flex justify-end gap-3 pt-4 ${option.wide ? "md:col-span-2" : ""}`}>
+          <div className={`flex flex-col-reverse gap-3 pt-4 sm:flex-row sm:justify-end ${option.wide ? "md:col-span-2" : ""}`}>
             <button
-              className="rounded-xl border px-5 py-2.5 text-xs font-semibold"
+              className="min-h-11 w-full rounded-xl border px-5 py-2.5 text-xs font-semibold sm:w-auto"
               style={{ background: "transparent", borderColor: "var(--vp-accent)", color: "var(--vp-accent)", cursor: "pointer" }}
               type="button"
               onClick={onClose}
             >
-              Cancel
+              Cancelar
             </button>
             <button
-              className="rounded-xl px-6 py-2.5 text-xs font-semibold"
-              style={{ background: "var(--vp-accent)", color: "#000000", border: 0, cursor: "pointer" }}
+              className="min-h-11 w-full rounded-xl px-6 py-2.5 text-xs font-semibold sm:w-auto"
+              style={{ background: "var(--vp-action)", color: "var(--vp-on-action)", border: 0, cursor: "pointer" }}
               type="submit"
             >
-              Save
+              Guardar
             </button>
           </div>
         </form>
-      </div>
-    </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }

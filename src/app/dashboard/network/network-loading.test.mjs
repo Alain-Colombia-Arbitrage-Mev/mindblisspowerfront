@@ -130,36 +130,10 @@ test('the deferred view fallback is visible, accessible and reserves workspace h
   }
 });
 
-test('overview network action uses a client transition and preserves its existing destination', () => {
-  const overviewSource = readFileSync(new URL('../../../components/panel/overview/OverviewDashboard.jsx', import.meta.url), 'utf8');
-  const pushed = [], components = new Map();
-  const snapshots = [{}, { positioned: true, tree: [{ level: 1, name: 'Synthetic child', status: 'active' }] }, 'ready', 'ready', { summary: null, network: null }];
-  let stateIndex = 0;
-  const mocks = {
-    react: { useCallback: fn => fn, useEffect: () => {}, useRef: current => ({ current }), useState: () => [snapshots[stateIndex++], () => {}] },
-    'next/link': { default: empty },
-    'next/navigation': { useRouter: () => ({ push: path => pushed.push(path) }) },
-    'lucide-react': icons,
-    '@/lib/member-read.mjs': {},
-    '@/lib/payment-display.mjs': { formatPaymentMoney: () => 'Synthetic balance' },
-  };
-  const module = { exports: {} };
-  new Function('require', 'module', 'exports', compile(overviewSource))(id => {
-    if (Object.hasOwn(mocks, id)) return mocks[id];
-    if (id === 'react/jsx-runtime') return require(id);
-    if (id.startsWith('.') || id.startsWith('@/components/')) {
-      const Component = () => null;
-      components.set(id, Component);
-      return { default: Component };
-    }
-    assert.fail(`Unexpected test dependency: ${id}`);
-  }, module, module.exports);
-  const tree = module.exports.default({});
-  const recent = elements(tree).find(item => item.type === components.get('./RecentSignupsCard'));
-  assert.ok(recent);
-  recent.props.onSeeAll();
-  assert.deepEqual(pushed, ['/dashboard/network']);
-  assert.doesNotMatch(overviewSource, /window\.location\.assign/);
+test('overview network card preserves the canonical tree destination without an imperative redirect', () => {
+  const source = readFileSync(new URL('../../../components/panel/overview/PositionSnapshotCard.jsx', import.meta.url), 'utf8');
+  assert.match(source, /href="\/dashboard\/network"/);
+  assert.doesNotMatch(source, /window\.location|router\.(push|replace)/);
 });
 
 test('a temporary access failure offers retry without declaring expiry, requesting OTP, or exposing a private tree', () => {
@@ -206,10 +180,10 @@ test('temporary tree refresh preserves the last tree with an explicit stale noti
   view.callbacks[0].onPart('tree', { error });
   assert.equal(view.state.data, before);
   assert.equal(view.state.error, '');
-  assert.match(view.state.refreshError, /servicio de acceso.*última lectura sin actualizar/);
+  assert.match(view.state.refreshError, /servicio de acceso.*última lectura confirmada/);
   const stale = renderToStaticMarkup(view.render());
   assert.match(stale, /role="alert"/);
-  assert.match(stale, /última lectura sin actualizar/);
+  assert.match(stale, /última lectura confirmada/);
   assert.doesNotMatch(stale, /href="\/login"|expir|iniciar sesi/i);
   view.callbacks[0].onPart('tree', { data: before });
   assert.equal(view.state.refreshError, '');

@@ -1045,8 +1045,8 @@ function PrimaryButton({ disabled, loading, icon, children }) {
       className="auth-primary-button flex min-h-12 w-full items-center justify-center gap-2 rounded-lg px-5 py-3 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-60"
       style={{
         color: "#ffffff",
-        background: "var(--vp-accent)",
-        border: "1px solid var(--vp-accent-strong)",
+        background: "var(--vp-action)",
+        border: "1px solid var(--vp-action-border)",
       }}
     >
       {loading ? <Loader2 className="animate-spin" size={16} /> : icon}

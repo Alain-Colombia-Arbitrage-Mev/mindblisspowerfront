@@ -8,6 +8,7 @@ import { betterAuthEnabled, AuthServiceUnavailable, AuthAccessRestricted } from 
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const privateSessionHeaders = { 'Cache-Control': 'private, no-store', Vary: 'Cookie' };
 
 const SESSION_COOKIES = [
   "vp_access_token",
@@ -28,9 +29,9 @@ export async function GET(request) {
     claims = (await verifyIdToken(idToken)) || {};
   } catch (error) {
     if (error instanceof AuthAccessRestricted) return NextResponse.json({ authenticated: false,
-      mode: 'better-auth', error: 'account_access_restricted' }, { status: 403, headers: { 'Cache-Control': 'private, no-store' } });
+      mode: 'better-auth', error: 'account_access_restricted' }, { status: 403, headers: privateSessionHeaders });
     if (!(error instanceof AuthServiceUnavailable)) throw error;
-    return NextResponse.json({ error: 'authentication_unavailable' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
+    return NextResponse.json({ error: 'authentication_unavailable' }, { status: 503, headers: privateSessionHeaders });
   }
 
   // Claims VERIFICADOS (firma + iss + aud + token_use + exp). Un id token
@@ -81,7 +82,7 @@ export async function GET(request) {
     // (Un código inventado se ve válido pero no resuelve a ningún sponsor.)
     referralCode: realCode || null,
     isAdmin: false,
-  }, { headers: { 'Cache-Control': 'private, no-store' } });
+  }, { headers: privateSessionHeaders });
 }
 
 function isSuspended(result) {
@@ -91,7 +92,7 @@ function isSuspended(result) {
 function suspendedSessionResponse() {
   const response = NextResponse.json(
     { authenticated: false, mode: "cognito", error: "account_suspended" },
-    { status: 403, headers: { 'Cache-Control': 'private, no-store' } }
+    { status: 403, headers: privateSessionHeaders }
   );
   for (const name of SESSION_COOKIES) clearCookie(response, name);
   return response;

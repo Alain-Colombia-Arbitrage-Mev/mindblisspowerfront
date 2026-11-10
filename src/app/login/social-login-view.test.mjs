@@ -29,7 +29,7 @@ test('mobile social actions are full-width touch targets and retain an accessibl
   const css = source('../../index.css');
   const component = source('./SocialLoginButtons.jsx');
   assert.match(css, /\.auth-social-button\s*\{[^}]*min-height:\s*52px/s);
-  assert.match(css, /@media \(max-width: 860px\)[\s\S]*\.auth-social-buttons\s*\{\s*grid-template-columns:\s*minmax\(0, 1fr\)/);
+  assert.match(css, /@media \(max-width: 719px\)[\s\S]*\.auth-social-buttons\s*\{\s*grid-template-columns:\s*minmax\(0, 1fr\)/);
   assert.match(component, /aria-live="polite"/);
   assert.match(component, /aria-busy=/);
 });

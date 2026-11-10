@@ -25,7 +25,7 @@ export default function SessionRedirect() {
       if (!isAuthed) {
         navigate('/login', { replace: true });
       } else if (status === 'active') {
-        navigate('/dashboard/home', { replace: true });
+        navigate('/dashboard', { replace: true });
       } else if (status === 'onboarding') {
         navigate('/onboarding/resume', { replace: true });
       } else {
