@@ -1,0 +1,248 @@
+"use client";
+
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createAppKit, useAppKit, useAppKitAccount, useAppKitProvider, useAppKitTheme } from "@reown/appkit/react";
+import { EthersAdapter } from "@reown/appkit-adapter-ethers";
+import { mainnet } from "@reown/appkit/networks";
+import { BrowserProvider, getAddress } from "ethers";
+
+const projectId = process.env.NEXT_PUBLIC_REOWN_PROJECT_ID?.trim() || "";
+const configured = /^[a-f0-9]{32}$/i.test(projectId);
+
+/**
+ * @typedef {Object} ReownContextValue
+ * @property {boolean} configured
+ * @property {boolean} isConnected
+ * @property {string} address
+ * @property {string} status
+ * @property {string} linkedAddress
+ * @property {string} linkStatus
+ * @property {boolean} isLinked
+ * @property {boolean} isLinking
+ * @property {() => Promise<unknown>} openConnect
+ * @property {() => Promise<unknown>} openOnramp
+ * @property {() => Promise<unknown>} startOnramp
+ * @property {() => Promise<unknown>} linkWallet
+ * @property {() => Promise<unknown>} openAccount
+ */
+
+/** @type {ReownContextValue} */
+const unavailable = Object.freeze({
+  configured: false,
+  isConnected: false,
+  address: "",
+  status: "unavailable",
+  linkedAddress: "",
+  linkStatus: "unavailable",
+  isLinked: false,
+  isLinking: false,
+  openConnect: async () => { throw new Error("reown_unavailable"); },
+  openOnramp: async () => { throw new Error("reown_unavailable"); },
+  startOnramp: async () => { throw new Error("reown_unavailable"); },
+  linkWallet: async () => { throw new Error("reown_unavailable"); },
+  openAccount: async () => { throw new Error("reown_unavailable"); },
+});
+
+const ReownContext = createContext(unavailable);
+
+if (configured) {
+  createAppKit({
+    adapters: [new EthersAdapter()],
+    projectId,
+    networks: [mainnet],
+    defaultNetwork: mainnet,
+    defaultAccountTypes: { eip155: "eoa" },
+    metadata: {
+      name: "Mindbliss Power",
+      description: "Crea o conecta tu wallet y compra cripto de forma segura.",
+      url: "https://app.mindblisspower.com",
+      icons: ["https://app.mindblisspower.com/mindbliss/mindbliss-favicon.png"],
+    },
+    enableEIP6963: true,
+    enableInjected: true,
+    enableWallets: true,
+    enableNetworkSwitch: false,
+    enableMobileFullScreen: true,
+    allowUnsupportedChain: false,
+    allWallets: "SHOW",
+    features: {
+      email: true,
+      socials: ["google", "apple"],
+      emailShowWallets: false,
+      analytics: false,
+      swaps: false,
+      send: false,
+      receive: false,
+      history: false,
+      onramp: true,
+    },
+    themeMode: "dark",
+    themeVariables: themeVariables("dark"),
+  });
+}
+
+export default function ReownProvider({ children }) {
+  if (!configured) {
+    return <ReownContext.Provider value={unavailable}>{children}</ReownContext.Provider>;
+  }
+
+  return <ConfiguredReownProvider>{children}</ConfiguredReownProvider>;
+}
+
+function ConfiguredReownProvider({ children }) {
+  const { open } = useAppKit();
+  const account = useAppKitAccount({ namespace: "eip155" });
+  const { walletProvider } = useAppKitProvider("eip155");
+  const { setThemeMode, setThemeVariables } = useAppKitTheme();
+  const [binding, setBinding] = useState({ status: "loading", address: "" });
+  const [isLinking, setIsLinking] = useState(false);
+  const linking = useRef(null);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const syncTheme = () => {
+      const mode = root.dataset.theme === "light" ? "light" : "dark";
+      setThemeMode(mode);
+      setThemeVariables(themeVariables(mode));
+    };
+
+    syncTheme();
+    const observer = new MutationObserver(syncTheme);
+    observer.observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => observer.disconnect();
+  }, [setThemeMode, setThemeVariables]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/api/member/wallet-link", { cache: "no-store", credentials: "same-origin", signal: controller.signal })
+      .then(async response => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data?.error || "wallet_link_unavailable");
+        setBinding(data.linked === true && isAddress(data.address)
+          ? { status: "linked", address: getAddress(data.address) }
+          : { status: "unlinked", address: "" });
+      })
+      .catch(error => {
+        if (error?.name !== "AbortError") setBinding({ status: "error", address: "" });
+      });
+    return () => controller.abort();
+  }, []);
+
+  const openConnect = useCallback(
+    () => open({ view: "Connect", namespace: "eip155" }),
+    [open],
+  );
+  const currentAddress = typeof account.address === "string" && isAddress(account.address) ? getAddress(account.address) : "";
+  const isLinked = account.isConnected === true && Boolean(currentAddress) && binding.status === "linked"
+    && binding.address.toLowerCase() === currentAddress.toLowerCase();
+
+  const linkWallet = useCallback(() => {
+    if (linking.current) return linking.current;
+    const operation = (async () => {
+      if (account.isConnected !== true || !currentAddress || !walletProvider) throw new Error("wallet_not_connected");
+      if (binding.status === "linked") {
+        if (binding.address.toLowerCase() !== currentAddress.toLowerCase()) throw new Error("wallet_already_linked");
+        return { linked: true, address: binding.address };
+      }
+      setIsLinking(true);
+      const challenge = await walletRequest("/api/member/wallet-link/challenge", { address: currentAddress });
+      if (challenge.linked === true) {
+        if (!sameAddress(challenge.address, currentAddress)) throw new Error("wallet_address_mismatch");
+        const linked = { status: "linked", address: getAddress(challenge.address) };
+        setBinding(linked);
+        return challenge;
+      }
+      if (!sameAddress(challenge.address, currentAddress) || typeof challenge.message !== "string"
+        || challenge.message.length > 4096 || !/^[0-9a-f-]{36}$/i.test(challenge.challengeId || "")) {
+        throw new Error("wallet_challenge_invalid");
+      }
+      const provider = new BrowserProvider(walletProvider);
+      const signer = await provider.getSigner();
+      if (!sameAddress(await signer.getAddress(), currentAddress)) throw new Error("wallet_address_mismatch");
+      const signature = await signer.signMessage(challenge.message);
+      const confirmed = await walletRequest("/api/member/wallet-link/confirm", {
+        challengeId: challenge.challengeId,
+        signature,
+      });
+      if (confirmed.linked !== true || !sameAddress(confirmed.address, currentAddress)) throw new Error("wallet_link_unconfirmed");
+      setBinding({ status: "linked", address: getAddress(confirmed.address) });
+      return confirmed;
+    })().finally(() => {
+      linking.current = null;
+      setIsLinking(false);
+    });
+    linking.current = operation;
+    return operation;
+  }, [account.isConnected, binding.address, binding.status, currentAddress, walletProvider]);
+
+  const openOnramp = useCallback(() => {
+    if (account.isConnected !== true) throw new Error("wallet_not_connected");
+    if (!isLinked) throw new Error("wallet_not_linked");
+    return open({ view: "OnRampProviders" });
+  }, [account.isConnected, isLinked, open]);
+
+  const startOnramp = useCallback(async () => {
+    if (account.isConnected !== true) return openConnect();
+    if (!isLinked) await linkWallet();
+    return open({ view: "OnRampProviders" });
+  }, [account.isConnected, isLinked, linkWallet, open, openConnect]);
+  const openAccount = useCallback(
+    () => open({ view: account.isConnected ? "Account" : "Connect", namespace: "eip155" }),
+    [account.isConnected, open],
+  );
+
+  const value = useMemo(() => ({
+    configured: true,
+    isConnected: account.isConnected === true,
+    address: currentAddress,
+    status: account.status || "disconnected",
+    linkedAddress: binding.address,
+    linkStatus: binding.status,
+    isLinked,
+    isLinking,
+    openConnect,
+    openOnramp,
+    startOnramp,
+    linkWallet,
+    openAccount,
+  }), [account.isConnected, account.status, binding.address, binding.status, currentAddress, isLinked, isLinking,
+    linkWallet, openAccount, openConnect, openOnramp, startOnramp]);
+
+  return <ReownContext.Provider value={value}>{children}</ReownContext.Provider>;
+}
+
+function themeVariables(mode) {
+  return {
+    "--apkt-font-family": "Manrope, ui-sans-serif, system-ui, sans-serif",
+    "--apkt-accent": "#4959E8",
+    "--apkt-color-mix": mode === "light" ? "#EBF2F4" : "#20333F",
+    "--apkt-color-mix-strength": mode === "light" ? 18 : 30,
+    "--apkt-border-radius-master": "4px",
+    "--apkt-z-index": 10000,
+  };
+}
+
+export function useReownWallet() {
+  return useContext(ReownContext);
+}
+
+function isAddress(value) {
+  return typeof value === "string" && /^0x[a-f0-9]{40}$/i.test(value);
+}
+
+function sameAddress(left, right) {
+  return isAddress(left) && isAddress(right) && left.toLowerCase() === right.toLowerCase();
+}
+
+async function walletRequest(path, body) {
+  const response = await fetch(path, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(typeof data?.error === "string" ? data.error : "wallet_link_unavailable");
+  return data;
+}

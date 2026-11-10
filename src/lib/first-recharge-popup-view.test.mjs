@@ -13,9 +13,9 @@ const copy = {
   'recharge.start': 'Hacer mi primera recarga', 'recharge.notNow': 'Ahora no',
   'recharge.methodsEyebrow': 'Recarga a tu manera', 'recharge.methodsTitle': 'Tu wallet está lista.',
   'recharge.methodsCopy': 'Elige una opción.', 'recharge.buyTitle': 'Comprar cripto',
-  'recharge.buyCopy': 'Revisa las opciones.', 'recharge.buyAction': 'Ver membresías',
+  'recharge.buyCopy': 'Revisa las opciones.', 'recharge.buyAction': 'Comprar cripto',
   'recharge.receiveTitle': 'Recibir desde otra wallet', 'recharge.receiveCopy': 'Verifica activo y red.',
-  'recharge.receiveAction': 'Ver cómo recibir', 'recharge.later': 'Lo haré después',
+  'recharge.receiveAction': 'Ver cómo recibir', 'recharge.providerUnavailable': 'Reown no disponible.', 'recharge.later': 'Lo haré después',
   'recharge.reminderEyebrow': 'Tu wallet · Primera recarga', 'recharge.balanceAvailable': 'Saldo disponible',
   'recharge.reminderTitle': '¿Tu primera recarga?', 'recharge.reminderCopy': 'Añade saldo.',
   'recharge.recharge': 'Recargar mi wallet', 'recharge.continue': 'Seguir explorando',
@@ -37,11 +37,14 @@ const radix = {
 };
 const i18n = { useI18n: () => ({ t: key => copy[key] ?? key }) };
 const link = ({ children, href, ...props }) => React.createElement('a', { href, ...props }, children);
+let onrampCalls = 0;
+const reown = { useReownWallet: () => ({ configured: true, startOnramp: async () => { onrampCalls += 1; } }) };
 
 function view(file) {
   return registrationViewHarness(`../../components/panel/overview/${file}`, {
     'next/link': { default: link }, 'lucide-react': icons,
     '@radix-ui/react-dialog': radix, '@/i18n/LanguageProvider': i18n,
+    '@/components/reown/ReownProvider': reown,
   });
 }
 
@@ -49,16 +52,22 @@ function button(tree, label) {
   return find(tree, node => node?.type === 'button' && renderToStaticMarkup(node).includes(label));
 }
 
-test('the first-recharge popup advances through the Pen welcome and method states with real destinations', () => {
+test('the first-recharge popup advances through the Pen welcome and opens Reown on-ramp', async () => {
+  onrampCalls = 0;
+  let closed = 0;
   const harness = view('FirstRechargeDialog.jsx');
-  const props = { open: true, initialStep: 'welcome', onOpenChange() {} };
+  const props = { open: true, initialStep: 'welcome', onOpenChange(value) { if (value === false) closed += 1; } };
   assert.match(renderToStaticMarkup(harness.render(props)), /Todo empieza con.*tu primera recarga/s);
   button(harness.render(props), 'Hacer mi primera recarga').props.onClick();
   const methods = harness.render(props);
   const html = renderToStaticMarkup(methods);
   assert.match(html, /Comprar cripto/);
-  assert.equal(find(methods, node => node?.props?.href === '/dashboard/packages').props.href, '/dashboard/packages');
+  assert.equal(find(methods, node => node?.props?.href === '/dashboard/packages'), undefined);
   assert.equal(find(methods, node => node?.props?.href === '/dashboard/payments#wallet-steps').props.href, '/dashboard/payments#wallet-steps');
+  const cryptoMethod = find(methods, node => node?.type?.name === 'RechargeMethod' && typeof node?.props?.onClick === 'function');
+  await cryptoMethod.props.onClick();
+  assert.equal(onrampCalls, 1);
+  assert.equal(closed, 1);
   harness.unmount();
 });
 

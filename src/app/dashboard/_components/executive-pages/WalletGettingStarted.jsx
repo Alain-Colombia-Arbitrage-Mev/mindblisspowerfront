@@ -1,7 +1,9 @@
 "use client";
 
 import { ArrowRight, CreditCard, KeyRound, MapPin, ShieldCheck, WalletCards } from "lucide-react";
+import { useState } from "react";
 import { useI18n } from "@/i18n/LanguageProvider";
+import { useReownWallet } from "@/components/reown/ReownProvider";
 
 const steps = [
   { number: "01", title: "walletIntro.stepCreate", copy: "walletIntro.stepCreateCopy", icon: KeyRound },
@@ -11,13 +13,45 @@ const steps = [
 
 export default function WalletGettingStarted() {
   const { t } = useI18n();
+  const reown = useReownWallet();
+  const [providerError, setProviderError] = useState("");
+  const activeStep = reown.isLinked ? 2 : reown.isConnected ? 1 : 0;
+  const address = compactAddress(reown.address);
+
+  async function openWallet() {
+    setProviderError("");
+    try {
+      await (reown.isConnected ? reown.openAccount() : reown.openConnect());
+    } catch {
+      setProviderError(t("recharge.providerUnavailable"));
+    }
+  }
+
+  async function openOnramp() {
+    setProviderError("");
+    try {
+      await reown.openOnramp();
+    } catch {
+      setProviderError(t("recharge.providerUnavailable"));
+    }
+  }
+
+  async function linkWallet() {
+    setProviderError("");
+    try {
+      await reown.linkWallet();
+    } catch {
+      setProviderError(t("walletPage.linkError"));
+    }
+  }
+
   return (
     <div className="mb-wallet-intro">
       <nav className="mb-wallet-progress" aria-label={t("walletIntro.progressLabel")}>
         {[
           ["1", t("walletIntro.start")], ["2", t("walletIntro.create")], ["3", t("walletIntro.ready")],
         ].map(([number, label], index) => (
-          <span key={number} data-active={index === 0 ? "true" : undefined}>
+          <span key={number} data-active={index === activeStep ? "true" : undefined}>
             <b>{number}</b>{label}
           </span>
         ))}
@@ -28,13 +62,34 @@ export default function WalletGettingStarted() {
           <h2>{t("walletIntro.title")}</h2>
           <p>{t("walletIntro.copy")}</p>
           <div className="mb-wallet-hero-actions">
-            <a className="executive-button primary" href="#wallet-finance">{t("walletIntro.create")} <ArrowRight size={14} /></a>
+            <button className="executive-button primary" type="button" onClick={openWallet}>
+              {reown.isConnected ? t("walletPage.manageWallet") : t("overview.createWallet")} <ArrowRight size={14} />
+            </button>
+            {reown.isConnected && !reown.isLinked ? (
+              <button className="executive-button" type="button" onClick={linkWallet} disabled={reown.isLinking}>
+                {reown.isLinking ? t("walletPage.linking") : t("walletPage.linkAction")} <ShieldCheck size={14} />
+              </button>
+            ) : null}
+            {reown.isLinked ? (
+              <button className="executive-button" type="button" onClick={openOnramp}>
+                {t("walletPage.onrampAction")} <CreditCard size={14} />
+              </button>
+            ) : null}
             <a className="executive-button" href="#wallet-steps">{t("overview.howItWorks")}</a>
           </div>
+          {providerError ? <p className="mb-reown-wallet-error" role="alert">{providerError}</p> : null}
         </div>
-        <div className="mb-wallet-visual" aria-hidden="true">
+        <div className="mb-wallet-visual">
           <span><WalletCards size={34} /></span>
-          <strong>{t("walletIntro.beforeStart")}</strong>
+          <strong>{reown.isLinked ? t("walletPage.verified") : reown.isConnected ? t("walletPage.connected") : t("walletPage.notConnected")}</strong>
+          <div className="mb-reown-wallet-status" data-connected={reown.isConnected ? "true" : "false"}>
+            <ShieldCheck size={17} aria-hidden="true" />
+            <div>
+              <small>{reown.isConnected ? t("walletPage.walletAddress") : t("walletPage.walletCreationCopy")}</small>
+              {address ? <code title={reown.address}>{address}</code> : null}
+            </div>
+          </div>
+          {reown.isConnected && !reown.isLinked ? <small className="mb-reown-link-hint">{t("walletPage.linkHint")}</small> : null}
           <ul>
             <li><KeyRound size={15} /><span><b>{t("walletIntro.access")}</b> {t("walletIntro.accessCopy")}</span></li>
             <li><MapPin size={15} /><span><b>{t("walletIntro.destination")}</b> {t("walletIntro.destinationCopy")}</span></li>
@@ -54,4 +109,9 @@ export default function WalletGettingStarted() {
       </div>
     </div>
   );
+}
+
+function compactAddress(address) {
+  if (typeof address !== "string" || !/^0x[a-f0-9]{40}$/i.test(address)) return "";
+  return `${address.slice(0, 8)}…${address.slice(-6)}`;
 }

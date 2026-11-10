@@ -6,6 +6,7 @@ import { ArrowDownLeft, ArrowRight, CreditCard, Plus, Wallet, X } from "lucide-r
 import { useEffect, useState } from "react";
 
 import { useI18n } from "@/i18n/LanguageProvider";
+import { useReownWallet } from "@/components/reown/ReownProvider";
 
 const VALID_STEPS = new Set(["welcome", "methods", "reminder"]);
 
@@ -15,13 +16,27 @@ function safeStep(value) {
 
 export default function FirstRechargeDialog({ open, initialStep = "welcome", onOpenChange }) {
   const { t } = useI18n();
+  const reown = useReownWallet();
   const [step, setStep] = useState(() => safeStep(initialStep));
+  const [providerError, setProviderError] = useState("");
 
   useEffect(() => {
-    if (open) setStep(safeStep(initialStep));
+    if (open) {
+      setStep(safeStep(initialStep));
+      setProviderError("");
+    }
   }, [initialStep, open]);
 
   const close = () => onOpenChange?.(false);
+  const openCryptoProvider = async () => {
+    setProviderError("");
+    try {
+      await reown.startOnramp();
+      close();
+    } catch {
+      setProviderError(t("recharge.providerUnavailable"));
+    }
+  };
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -59,9 +74,10 @@ export default function FirstRechargeDialog({ open, initialStep = "welcome", onO
                 <Dialog.Description id="recharge-methods-description">{t("recharge.methodsCopy")}</Dialog.Description>
               </div>
               <div className="mb-recharge-methods">
-                <RechargeMethod icon={CreditCard} title={t("recharge.buyTitle")} copy={t("recharge.buyCopy")} action={t("recharge.buyAction")} href="/dashboard/packages" onNavigate={close} />
+                <RechargeMethod icon={CreditCard} title={t("recharge.buyTitle")} copy={t("recharge.buyCopy")} action={t("recharge.buyAction")} onClick={openCryptoProvider} />
                 <RechargeMethod icon={ArrowDownLeft} title={t("recharge.receiveTitle")} copy={t("recharge.receiveCopy")} action={t("recharge.receiveAction")} href="/dashboard/payments#wallet-steps" onNavigate={close} />
               </div>
+              {providerError ? <p className="mb-recharge-error" role="alert">{providerError}</p> : null}
               <button type="button" className="mb-recharge-secondary" onClick={close}>{t("recharge.later")}</button>
             </>
           ) : (
@@ -101,11 +117,14 @@ function CloseButton({ label, onClick }) {
   return <Dialog.Close asChild><button type="button" className="mb-recharge-close" aria-label={label} onClick={onClick}><X size={18} aria-hidden="true" /></button></Dialog.Close>;
 }
 
-function RechargeMethod({ icon: Icon, title, copy, action, href, onNavigate }) {
-  return (
-    <Link className="mb-recharge-method" href={href} onClick={onNavigate}>
+function RechargeMethod({ icon: Icon, title, copy, action, href = "", onNavigate = undefined, onClick = undefined }) {
+  const content = (
+    <>
       <span className="mb-recharge-method-icon"><Icon size={22} aria-hidden="true" /></span>
       <span className="mb-recharge-method-copy"><strong>{title}</strong><span>{copy}</span><b>{action} <ArrowRight size={14} aria-hidden="true" /></b></span>
-    </Link>
+    </>
   );
+
+  if (href) return <Link className="mb-recharge-method" href={href} onClick={onNavigate}>{content}</Link>;
+  return <button className="mb-recharge-method" type="button" onClick={onClick}>{content}</button>;
 }

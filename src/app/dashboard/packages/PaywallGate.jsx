@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2, ChevronDown, ChevronUp, Network, ReceiptText } from "lucide-react";
+import { BadgeDollarSign, CheckCircle2, ChevronDown, ChevronUp, ReceiptText } from "lucide-react";
 import Link from "next/link";
 import { useMemberSummary } from "@/hooks/useMemberSummary";
 import { useI18n } from "@/i18n/LanguageProvider";
@@ -62,8 +62,8 @@ export default function PaywallGate({ children, initialShowPlans = false }) {
         </div>
 
         <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
-          <Link href="/dashboard/network?tab=tree" className="executive-button primary justify-center no-underline">
-            <Network size={16} /> {t("membershipGate.network")}
+          <Link href="/dashboard/bonificaciones" className="executive-button primary justify-center no-underline">
+            <BadgeDollarSign size={16} /> {t("membershipGate.referralBonus")}
           </Link>
           <Link href="/dashboard/referrals" className="executive-button justify-center no-underline">
             <ReceiptText size={16} /> {t("membershipGate.referral")}

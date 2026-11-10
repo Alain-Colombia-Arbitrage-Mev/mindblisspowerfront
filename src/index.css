@@ -1731,6 +1731,20 @@ html {
   gap: 10px;
   margin-top: 24px;
 }
+.mb-reown-wallet-error {
+  margin: 12px 0 0;
+  color: var(--vp-danger);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.mb-reown-link-hint {
+  display: block;
+  max-width: 32rem;
+  color: var(--vp-muted);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
 .mb-wallet-visual {
   min-width: 0;
   padding: 24px;
@@ -1750,6 +1764,44 @@ html {
   margin-top: 20px;
   color: var(--vp-text);
   font-size: 18px;
+}
+.mb-reown-wallet-status {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--vp-border);
+  border-radius: 14px;
+  background: var(--vp-bg);
+  color: var(--vp-muted);
+}
+.mb-reown-wallet-status[data-connected="true"] {
+  border-color: var(--vp-success-border);
+  background: var(--vp-success-muted);
+  color: var(--vp-success);
+}
+.mb-reown-wallet-status > div {
+  min-width: 0;
+}
+.mb-reown-wallet-status small,
+.mb-reown-wallet-status code {
+  display: block;
+}
+.mb-reown-wallet-status small {
+  color: var(--vp-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.mb-reown-wallet-status code {
+  margin-top: 4px;
+  overflow: hidden;
+  color: var(--vp-text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .mb-wallet-visual ul {
   display: grid;

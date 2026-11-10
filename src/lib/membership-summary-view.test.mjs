@@ -29,7 +29,11 @@ test("the paywall consumes the same validated membership state and never invents
     "next/link": { default: ({ children, ...props }) => React.createElement("a", props, children) },
   });
   const render = () => renderToStaticMarkup(React.createElement(Gate, {}, React.createElement("p", {}, "Catálogo de planes")));
-  assert.match(render(), /Tu membresía está activa/); assert.equal(consumers, 1);
+  const activeMarkup = render();
+  assert.match(activeMarkup, /Tu membresía está activa/);
+  assert.match(activeMarkup, /Verificar bono de referido/);
+  assert.match(activeMarkup, /href="\/dashboard\/bonificaciones"/);
+  assert.equal(consumers, 1);
   state.data = null; state.error = "No se pudo consultar";
   const failed = render(); assert.match(failed, /Catálogo de planes/); assert.doesNotMatch(failed, /Tu membresía está activa/);
   state.data = { active_packages: "invalid" }; state.error = "";

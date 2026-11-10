@@ -11,6 +11,7 @@ import { memberPageKeysFor } from "@/lib/member-navigation.mjs";
 import { MemberSessionContext } from "@/lib/member-session-context";
 import { browserReferralChoice, chooseBrowserReferral, pendingVerifiedReferral, readVerifiedReferral, retryVerifiedReferral } from '@/lib/referral-sync.mjs';
 import { useI18n } from "@/i18n/LanguageProvider";
+import ReownProvider from "@/components/reown/ReownProvider";
 import "@/components/panel/panel-shell.css";
 
 export default function DashboardShell({ authMode: _authMode, children }) {
@@ -132,8 +133,9 @@ export default function DashboardShell({ authMode: _authMode, children }) {
   const overview = pathname === "/dashboard" || pathname === "/dashboard/home";
 
   return (
-    <MemberSessionContext.Provider value={member}>
-      <div className="vp-dashboard-shell">
+    <ReownProvider>
+      <MemberSessionContext.Provider value={member}>
+        <div className="vp-dashboard-shell">
         <a className="vp-skip-link" href="#member-main">
           {t("dashboard.skipToContent")}
         </a>
@@ -175,7 +177,8 @@ export default function DashboardShell({ authMode: _authMode, children }) {
           </main>
         </div>
         <SupportWidget />
-      </div>
-    </MemberSessionContext.Provider>
+        </div>
+      </MemberSessionContext.Provider>
+    </ReownProvider>
   );
 }

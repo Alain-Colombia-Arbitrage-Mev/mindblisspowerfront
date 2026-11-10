@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { CreditCard, Info, Loader2, PlusCircle, ReceiptText, Wallet } from "lucide-react";
+import { useState } from "react";
 
 import { useMemberSummary } from "@/hooks/useMemberSummary";
 import { useI18n } from "@/i18n/LanguageProvider";
@@ -11,6 +11,7 @@ import NOWPaymentsBalances from "@/components/panel/NOWPaymentsBalances";
 import StripeSalesHistory from "../../packages/StripeSalesHistory";
 import { MetricCard, PageHeader, StatusPill } from "./executive-ui";
 import WalletGettingStarted from "./WalletGettingStarted";
+import { useReownWallet } from "@/components/reown/ReownProvider";
 
 const PAYMENT_STATUS = {
   activated: { label: "financePage.statusActivated", tone: "success" },
@@ -146,6 +147,17 @@ function FinanceContent({ data }) {
 
 function TopUpPanel() {
   const { t } = useI18n();
+  const reown = useReownWallet();
+  const [providerError, setProviderError] = useState("");
+  const openProvider = async () => {
+    setProviderError("");
+    try {
+      await reown.startOnramp();
+    } catch {
+      setProviderError(t("recharge.providerUnavailable"));
+    }
+  };
+
   return (
     <div className="executive-panel">
       <h2 className="executive-section-title">
@@ -157,10 +169,11 @@ function TopUpPanel() {
         <p className="m-0 text-sm font-semibold" style={{ color: "var(--vp-text)" }}>{t("walletPage.onlyTopUps")}</p>
         <p className="m-0 mt-2 text-xs leading-5" style={{ color: "var(--vp-muted)" }}>{t("walletPage.onlyTopUpsCopy")}</p>
       </div>
-      <Link className="executive-button primary mt-5 w-full" href="/dashboard/packages">
+      <button className="executive-button primary mt-5 w-full" type="button" onClick={openProvider}>
         <PlusCircle size={16} aria-hidden="true" />
         {t("walletPage.topUpAction")}
-      </Link>
+      </button>
+      {providerError ? <p className="mt-3 text-xs" role="alert" style={{ color: "var(--vp-danger)" }}>{providerError}</p> : null}
     </div>
   );
 }

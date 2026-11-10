@@ -22,6 +22,7 @@ function view(sync) {
     '@/components/panel/NavigationDrawer': { default: ({ children }) => children },
     '@/lib/member-navigation.mjs': { memberPageKeysFor: () => ({ titleKey: 'pages.summary', sectionKey: '' }) },
     '@/i18n/LanguageProvider': { useI18n: () => ({ locale: 'es', dir: 'ltr', t: (key, values) => translateMessage('es', key, values) }) },
+    '@/components/reown/ReownProvider': { default: ({ children }) => children },
     '@/lib/member-session-context': { MemberSessionContext: { Provider: ({ children }) => children } },
     '@/lib/referral-sync.mjs': sync, '@/components/panel/panel-shell.css': {},
   });

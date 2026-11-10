@@ -46,6 +46,9 @@ function loadPages({ summary = { loading: true, data: null, error: '' }, health 
     '@/components/member/ReferralModule': { default: emptyComponent },
     './CommunityInviteCard': { default: emptyComponent },
     '@/components/panel/NOWPaymentsBalances': { default: emptyComponent },
+    '@/components/reown/ReownProvider': {
+      useReownWallet: () => ({ configured: true, isConnected: false, isLinked: false, startOnramp: async () => {}, openOnramp: async () => {} }),
+    },
     'next/link': { default: ({ children, ...props }) => React.createElement('a', props, children) },
   };
   function load(url) {

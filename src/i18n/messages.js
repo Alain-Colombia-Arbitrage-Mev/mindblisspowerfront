@@ -37,8 +37,8 @@ export const messages = {
       welcomeEyebrow: "Tu primera recarga", welcomeTitle: "Todo empieza con\ntu primera recarga.", welcomeCopy: "Añade saldo y deja tu wallet lista para elegir tu próxima membresía.",
       stepMethod: "Elige tu método", stepReview: "Revisa importe, activo y red", stepConfirm: "Confirma la recarga", start: "Hacer mi primera recarga", notNow: "Ahora no",
       methodsEyebrow: "Recarga a tu manera", methodsTitle: "Tu wallet está lista.\nHaz tu primera recarga.", methodsCopy: "Elige una opción. Antes de enviar, confirma el activo, la red y el importe.",
-      buyTitle: "Comprar cripto", buyCopy: "Elige una membresía y revisa las opciones del proveedor antes de pagar.", buyAction: "Ver membresías",
-      receiveTitle: "Recibir desde otra wallet", receiveCopy: "Revisa cómo configurar tu wallet y verifica siempre el activo y la red.", receiveAction: "Ver cómo recibir", later: "Lo haré después",
+      buyTitle: "Comprar cripto", buyCopy: "Compra cripto con moneda local y revisa las opciones del proveedor.", buyAction: "Comprar cripto",
+      receiveTitle: "Recibir desde otra wallet", receiveCopy: "Revisa cómo configurar tu wallet y verifica siempre el activo y la red.", receiveAction: "Ver cómo recibir", providerUnavailable: "La conexión segura con Reown no está disponible en este momento. Intenta nuevamente más tarde.", later: "Lo haré después",
       reminderEyebrow: "Tu wallet · Primera recarga", balanceAvailable: "Saldo disponible", reminderTitle: "¿Tu primera recarga?\nEmpieza por aquí.", reminderCopy: "Añade saldo para tu próxima membresía.\nEn el siguiente paso eliges cómo recargar.", recharge: "Recargar mi wallet", continue: "Seguir explorando",
     },
     walletIntro: {
@@ -49,6 +49,7 @@ export const messages = {
     walletPage: {
       eyebrow: "Wallet", title: "Tu wallet Mindbliss", subtitle: "Consulta tu saldo y recárgalo para tus próximas compras.", loading: "Cargando tu wallet…", syncing: "Wallet en sincronización", syncingCopy: "Mostraremos el saldo cuando la actualización quede confirmada.", retry: "Reintentar",
       balance: "Saldo de wallet", balanceCopy: "saldo confirmado", activeMemberships: "Membresías activas", activeMembershipsCopy: "membresías confirmadas", registeredPayments: "Pagos registrados", registeredPaymentsCopy: "operaciones en el historial", pendingPayments: "Pagos pendientes", pendingPaymentsCopy: "en proceso de confirmación", recoveryNotice: "Algunos importes históricos siguen en revisión y no se suman al saldo de wallet.",
+      connected: "Wallet Reown conectada", verified: "Wallet verificada", notConnected: "Crea o conecta tu wallet", walletAddress: "Dirección conectada", walletCreationCopy: "Usa email, Google, Apple o una wallet externa. Reown creará una wallet no custodial cuando sea necesario.", manageWallet: "Administrar wallet", onrampAction: "Recargar con onramp", linkAction: "Verificar y vincular", linking: "Esperando firma…", linkHint: "Firma una verificación única para vincular esta dirección a tu sesión. No mueve fondos ni permite iniciar sesión con la wallet.", linkError: "No pudimos verificar esta wallet. Confirma la firma o intenta con la dirección ya vinculada a tu cuenta.",
       topUpTitle: "Recargar saldo", topUpCopy: "Añade saldo eligiendo una opción disponible y revisa siempre el importe antes de confirmar.", onlyTopUps: "Solo recargas", onlyTopUpsCopy: "La wallet permite añadir saldo y no incluye transferencias salientes.", topUpAction: "Elegir recarga", history: "Historial de compras", noMovements: "Aún no tienes compras registradas.", profileSubtitle: "Gestiona tus datos personales y la seguridad de tu cuenta.",
     },
     support: {
@@ -110,8 +111,8 @@ export const messages = {
       welcomeEyebrow: "Your first top-up", welcomeTitle: "Everything starts with\nyour first top-up.", welcomeCopy: "Add funds and get your wallet ready for your next membership.",
       stepMethod: "Choose your method", stepReview: "Review amount, asset and network", stepConfirm: "Confirm the top-up", start: "Make my first top-up", notNow: "Not now",
       methodsEyebrow: "Top up your way", methodsTitle: "Your wallet is ready.\nMake your first top-up.", methodsCopy: "Choose an option. Before sending, confirm the asset, network and amount.",
-      buyTitle: "Buy crypto", buyCopy: "Choose a membership and review the provider options before paying.", buyAction: "View memberships",
-      receiveTitle: "Receive from another wallet", receiveCopy: "Review how to configure your wallet and always verify the asset and network.", receiveAction: "See how to receive", later: "I'll do it later",
+      buyTitle: "Buy crypto", buyCopy: "Buy crypto with local currency and review the provider options.", buyAction: "Buy crypto",
+      receiveTitle: "Receive from another wallet", receiveCopy: "Review how to configure your wallet and always verify the asset and network.", receiveAction: "See how to receive", providerUnavailable: "The secure Reown connection is currently unavailable. Please try again later.", later: "I'll do it later",
       reminderEyebrow: "Your wallet · First top-up", balanceAvailable: "Available balance", reminderTitle: "Your first top-up?\nStart here.", reminderCopy: "Add funds for your next membership.\nOn the next step, choose how to top up.", recharge: "Top up my wallet", continue: "Keep exploring",
     },
     walletIntro: {
@@ -122,6 +123,7 @@ export const messages = {
     walletPage: {
       eyebrow: "Wallet", title: "Your Mindbliss wallet", subtitle: "Check your balance and add funds for future purchases.", loading: "Loading your wallet…", syncing: "Wallet is syncing", syncingCopy: "Your balance will appear once the update is confirmed.", retry: "Try again",
       balance: "Wallet balance", balanceCopy: "confirmed balance", activeMemberships: "Active memberships", activeMembershipsCopy: "confirmed memberships", registeredPayments: "Recorded payments", registeredPaymentsCopy: "operations in your history", pendingPayments: "Pending payments", pendingPaymentsCopy: "awaiting confirmation", recoveryNotice: "Some historical amounts remain under review and are not added to the wallet balance.",
+      connected: "Reown wallet connected", verified: "Wallet verified", notConnected: "Create or connect your wallet", walletAddress: "Connected address", walletCreationCopy: "Use email, Google, Apple or an external wallet. Reown will create a non-custodial wallet when needed.", manageWallet: "Manage wallet", onrampAction: "Add funds with onramp", linkAction: "Verify and link", linking: "Waiting for signature…", linkHint: "Sign a one-time verification to link this address to your session. It cannot move funds or sign you in with the wallet.", linkError: "We could not verify this wallet. Confirm the signature or use the address already linked to your account.",
       topUpTitle: "Add funds", topUpCopy: "Choose an available option to add funds and always review the amount before confirming.", onlyTopUps: "Top-ups only", onlyTopUpsCopy: "The wallet accepts added funds and does not include outgoing transfers.", topUpAction: "Choose top-up", history: "Purchase history", noMovements: "You do not have any recorded purchases yet.", profileSubtitle: "Manage your personal information and account security.",
     },
     support: {
@@ -183,8 +185,8 @@ export const messages = {
       welcomeEyebrow: "شحنك الأول", welcomeTitle: "كل شيء يبدأ\nبشحنك الأول.", welcomeCopy: "أضف رصيداً وجهّز محفظتك لاختيار عضويتك التالية.",
       stepMethod: "اختر الطريقة", stepReview: "راجع المبلغ والأصل والشبكة", stepConfirm: "أكّد الشحن", start: "إجراء أول شحن", notNow: "ليس الآن",
       methodsEyebrow: "اشحن بطريقتك", methodsTitle: "محفظتك جاهزة.\nابدأ شحنك الأول.", methodsCopy: "اختر خياراً، وتأكد من الأصل والشبكة والمبلغ قبل الإرسال.",
-      buyTitle: "شراء العملات الرقمية", buyCopy: "اختر عضوية وراجع خيارات مزود الدفع قبل المتابعة.", buyAction: "عرض العضويات",
-      receiveTitle: "الاستقبال من محفظة أخرى", receiveCopy: "راجع إعداد المحفظة وتأكد دائماً من الأصل والشبكة.", receiveAction: "طريقة الاستقبال", later: "سأفعل ذلك لاحقاً",
+      buyTitle: "شراء العملات الرقمية", buyCopy: "اشترِ العملات الرقمية بعملتك المحلية وراجع خيارات مزود الخدمة.", buyAction: "شراء العملات الرقمية",
+      receiveTitle: "الاستقبال من محفظة أخرى", receiveCopy: "راجع إعداد المحفظة وتأكد دائماً من الأصل والشبكة.", receiveAction: "طريقة الاستقبال", providerUnavailable: "اتصال Reown الآمن غير متاح حالياً. حاول مرة أخرى لاحقاً.", later: "سأفعل ذلك لاحقاً",
       reminderEyebrow: "محفظتك · الشحن الأول", balanceAvailable: "الرصيد المتاح", reminderTitle: "هل هذا شحنك الأول؟\nابدأ من هنا.", reminderCopy: "أضف رصيداً لعضويتك التالية.\nفي الخطوة التالية تختار طريقة الشحن.", recharge: "شحن محفظتي", continue: "متابعة الاستكشاف",
     },
     walletIntro: {
@@ -195,6 +197,7 @@ export const messages = {
     walletPage: {
       eyebrow: "المحفظة", title: "محفظة Mindbliss", subtitle: "راجع رصيدك واشحنه لمشترياتك القادمة.", loading: "جارٍ تحميل المحفظة…", syncing: "جارٍ مزامنة المحفظة", syncingCopy: "سيظهر الرصيد بعد تأكيد التحديث.", retry: "إعادة المحاولة",
       balance: "رصيد المحفظة", balanceCopy: "رصيد مؤكد", activeMemberships: "العضويات النشطة", activeMembershipsCopy: "عضويات مؤكدة", registeredPayments: "المدفوعات المسجلة", registeredPaymentsCopy: "عمليات في السجل", pendingPayments: "مدفوعات معلقة", pendingPaymentsCopy: "بانتظار التأكيد", recoveryNotice: "بعض المبالغ التاريخية قيد المراجعة ولا تُضاف إلى رصيد المحفظة.",
+      connected: "محفظة Reown متصلة", verified: "تم التحقق من المحفظة", notConnected: "أنشئ محفظتك أو صِلها", walletAddress: "العنوان المتصل", walletCreationCopy: "استخدم البريد الإلكتروني أو Google أو Apple أو محفظة خارجية. سينشئ Reown محفظة غير وصائية عند الحاجة.", manageWallet: "إدارة المحفظة", onrampAction: "الشحن عبر onramp", linkAction: "التحقق والربط", linking: "بانتظار التوقيع…", linkHint: "وقّع تحققاً لمرة واحدة لربط العنوان بجلستك. لا ينقل أموالاً ولا يسمح بتسجيل الدخول بالمحفظة.", linkError: "تعذر التحقق من هذه المحفظة. أكّد التوقيع أو استخدم العنوان المرتبط مسبقاً بحسابك.",
       topUpTitle: "شحن الرصيد", topUpCopy: "اختر خياراً متاحاً لإضافة الرصيد وراجع المبلغ دائماً قبل التأكيد.", onlyTopUps: "للشحن فقط", onlyTopUpsCopy: "تتيح المحفظة إضافة الرصيد ولا تشمل التحويلات الصادرة.", topUpAction: "اختيار طريقة الشحن", history: "سجل المشتريات", noMovements: "لا توجد مشتريات مسجلة بعد.", profileSubtitle: "أدر معلوماتك الشخصية وأمان حسابك.",
     },
     support: {
@@ -256,8 +259,8 @@ export const messages = {
       welcomeEyebrow: "首次充值", welcomeTitle: "一切从你的\n首次充值开始。", welcomeCopy: "添加余额，准备好钱包以选择下一项会员方案。",
       stepMethod: "选择充值方式", stepReview: "确认金额、资产和网络", stepConfirm: "确认充值", start: "开始首次充值", notNow: "暂时不要",
       methodsEyebrow: "按你的方式充值", methodsTitle: "钱包已准备好。\n开始首次充值。", methodsCopy: "选择一个选项。发送前请确认资产、网络和金额。",
-      buyTitle: "购买加密货币", buyCopy: "选择会员方案并在付款前查看支付服务商选项。", buyAction: "查看会员方案",
-      receiveTitle: "从其他钱包接收", receiveCopy: "查看钱包配置方式，并始终核对资产和网络。", receiveAction: "查看接收方式", later: "稍后再做",
+      buyTitle: "购买加密货币", buyCopy: "使用本地货币购买加密货币，并查看服务商选项。", buyAction: "购买加密货币",
+      receiveTitle: "从其他钱包接收", receiveCopy: "查看钱包配置方式，并始终核对资产和网络。", receiveAction: "查看接收方式", providerUnavailable: "Reown 安全连接目前不可用，请稍后重试。", later: "稍后再做",
       reminderEyebrow: "你的钱包 · 首次充值", balanceAvailable: "可用余额", reminderTitle: "第一次充值？\n从这里开始。", reminderCopy: "为下一项会员方案添加余额。\n下一步选择充值方式。", recharge: "为钱包充值", continue: "继续浏览",
     },
     walletIntro: {
@@ -268,6 +271,7 @@ export const messages = {
     walletPage: {
       eyebrow: "钱包", title: "你的 Mindbliss 钱包", subtitle: "查看余额并为之后的购买充值。", loading: "正在加载钱包…", syncing: "钱包正在同步", syncingCopy: "更新确认后将显示余额。", retry: "重试",
       balance: "钱包余额", balanceCopy: "已确认余额", activeMemberships: "有效会员方案", activeMembershipsCopy: "已确认会员方案", registeredPayments: "已记录付款", registeredPaymentsCopy: "历史记录中的操作", pendingPayments: "待确认付款", pendingPaymentsCopy: "正在等待确认", recoveryNotice: "部分历史金额仍在审核中，不会计入钱包余额。",
+      connected: "Reown 钱包已连接", verified: "钱包已验证", notConnected: "创建或连接你的钱包", walletAddress: "已连接地址", walletCreationCopy: "可使用电子邮件、Google、Apple 或外部钱包。需要时，Reown 会创建非托管钱包。", manageWallet: "管理钱包", onrampAction: "通过 onramp 充值", linkAction: "验证并绑定", linking: "等待签名…", linkHint: "完成一次性签名验证，将此地址绑定到当前会话。该签名不会转移资金，也不能用于钱包登录。", linkError: "无法验证此钱包。请确认签名，或使用已绑定到你账户的地址。",
       topUpTitle: "余额充值", topUpCopy: "选择可用方式添加余额，并在确认前仔细检查金额。", onlyTopUps: "仅支持充值", onlyTopUpsCopy: "此钱包用于添加余额，不包含对外转账。", topUpAction: "选择充值方式", history: "购买记录", noMovements: "目前没有已记录的购买。", profileSubtitle: "管理个人信息和账户安全。",
     },
     support: {

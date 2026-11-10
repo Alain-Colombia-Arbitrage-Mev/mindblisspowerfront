@@ -1123,6 +1123,7 @@
 .mb-recharge-methods { display: grid; gap: 12px; }
 .mb-recharge-method {
   display: flex;
+  width: 100%;
   min-width: 0;
   align-items: center;
   gap: 16px;
@@ -1131,7 +1132,10 @@
   border-radius: 16px;
   background: var(--vp-shell);
   color: var(--vp-text);
+  font: inherit;
+  text-align: start;
   text-decoration: none;
+  cursor: pointer;
   transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
 }
 .mb-recharge-method:hover { transform: translateY(-1px); border-color: var(--vp-accent-border); background: var(--vp-accent-muted); }
@@ -1140,6 +1144,16 @@
 .mb-recharge-method-copy strong { font-size: 20px; font-weight: 650; letter-spacing: -.02em; }
 .mb-recharge-method-copy > span { color: var(--vp-muted); font-size: 15px; line-height: 1.5; }
 .mb-recharge-method-copy b { display: inline-flex; align-items: center; gap: 8px; color: var(--vp-link); font-size: 13px; }
+.mb-recharge-error {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--vp-danger-border);
+  border-radius: 12px;
+  background: var(--vp-danger-muted);
+  color: var(--vp-danger);
+  font-size: 13px;
+  line-height: 1.45;
+}
 .mb-recharge-balance {
   display: grid;
   justify-items: center;

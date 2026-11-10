@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowRight, CheckCircle2, Clock3, Loader2, Network, Receipt, XCircle } from "lucide-react";
+import { ArrowRight, BadgeDollarSign, CheckCircle2, Clock3, Loader2, Receipt, XCircle } from "lucide-react";
 import { useCheckoutActivation } from "@/hooks/useCheckoutActivation";
 import { checkoutStatusCopy } from "@/lib/checkout-status.mjs";
 import { formatPaymentMoney as money } from "@/lib/payment-display.mjs";
@@ -94,8 +94,8 @@ export default function PaymentConfirmationPage() {
           )}
 
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <Link href="/dashboard/network?tab=tree" className="executive-button primary flex-1 justify-center no-underline">
-              <Network size={16} /> Ir a mi red <ArrowRight size={15} />
+            <Link href="/dashboard/bonificaciones" className="executive-button primary flex-1 justify-center no-underline">
+              <BadgeDollarSign size={16} /> Verificar bono de referido <ArrowRight size={15} />
             </Link>
             <Link href="/dashboard/packages" className="executive-button flex-1 justify-center no-underline">
               <Receipt size={16} /> Ver mis membresías
