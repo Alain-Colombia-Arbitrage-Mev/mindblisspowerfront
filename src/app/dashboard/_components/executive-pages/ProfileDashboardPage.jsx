@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 
 import { useMemberSession } from "@/lib/member-session-context";
 
@@ -332,12 +333,14 @@ export function ProfileDashboardPage({ authMode = 'cognito' }) {
                   <Shield size={18} style={{ color: "var(--vp-accent)" }} />
                   {t("profilePage.security")}
                 </h2>
-                <p className="text-sm leading-6" style={{ color: 'var(--vp-muted)' }}>{t("profilePage.securityCopy")}</p>
-                <button className="executive-button mt-4 w-full" type="button" disabled aria-describedby="profile-password-unavailable">
+                <div className="rounded-2xl p-4" style={{ background: "var(--vp-bg)", border: "1px solid var(--vp-border)" }}>
+                  <p className="executive-card-label mb-1">{t("profilePage.email")}</p>
+                  <p className="m-0 break-all text-sm font-semibold" style={{ color: "var(--vp-text)" }}>{displayEmail}</p>
+                </div>
+                <Link className="executive-button mt-4 w-full" href="/forgot-password">
                   <KeyRound size={16} />
-                  {t("profilePage.changePassword")}
-                </button>
-                <p id="profile-password-unavailable" className="mt-2 text-sm" style={{ color: 'var(--vp-muted)' }}>{t("profilePage.passwordUnavailable")}</p>
+                  {t("auth.changePassword")}
+                </Link>
               </div>
             </div>
           </div>

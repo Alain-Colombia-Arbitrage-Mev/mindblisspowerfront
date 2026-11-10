@@ -146,6 +146,9 @@ test('Better Auth profile stays email-only, with saves disabled until the stored
   assert.match(html, /verified@example.test/);
   assert.match(html, /REF-123/);
   assert.match(html, /autenticación se realiza por correo electrónico/);
+  assert.match(html, /href="\/forgot-password"/);
+  assert.match(html, /Crear o cambiar contraseña/);
+  assert.doesNotMatch(html, /profile-password-unavailable|Función pendiente de integración/);
   assert.match(html, /disabled="">Guardar cambios/);
   assert.match(html, /Cargando los datos guardados de tu perfil/);
   assert.doesNotMatch(html, /Enviar SMS|Código SMS|Validación del teléfono/);
