@@ -132,7 +132,7 @@
     --sidebar-ring: 167 59% 69%;
   }
 
-  :root[data-theme="light"] {
+  :root:not([data-theme="dark"]) {
     color-scheme: light;
     --vp-bg: #f3f7f8;
     --vp-shell: #fcfdfe;

@@ -1,0 +1,43 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { cloudflareReadiness } from './cloudflare-runtime.mjs';
+import { cloudflarePortalGuard, cloudflarePortalRequest } from './cloudflare-portal-guard.mjs';
+const config = JSON.parse(readFileSync(new URL('../../wrangler.jsonc', import.meta.url), 'utf8'));
+const wallet = config.env.wallet;
+test('administrative wallet is an isolated Worker with one custom domain and no rewon deployment target', () => {
+ assert.equal(wallet.name,'mindbliss-wallet');
+ assert.equal(config.env.rewon,undefined);
+ assert.equal(config.env.production,undefined);
+ assert.notEqual(wallet.name,config.env.staging.name);
+ assert.equal(wallet.workers_dev,false); assert.equal(wallet.preview_urls,false);
+ assert.deepEqual(wallet.routes,[{pattern:'wallet.mindblisspower.com',custom_domain:true}]);
+ assert.equal(wallet.vars.AUTH_PUBLIC_ORIGIN,'https://wallet.mindblisspower.com');
+ assert.equal(wallet.vars.ADMINISTRATIVE_ONRAMP_ENVIRONMENT,'sandbox');
+ assert.equal(wallet.vars.AUTH_ALTERNATE_ORIGIN,undefined);
+ assert.equal(wallet.vars.NOWPAYMENTS_MEMBERSHIPS_ENABLED,'false');
+ assert.equal(wallet.vars.NOWPAYMENTS_WEBHOOK_ENABLED,'false');
+ assert.deepEqual(config.env.staging.routes,[]);
+});
+test('administrative wallet uses only the existing fresh reader and private Core binding without provider secrets', () => {
+ assert.equal(wallet.hyperdrive.length,1);
+ assert.equal(wallet.hyperdrive[0].binding,'HYPERDRIVE_MEMBER_FRESH');
+ assert.equal(wallet.hyperdrive[0].id,'fea27e02187448dd940393bc63f4eda6');
+ assert.deepEqual(wallet.services,[{binding:'CORE_API',service:'mindbliss-core-production'}]);
+ assert.equal(wallet.vars.MEMBER_DB_PROVIDER,'hyperdrive');
+ assert.equal(wallet.vars.MEMBER_DB_QUERY_CACHE_DISABLED,'true');
+ for(const key of Object.keys(wallet.vars))assert.doesNotMatch(key,/SECRET|TOKEN|API_KEY|DATABASE_URL|PASSWORD|CERT|PRIVATE_KEY/);
+ assert.equal(wallet.durable_objects,undefined); assert.equal(wallet.triggers,undefined);
+});
+test('wallet readiness requires fresh bindings and exact origin without widening browser cookies or admin API admission',()=>{
+ const env={...wallet.vars,CLOUDFLARE_DEPLOYMENT_READY:'true',HYPERDRIVE_MEMBER_FRESH:{connectionString:'synthetic-not-used'},CORE_API:{fetch(){assert.fail('unexpected Core call');}}};
+ assert.equal(cloudflareReadiness(env),true);
+ assert.equal(cloudflareReadiness({...env,MEMBER_DB_QUERY_CACHE_DISABLED:'false'}),false);
+ assert.equal(cloudflareReadiness({...env,HYPERDRIVE_MEMBER_FRESH:undefined}),false);
+ assert.equal(cloudflareReadiness({...env,CORE_API:undefined}),false);
+ const request=(pathname,origin=env.AUTH_PUBLIC_ORIGIN)=>cloudflarePortalRequest(new Request(env.AUTH_PUBLIC_ORIGIN+pathname,{method:'POST',headers:{origin,'sec-fetch-site':'same-origin','content-type':'application/json'}}));
+ assert.equal(cloudflarePortalGuard(request('/api/member/profile'),env),null);
+ assert.equal(cloudflarePortalGuard(request('/api/member/profile','https://app.mindblisspower.com'),env).status,403);
+ assert.equal(cloudflarePortalGuard(request('/api/admin/users'),env).status,404);
+ assert.equal(cloudflarePortalGuard(request('/api/member/wallet-funding/personal/intent'),env).status,404);
+});

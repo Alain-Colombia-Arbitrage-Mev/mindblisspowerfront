@@ -51,7 +51,7 @@ test("actual member sidebar removes identity verification while preserving accou
   }));
   assert.doesNotMatch(html, /\/dashboard\/kyc|Verificación de identidad|KYC|Identidad verificada/);
   for (const href of ["/dashboard", "/dashboard/referrals", "/dashboard/support", "/dashboard/packages",
-    "/dashboard/payments", "/dashboard/profile", "/dashboard/rank", "/dashboard/network"]) {
+    "/dashboard/wallet-administrative", "/dashboard/profile", "/dashboard/rank", "/dashboard/network"]) {
     assert.ok(html.includes(`href="${href}"`), `missing retained destination ${href}`);
   }
   assert.match(html, /<button[^>]*type="button"[^>]*aria-label="Cerrar sesión"/);

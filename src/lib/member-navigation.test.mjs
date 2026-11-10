@@ -5,7 +5,7 @@ import { matchesRoute, memberPageFor, memberPageKeysFor } from "./member-navigat
 test("member pages have Spanish titles for overview, payments and nested messages", () => {
   assert.equal(memberPageFor("/dashboard").title, "Resumen");
   assert.equal(memberPageFor("/dashboard/payments").title, "Billetera");
-  assert.equal(memberPageKeysFor("/dashboard/wallet-personal").title, "nav.personalWallet");
+  assert.equal(memberPageKeysFor("/dashboard/wallet-personal").title, "pages.account");
   assert.equal(memberPageKeysFor("/dashboard/wallet-administrative").title, "nav.administrativeWallet");
   assert.equal(
     memberPageFor("/dashboard/communications/news").title,

@@ -1,6 +1,7 @@
 import { customerDomainDecision, normalizedApplicationPath } from './domain-routing.js';
 import { memberMutationError } from './member-mutation-policy.mjs';
 import { applySecurityHeaders } from './security-headers.mjs';
+import { walletPortalNotFound, walletPortalRequestAllowed } from './wallet-portal-policy.mjs';
 
 // Public, uploaded assets are served before this Worker. Every response which
 // reaches application code (including errors and static-looking API paths) must
@@ -35,6 +36,7 @@ export function portalProxyMatches(pathname) {
 
 export function cloudflarePortalGuard(request, env) {
   const url = new URL(request.url);
+  if (!walletPortalRequestAllowed(url)) return walletPortalNotFound();
   // A cutover must not leave the legacy provider's more-specific routes live.
   const decodedPath = normalizedApplicationPath(url.pathname);
   if (decodedPath === null) {

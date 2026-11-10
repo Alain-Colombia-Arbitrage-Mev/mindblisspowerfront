@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRight, Building2, Wallet } from "lucide-react";
+import { ArrowUpRight, Building2 } from "lucide-react";
 import Link from "next/link";
 import { useI18n } from "@/i18n/LanguageProvider";
 import styles from "./wallet-funding.module.css";
@@ -9,8 +9,6 @@ import styles from "./wallet-funding.module.css";
 export default function WalletFundingPanels() {
   const { t } = useI18n();
   return <div className={styles.destinations} aria-label={t("walletPage.fundsTitle")}>
-    <WalletDestination icon={Wallet} title={t("walletPage.personalWalletLabel")} copy={t("funding.personalDestination")}
-      provider="Reown" href="/dashboard/wallet-personal" />
     <WalletDestination icon={Building2} title={t("walletPage.administrativeWalletLabel")} copy={t("funding.administrativeDestination")}
       provider="MELD" href="/dashboard/wallet-administrative" />
   </div>;

@@ -188,10 +188,10 @@ test('finance loading and failures do not invent an available zero balance', () 
   assert.doesNotMatch(failure, /\$0\.00|Cargando tu wallet/);
 });
 
-test('financial summary offers separate wallet screens without mounting either funding form', () => {
+test('financial summary offers only administrative funding without mounting a funding form', () => {
   const page = loadPages().FinanceDashboardPage;
   const html = render(page);
-  assert.match(html, /href="\/dashboard\/wallet-personal"/);
+  assert.doesNotMatch(html, /href="\/dashboard\/wallet-personal"/);
   assert.match(html, /href="\/dashboard\/wallet-administrative"/);
   assert.doesNotMatch(html, /<form|Proveedor de prueba|id="personal-wallet"|id="administrative-wallet"/);
 });

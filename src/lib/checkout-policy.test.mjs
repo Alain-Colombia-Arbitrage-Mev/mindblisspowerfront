@@ -23,7 +23,7 @@ test('NOWPayments membership admission has an independent literal server flag an
 
 test('every portal deployment scope explicitly pauses Stripe and the page passes only a runtime boolean', () => {
   const config = JSON.parse(readFileSync(new URL('../../wrangler.jsonc', import.meta.url), 'utf8'));
-  for (const scope of [config, config.env.staging, config.env.production]) {
+  for (const scope of [config, ...Object.values(config.env)]) {
     assert.equal(scope.vars.STRIPE_CHECKOUT_ENABLED, 'false');
     assert.equal(scope.vars.NEXT_PUBLIC_STRIPE_CHECKOUT_ENABLED, undefined);
   }
@@ -39,7 +39,7 @@ test('every portal deployment scope explicitly pauses Stripe and the page passes
     assert.equal(scope.vars.NOWPAYMENTS_WEBHOOK_ENABLED, 'false');
   }
   for (const flag of ['NOWPAYMENTS_MEMBERSHIPS_ENABLED', 'NOWPAYMENTS_WEBHOOK_ENABLED']) {
-    assert.ok(['true', 'false'].includes(config.env.production.vars[flag]), `${flag} must be explicitly configured`);
+    assert.equal(config.env.wallet.vars[flag], 'false', `${flag} must remain disabled on the sandbox portal`);
   }
 });
 

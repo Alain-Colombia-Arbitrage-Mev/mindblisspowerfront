@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
@@ -28,21 +28,16 @@ const QUICK_ACTIONS = [
   { icon: UserRound, label: "overview.completeProfile", href: "/dashboard/profile" },
 ];
 
-const RECHARGE_SEEN_KEY = "mindbliss:first-recharge-popup:v1";
-const ReownRechargeDialog = dynamic(() => import("./ReownRechargeDialog"), { ssr: false });
-
 export default function OverviewDashboard() {
   const { t } = useI18n();
+  const router = useRouter();
   const localWalletPreview = process.env.NODE_ENV === "development";
   const [summary, setSummary] = useState(null);
   const [network, setNetwork] = useState(null);
   const [summaryStatus, setSummaryStatus] = useState("loading");
   const [networkStatus, setNetworkStatus] = useState("loading");
   const [errors, setErrors] = useState({ summary: null, network: null });
-  const [rechargeDialog, setRechargeDialog] = useState({ open: false, step: "welcome" });
-  const [reownLoaded, setReownLoaded] = useState(false);
   const request = useRef(null);
-  const rechargeChecked = useRef(false);
 
   const load = useCallback(() => {
     request.current?.abort();
@@ -76,29 +71,7 @@ export default function OverviewDashboard() {
     return () => request.current?.abort();
   }, [load]);
 
-  useEffect(() => {
-    if (summaryStatus !== "ready" || Number(summary?.wallet_balance_usd) > 0 || rechargeChecked.current) return;
-    rechargeChecked.current = true;
-    let seen = false;
-    try { seen = sessionStorage.getItem(RECHARGE_SEEN_KEY) === "seen"; } catch { /* storage is optional */ }
-    if (!seen) {
-      try { sessionStorage.setItem(RECHARGE_SEEN_KEY, "seen"); } catch { /* storage is optional */ }
-      setReownLoaded(true);
-      setRechargeDialog({ open: true, step: "welcome" });
-    }
-  }, [summary?.wallet_balance_usd, summaryStatus]);
-
-  useEffect(() => {
-    if (summaryStatus === "ready" && Number(summary?.wallet_balance_usd) > 0) {
-      setRechargeDialog(current => current.open ? { ...current, open: false } : current);
-    }
-  }, [summary?.wallet_balance_usd, summaryStatus]);
-
-  const openRecharge = useCallback((step = "welcome") => {
-    try { sessionStorage.setItem(RECHARGE_SEEN_KEY, "seen"); } catch { /* storage is optional */ }
-    setReownLoaded(true);
-    setRechargeDialog({ open: true, step });
-  }, []);
+  const openRecharge = useCallback(() => router.push("/dashboard/wallet-administrative"), [router]);
 
   const unavailable = summaryStatus === "error" || networkStatus === "error";
 
@@ -153,7 +126,6 @@ export default function OverviewDashboard() {
       </section> : null}
 
       <p className="mb-overview-footnote">{t("overview.question")}</p>
-      {reownLoaded ? <ReownRechargeDialog open={rechargeDialog.open} initialStep={rechargeDialog.step} onOpenChange={open => setRechargeDialog(current => ({ ...current, open }))} /> : null}
     </div>
   );
 }

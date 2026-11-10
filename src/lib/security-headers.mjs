@@ -2,7 +2,7 @@
 // Do not advertise a report-only policy without a same-origin reporting
 // endpoint: browsers cannot deliver it and only emit misleading console noise.
 export const DOCUMENT_CSP = "base-uri 'self'; object-src 'none'; frame-ancestors 'none'";
-const productionHosts = new Set(['mindblisspower.com', 'admin.mindblisspower.com', 'app.mindblisspower.com',
+const productionHosts = new Set(['mindblisspower.com', 'admin.mindblisspower.com', 'app.mindblisspower.com', 'wallet.mindblisspower.com',
   'mindbliss-portal-rewon.devfidubit.workers.dev']);
 
 export function applySecurityHeaders(headers, request) {

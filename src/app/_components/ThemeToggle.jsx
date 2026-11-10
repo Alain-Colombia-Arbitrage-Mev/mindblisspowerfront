@@ -22,10 +22,10 @@ function applyTheme(next) {
 
 export default function ThemeToggle() {
   const { t } = useI18n();
-  const [theme, setTheme] = useState("dark");
+  const [theme, setTheme] = useState("light");
 
   useEffect(() => {
-    let next = "dark";
+    let next = "light";
     try {
       const saved = localStorage.getItem(THEME_STORAGE_KEY);
       if (isTheme(saved)) next = saved;

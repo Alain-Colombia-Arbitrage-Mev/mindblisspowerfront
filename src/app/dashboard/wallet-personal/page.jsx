@@ -1,7 +1,7 @@
-import PersonalWalletFundingPage from "../_components/executive-pages/PersonalWalletFundingPage";
+import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
 export default function PersonalWalletPage() {
-  return <PersonalWalletFundingPage />;
+  notFound();
 }

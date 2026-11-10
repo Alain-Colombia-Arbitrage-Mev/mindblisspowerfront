@@ -1,4 +1,5 @@
 export const CUSTOMER_APP_HOST = "app.mindblisspower.com";
+export const WALLET_APP_HOST = "wallet.mindblisspower.com";
 export const CUSTOMER_PUBLIC_HOST = "mindblisspower.com";
 export const CUSTOMER_TEMPORARY_HOST = "mindbliss-portal-rewon.devfidubit.workers.dev";
 export const ADMIN_APP_HOST = "admin.mindblisspower.com";
@@ -16,7 +17,7 @@ export function normalizeHost(host) {
 
 export function isCustomerAppHost(host) {
   const normalized = normalizeHost(host);
-  return normalized === CUSTOMER_APP_HOST || normalized === CUSTOMER_PUBLIC_HOST
+  return normalized === CUSTOMER_APP_HOST || normalized === WALLET_APP_HOST || normalized === CUSTOMER_PUBLIC_HOST
     || normalized === CUSTOMER_TEMPORARY_HOST || normalized.endsWith(".sslip.io");
 }
 

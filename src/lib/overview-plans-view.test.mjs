@@ -100,14 +100,14 @@ test("overview rejects malformed catalog rows and duplicate IDs instead of publi
   }
 });
 
-test("the canonical summary route renders the Pen overview and the legacy home route redirects to it", () => {
-  const Overview = () => null;
-  const { default: Page } = moduleAt("../app/dashboard/page.jsx", {
-    "@/components/panel/overview/OverviewDashboard": { default: Overview },
-  });
-  assert.equal(Page().type, Overview);
-  assert.equal(Object.keys(Page().props).length, 0);
+test("the wallet portal enters administrative funding after login and retains the legacy home redirect", () => {
   const destinations = [];
+  const { default: Page } = moduleAt("../app/dashboard/page.jsx", {
+    "next/navigation": { redirect: destination => destinations.push(destination) },
+  });
+  Page();
+  assert.deepEqual(destinations, ["/dashboard/wallet-administrative"]);
+  destinations.length = 0;
   const { default: Home } = moduleAt("../app/dashboard/home/page.jsx", {
     "next/navigation": { redirect: destination => destinations.push(destination) },
   });
@@ -120,7 +120,7 @@ test("the canonical summary route renders the Pen overview and the legacy home r
 test("actual summary follows the Pen bento and omits the retired long-form sections", () => {
   const react = { ...React, useState: initial => [initial, () => {}], useRef: () => ({ current: null }), useCallback: callback => callback, useEffect: () => {} };
   const mocks = { react,
-    "next/dynamic": { default: () => marker("ReownRechargeDialog") },
+    "next/navigation": { useRouter: () => ({ push() { throw Error('a render cannot navigate'); } }) },
     "@/app/_components/ThemeToggle": { default: marker("ThemeToggle") },
     "@/lib/member-read.mjs": { readMemberParts: () => { throw new Error("Unexpected request"); }, validMemberTree: () => true, validMemberSummary: () => true },
     "@/lib/payment-display.mjs": { formatPaymentMoney: () => "not-called" },

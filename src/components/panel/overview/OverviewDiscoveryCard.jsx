@@ -9,11 +9,11 @@ export default function OverviewDiscoveryCard() {
       <section className="executive-card mb-buy-crypto-card">
         <div className="mb-discovery-top"><span><WalletCards size={20} aria-hidden="true" /></span><b>{t("overview.buyCryptoTag")}</b></div>
         <div>
-          <h2>{t("overview.buyCrypto")}</h2>
-          <p>{t("overview.buyCryptoCopy")}</p>
+          <h2>{t("walletPage.administrativeWalletLabel")}</h2>
+          <p>{t("funding.administrativeDestination")}</p>
         </div>
-        <Link className="executive-button primary" href="/dashboard/wallet-personal">
-          {t("overview.createAndBuy")} <ArrowRight size={14} />
+        <Link className="executive-button primary" href="/dashboard/wallet-administrative">
+          {t("walletPage.addFundsAction")} <ArrowRight size={14} />
         </Link>
       </section>
 

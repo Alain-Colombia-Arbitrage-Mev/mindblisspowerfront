@@ -1,5 +1,5 @@
-import OverviewDashboard from "@/components/panel/overview/OverviewDashboard";
+import { redirect } from "next/navigation";
 
 export default function DashboardPage() {
-  return <OverviewDashboard />;
+  redirect("/dashboard/wallet-administrative");
 }
