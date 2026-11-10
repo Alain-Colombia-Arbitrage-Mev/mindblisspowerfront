@@ -105,13 +105,14 @@ export async function handleWalletFunding(request, action, {
         'wallet_funding_unconfigured', 'wallet_funding_provider_unavailable', 'wallet_funding_unavailable',
         'wallet_funding_method_unavailable', 'wallet_funding_amount_out_of_range', 'wallet_funding_amount_unavailable']);
       diagnostic(action, 'upstream_response', result.status, safeErrors.has(result.data?.error) ? result.data.error : 'unclassified');
-      return reply({ error: safeErrors.has(result.data?.error) ? result.data.error : 'funding_unavailable' },
+      return reply({ error: safeErrors.has(result.data?.error) ? result.data.error : 'funding_unavailable',
+        reason: result.status === 404 ? 'gateway_route_missing' : result.status >= 500 ? 'gateway_service_unavailable' : 'gateway_rejected' },
         [400, 401, 403, 409, 413, 429, 503].includes(result.status) ? result.status : 502);
     }
     const safe = action === 'personal-options' ? personalProductionOptions(result.data)
       : action === 'options' ? administrativeSandboxOptions(result.data)
       : action === 'history' ? fundingHistory(result.data, kind) : fundingAcknowledgement(result.data, kind);
-    if (!safe) { diagnostic(action, 'response_contract', result.status || 200); return reply({ error: 'funding_unavailable' }, 502); }
+    if (!safe) { diagnostic(action, 'response_contract', result.status || 200); return reply({ error: 'funding_unavailable', reason: 'invalid_gateway_response' }, 502); }
     if (body && (!('requestedAmount' in safe) || !('checkoutReference' in safe) || safe.requestedAmount !== body.amount
       || safe.checkoutReference !== body.requestId || (kind === 'personal' && (!('paymentMethodType' in safe)
         || safe.paymentMethodType !== body.paymentMethodType)))) return reply({ error: 'funding_unavailable' }, 502);
@@ -122,6 +123,6 @@ export async function handleWalletFunding(request, action, {
     const code = ['service_request_cancelled', 'private_api_unavailable', 'worker_request_scope_required'].includes(error?.message)
       ? error.message : 'unclassified';
     diagnostic(action, 'transport', 0, code);
-    return reply({ error: 'funding_unavailable' }, 503);
+    return reply({ error: 'funding_unavailable', reason: 'gateway_transport_unavailable' }, 503);
   }
 }

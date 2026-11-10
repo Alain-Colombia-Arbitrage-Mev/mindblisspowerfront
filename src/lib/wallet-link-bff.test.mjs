@@ -69,5 +69,5 @@ test('missing sessions and malformed upstream success fail closed', async () => 
   const response = await handleWalletLink(request(''), 'status', { env,
     serviceRequest: async () => ({ ok: true, status: 200, data: { linked: true, address: 'not-an-address' } }) });
   assert.equal(response.status, 502);
-  assert.deepEqual(await response.json(), { error: 'wallet_link_unavailable' });
+  assert.deepEqual(await response.json(), { error: 'wallet_link_unavailable', reason: 'invalid_gateway_response' });
 });

@@ -8,7 +8,7 @@ import { useI18n } from "@/i18n/LanguageProvider";
 import { personalFundingFailure } from "@/lib/personal-funding-errors.mjs";
 import { PersonalFundingForm } from "./WalletFundingForm";
 import WalletFundingHistory from "./WalletFundingHistory";
-import { ProviderNote, WalletActionError, WalletAddress, WalletFundingScreen } from "./WalletFundingUI";
+import { ProviderNote, WalletActionError, WalletAddress, WalletFundingScreen, walletFailureDiagnostic } from "./WalletFundingUI";
 import styles from "./wallet-funding.module.css";
 
 const ReownProvider = dynamic(() => import("@/components/reown/ReownProvider"), {
@@ -33,6 +33,7 @@ export function PersonalWalletFunding() {
   const { t } = useI18n();
   const reown = useReownWallet();
   const [actionError, setActionError] = useState("");
+  const [actionDiagnostic, setActionDiagnostic] = useState("");
   const [copyError, setCopyError] = useState("");
   const [actionBusy, setActionBusy] = useState(false);
   const state = personalWalletState(reown);
@@ -42,17 +43,20 @@ export function PersonalWalletFunding() {
 
   async function walletAction() {
     if (actionBusy) return;
-    setActionBusy(true); setActionError("");
+    setActionBusy(true); setActionError(""); setActionDiagnostic("");
     try {
       if (state === "error") await reown.refreshLink();
       else if (state === "connected") await reown.linkWallet();
       else await reown.openConnect();
-    } catch (error) { setActionError(personalOnrampError(personalFundingFailure(error, "link"), t)); }
+    } catch (error) {
+      setActionError(personalOnrampError(personalFundingFailure(error, "link"), t));
+      setActionDiagnostic(walletFailureDiagnostic(error?.reason) || "");
+    }
     finally { setActionBusy(false); }
   }
 
   async function openProvider(input) {
-    setActionError("");
+    setActionError(""); setActionDiagnostic("");
     return reown.startOnramp({ walletAddress: reown.linkedAddress, ...input });
   }
 
@@ -66,7 +70,7 @@ export function PersonalWalletFunding() {
           <div><h2 id="personal-funding-title">{t("walletPage.addFundsAction")}</h2><p>{t("funding.personalFormCopy")}</p></div></div>
         <PersonalFundingForm disabled={!verified} busy={busy} onContinue={openProvider} />
         {!verified ? <p className={styles.hint}>{t("funding.verifyBeforeFunding")}</p> : null}
-        <WalletActionError message={actionError || (reown.onrampStatus === "error" ? personalOnrampError(reown.onrampError, t) : reown.linkError ? personalOnrampError(reown.linkError, t) : "")} />
+        <WalletActionError diagnostic={actionDiagnostic} message={actionError || (reown.onrampStatus === "error" ? personalOnrampError(reown.onrampError, t) : reown.linkError ? personalOnrampError(reown.linkError, t) : "")} />
       </section>
       <aside className={styles.details} aria-label={t("funding.destinationDetails")}>
         <section className={styles.detailCard}>

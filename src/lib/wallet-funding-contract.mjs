@@ -5,6 +5,8 @@ const METHOD = /^[A-Z0-9_]{2,40}$/;
 const PROVIDERS = new Set(['TRANSAK', 'BANXA']);
 const PERSONAL_PROVIDERS = new Set(['TOPPER', 'SWAPPED']);
 const STATUSES = new Set(['initiated', 'session_created', 'unavailable', 'failed']);
+export const WALLET_GATEWAY_FAILURE_REASONS = Object.freeze(['gateway_route_missing', 'gateway_service_unavailable',
+  'gateway_rejected', 'invalid_gateway_response', 'gateway_transport_unavailable']);
 
 export function validFundingAmount(value) {
   return typeof value === 'number' && Number.isFinite(value) && value >= 50 && value <= 25_000

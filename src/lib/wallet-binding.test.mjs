@@ -45,6 +45,14 @@ test('an aborted ownership read cannot publish a late connected address', async 
   await assert.rejects(promise, { name: 'AbortError' });
 });
 
+test('only the coarse gateway reason can accompany an ownership failure', async () => {
+  for (const [reason, expected] of [['gateway_route_missing', 'gateway_route_missing'], ['private-provider-token', '']]) {
+    await assert.rejects(requestWalletLink('/api/member/wallet-link/challenge', {}, {
+      fetchImpl: async () => Response.json({ error: 'wallet_link_unavailable', reason }, { status: 502 }),
+    }), error => error instanceof WalletBindingError && error.reason === expected);
+  }
+});
+
 test("wallet binding fails closed for malformed success payloads", async () => {
   await assert.rejects(
     readWalletBinding({ fetchImpl: async () => Response.json({ linked: true, address: "not-an-address" }) }),

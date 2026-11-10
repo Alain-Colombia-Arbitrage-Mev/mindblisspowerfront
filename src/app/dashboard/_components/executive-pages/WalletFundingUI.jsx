@@ -3,6 +3,7 @@
 import { ArrowLeft, Copy, Loader2, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useI18n } from "@/i18n/LanguageProvider";
+import { WALLET_GATEWAY_FAILURE_REASONS } from "@/lib/wallet-funding-contract.mjs";
 import styles from "./wallet-funding.module.css";
 
 export function WalletFundingScreen({ title, subtitle, provider, children }) {
@@ -31,8 +32,12 @@ export function ProviderNote({ children }) {
   return <div className="mb-wallet-provider-note"><ShieldCheck size={16} aria-hidden="true" /><p>{children}</p></div>;
 }
 
-export function WalletActionError({ message }) {
-  return message ? <p className="mb-reown-wallet-error" role="alert">{message}</p> : null;
+export function walletFailureDiagnostic(value) {
+  return typeof value === "string" && WALLET_GATEWAY_FAILURE_REASONS.includes(value) ? value : undefined;
+}
+
+export function WalletActionError({ message, diagnostic = "" }) {
+  return message ? <p className="mb-reown-wallet-error" role="alert" data-wallet-failure={walletFailureDiagnostic(diagnostic)}>{message}</p> : null;
 }
 
 export function fundingError(error, t, sandbox = false) {

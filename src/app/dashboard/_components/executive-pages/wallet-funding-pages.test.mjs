@@ -3,9 +3,10 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import test from 'node:test';
 import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 import { translateMessage } from '../../../../i18n/translate.mjs';
-import { validFundingAmount } from '../../../../lib/wallet-funding-contract.mjs';
+import { validFundingAmount, WALLET_GATEWAY_FAILURE_REASONS } from '../../../../lib/wallet-funding-contract.mjs';
 import { personalFundingFailure } from '../../../../lib/personal-funding-errors.mjs';
 
 const require = createRequire(import.meta.url);
@@ -19,6 +20,7 @@ function load(filename, mocks) {
   const module = { exports: {} };
   new Function('require', 'module', 'exports', code)(id => {
     if (Object.hasOwn(mocks, id)) return mocks[id];
+    if (id === '@/lib/wallet-funding-contract.mjs') return { validFundingAmount, WALLET_GATEWAY_FAILURE_REASONS };
     if (id.endsWith('.module.css')) return styles;
     if (id === 'react/jsx-runtime' || id === 'react') return require(id);
     assert.fail(`Unexpected dependency ${id}`);
@@ -207,4 +209,21 @@ test('administrative method availability and amount limits have distinct localiz
     assert.notEqual(method, t('funding.sandboxUnavailable'));
     assert.ok(!method.startsWith('funding.') && !amount.startsWith('funding.'), locale);
   }
+});
+
+test('wallet failure markup exposes only the exact safe diagnostic enum while preserving localized customer copy', () => {
+  const { WalletActionError, walletFailureDiagnostic } = load('WalletFundingUI.jsx', { 'lucide-react': icons, 'next/link': {}, '@/i18n/LanguageProvider': i18n });
+  const message = translateMessage('es', 'funding.personalLinkFailed');
+  for (const diagnostic of ['gateway_route_missing', 'gateway_service_unavailable', 'gateway_rejected', 'invalid_gateway_response', 'gateway_transport_unavailable']) {
+    const html = renderToStaticMarkup(WalletActionError({ message, diagnostic }));
+    assert.match(html, new RegExp(`data-wallet-failure="${diagnostic}"`));
+    assert.ok(html.includes(message));
+  }
+  for (const diagnostic of ['unknown_failure', 'gateway_rejected?token=private-token', 'Bearer private-token', '<script>private-token</script>', null, {}, ['gateway_rejected']]) {
+    assert.equal(walletFailureDiagnostic(diagnostic), undefined);
+    const html = renderToStaticMarkup(WalletActionError({ message, diagnostic }));
+    assert.doesNotMatch(html, /data-wallet-failure|private-token|unknown_failure/);
+    assert.ok(html.includes(message));
+  }
+  assert.equal(WalletActionError({ message: '', diagnostic: 'gateway_rejected' }), null);
 });

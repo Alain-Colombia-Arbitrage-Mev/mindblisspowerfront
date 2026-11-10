@@ -1,4 +1,5 @@
 import { browserRequestDeadline } from './browser-request-deadline.mjs';
+import { WALLET_GATEWAY_FAILURE_REASONS } from './wallet-funding-contract.mjs';
 
 const ADDRESS = /^0x[0-9a-f]{40}$/i;
 const SAFE_ERRORS = new Set(['unauthenticated', 'invalid_origin', 'invalid_request', 'wallet_link_rate_limited',
@@ -6,11 +7,12 @@ const SAFE_ERRORS = new Set(['unauthenticated', 'invalid_origin', 'invalid_reque
   'wallet_signature_invalid', 'wallet_identity_unavailable', 'wallet_link_unavailable']);
 
 export class WalletBindingError extends Error {
-  constructor(code = "wallet_link_unavailable", status = 0) {
+  constructor(code = "wallet_link_unavailable", status = 0, reason = '') {
     super(code);
     this.name = "WalletBindingError";
     this.code = code;
     this.status = status;
+    this.reason = WALLET_GATEWAY_FAILURE_REASONS.includes(reason) ? reason : '';
   }
 }
 
@@ -47,7 +49,7 @@ async function bindingRequest(path, init, fetchImpl) {
     if (raw.length > 16_384) throw new WalletBindingError('wallet_link_unavailable', 502);
     let data;
     try { data = JSON.parse(raw); } catch { throw new WalletBindingError('wallet_link_unavailable', 502); }
-    if (!response.ok) throw new WalletBindingError(SAFE_ERRORS.has(data?.error) ? data.error : 'wallet_link_unavailable', response.status);
+    if (!response.ok) throw new WalletBindingError(SAFE_ERRORS.has(data?.error) ? data.error : 'wallet_link_unavailable', response.status, data?.reason);
     if (deadline.signal.aborted) throw new DOMException('Aborted', 'AbortError');
     return data;
   } finally { deadline.dispose(); }
