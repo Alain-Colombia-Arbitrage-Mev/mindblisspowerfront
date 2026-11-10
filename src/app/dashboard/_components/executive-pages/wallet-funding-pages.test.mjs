@@ -28,23 +28,28 @@ function load(filename, mocks) {
   return module.exports;
 }
 
-function formHarness(name, api) {
-  const state = [], refs = [], effects = [];
-  let stateIndex = 0, refIndex = 0, effectIndex = 0;
+function componentHarness(filename, name, mocks) {
+  const state = [], refs = [], effects = [], callbacks = [];
+  let stateIndex = 0, refIndex = 0, effectIndex = 0, callbackIndex = 0;
   const pendingEffects = [];
   const hooks = { ...React,
     useState(initial) { const index = stateIndex++; if (!(index in state)) state[index] = initial; return [state[index], value => { state[index] = typeof value === 'function' ? value(state[index]) : value; }]; },
     useRef(initial) { const index = refIndex++; return refs[index] ||= { current: initial }; },
     useId: () => 'funding-test',
+    useCallback(callback, deps) { const index = callbackIndex++, previous = callbacks[index]; if (!previous || deps.some((value, i) => value !== previous.deps[i])) callbacks[index] = { callback, deps }; return callbacks[index].callback; },
     useEffect(effect, deps) { const index = effectIndex++, previous = effects[index]; if (!previous || deps.some((value, i) => value !== previous.deps[i])) pendingEffects.push(() => { previous?.cleanup?.(); effects[index] = { deps, cleanup: effect() }; }); },
   };
-  const exports = load('WalletFundingForm.jsx', { react: hooks, 'lucide-react': icons, '@/i18n/LanguageProvider': i18n,
+  const exports = load(filename, { ...mocks, react: hooks });
+  return { render(props = {}) { stateIndex = 0; refIndex = 0; effectIndex = 0; callbackIndex = 0; const tree = exports[name](props); while (pendingEffects.length) pendingEffects.shift()(); return tree; },
+    unmount() { for (const effect of effects) effect?.cleanup?.(); }, exports, state };
+}
+
+function formHarness(name, api) {
+  return componentHarness('WalletFundingForm.jsx', name, { 'lucide-react': icons, '@/i18n/LanguageProvider': i18n,
     '@/lib/meld-onramp.mjs': { browserOnrampRegion: () => 'CO' }, '@/lib/meld-onramp-client.mjs': { ONRAMP_COUNTRIES: [['CO'], ['US']] },
     '@/lib/wallet-funding-client.mjs': { fundingRequestId: () => 'd8a4c010-cc33-44da-a297-8b3c6440f491', ...api },
     '@/lib/wallet-funding-contract.mjs': { validFundingAmount },
   });
-  return { render(props = {}) { stateIndex = 0; refIndex = 0; effectIndex = 0; const tree = exports[name](props); while (pendingEffects.length) pendingEffects.shift()(); return tree; },
-    unmount() { for (const effect of effects) effect?.cleanup?.(); }, exports, state };
 }
 
 function find(node, name) {
@@ -198,16 +203,52 @@ test('each wallet route mounts only its own flow and summary contains no funding
 });
 
 test('administrative method availability and amount limits have distinct localized recovery instructions', () => {
-  const { fundingError } = load('WalletFundingUI.jsx', { 'lucide-react': icons, 'next/link': {}, '@/i18n/LanguageProvider': i18n });
+  const { administrativeFundingError } = load('WalletFundingUI.jsx', { 'lucide-react': icons, 'next/link': {}, '@/i18n/LanguageProvider': i18n });
   for (const locale of ['es', 'en', 'ar', 'zh']) {
     const t = key => translateMessage(locale, key);
-    const method = fundingError(new Error('wallet_funding_method_unavailable'), t, true);
-    const amount = fundingError(new Error('wallet_funding_amount_unavailable'), t, true);
+    const method = administrativeFundingError(new Error('wallet_funding_method_unavailable'), t);
+    const amount = administrativeFundingError(new Error('wallet_funding_amount_unavailable'), t);
     assert.equal(method, t('funding.methodReloadRequired'));
     assert.equal(amount, t('funding.amountUnavailable'));
     assert.notEqual(method, amount);
     assert.notEqual(method, t('funding.sandboxUnavailable'));
     assert.ok(!method.startsWith('funding.') && !amount.startsWith('funding.'), locale);
+  }
+});
+
+test('every administrative failure remains in its own recovery flow, including unknown upstream errors', () => {
+  const { administrativeFundingError } = load('WalletFundingUI.jsx', { 'lucide-react': icons, 'next/link': {}, '@/i18n/LanguageProvider': i18n });
+  const cases = [
+    ['unauthenticated', 'recharge.providerSession'],
+    ['wallet_funding_rate_limited', 'funding.rateLimited'],
+    ['wallet_funding_request_already_used', 'funding.requestUsed'],
+    ['wallet_funding_method_unavailable', 'funding.methodReloadRequired'],
+    ['wallet_funding_amount_unavailable', 'funding.amountUnavailable'],
+    ['wallet_funding_unconfigured', 'funding.sandboxConfiguration'],
+    ['wallet_funding_provider_unavailable', 'funding.sandboxUnavailable'],
+    ['funding_unavailable', 'funding.sandboxUnavailable'],
+    ['unrecognized-provider-failure', 'funding.sandboxUnavailable'],
+  ];
+  const obsoletePersonalMessages = [
+    'No pudimos registrar o abrir la recarga personal. Reintenta desde esta pantalla.',
+    'We could not record or open your personal top-up. Try again from this screen.',
+    'تعذر تسجيل الشحن الشخصي أو فتحه. أعد المحاولة من هذه الشاشة.',
+    '无法记录或打开个人充值，请从此页面重试。',
+  ];
+  for (const locale of ['es', 'en', 'ar', 'zh']) {
+    const t = key => translateMessage(locale, key);
+    for (const [code, key] of cases) {
+      const message = administrativeFundingError(new Error(code), t);
+      assert.equal(message, t(key), `${locale}/${code}`);
+      assert.ok(!obsoletePersonalMessages.includes(message), `${locale}/${code} leaked personal recovery`);
+      assert.ok(!message.startsWith('funding.'), `${locale}/${code} missing translation`);
+    }
+    // Untrusted error messages are never rendered directly, even if they contain
+    // a former personal-flow message or HTML from a provider response.
+    for (const message of [...obsoletePersonalMessages, '<script>private-provider-data</script>']) {
+      assert.equal(administrativeFundingError(new Error(message), t), t('funding.sandboxUnavailable'));
+    }
+    assert.equal(administrativeFundingError(null, t), t('funding.sandboxUnavailable'));
   }
 });
 
@@ -253,4 +294,71 @@ test('returned canonical payment methods use brand labels without changing their
   assert.equal(harness.exports.paymentMethodLabel('APPLE_PAY', t), 'Apple Pay');
   assert.equal(harness.exports.paymentMethodLabel('GOOGLE_PAY', t), 'Google Pay');
   assert.equal(harness.exports.paymentMethodLabel('BANK_TRANSFER', t), t('onramp.bankTransfer'));
+});
+
+test('administrative user edits notify the page once without retrying a session or changing personal state', async t => {
+  let selectionChanges = 0, sessions = 0;
+  const routes = [{ paymentMethods: [
+    { method: 'CREDIT_DEBIT_CARD', minimumUsd: 50, maximumUsd: 1000 },
+    { method: 'BANK_TRANSFER', minimumUsd: 50, maximumUsd: 1000 },
+  ] }];
+  const harness = formHarness('AdministrativeSandboxFundingForm', {
+    readPersonalFundingOptions() { assert.fail('personal discovery called'); },
+    readAdministrativeSandboxOptions: async (country, serviceProvider) => ({ country, serviceProvider, paymentMethods: ['CREDIT_DEBIT_CARD', 'BANK_TRANSFER'], routes }),
+  });
+  t.after(() => harness.unmount());
+  const props = { onSelectionChange() { selectionChanges++; }, onContinue: async () => { sessions++; throw Error('previous provider attempt failed'); } };
+  harness.render(props); await flush(); harness.render(props); let tree = harness.render(props);
+  assert.equal(selectionChanges, 0, 'loading and automatic method selection cannot clear an error in an effect loop');
+  tree.props.onSubmit({ preventDefault() {} }); await flush();
+  assert.equal(sessions, 1);
+  find(tree, 'FundingAmountField').props.onChange('100');
+  harness.render(props); tree = harness.render(props);
+  assert.equal(selectionChanges, 1);
+  find(tree, 'FundingCountryField').props.onChange('CO');
+  harness.render(props); await flush(); harness.render(props); tree = harness.render(props);
+  assert.equal(selectionChanges, 2);
+  const label = React.Children.toArray(tree.props.children.props.children).find(node => node?.type === 'label');
+  React.Children.toArray(label.props.children).find(node => node?.type === 'select').props.onChange({ target: { value: 'BANXA' } });
+  harness.render(props); tree = harness.render(props);
+  assert.equal(selectionChanges, 3);
+  find(tree, 'FundingMethodField').props.onChange('BANK_TRANSFER');
+  harness.render(props);
+  assert.equal(selectionChanges, 4);
+  assert.equal(sessions, 1, 'editing a selection never submits another checkout');
+});
+
+test('changing an administrative selection clears its old provider error while preserving its address, copy error and history', async t => {
+  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  Object.defineProperty(globalThis, 'window', { value: { dispatchEvent() {} }, configurable: true });
+  t.after(() => { if (previousWindow) Object.defineProperty(globalThis, 'window', previousWindow); else delete globalThis.window; });
+  const shared = load('WalletFundingUI.jsx', { 'lucide-react': icons, 'next/link': {}, '@/i18n/LanguageProvider': i18n });
+  const address = `0x${'2'.repeat(40)}`;
+  let sessions = 0;
+  function AdministrativeSandboxFundingForm() { return null; }
+  function WalletFundingHistory() { return null; }
+  const harness = componentHarness('AdministrativeWalletFundingPage.jsx', 'default', {
+    'lucide-react': icons, '@/i18n/LanguageProvider': i18n,
+    '@/lib/administrative-wallet.mjs': { readAdministrativeWallet: async () => ({ status: 'assigned', address }), ensureAdministrativeWallet() { assert.fail('unnecessary assignment'); } },
+    '@/lib/administrative-onramp-client.mjs': { async startAdministrativeMeldOnramp() { sessions++; throw Error('wallet_funding_method_unavailable'); } },
+    './WalletFundingForm': { AdministrativeSandboxFundingForm }, './WalletFundingHistory': { default: WalletFundingHistory }, './WalletFundingUI': shared,
+  });
+  t.after(() => harness.unmount());
+  const props = { environment: 'sandbox' };
+  harness.render(props); await flush(); let tree = harness.render(props);
+  find(tree, 'WalletAddress').props.onCopyError();
+  tree = harness.render(props);
+  await assert.rejects(find(tree, 'AdministrativeSandboxFundingForm').props.onContinue({}), /wallet_funding_method_unavailable/);
+  tree = harness.render(props);
+  assert.ok(find(tree, 'WalletActionError').props.message);
+  const copyError = harness.state[2];
+  const revision = find(tree, 'WalletFundingHistory').props.refreshKey;
+  find(tree, 'AdministrativeSandboxFundingForm').props.onSelectionChange();
+  tree = harness.render(props);
+  assert.equal(find(tree, 'WalletActionError').props.message, '');
+  assert.equal(find(tree, 'WalletAddress').props.address, address);
+  assert.equal(harness.state[2], copyError);
+  assert.ok(copyError, 'clipboard error stays separate');
+  assert.equal(find(tree, 'WalletFundingHistory').props.refreshKey, revision);
+  assert.equal(sessions, 1);
 });

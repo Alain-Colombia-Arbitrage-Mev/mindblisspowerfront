@@ -76,7 +76,7 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
 }
 
 /** Both approved providers are discovered only within this administrative sandbox account. */
-export function AdministrativeSandboxFundingForm({ disabled = false, busy = false, onContinue }) {
+export function AdministrativeSandboxFundingForm({ disabled = false, busy = false, onContinue, onSelectionChange = undefined }) {
   const { t } = useI18n();
   const id = useId();
   const [amount, setAmount] = useState("50");
@@ -94,6 +94,11 @@ export function AdministrativeSandboxFundingForm({ disabled = false, busy = fals
   const methods = current && selectedOptions ? eligiblePaymentMethods(selectedOptions.routes, Number(amount)) : [];
   const methodsKey = methods.join(",");
   const valid = validFundingAmount(Number(amount)) && methods.includes(method);
+
+  function changeSelection(update, value) {
+    update(value);
+    onSelectionChange?.();
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -122,14 +127,14 @@ export function AdministrativeSandboxFundingForm({ disabled = false, busy = fals
   return <form className="mb-onramp-simple" onSubmit={event => void submit(event).catch(() => {})} aria-label={t("walletPage.administrativeWalletLabel")}>
     <div className="mb-onramp-simple-main">
       <AssetLabel provider={t("funding.sandbox")} />
-      <FundingAmountField id={id} amount={amount} onChange={setAmount} busy={busy} />
-      <FundingCountryField id={id} value={countryCode} onChange={setCountryCode} busy={busy} label={t("funding.testCountry")} />
+      <FundingAmountField id={id} amount={amount} onChange={value => changeSelection(setAmount, value)} busy={busy} />
+      <FundingCountryField id={id} value={countryCode} onChange={value => changeSelection(setCountryCode, value)} busy={busy} label={t("funding.testCountry")} />
       {eligibleProviders.length > 1 ? <label className="mb-onramp-country-picker" htmlFor={`${id}-provider`}><span>{t("funding.provider")}</span>
-        <select id={`${id}-provider`} value={serviceProvider} onChange={event => setPreferredProvider(event.target.value)} disabled={busy}>
+        <select id={`${id}-provider`} value={serviceProvider} onChange={event => changeSelection(setPreferredProvider, event.target.value)} disabled={busy}>
           {eligibleProviders.map(provider => <option key={provider} value={provider}>{provider === "TRANSAK" ? "Transak" : "Banxa"}</option>)}
         </select></label> : serviceProvider ? <p className="mb-onramp-disclosure">{t("onramp.processedBy")} {serviceProvider === "TRANSAK" ? "Transak" : "Banxa"}</p> : null}
       <FundingMethodField id={id} value={methods.includes(method) ? method : ""} methods={methods} status={current ? options.status : "loading"}
-        countrySelected={Boolean(countryCode)} minimumUsd={current ? lowestRouteMinimum(selectedOptions?.routes || options.providers.flatMap(provider => provider.routes)) : null} onChange={setMethod} onRetry={() => setRevision(value => value + 1)} busy={busy} />
+        countrySelected={Boolean(countryCode)} minimumUsd={current ? lowestRouteMinimum(selectedOptions?.routes || options.providers.flatMap(provider => provider.routes)) : null} onChange={value => changeSelection(setMethod, value)} onRetry={() => setRevision(value => value + 1)} busy={busy} />
       <FundingSubmit disabled={disabled || !valid} busy={busy} />
     </div>
   </form>;

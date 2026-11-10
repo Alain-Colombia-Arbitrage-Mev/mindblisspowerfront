@@ -40,13 +40,13 @@ export function WalletActionError({ message, diagnostic = "" }) {
   return message ? <p className="mb-reown-wallet-error" role="alert" data-wallet-failure={walletFailureDiagnostic(diagnostic)}>{message}</p> : null;
 }
 
-export function fundingError(error, t, sandbox = false) {
+export function administrativeFundingError(error, t) {
   const code = error?.message;
   if (code === "unauthenticated") return t("recharge.providerSession");
   if (code === "wallet_funding_rate_limited") return t("funding.rateLimited");
   if (code === "wallet_funding_request_already_used") return t("funding.requestUsed");
   if (code === "wallet_funding_method_unavailable") return t("funding.methodReloadRequired");
   if (code === "wallet_funding_amount_unavailable") return t("funding.amountUnavailable");
-  if (sandbox && code === "wallet_funding_unconfigured") return t("funding.sandboxConfiguration");
-  return t(sandbox ? "funding.sandboxUnavailable" : "funding.requestUnavailable");
+  if (code === "wallet_funding_unconfigured") return t("funding.sandboxConfiguration");
+  return t("funding.sandboxUnavailable");
 }

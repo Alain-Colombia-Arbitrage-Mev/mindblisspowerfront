@@ -7,7 +7,7 @@ import { ensureAdministrativeWallet, readAdministrativeWallet } from "@/lib/admi
 import { startAdministrativeMeldOnramp } from "@/lib/administrative-onramp-client.mjs";
 import { AdministrativeSandboxFundingForm } from "./WalletFundingForm";
 import WalletFundingHistory from "./WalletFundingHistory";
-import { fundingError, ProviderNote, WalletActionError, WalletAddress, WalletFundingScreen } from "./WalletFundingUI";
+import { administrativeFundingError, ProviderNote, WalletActionError, WalletAddress, WalletFundingScreen } from "./WalletFundingUI";
 import styles from "./wallet-funding.module.css";
 
 const EMPTY_WALLET = { status: "loading", address: "", checkoutReference: "", assignedAt: "", errorCode: "" };
@@ -29,7 +29,7 @@ export default function AdministrativeWalletFundingPage({ environment = "product
     const controller = new AbortController(); checkoutRequest.current = controller;
     setBusy(true); setProviderError("");
     try { await startAdministrativeMeldOnramp({ address: wallet.address, ...input }, { signal: controller.signal }); }
-    catch (error) { if (!controller.signal.aborted) setProviderError(fundingError(error, t, true)); throw error; }
+    catch (error) { if (!controller.signal.aborted) setProviderError(administrativeFundingError(error, t)); throw error; }
     finally {
       if (checkoutRequest.current === controller) checkoutRequest.current = null;
       if (!controller.signal.aborted) { setBusy(false); setHistoryRevision(value => value + 1); }
@@ -45,7 +45,7 @@ export default function AdministrativeWalletFundingPage({ environment = "product
       <section className={`executive-panel ${styles.formPanel}`} aria-labelledby="administrative-funding-title">
         <div className={styles.sectionHeading}><span className="mb-wallet-funding-icon"><Building2 size={20} aria-hidden="true" /></span>
           <div><h2 id="administrative-funding-title">{t("walletPage.addFundsAction")}</h2><p>{t("funding.sandboxFormCopy")}</p></div></div>
-        {sandbox ? <AdministrativeSandboxFundingForm disabled={!assigned} busy={busy} onContinue={openProvider} /> : null}
+        {sandbox ? <AdministrativeSandboxFundingForm disabled={!assigned} busy={busy} onContinue={openProvider} onSelectionChange={() => setProviderError("")} /> : null}
         <WalletActionError message={providerError} />
       </section>
       <aside className={styles.details} aria-label={t("funding.destinationDetails")}>
