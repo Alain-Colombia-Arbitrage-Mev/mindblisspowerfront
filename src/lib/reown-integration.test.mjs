@@ -18,6 +18,7 @@ test("Reown creates EVM wallets, links one signed address and never replaces mem
   assert.match(provider, /onramp: true/);
   assert.match(provider, /allowUnsupportedChain: false/);
   assert.match(provider, /buildMeldOnrampUrl/);
+  assert.match(provider, /createOnrampIntent/);
   assert.match(provider, /OnRampController\.setSelectedProvider/);
   assert.match(provider, /provider: "meld"/);
   assert.doesNotMatch(provider, /\/api\/member\/onramp\/session|app\.topperpay\.com|widget\.swapped\.com|Binance/i);
@@ -55,11 +56,15 @@ test("personal and administrative wallets remain visibly separate without loadin
   assert.match(sidebar, /\/dashboard\/payments#wallet-topup/);
   assert.match(finance, /id="personal-wallet"/);
   assert.match(finance, /mb-administrative-wallet/);
-  assert.match(finance, /reown\.startOnramp\(\)/);
-  assert.match(finance, /walletPage\.managedByMeld/);
-  assert.match(finance, /MINDBLISS_ONRAMP_FEE_PERCENT/);
+  assert.match(finance, /StablecoinOnrampForm/);
+  assert.match(finance, /reown\.startOnramp\(input\)/);
+  assert.match(finance, /reown\.startAdministrativeOnramp/);
+  assert.match(finance, /readAdministrativeWallet/);
+  assert.match(finance, /ensureAdministrativeWallet/);
+  assert.match(finance, /onramp\.simpleProviderNote/);
   assert.match(policy, /MINDBLISS_ONRAMP_FEE_BPS = 100/);
   assert.match(policy, /PERSONAL_WALLET_ASSET = "USDT"/);
+  assert.match(policy, /PERSONAL_WALLET_MELD_ASSET = "USDT_POLYGON"/);
   assert.match(policy, /PERSONAL_WALLET_MINIMUM_USD = 50/);
   assert.doesNotMatch(finance, /PERSONAL_WALLET_RECOMMENDED_PROVIDERS|Topper|Swapped/);
   assert.doesNotMatch(sidebar, /Binance/i);

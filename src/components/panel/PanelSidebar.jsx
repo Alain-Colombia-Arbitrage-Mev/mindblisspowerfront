@@ -2,11 +2,11 @@
 
 import {
   LayoutDashboard,
+  Layers,
   LogOut,
-  Medal,
   Network,
-  Package,
-  User,
+  Trophy,
+  UserRound,
   Users,
   Wallet,
 } from "lucide-react";
@@ -15,6 +15,7 @@ import SidebarLogo from "./SidebarLogo";
 import SidebarNavItem from "./SidebarNavItem";
 import SidebarUserCard from "./SidebarUserCard";
 import SidebarWalletCard from "./SidebarWalletCard";
+import SidebarAdministrativeWalletCard from "./SidebarAdministrativeWalletCard";
 import { matchesRoute } from "@/lib/member-navigation.mjs";
 import LogoutButton from "./LogoutButton";
 import { useI18n } from "@/i18n/LanguageProvider";
@@ -22,16 +23,16 @@ import { useI18n } from "@/i18n/LanguageProvider";
 const NAV_GROUPS = [
   { label: "nav.account", items: [
     { icon: LayoutDashboard, label: "nav.summary", href: "/dashboard", exact: true, also: ["/dashboard/home"] },
-    { icon: Package, label: "nav.memberships", href: "/dashboard/packages" },
+    { icon: Layers, label: "nav.memberships", href: "/dashboard/packages" },
     { icon: Wallet, label: "nav.personalWallet", href: "/dashboard/payments" },
   ] },
   { label: "nav.communityGroup", items: [
     { icon: Users, label: "nav.community", href: "/dashboard/referrals" },
     { icon: Network, label: "nav.referrals", href: "/dashboard/network", also: ["/dashboard/team"] },
-    { icon: Medal, label: "nav.ranks", href: "/dashboard/rank", also: ["/dashboard/ranks"] },
+    { icon: Trophy, label: "nav.ranks", href: "/dashboard/rank", also: ["/dashboard/ranks"] },
   ] },
   { label: "nav.settings", items: [
-    { icon: User, label: "nav.profile", href: "/dashboard/profile" },
+    { icon: UserRound, label: "nav.profile", href: "/dashboard/profile" },
   ] },
 ];
 
@@ -41,6 +42,7 @@ export default function PanelSidebar({ pathname, member, onNavigate = undefined 
     <div className="flex h-full flex-col" style={{ background: "var(--vp-shell)" }}>
       <SidebarLogo onNavigate={onNavigate} />
       <SidebarWalletCard onNavigate={onNavigate} />
+      <SidebarAdministrativeWalletCard onNavigate={onNavigate} />
 
       <nav aria-label={t("dashboard.memberNavigation")} className="vp-sidebar-nav">
         {NAV_GROUPS.map((group) => (

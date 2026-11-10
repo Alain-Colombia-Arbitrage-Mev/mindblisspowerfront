@@ -1,6 +1,6 @@
 "use client";
 
-import { Headphones, LifeBuoy, Loader2, Send, X } from "lucide-react";
+import { ChevronUp, Headphones, LifeBuoy, Loader2, Send, X } from "lucide-react";
 import { useId, useState } from "react";
 
 export default function AuthSupportWidget({ initialEmail = "", variant = "floating" }) {
@@ -62,7 +62,7 @@ export default function AuthSupportWidget({ initialEmail = "", variant = "floati
         {header ? <><Headphones size={16} aria-hidden="true" />¿Necesitas ayuda?</> : <>
           <span className="vp-support-launcher-icon"><Headphones size={22} aria-hidden="true" /></span>
           <span className="vp-support-launcher-copy"><strong>¿Necesitas ayuda?</strong><small>Habla con soporte</small></span>
-          <span className="auth-support-chevron" aria-hidden="true">⌃</span>
+          <ChevronUp className="auth-support-chevron" size={18} aria-hidden="true" />
         </>}
       </button>
 
@@ -71,7 +71,7 @@ export default function AuthSupportWidget({ initialEmail = "", variant = "floati
           <div className="auth-support-dialog-header">
             <span className="auth-support-dialog-icon"><LifeBuoy size={20} aria-hidden="true" /></span>
             <div><p>Soporte de acceso</p><h2 id={titleId}>¿Cómo podemos ayudarte?</h2></div>
-            <button type="button" className="auth-support-close" onClick={close} disabled={sending} aria-label="Cerrar soporte"><X size={19} /></button>
+            <button type="button" className="auth-support-close" onClick={close} disabled={sending} aria-label="Cerrar soporte"><X size={19} aria-hidden="true" /></button>
           </div>
 
           {feedback.type === "success" ? <div className="auth-support-success" role="status">
@@ -81,11 +81,11 @@ export default function AuthSupportWidget({ initialEmail = "", variant = "floati
           </div> : <form className="auth-support-form" onSubmit={submit}>
             <p>Cuéntanos el problema de acceso. No incluyas contraseñas ni códigos de verificación.</p>
             <label htmlFor={`${titleId}-email`}>Correo de tu cuenta</label>
-            <input id={`${titleId}-email`} type="email" inputMode="email" autoComplete="email" required maxLength={254} value={email} onChange={event => setEmail(event.target.value)} placeholder="nombre@correo.com" disabled={sending} />
+            <input id={`${titleId}-email`} name="email" type="email" inputMode="email" autoComplete="email" spellCheck={false} required maxLength={254} value={email} onChange={event => setEmail(event.target.value)} placeholder="nombre@correo.com…" disabled={sending} />
             <label htmlFor={`${titleId}-phone`}>Teléfono de contacto <span>opcional</span></label>
-            <input id={`${titleId}-phone`} type="tel" inputMode="tel" autoComplete="tel" maxLength={40} value={phone} onChange={event => setPhone(event.target.value)} placeholder="+57 300 123 4567" disabled={sending} />
+            <input id={`${titleId}-phone`} name="phone" type="tel" inputMode="tel" autoComplete="tel" maxLength={40} value={phone} onChange={event => setPhone(event.target.value)} placeholder="+57 300 123 4567…" disabled={sending} />
             <label htmlFor={`${titleId}-note`}>¿Qué ocurrió?</label>
-            <textarea id={`${titleId}-note`} rows={4} maxLength={500} value={note} onChange={event => setNote(event.target.value)} placeholder="Describe brevemente el problema." disabled={sending} />
+            <textarea id={`${titleId}-note`} name="note" autoComplete="off" rows={4} maxLength={500} value={note} onChange={event => setNote(event.target.value)} placeholder="Describe brevemente el problema…" disabled={sending} />
             {feedback.type === "error" ? <p className="auth-support-feedback" role="alert">{feedback.text}</p> : null}
             <button className="auth-support-submit" type="submit" disabled={sending || !email.trim()}>
               {sending ? <Loader2 className="animate-spin" size={17} aria-hidden="true" /> : <Send size={17} aria-hidden="true" />}

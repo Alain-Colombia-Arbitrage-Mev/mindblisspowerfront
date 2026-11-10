@@ -28,7 +28,7 @@ function IconCircle({ icon: Icon, tone = "accent" }) {
       className="flex h-10 w-10 items-center justify-center rounded-full"
       style={{ background: styles.background, border: `1px solid ${styles.border}`, color: styles.color }}
     >
-      <Icon size={18} />
+      <Icon size={18} aria-hidden="true" />
     </span>
   );
 }
@@ -78,7 +78,7 @@ function ExecutiveModulePage({ config, extra = null }) {
           action={
             config.action && (
               <a className="executive-button primary" href={config.action.href}>
-                <config.action.icon size={16} />
+                <config.action.icon size={16} aria-hidden="true" />
                 {config.action.label}
               </a>
             )
@@ -113,12 +113,12 @@ function ExecutiveModulePage({ config, extra = null }) {
         <div className="executive-panel">
           <div className="mb-5 flex flex-col justify-between gap-4 md:flex-row md:items-center">
             <h2 className="executive-section-title mb-0">
-              <config.tableIcon size={18} style={{ color: "var(--vp-accent)" }} />
+              <config.tableIcon size={18} style={{ color: "var(--vp-accent)" }} aria-hidden="true" />
               {config.tableTitle}
             </h2>
             <div className="relative w-full md:w-72">
-              <Search size={15} style={{ color: "var(--vp-muted)", left: 13, position: "absolute", top: "50%", transform: "translateY(-50%)" }} />
-              <input className="executive-input leading-icon" placeholder={config.searchPlaceholder || "Buscar..."} type="search" />
+              <Search size={15} style={{ color: "var(--vp-muted)", left: 13, position: "absolute", top: "50%", transform: "translateY(-50%)" }} aria-hidden="true" />
+              <input className="executive-input leading-icon" name="query" aria-label={config.searchPlaceholder || "Buscar"} autoComplete="off" placeholder={config.searchPlaceholder || "Buscar…"} type="search" />
             </div>
           </div>
           <ExecutiveTable columns={config.columns} rows={config.rows} emptyMessage={config.tableMessage} />

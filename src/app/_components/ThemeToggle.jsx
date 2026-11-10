@@ -6,7 +6,7 @@ import { useI18n } from "@/i18n/LanguageProvider";
 
 const THEME_STORAGE_KEY = "vp-theme";
 const THEME_EVENT = "vp:theme-change";
-const THEME_COLORS = { dark: "#050f19", light: "#f3f5fb" };
+const THEME_COLORS = { dark: "#0b1219", light: "#f3f7f8" };
 
 function isTheme(value) {
   return value === "light" || value === "dark";

@@ -15,9 +15,12 @@ export const ReownContext = createContext(Object.freeze({
   isLinking: false,
   onrampStatus: "idle",
   onrampError: "",
+  administrativeOnrampStatus: "idle",
+  administrativeOnrampError: "",
   openConnect: async () => { throw new Error("reown_unavailable"); },
   openOnramp: async () => { throw new Error("reown_unavailable"); },
   startOnramp: async () => { throw new Error("reown_unavailable"); },
+  startAdministrativeOnramp: async () => { throw new Error("reown_unavailable"); },
   reconnectWallet: async () => { throw new Error("reown_unavailable"); },
   linkWallet: async () => { throw new Error("reown_unavailable"); },
   refreshLink: async () => { throw new Error("reown_unavailable"); },
@@ -40,9 +43,12 @@ export const ReownContext = createContext(Object.freeze({
  * @property {boolean} isLinking
  * @property {string} onrampStatus
  * @property {string} onrampError
+ * @property {string} administrativeOnrampStatus
+ * @property {string} administrativeOnrampError
  * @property {() => Promise<unknown>} openConnect
  * @property {() => Promise<unknown>} openOnramp
- * @property {() => Promise<unknown>} startOnramp
+ * @property {(input?: {amount?: number, countryCode?: string, paymentMethodType?: string, serviceProvider?: string}) => Promise<unknown>} startOnramp
+ * @property {(input: {address: string, amount?: number, countryCode?: string, paymentMethodType?: string, serviceProvider?: string}) => Promise<unknown>} startAdministrativeOnramp
  * @property {() => Promise<unknown>} reconnectWallet
  * @property {() => Promise<unknown>} linkWallet
  * @property {() => Promise<unknown>} refreshLink

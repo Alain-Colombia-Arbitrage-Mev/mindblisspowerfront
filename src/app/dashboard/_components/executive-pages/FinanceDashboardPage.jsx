@@ -1,8 +1,8 @@
 "use client";
 
-import { Building2, CreditCard, Info, Loader2, PlusCircle, ReceiptText, ShieldCheck, Wallet } from "lucide-react";
+import { Building2, Copy, CreditCard, Info, Loader2, PlusCircle, ReceiptText, RefreshCw, ShieldCheck, Wallet } from "lucide-react";
 import dynamic from "next/dynamic";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { useMemberSummary } from "@/hooks/useMemberSummary";
 import { useI18n } from "@/i18n/LanguageProvider";
@@ -11,9 +11,9 @@ import { formatPaymentDate as fmtMoneyDate, formatPaymentMoney as money } from "
 import NOWPaymentsBalances from "@/components/panel/NOWPaymentsBalances";
 import StripeSalesHistory from "../../packages/StripeSalesHistory";
 import { MetricCard, PageHeader, StatusPill } from "./executive-ui";
-import WalletGettingStarted from "./WalletGettingStarted";
+import StablecoinOnrampForm from "./StablecoinOnrampForm";
 import { useReownWallet } from "@/components/reown/ReownContext";
-import { MINDBLISS_ONRAMP_FEE_PERCENT, PERSONAL_WALLET_ASSET, PERSONAL_WALLET_MINIMUM_USD } from "@/lib/personal-wallet.mjs";
+import { ensureAdministrativeWallet, readAdministrativeWallet } from "@/lib/administrative-wallet.mjs";
 
 const ReownProvider = dynamic(() => import("@/components/reown/ReownProvider"), {
   ssr: false,
@@ -176,12 +176,12 @@ function TopUpPanel() {
   const reown = useReownWallet();
   const [providerError, setProviderError] = useState("");
   const busy = ["connecting", "linking", "opening"].includes(reown.onrampStatus);
-  const openProvider = async () => {
+  const openProvider = async input => {
     setProviderError("");
     try {
-      await reown.startOnramp();
+      await reown.startOnramp(input);
     } catch {
-      setProviderError(t("recharge.providerUnavailable"));
+      setProviderError(t("walletPage.quoteUnavailable"));
     }
   };
 
@@ -195,26 +195,10 @@ function TopUpPanel() {
           <small>{t("walletPage.personalCopy")}</small>
         </div>
       </div>
-      <WalletGettingStarted />
-      <p className="mb-wallet-network-note">
-        <ShieldCheck size={15} aria-hidden="true" />
-        {t("walletPage.managedByMeld", { asset: PERSONAL_WALLET_ASSET })}
-      </p>
-      <div className="mb-wallet-fee-summary">
-        <span>{t("walletPage.minimumTopUp")}</span>
-        <strong>${PERSONAL_WALLET_MINIMUM_USD} USD</strong>
-        <small>{t("walletPage.minimumTopUpCopy", { asset: PERSONAL_WALLET_ASSET })}</small>
-        <span>{t("walletPage.mindblissFee", { percent: MINDBLISS_ONRAMP_FEE_PERCENT })}</span>
-        <strong>{MINDBLISS_ONRAMP_FEE_PERCENT}%</strong>
-        <small>{t("walletPage.feeDisclosure")}</small>
-      </div>
-      <button className="executive-button primary mt-3 w-full" type="button" onClick={openProvider} disabled={busy}>
-        <PlusCircle size={16} aria-hidden="true" />
-        {busy ? t("recharge.connecting") : t("walletPage.topUpPersonalAction")}
-      </button>
+      <StablecoinOnrampForm walletAddress={reown.address || reown.linkedAddress || ""} busy={busy} onContinue={openProvider} />
       <div className="mb-wallet-provider-note">
         <ShieldCheck size={16} aria-hidden="true" />
-        <p>{t("walletPage.simpleProviderNote")}</p>
+        <p>{t("onramp.simpleProviderNote")}</p>
       </div>
       {providerError ? <p className="mt-3 text-xs" role="alert" style={{ color: "var(--vp-danger)" }}>{providerError}</p> : null}
     </div>
@@ -223,15 +207,83 @@ function TopUpPanel() {
 
 function AdministrativeWalletPanel() {
   const { t } = useI18n();
+  const reown = useReownWallet();
+  const [wallet, setWallet] = useState({ status: "loading", address: "", checkoutReference: "", assignedAt: "" });
+  const [actionError, setActionError] = useState("");
+
+  const loadWallet = async (signal) => {
+    setActionError("");
+    setWallet(current => ({ ...current, status: "loading" }));
+    try {
+      let next = await readAdministrativeWallet({ signal });
+      if (next.status === "pending") next = await ensureAdministrativeWallet({ signal });
+      setWallet(next);
+    } catch (error) {
+      if (error?.name !== "AbortError") setWallet({ status: "error", address: "", checkoutReference: "", assignedAt: "" });
+    }
+  };
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadWallet(controller.signal);
+    return () => controller.abort();
+  }, []);
+
+  async function topUp(input) {
+    if (wallet.status !== "assigned") return;
+    setActionError("");
+    try {
+      await reown.startAdministrativeOnramp({ address: wallet.address, ...input });
+    } catch { setActionError(t("walletPage.quoteUnavailable")); }
+  }
+
+  async function copyAddress() {
+    if (wallet.status !== "assigned") return;
+    try { await navigator.clipboard.writeText(wallet.address); }
+    catch { setActionError(t("walletPage.administrativeCopyFailed")); }
+  }
+
+  const busy = reown.administrativeOnrampStatus === "opening";
   return (
-    <section className="mb-administrative-wallet" aria-labelledby="administrative-wallet-title">
-      <span className="mb-administrative-wallet-icon"><Building2 size={20} aria-hidden="true" /></span>
-      <div>
-        <p>{t("walletPage.administrativeEyebrow")}</p>
-        <h2 id="administrative-wallet-title">{t("walletPage.administrativeTitle")}</h2>
-        <small>{t("walletPage.administrativeCopy")}</small>
+    <section id="administrative-wallet" className="mb-administrative-wallet" aria-labelledby="administrative-wallet-title">
+      <div className="mb-administrative-wallet-heading">
+        <span className="mb-administrative-wallet-icon"><Building2 size={20} aria-hidden="true" /></span>
+        <div>
+          <p>{t("walletPage.administrativeEyebrow")}</p>
+          <h2 id="administrative-wallet-title">{t("walletPage.administrativeTitle")}</h2>
+          <small>{t("walletPage.administrativeCopy")}</small>
+        </div>
+        <span className={`mb-administrative-wallet-status ${wallet.status === "assigned" ? "ready" : ""}`}>
+          {wallet.status === "assigned" ? t("walletPage.administrativeReady")
+            : wallet.status === "exhausted" ? t("walletPage.administrativeUnavailable")
+              : t("walletPage.administrativeAssigning")}
+        </span>
       </div>
-      <span className="mb-administrative-wallet-status">{t("walletPage.comingSoon")}</span>
+      {wallet.status === "loading" ? (
+        <div className="mb-administrative-wallet-state" role="status"><Loader2 className="animate-spin" size={18} /> {t("walletPage.administrativeAssigning")}</div>
+      ) : wallet.status === "error" ? (
+        <div className="mb-administrative-wallet-state error" role="alert">
+          <span>{t("walletPage.administrativeLoadError")}</span>
+          <button className="executive-button" type="button" onClick={() => loadWallet()}><RefreshCw size={14} /> {t("walletPage.retry")}</button>
+        </div>
+      ) : wallet.status === "exhausted" ? (
+        <div className="mb-administrative-wallet-state" role="status">{t("walletPage.administrativeExhaustedCopy")}</div>
+      ) : (
+        <div className="mb-administrative-wallet-body">
+          <div className="mb-administrative-wallet-address">
+            <span>{t("walletPage.administrativeAddress")}</span>
+            <code title={wallet.address}>{wallet.address}</code>
+            <button type="button" onClick={copyAddress} aria-label={t("walletPage.copyAddress")}><Copy size={15} /></button>
+          </div>
+          <div className="mb-administrative-wallet-summary">
+            <span>{t("onramp.administrativeRoute")}</span><strong>USDT · Polygon</strong>
+            <small>{t("onramp.administrativeProviderCopy")}</small>
+          </div>
+          <StablecoinOnrampForm walletAddress={wallet.address} busy={busy} onContinue={topUp} />
+          <p className="mb-administrative-wallet-separation"><ShieldCheck size={15} /> {t("walletPage.administrativeSeparation")}</p>
+        </div>
+      )}
+      {actionError ? <p className="mb-reown-wallet-error" role="alert">{actionError}</p> : null}
     </section>
   );
 }

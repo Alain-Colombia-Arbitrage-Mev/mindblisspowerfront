@@ -38,17 +38,10 @@ const radix = {
 };
 const i18n = { useI18n: () => ({ t: key => copy[key] ?? key }) };
 const link = ({ children, href, ...props }) => React.createElement('a', { href, ...props }, children);
-let onrampCalls = 0;
-let onrampResult = { opened: true };
-let onrampError = '';
-let reconnectCalls = 0;
-const reown = { useReownWallet: () => ({ configured: true, onrampStatus: 'idle', onrampError, startOnramp: async () => { onrampCalls += 1; return onrampResult; }, reconnectWallet: async () => { reconnectCalls += 1; return { pending: true }; } }) };
-
 function view(file) {
   return registrationViewHarness(`../../components/panel/overview/${file}`, {
     'next/link': { default: link }, 'lucide-react': icons,
     '@radix-ui/react-dialog': radix, '@/i18n/LanguageProvider': i18n,
-    '@/components/reown/ReownContext': reown,
     '@/lib/personal-wallet.mjs': { PERSONAL_WALLET_ASSET: 'USDT' },
   });
 }
@@ -57,10 +50,7 @@ function button(tree, label) {
   return find(tree, node => node?.type === 'button' && renderToStaticMarkup(node).includes(label));
 }
 
-test('the first-recharge popup advances through the Pen welcome and opens Reown on-ramp', async () => {
-  onrampCalls = 0;
-  onrampResult = { opened: true };
-  onrampError = '';
+test('the first-recharge popup advances through the Pen welcome and routes to the validated on-ramp', () => {
   let closed = 0;
   const harness = view('FirstRechargeDialog.jsx');
   const props = { open: true, initialStep: 'welcome', onOpenChange(value) { if (value === false) closed += 1; } };
@@ -71,36 +61,17 @@ test('the first-recharge popup advances through the Pen welcome and opens Reown 
   assert.match(html, /Comprar cripto/);
   assert.equal(find(methods, node => node?.props?.href === '/dashboard/packages'), undefined);
   assert.equal(find(methods, node => node?.props?.href === '/dashboard/payments#wallet-steps').props.href, '/dashboard/payments#wallet-steps');
-  const cryptoMethod = find(methods, node => node?.type?.name === 'RechargeMethod' && typeof node?.props?.onClick === 'function');
-  await cryptoMethod.props.onClick();
-  assert.equal(onrampCalls, 1);
+  const cryptoMethod = find(methods, node => node?.type?.name === 'RechargeMethod' && node?.props?.href === '/dashboard/payments#wallet-topup');
+  cryptoMethod.props.onNavigate();
   assert.equal(closed, 1);
   harness.unmount();
 });
 
-test('a different restored wallet offers an explicit reconnect instead of a generic outage', async () => {
-  onrampError = 'mismatch';
-  reconnectCalls = 0;
+test('the popup never opens a provider before backend route and quote validation', () => {
   const harness = view('FirstRechargeDialog.jsx');
   const tree = harness.render({ open: true, initialStep: 'methods', onOpenChange() {} });
-  assert.match(renderToStaticMarkup(tree), /Wallet distinta/);
-  await button(tree, 'Reconectar wallet vinculada').props.onClick();
-  assert.equal(reconnectCalls, 1);
-  onrampError = '';
-  harness.unmount();
-});
-
-test('wallet setup keeps the Reown bridge mounted until connection can continue to on-ramp', async () => {
-  onrampCalls = 0;
-  onrampResult = { pending: true };
-  let closed = 0;
-  const harness = view('FirstRechargeDialog.jsx');
-  const props = { open: true, initialStep: 'methods', onOpenChange(value) { if (value === false) closed += 1; } };
-  const methods = harness.render(props);
-  const cryptoMethod = find(methods, node => node?.type?.name === 'RechargeMethod' && typeof node?.props?.onClick === 'function');
-  await cryptoMethod.props.onClick();
-  assert.equal(onrampCalls, 1);
-  assert.equal(closed, 0);
+  assert.match(renderToStaticMarkup(tree), /dashboard\/payments#wallet-topup/);
+  assert.equal(find(tree, node => node?.type?.name === 'RechargeMethod' && typeof node?.props?.onClick === 'function'), undefined);
   harness.unmount();
 });
 

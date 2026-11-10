@@ -42,6 +42,22 @@ function loadPages({ summary = { loading: true, data: null, error: '' }, health 
     '@/lib/personal-wallet.mjs': {
       MINDBLISS_ONRAMP_FEE_PERCENT: 1,
       PERSONAL_WALLET_ASSET: 'USDT',
+      PERSONAL_WALLET_NETWORK: 'Polygon',
+      PERSONAL_WALLET_MINIMUM_USD: 50,
+    },
+    '@/lib/administrative-wallet.mjs': {
+      ADMINISTRATIVE_WALLET_ASSET: 'USDT',
+      ADMINISTRATIVE_WALLET_MINIMUM_USD: 50,
+      ADMINISTRATIVE_WALLET_PROVIDERS: ['TOPPER', 'SWAPPED'],
+      readAdministrativeWallet: async () => { throw Error('Unexpected render-time request'); },
+      ensureAdministrativeWallet: async () => { throw Error('Unexpected render-time request'); },
+    },
+    '@/lib/meld-onramp.mjs': { browserOnrampRegion: () => 'CO' },
+    '@/lib/meld-onramp-client.mjs': {
+      ONRAMP_COUNTRIES: [['CO', 'Colombia']],
+      ONRAMP_CRYPTO: 'USDT_POLYGON',
+      readOnrampAvailability: async () => { throw Error('Unexpected render-time request'); },
+      createOnrampQuote: async () => { throw Error('Unexpected render-time request'); },
     },
     '@/i18n/LanguageProvider': { useI18n: () => ({ locale: 'es', dir: 'ltr', t: (key, values) => translateMessage('es', key, values) }) },
     '@/lib/useNetworkHealth': { useNetworkHealth: () => health },

@@ -62,7 +62,7 @@
   text-decoration: none;
 }
 .vp-sidebar-wordmark strong {
-  font-size: 24px;
+  font-size: 25px;
   font-weight: 800;
   letter-spacing: -0.04em;
   line-height: 1;
@@ -77,10 +77,10 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin: 0 20px 18px;
+  margin: 0 16px 12px;
   padding: 16px;
-  border: 1px solid var(--vp-border);
-  border-radius: 20px;
+  border: 1px solid var(--vp-divider);
+  border-radius: 12px;
   background: var(--vp-surface-raised);
   color: var(--vp-text);
 }
@@ -106,7 +106,7 @@
 }
 .vp-sidebar-wallet strong {
   color: var(--vp-text);
-  font-size: 21px;
+  font-size: 23px;
   line-height: 1.15;
 }
 .vp-sidebar-wallet-actions {
@@ -114,13 +114,33 @@
   grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
   gap: 7px;
 }
+
+.vp-sidebar-wallet.administrative-card {
+  margin-top: 0;
+  border-color: color-mix(in srgb, var(--vp-accent) 22%, var(--vp-border));
+  background: color-mix(in srgb, var(--vp-accent) 5%, var(--vp-surface));
+}
+
+.vp-sidebar-wallet-address {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--vp-border);
+  border-radius: 8px;
+  background: var(--vp-bg);
+}
+.vp-sidebar-wallet-address code { overflow: hidden; color: var(--vp-muted); font: 600 10px var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
+.vp-sidebar-wallet-address button { flex: 0 0 auto; padding: 2px; border: 0; color: var(--vp-link); background: transparent; cursor: pointer; }
 .vp-sidebar-wallet-action {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 7px;
   min-height: 40px;
-  border-radius: 999px;
+  border-radius: 8px;
   background: color-mix(in srgb, var(--vp-text) 6%, transparent);
   color: var(--vp-text);
   font-size: 11px;
@@ -131,6 +151,9 @@
   background: var(--vp-selected);
   color: var(--vp-on-selected);
 }
+.vp-sidebar-wallet-divider { height: 1px; margin: 3px 0; background: var(--vp-border); }
+.vp-sidebar-administrative-heading { display: flex; align-items: center; gap: 7px; color: var(--vp-accent); font-size: 11px; font-weight: 800; }
+.vp-sidebar-wallet-action.administrative { justify-content: flex-start; padding-inline: 13px; border: 1px solid var(--vp-border); background: var(--vp-bg); }
 .vp-sidebar-account {
   display: flex;
   align-items: center;
@@ -160,7 +183,7 @@
   flex-direction: column;
   gap: 20px;
   overflow-y: auto;
-  padding: 0 20px 18px;
+  padding: 0 16px 18px;
 }
 .vp-sidebar-nav-group {
   display: flex;
@@ -171,7 +194,7 @@
   margin: 0 0 2px;
   color: var(--vp-muted);
   font-size: 10px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.08em;
 }
 .vp-sidebar-link {
@@ -181,10 +204,10 @@
   min-height: 44px;
   padding: 9px 12px;
   border: 1px solid transparent;
-  border-radius: 14px;
+  border-radius: 8px;
   color: var(--vp-muted);
   background: transparent;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   line-height: 1.5;
   text-align: left;
@@ -338,7 +361,7 @@
 }
 
 .vp-sidebar-footer {
-  padding: 0 20px 18px;
+  padding: 0 16px 18px;
 }
 .vp-sidebar-logout {
   display: inline-flex;
@@ -740,9 +763,9 @@
   overflow: hidden;
   padding: 28px;
   border: 1px solid color-mix(in srgb, var(--vp-wallet-ink) 18%, transparent);
-  border-radius: 20px !important;
-  background: linear-gradient(128deg, #63d9b8 0%, #aeeb72 58%, #74cb91 100%) !important;
-  box-shadow: 0 16px 48px rgb(118 87 246 / 20%);
+  border-radius: 16px !important;
+  background: linear-gradient(128deg, var(--vp-wallet-start) 0%, var(--vp-wallet-mid) 58%, var(--vp-wallet-end) 100%) !important;
+  box-shadow: 0 16px 48px color-mix(in srgb, var(--vp-wallet-start) 18%, transparent);
 }
 .mb-wallet-heading,
 .mb-wallet-balance,
@@ -815,18 +838,18 @@
   min-height: 48px;
   justify-content: center;
   padding-inline: 10px;
-  border-radius: 16px;
+  border-radius: 10px;
   white-space: nowrap;
 }
 .mb-wallet-actions .executive-button:nth-child(2) {
   border-color: rgb(255 255 255 / 80%);
   background: rgb(247 247 252 / 92%);
-  color: #111315;
+  color: var(--vp-wallet-ink);
 }
 .mb-wallet-actions .executive-button:nth-child(3) {
   border-color: rgb(17 19 21 / 14%);
   background: rgb(17 19 21 / 8%);
-  color: #111315;
+  color: var(--vp-wallet-ink);
 }
 .mb-membership-summary {
   display: flex;

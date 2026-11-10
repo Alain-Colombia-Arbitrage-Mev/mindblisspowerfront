@@ -6,7 +6,6 @@ import { ArrowDownLeft, ArrowRight, CreditCard, Plus, Wallet, X } from "lucide-r
 import { useEffect, useState } from "react";
 
 import { useI18n } from "@/i18n/LanguageProvider";
-import { useReownWallet } from "@/components/reown/ReownContext";
 import { PERSONAL_WALLET_ASSET } from "@/lib/personal-wallet.mjs";
 
 const VALID_STEPS = new Set(["welcome", "methods", "reminder"]);
@@ -14,44 +13,17 @@ const VALID_STEPS = new Set(["welcome", "methods", "reminder"]);
 function safeStep(value) {
   return VALID_STEPS.has(value) ? value : "welcome";
 }
-
 export default function FirstRechargeDialog({ open, initialStep = "welcome", onOpenChange }) {
   const { t } = useI18n();
-  const reown = useReownWallet();
   const [step, setStep] = useState(() => safeStep(initialStep));
-  const [providerError, setProviderError] = useState("");
 
   useEffect(() => {
     if (open) {
       setStep(safeStep(initialStep));
-      setProviderError("");
     }
   }, [initialStep, open]);
 
-  useEffect(() => {
-    if (open && reown.onrampStatus === "open") onOpenChange?.(false);
-  }, [onOpenChange, open, reown.onrampStatus]);
-
   const close = () => onOpenChange?.(false);
-  const openCryptoProvider = async () => {
-    setProviderError("");
-    try {
-      const result = await reown.startOnramp();
-      if (result && typeof result === "object" && "opened" in result && result.opened === true) close();
-    } catch {
-      setProviderError(t("recharge.providerUnavailable"));
-    }
-  };
-  const reconnectWallet = async () => {
-    setProviderError("");
-    try {
-      await reown.reconnectWallet();
-    } catch {
-      setProviderError(t("recharge.providerUnavailable"));
-    }
-  };
-  const onrampBusy = ["connecting", "linking", "opening"].includes(reown.onrampStatus);
-  const onrampMessage = errorMessage(t, reown.onrampError) || providerError;
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -89,10 +61,9 @@ export default function FirstRechargeDialog({ open, initialStep = "welcome", onO
                 <Dialog.Description id="recharge-methods-description">{t("recharge.methodsCopy")}</Dialog.Description>
               </div>
               <div className="mb-recharge-methods">
-                <RechargeMethod icon={CreditCard} title={t("recharge.buyTitle")} copy={t("recharge.buyCopy")} action={onrampBusy ? t("recharge.connecting") : t("recharge.buyAction")} onClick={openCryptoProvider} disabled={onrampBusy} />
+                <RechargeMethod icon={CreditCard} title={t("recharge.buyTitle")} copy={t("recharge.buyCopy")} action={t("recharge.buyAction")} href="/dashboard/payments#wallet-topup" onNavigate={close} />
                 <RechargeMethod icon={ArrowDownLeft} title={t("recharge.receiveTitle")} copy={t("recharge.receiveCopy")} action={t("recharge.receiveAction")} href="/dashboard/payments#wallet-steps" onNavigate={close} />
               </div>
-              {onrampMessage ? <div className="mb-recharge-error" role="alert"><span>{onrampMessage}</span>{reown.onrampError === "mismatch" ? <button type="button" onClick={reconnectWallet}>{t("recharge.reconnectWallet")}</button> : null}</div> : null}
               <button type="button" className="mb-recharge-secondary" onClick={close}>{t("recharge.later")}</button>
             </>
           ) : (
@@ -142,17 +113,4 @@ function RechargeMethod({ icon: Icon, title, copy, action, href = "", onNavigate
 
   if (href) return <Link className="mb-recharge-method" href={href} onClick={onNavigate}>{content}</Link>;
   return <button className="mb-recharge-method" type="button" onClick={onClick} disabled={disabled}>{content}</button>;
-}
-
-function errorMessage(t, code) {
-  const keys = {
-    configuration: "recharge.providerConfiguration",
-    connection: "recharge.providerConnection",
-    mismatch: "recharge.providerMismatch",
-    session: "recharge.providerSession",
-    origin: "recharge.providerConfiguration",
-    rejected: "recharge.providerRejected",
-    provider: "recharge.providerUnavailable",
-  };
-  return code && keys[code] ? t(keys[code]) : "";
 }
