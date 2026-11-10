@@ -1,4 +1,4 @@
-import { administrativeSandboxOptions, personalProductionOptions, fundingAcknowledgement, fundingHistory, fundingInput } from './wallet-funding-contract.mjs';
+import { administrativeSandboxOptions, personalProductionOptions, fundingAcknowledgement, fundingHistory, fundingInput, fundingStatus, FUNDING_UUID } from './wallet-funding-contract.mjs';
 import { browserRequestDeadline } from './browser-request-deadline.mjs';
 
 export function fundingRequestId() { return crypto.randomUUID(); }
@@ -42,6 +42,20 @@ export async function readWalletFundingHistory(kind, { signal } = {}) {
   if (!['personal', 'administrative'].includes(kind)) throw new Error('invalid_request');
   const data = fundingHistory(await request(`/api/member/wallet-funding/history?walletKind=${kind}`, { method: 'GET', signal }), kind);
   if (!data) throw new Error('funding_unavailable');
+  return data;
+}
+
+/** An owner's persisted request and destination. A return URL is not payment evidence.
+ * @param {'personal' | 'administrative'} kind
+ * @param {string} checkoutReference
+ * @param {{signal?: AbortSignal}} [options]
+ */
+export async function readWalletFundingStatus(kind, checkoutReference, { signal } = {}) {
+  if (!['personal', 'administrative'].includes(kind) || typeof checkoutReference !== 'string'
+    || checkoutReference.length !== 36 || !FUNDING_UUID.test(checkoutReference)) throw new Error('invalid_request');
+  const reference = checkoutReference.toLowerCase();
+  const data = fundingStatus(await request(`/api/member/wallet-funding/${kind}/status?checkoutReference=${reference}`, { method: 'GET', signal }), kind);
+  if (!data || data.checkoutReference !== reference) throw new Error('funding_unavailable');
   return data;
 }
 

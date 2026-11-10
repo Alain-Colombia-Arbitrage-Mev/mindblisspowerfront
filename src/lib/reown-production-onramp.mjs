@@ -24,8 +24,10 @@ export function buildReownProductionOnrampUrl({ providerUrl, address, projectId,
     sourceCurrencyCode: 'USD', destinationCurrencyCode: 'USDT_POLYGON', sourceAmount: String(amount), paymentMethodType })) {
     url.searchParams.set(`${key}Locked`, value);
   }
-  // Compatibility hint. Enforcement of available routes/methods lives in the
-  // authenticated backend; the vendor controls its final checkout provider UI.
-  url.searchParams.set('serviceProviders', allowedProviders.join(','));
+  // Internal provider restrictions are merchant configuration. The public
+  // widget ignores serviceProvider/serviceProviders URL parameters; do not
+  // present an undocumented parameter as enforcement of an allowlist.
+  url.searchParams.delete('serviceProvider');
+  url.searchParams.delete('serviceProviders');
   return url.toString();
 }

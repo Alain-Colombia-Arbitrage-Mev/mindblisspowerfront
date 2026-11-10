@@ -42,10 +42,12 @@ The personal card records an initiated funding request through
 That path uses no private Meld credential or quote. Reown supplies its own live
 checkout configuration. Mindbliss keeps Reown's `externalCustomerId` attribution
 and adds only its recorded session reference, requested USD amount, USDT Polygon,
-country, selected payment method and the requested Topper/Swapped filter. Documented
-checkout locks carry actual field values, not boolean flags. The `serviceProviders`
-URL parameter is only a compatibility hint; it is not a documented hard provider
-restriction. Reown/Meld controls the final provider UI. The provider confirms availability,
+country and selected payment method. Documented checkout locks carry actual field
+values, not boolean flags. Unsupported `serviceProvider`/`serviceProviders` URL
+parameters are removed. A production check on 2026-11-10 showed that they do not
+exclude Binance Connect. The requested Topper/Swapped restriction needs Reown/MELD
+merchant configuration; the support request is tracked separately in
+`docs/reown-onramp-provider-request.md`. The provider confirms availability,
 received amount and fees; an initiated record does not confirm a paid transaction.
 No synthetic quote or 1% collected commission is displayed or calculated here.
 
@@ -109,6 +111,31 @@ as requests/tests, never confirmed balances. Sandbox activity cannot accrue real
 commissions or satisfy a production purchase. Reown request records remain
 `initiated` until an independent live settlement integration is added; closing
 or returning from the provider does not confirm payment.
+
+`GET /api/member/wallet-funding/{personal|administrative}/status?checkoutReference=...`
+returns an owner-filtered persisted request and its immutable destination. The
+read function added in migration 95 has no settlement writes or table grants.
+Its current `confirmation` is always `{state: "unconfirmed", source: "none",
+testMode: ...}`. The native BFF rejects claims of confirmed/pending settlement,
+crossed wallets, environments, references, assets and networks. A status check
+cannot replay checkout creation. The successful-payment visual is reserved for
+a future authenticated, persisted settlement integration; it is not activated
+by a browser URL, a created session or a requested USD amount.
+
+Observed routes on 2026-11-10 for USD to USDT Polygon, using each wallet's own
+credentials and the administrative account scope:
+
+| Country | Reown production discovery | MELD administrative sandbox |
+| --- | --- | --- |
+| United States | Topper, Swapped | Transak, Banxa |
+| Mexico | Swapped | Banxa |
+| Panama | Topper, Swapped | No routes |
+| Colombia | Topper, Swapped | Banxa |
+
+These are discovery results, not guarantees of a quote or payment. Banxa sandbox
+rejected the tested Colombia checkout; Transak US opened a sandbox quote. The
+frontend fetches fresh methods when the country changes and applies provider
+limits to each amount; it does not create card methods for an unavailable route.
 
 ## Webhook
 

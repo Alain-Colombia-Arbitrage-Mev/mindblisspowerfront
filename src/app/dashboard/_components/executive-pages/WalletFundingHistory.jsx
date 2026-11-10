@@ -6,7 +6,7 @@ import { useI18n } from "@/i18n/LanguageProvider";
 import { readWalletFundingHistory } from "@/lib/wallet-funding-client.mjs";
 import styles from "./wallet-funding.module.css";
 
-export default function WalletFundingHistory({ walletKind, refreshKey }) {
+export default function WalletFundingHistory({ walletKind, refreshKey, onSelectRequest = undefined }) {
   const { t, locale } = useI18n();
   const [revision, setRevision] = useState(0);
   const [state, setState] = useState({ loading: true, error: false, records: [] });
@@ -31,6 +31,7 @@ export default function WalletFundingHistory({ walletKind, refreshKey }) {
             <th>{t("onramp.amountLabel")}</th><th>{t("financePage.status")}</th></tr></thead><tbody>{state.records.map(record => <tr key={record.checkoutReference}>
               <td>{new Intl.DateTimeFormat(locale, { dateStyle: "short" }).format(new Date(record.createdAt))}</td>
               <td>{new Intl.NumberFormat(locale, { style: "currency", currency: "USD" }).format(record.requestedAmount)}</td>
-              <td>{t(labels[record.status])}</td></tr>)}</tbody></table></div>}
+              <td><div className={styles.historyStatus}><span>{t(labels[record.status])}</span>{onSelectRequest ? <button className={styles.historyAction} type="button"
+                onClick={() => onSelectRequest(record.checkoutReference)} aria-label={t("funding.viewStatusFor", { reference: record.checkoutReference.slice(-8) })}>{t("funding.viewStatus")}</button> : null}</div></td></tr>)}</tbody></table></div>}
   </section>;
 }

@@ -15,14 +15,37 @@
 .provider { display: block; margin-top: 5px; color: var(--vp-muted); font-size: 12px; }
 .flowLayout { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(280px, .85fr); gap: 28px; align-items: start; }
 .formPanel { min-width: 0; }
-.formPanel :global(.mb-onramp-simple) { display: block; margin-top: 24px; }
+.formPanel :global(.mb-onramp-simple) { display: block; margin-top: 0; }
 .formPanel :global(.mb-onramp-simple-main) { border: 0; padding: 0; background: transparent; }
 .formPanel :global(.mb-onramp-country-picker > span), .formPanel :global(.mb-onramp-country-picker > label), .formPanel :global(legend) { color: var(--vp-muted); font-size: 13px; font-weight: 700; letter-spacing: normal; text-transform: none; }
-.formPanel :global(select) { font-size: 16px; }
+.formPanel :global(select) { width: 100%; min-width: 0; font-size: 16px; }
 .formPanel :global(.mb-onramp-quick-amounts button) { min-height: 44px; font-family: inherit; font-size: 13px; }
 .formPanel :global(.mb-onramp-disclosure), .formPanel :global(.mb-onramp-amount-fieldset > small) { color: var(--vp-muted); font-size: 12px; line-height: 1.6; text-align: start; }
 .formPanel :global(.mb-onramp-amount-fieldset) { margin-bottom: 20px; }
 .formPanel :global(.mb-onramp-country-picker) { margin-bottom: 18px; }
+.formFields { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "country" "amount" "method"; gap: 20px; }
+.formFields .countryField, .formFields .amountField { min-width: 0; margin: 0; }
+.countryField { grid-area: country; align-content: start; }
+.amountField { grid-area: amount; }
+.methodField { grid-area: method; min-width: 0; margin: 0; padding: 0; border: 0; }
+.methodField legend { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; width: 100%; margin-bottom: 10px; }
+.methodCount { margin-inline-start: auto; color: var(--vp-muted); font-size: 12px; font-weight: 500; }
+.methodChoices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.methodOption { position: relative; display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 44px; padding: 10px 11px; border: 1px solid var(--vp-border); border-radius: 10px; color: var(--vp-text); background: var(--vp-surface); cursor: pointer; }
+.methodOption input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.methodOption svg { flex: none; color: var(--vp-muted); }
+.methodOption span { min-width: 0; font-size: 13px; line-height: 1.35; overflow-wrap: anywhere; }
+.methodOption:hover { border-color: var(--vp-border-strong); }
+.methodOption:focus-within { outline: 2px solid var(--vp-accent); outline-offset: 3px; }
+.methodSelected { border-color: var(--vp-accent-border); background: var(--vp-accent-muted); color: var(--vp-link); }
+.methodSelected svg { color: currentColor; }
+.methodOption:has(input:disabled) { cursor: wait; opacity: .65; }
+.providerChoice { margin-top: 12px; color: var(--vp-muted); font-size: 13px; }
+.providerChoice summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; cursor: pointer; }
+.providerChoice summary span { color: var(--vp-link); font-weight: 700; }
+.providerChoice summary:focus-visible { outline: 2px solid var(--vp-accent); outline-offset: 3px; border-radius: 6px; }
+.processedBy { margin: 12px 0 0; color: var(--vp-muted); font-size: 12px; }
+.formFields .amountField :global(.mb-onramp-amount-input) { min-height: 46px; }
 .sectionHeading p { margin: 6px 0 0; max-width: 65ch; color: var(--vp-muted); font-size: 13px; line-height: 1.6; }
 .details { min-width: 0; }
 .detailCard { display: grid; gap: 16px; min-width: 0; padding-block: 12px; }
@@ -43,6 +66,32 @@
 .history :global(.executive-table th), .history :global(.executive-table td) { padding: 12px; font-size: 12px; }
 .history :global(.executive-table td:nth-child(2)) { white-space: nowrap; }
 .history :global(.mb-onramp-disclosure) { margin-bottom: 16px; color: var(--vp-muted); text-align: start; font-size: 12px; line-height: 1.6; }
+.historyStatus { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.historyAction { min-height: 44px; padding: 4px 0; border: 0; background: transparent; color: var(--vp-link); font: inherit; font-weight: 700; cursor: pointer; }
+.historyAction:hover { text-decoration: underline; text-underline-offset: 3px; }
+.historyAction:focus-visible { outline: 2px solid var(--vp-accent); outline-offset: 4px; border-radius: 4px; }
+.destinationReview { display: grid; gap: 7px; margin-top: 20px; }
+.destinationReview label { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--vp-muted); font-size: 13px; font-weight: 700; }
+.destinationReview label small { font-size: 12px; font-weight: 500; }
+.destinationReview input { width: 100%; min-width: 0; min-height: 44px; padding: 10px 12px; border: 1px solid var(--vp-border); border-radius: 11px; color: var(--vp-text); background: var(--vp-bg); font: 13px var(--font-mono); }
+.destinationReview input:focus-visible { outline: 2px solid var(--vp-accent); outline-offset: 2px; }
+.destinationReview small { color: var(--vp-muted); font-size: 12px; line-height: 1.6; }
+.statusPanel { display: grid; gap: 18px; scroll-margin-top: 20px; }
+.statusPanel:focus-visible { outline: 2px solid var(--vp-accent); outline-offset: 4px; }
+.statusPanel > button { justify-self: start; min-height: 44px; }
+.statusHeading { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; color: var(--vp-text); font-size: 18px; font-weight: 800; }
+.statusHeading svg { flex: none; color: var(--vp-info); }
+.confirmedStatus .statusHeading svg { color: var(--vp-success); }
+.failedStatus .statusHeading svg { color: var(--vp-danger); }
+.testStatus { margin: 12px 0 0; color: var(--vp-info); font-size: 13px; line-height: 1.6; }
+.statusDetails { display: grid; gap: 14px; margin: 20px 0 0; padding-top: 16px; border-top: 1px solid var(--vp-border); }
+.statusDetails > div { display: grid; grid-template-columns: minmax(130px, .55fr) minmax(0, 1fr); gap: 12px; }
+.statusDetails dt { color: var(--vp-muted); font-size: 13px; }
+.statusDetails dd { min-width: 0; margin: 0; color: var(--vp-text); font-size: 14px; overflow-wrap: anywhere; }
+.statusDetails code { font-size: 12px; }
+.statusDetails small { display: block; margin-top: 4px; color: var(--vp-muted); font-size: 12px; }
 :global([dir="rtl"]) .back svg { transform: scaleX(-1); }
 @media (max-width: 1150px) { .flowLayout { grid-template-columns: minmax(0, 1fr); } .setupRequired .details { grid-row: 1; } }
 @media (max-width: 640px) { .destinations { grid-template-columns: minmax(0, 1fr); } .screen { gap: 18px; } .destination > a { width: 100%; } .sectionHeading { align-items: start; } .pageHeading { flex-direction: column; } .pageHeading h1 { font-size: 1.75rem; } .hint, .sectionHeading p, .destination p, .pageHeading span { font-size: 14px; } }
+@media (max-width: 430px) { .statusDetails > div { grid-template-columns: minmax(0, 1fr); gap: 5px; } .destinationReview input { font-size: 16px; } }
+@media (min-width: 700px) { .formFields { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: "country amount" "method method"; gap: 18px 20px; } .methodChoices { grid-template-columns: repeat(3, minmax(0, 1fr)); } }

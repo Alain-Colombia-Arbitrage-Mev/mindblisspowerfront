@@ -6,7 +6,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 import { translateMessage } from '../../../../i18n/translate.mjs';
-import { validFundingAmount, WALLET_GATEWAY_FAILURE_REASONS } from '../../../../lib/wallet-funding-contract.mjs';
+import { validFundingAmount, WALLET_GATEWAY_FAILURE_REASONS, FUNDING_UUID, fundingStatus } from '../../../../lib/wallet-funding-contract.mjs';
 import { personalFundingFailure } from '../../../../lib/personal-funding-errors.mjs';
 
 const require = createRequire(import.meta.url);
@@ -20,7 +20,7 @@ function load(filename, mocks) {
   const module = { exports: {} };
   new Function('require', 'module', 'exports', code)(id => {
     if (Object.hasOwn(mocks, id)) return mocks[id];
-    if (id === '@/lib/wallet-funding-contract.mjs') return { validFundingAmount, WALLET_GATEWAY_FAILURE_REASONS };
+    if (id === '@/lib/wallet-funding-contract.mjs') return { validFundingAmount, WALLET_GATEWAY_FAILURE_REASONS, FUNDING_UUID, fundingStatus };
     if (id.endsWith('.module.css')) return styles;
     if (id === 'react/jsx-runtime' || id === 'react') return require(id);
     assert.fail(`Unexpected dependency ${id}`);
@@ -45,24 +45,37 @@ function componentHarness(filename, name, mocks) {
 }
 
 function formHarness(name, api) {
-  return componentHarness('WalletFundingForm.jsx', name, { 'lucide-react': icons, '@/i18n/LanguageProvider': i18n,
+  const harness = componentHarness('WalletFundingForm.jsx', name, { 'lucide-react': icons, '@/i18n/LanguageProvider': i18n,
     '@/lib/meld-onramp.mjs': { browserOnrampRegion: () => 'CO' }, '@/lib/meld-onramp-client.mjs': { ONRAMP_COUNTRIES: [['CO'], ['US']] },
     '@/lib/wallet-funding-client.mjs': { fundingRequestId: () => 'd8a4c010-cc33-44da-a297-8b3c6440f491', ...api },
     '@/lib/wallet-funding-contract.mjs': { validFundingAmount },
   });
+  const render = harness.render;
+  return { ...harness, render(props = {}) { return render({ destinationAddress: `0x${'1'.repeat(40)}`, ...props }); } };
 }
 
 function find(node, name) {
-  if (node?.type?.name === name) return node;
+  if (typeof name === 'function' ? name(node) : node?.type?.name === name) return node;
   return React.Children.toArray(node?.props?.children).map(child => find(child, name)).find(Boolean);
+}
+function findAll(node, predicate) {
+  return [...(predicate(node) ? [node] : []), ...React.Children.toArray(node?.props?.children).flatMap(child => findAll(child, predicate))];
 }
 const flush = async () => { await Promise.resolve(); await Promise.resolve(); };
 const methods = [{ method: 'CREDIT_DEBIT_CARD', minimumUsd: 75, maximumUsd: 1000 }];
+const statusReference = 'd8a4c010-cc33-44da-a297-8b3c6440f491';
+const secondStatusReference = 'd8a4c010-cc33-44da-a297-8b3c6440f492';
+const personalStatus = { checkoutReference: statusReference, walletKind: 'personal', environment: 'production', provider: 'reown', requestedAmount: 50,
+  country: 'CO', requestStatus: 'initiated', destination: { address: `0x${'1'.repeat(40)}`, asset: 'USDT', network: 'polygon', chainId: 137 },
+  confirmation: { state: 'unconfirmed', source: 'none', testMode: false } };
+const administrativeStatus = { ...personalStatus, walletKind: 'administrative', environment: 'sandbox', provider: 'meld', requestStatus: 'session_created',
+  destination: { ...personalStatus.destination, address: `0x${'2'.repeat(40)}` }, confirmation: { state: 'unconfirmed', source: 'none', testMode: true } };
+const statusMocks = read => ({ 'lucide-react': icons, '@/i18n/LanguageProvider': i18n, '@/lib/wallet-funding-client.mjs': { readWalletFundingStatus: read } });
 
 test('a connected Reown address never claims backend verification and check failures remain actionable', () => {
   const { personalWalletState, personalOnrampError } = load('PersonalWalletFundingPage.jsx', {
     'lucide-react': icons, 'next/dynamic': { default: () => () => null }, '@/components/reown/ReownContext': {},
-    '@/i18n/LanguageProvider': i18n, './WalletFundingForm': {}, './WalletFundingHistory': {}, './WalletFundingUI': {},
+    '@/i18n/LanguageProvider': i18n, './WalletFundingForm': {}, './WalletFundingHistory': {}, './WalletFundingStatus': {}, './WalletFundingUI': {},
     '@/lib/personal-funding-errors.mjs': { personalFundingFailure },
   });
   const account = { configured: true, isConnected: true, address: `0x${'1'.repeat(40)}`, linkStatus: 'unlinked', linkedAddress: '' };
@@ -139,7 +152,7 @@ test('administrative country discovery cancels both old requests and automatical
   calls[3].resolve({ country: 'CO', serviceProvider: 'BANXA', paymentMethods: ['CREDIT_DEBIT_CARD'], routes: [{ paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', minimumUsd: 50, maximumUsd: 500 }] }] });
   await flush(); harness.render(props); tree = harness.render(props);
   assert.deepEqual(find(tree, 'FundingMethodField').props.methods, ['CREDIT_DEBIT_CARD']);
-  assert.equal(React.Children.toArray(tree.props.children.props.children).some(node => node?.type === 'label'), false, 'one eligible provider requires no selection');
+  assert.equal(find(tree, node => node?.type === 'select' && node.props.id.endsWith('-provider')), undefined, 'one eligible provider requires no selection');
   tree.props.onSubmit({ preventDefault() {} }); await flush();
   assert.equal(submitted[0].serviceProvider, 'BANXA');
   assert.equal(submitted[0].countryCode, 'CO');
@@ -158,8 +171,7 @@ test('administrative choices contain only amount-eligible providers and retain a
   harness.render(props);
   for (const call of calls) call.resolve({ country: 'US', serviceProvider: call.serviceProvider, paymentMethods: ['CREDIT_DEBIT_CARD'], routes: [{ paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', minimumUsd: 50, maximumUsd: call.serviceProvider === 'TRANSAK' ? 100 : 500 }] }] });
   await flush(); harness.render(props); let tree = harness.render(props);
-  const label = React.Children.toArray(tree.props.children.props.children).find(node => node?.type === 'label');
-  const select = React.Children.toArray(label.props.children).find(node => node?.type === 'select');
+  const select = find(tree, node => node?.type === 'select' && node.props.id.endsWith('-provider'));
   assert.equal(select.props.value, 'TRANSAK');
   select.props.onChange({ target: { value: 'BANXA' } });
   harness.render(props); tree = harness.render(props);
@@ -167,10 +179,18 @@ test('administrative choices contain only amount-eligible providers and retain a
   assert.equal(submitted[0].serviceProvider, 'BANXA');
   find(tree, 'FundingAmountField').props.onChange('250');
   harness.render(props); tree = harness.render(props);
-  assert.equal(React.Children.toArray(tree.props.children.props.children).some(node => node?.type === 'label'), false);
+  assert.equal(find(tree, node => node?.type === 'select' && node.props.id.endsWith('-provider')), undefined);
   tree.props.onSubmit({ preventDefault() {} }); await flush();
   assert.equal(submitted[1].serviceProvider, 'BANXA');
   assert.equal(calls.length, 2, 'provider and amount changes use their own already-fetched country routes');
+  find(tree, 'FundingAmountField').props.onChange('50');
+  harness.render(props); tree = harness.render(props);
+  find(tree, 'FundingCountryField').props.onChange('CO');
+  harness.render(props);
+  for (const call of calls.slice(2)) call.resolve({ country: 'CO', serviceProvider: call.serviceProvider, paymentMethods: ['CREDIT_DEBIT_CARD'], routes: [{ paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', minimumUsd: 50, maximumUsd: 500 }] }] });
+  await flush(); harness.render(props); tree = harness.render(props);
+  tree.props.onSubmit({ preventDefault() {} }); await flush();
+  assert.equal(submitted[2].serviceProvider, 'BANXA', 'an explicit provider preference survives a country change when both providers remain available');
 });
 
 test('an administrative provider outage fails closed with explicit retry rather than posing as an unavailable country', async t => {
@@ -289,7 +309,7 @@ test('narrow wallet layouts prioritize funding after assignment and constrain lo
 test('returned canonical payment methods use brand labels without changing their submitted identifiers', () => {
   const harness = formHarness('PersonalFundingForm', {});
   const t = key => translateMessage('es', key);
-  assert.deepEqual(['ASTROPAY', 'NETELLER', 'PAYSAFECARD', 'SKRILL'].map(code => harness.exports.paymentMethodLabel(code, t)), ['AstroPay', 'Neteller', 'PaysafeCard', 'Skrill']);
+  assert.deepEqual(['ASTROPAY', 'NETELLER', 'PAYSAFECARD', 'SKRILL', 'PAYPAL', 'VENMO'].map(code => harness.exports.paymentMethodLabel(code, t)), ['AstroPay', 'Neteller', 'PaysafeCard', 'Skrill', 'PayPal', 'Venmo']);
   assert.equal(harness.exports.paymentMethodLabel('CREDIT_DEBIT_CARD', t), t('onramp.cardPayment'));
   assert.equal(harness.exports.paymentMethodLabel('APPLE_PAY', t), 'Apple Pay');
   assert.equal(harness.exports.paymentMethodLabel('GOOGLE_PAY', t), 'Google Pay');
@@ -318,8 +338,7 @@ test('administrative user edits notify the page once without retrying a session 
   find(tree, 'FundingCountryField').props.onChange('CO');
   harness.render(props); await flush(); harness.render(props); tree = harness.render(props);
   assert.equal(selectionChanges, 2);
-  const label = React.Children.toArray(tree.props.children.props.children).find(node => node?.type === 'label');
-  React.Children.toArray(label.props.children).find(node => node?.type === 'select').props.onChange({ target: { value: 'BANXA' } });
+  find(tree, node => node?.type === 'select' && node.props.id.endsWith('-provider')).props.onChange({ target: { value: 'BANXA' } });
   harness.render(props); tree = harness.render(props);
   assert.equal(selectionChanges, 3);
   find(tree, 'FundingMethodField').props.onChange('BANK_TRANSFER');
@@ -342,6 +361,7 @@ test('changing an administrative selection clears its old provider error while p
     '@/lib/administrative-wallet.mjs': { readAdministrativeWallet: async () => ({ status: 'assigned', address }), ensureAdministrativeWallet() { assert.fail('unnecessary assignment'); } },
     '@/lib/administrative-onramp-client.mjs': { async startAdministrativeMeldOnramp() { sessions++; throw Error('wallet_funding_method_unavailable'); } },
     './WalletFundingForm': { AdministrativeSandboxFundingForm }, './WalletFundingHistory': { default: WalletFundingHistory }, './WalletFundingUI': shared,
+    './WalletFundingStatus': { default: () => null },
   });
   t.after(() => harness.unmount());
   const props = { environment: 'sandbox' };
@@ -361,4 +381,260 @@ test('changing an administrative selection clears its old provider error while p
   assert.ok(copyError, 'clipboard error stays separate');
   assert.equal(find(tree, 'WalletFundingHistory').props.refreshKey, revision);
   assert.equal(sessions, 1);
+});
+
+test('live status presentation accepts only its exact own reference and unconfirmed backend contract, never checkout or URL success hints', () => {
+  const { currentFundingView } = load('WalletFundingStatus.jsx', statusMocks(() => assert.fail('render-time read')));
+  assert.equal(currentFundingView(personalStatus, 'personal', statusReference).state, 'unconfirmed');
+  assert.equal(currentFundingView(personalStatus, 'personal', statusReference.toUpperCase()).state, 'unconfirmed');
+  assert.equal(currentFundingView(administrativeStatus, 'administrative', statusReference).state, 'checkout_ready');
+  assert.equal(currentFundingView(administrativeStatus, 'personal', statusReference), null);
+  assert.equal(currentFundingView(personalStatus, 'personal', secondStatusReference), null);
+  assert.equal(currentFundingView({ ...personalStatus, success: true, paid: true, status: 'confirmed' }, 'personal', statusReference).state, 'unconfirmed');
+  for (const confirmation of [{ state: 'confirmed', source: 'none', testMode: false }, { state: 'pending', source: 'return_url', testMode: false }, { state: 'unconfirmed', source: 'webhook', testMode: false }]) {
+    assert.equal(currentFundingView({ ...personalStatus, confirmation }, 'personal', statusReference), null);
+  }
+});
+
+test('definitive administrative preparation failures do not pose as pending or failed financial payments', () => {
+  const { currentFundingView, WalletFundingStatusView } = load('WalletFundingStatus.jsx', statusMocks(() => assert.fail('render-time read')));
+  for (const [requestStatus, expected] of [['unavailable', 'request_unavailable'], ['failed', 'checkout_failed']]) {
+    const view = currentFundingView({ ...administrativeStatus, requestStatus }, 'administrative', statusReference);
+    assert.equal(view.state, expected);
+    const html = renderToStaticMarkup(WalletFundingStatusView({ view }));
+    assert.match(html, /No se inició una compra/);
+    assert.doesNotMatch(html, /Pago sin confirmar|Recarga en proceso|Recarga no completada|Recarga confirmada/);
+  }
+});
+
+test('status reads are manual, scoped to the chosen wallet and abort old references without publishing a late response', async t => {
+  const calls = [];
+  const harness = componentHarness('WalletFundingStatus.jsx', 'default', statusMocks((kind, reference, { signal }) => new Promise(resolve => calls.push({ kind, reference, signal, resolve }))));
+  t.after(() => harness.unmount());
+  const props = { walletKind: 'personal', checkoutReference: statusReference };
+  harness.render(props); harness.render(props);
+  assert.equal(calls.length, 1);
+  calls[0].resolve(personalStatus); await flush();
+  let tree = harness.render(props);
+  assert.equal(find(tree, 'WalletFundingStatusView').props.view.state, 'unconfirmed');
+  const refresh = React.Children.toArray(tree.props.children).find(node => node?.type === 'button');
+  refresh.props.onClick(); harness.render(props);
+  assert.equal(calls.length, 2);
+  const second = { ...props, checkoutReference: secondStatusReference };
+  harness.render(second);
+  assert.equal(calls[1].signal.aborted, true);
+  assert.equal(calls[2].reference, secondStatusReference);
+  calls[1].resolve(personalStatus); await flush();
+  tree = harness.render(second);
+  assert.equal(find(tree, 'WalletFundingStatusView'), undefined);
+  calls[2].resolve({ ...personalStatus, checkoutReference: secondStatusReference }); await flush();
+  tree = harness.render(second);
+  assert.equal(find(tree, 'WalletFundingStatusView').props.view.checkoutReference, secondStatusReference);
+  assert.equal(calls.every(call => call.kind === 'personal'), true);
+  assert.equal(calls.length, 3, 'renders cannot poll or create another checkout');
+});
+
+test('a status read failure stays unavailable with an explicit GET retry and never becomes a failed or successful payment', async t => {
+  let reads = 0;
+  const harness = componentHarness('WalletFundingStatus.jsx', 'default', statusMocks(async () => { reads++; throw Error('private-provider-token'); }));
+  t.after(() => harness.unmount());
+  const props = { walletKind: 'administrative', checkoutReference: statusReference };
+  harness.render(props); await flush();
+  const tree = harness.render(props);
+  const html = renderToStaticMarkup(tree);
+  assert.match(html, /No pudimos consultar el estado/);
+  assert.doesNotMatch(html, /private-provider-token|Recarga confirmada|Recarga no completada/);
+  assert.equal(reads, 1);
+  React.Children.toArray(tree.props.children).find(node => node?.type === 'button').props.onClick();
+  harness.render(props); await flush();
+  assert.equal(reads, 2);
+});
+
+test('future confirmed visual fixtures distinguish received USDT from requested USD and mark sandbox as a test', () => {
+  const { currentFundingView, WalletFundingStatusView } = load('WalletFundingStatus.jsx', statusMocks(() => assert.fail('fixture cannot fetch')));
+  const base = currentFundingView(personalStatus, 'personal', statusReference);
+  const confirmed = { ...base, state: 'confirmed', receivedAmount: '46.580001', confirmedAt: '2026-11-10T21:00:00Z' };
+  let html = renderToStaticMarkup(WalletFundingStatusView({ view: confirmed }));
+  assert.match(html, /Recarga confirmada/);
+  assert.match(html, /46\.580001 USDT/);
+  assert.ok(html.includes(translateMessage('es', 'funding.statusRequestedAmount')));
+  assert.ok(html.includes(translateMessage('es', 'funding.statusReceived')));
+  html = renderToStaticMarkup(WalletFundingStatusView({ view: { ...confirmed, testMode: true } }));
+  assert.match(html, /Prueba confirmada/);
+  assert.match(html, /No acredita fondos ni comisiones reales/);
+  html = renderToStaticMarkup(WalletFundingStatusView({ view: { ...confirmed, receivedAmount: undefined } }));
+  assert.doesNotMatch(html, /Recarga confirmada|46\.580001/);
+  assert.match(html, /Pago sin confirmar/);
+});
+
+test('each form reviews its immutable trusted destination immediately before the CTA and blocks a missing address', async t => {
+  const harness = formHarness('AdministrativeSandboxFundingForm', { readAdministrativeSandboxOptions: async (country, serviceProvider) => ({ country, serviceProvider,
+    paymentMethods: ['CREDIT_DEBIT_CARD'], routes: [{ paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', minimumUsd: 50, maximumUsd: 1000 }] }] }) });
+  t.after(() => harness.unmount());
+  harness.render(); await flush(); harness.render(); let tree = harness.render();
+  const fields = React.Children.toArray(tree.props.children.props.children);
+  assert.equal(fields.at(-2).type.name, 'FundingDestination');
+  assert.equal(fields.at(-1).type.name, 'FundingSubmit');
+  const destination = harness.exports.FundingDestination({ address: personalStatus.destination.address });
+  const input = React.Children.toArray(destination.props.children).find(node => node?.type === 'input');
+  assert.equal(input.props.readOnly, true);
+  assert.equal(input.props.value, personalStatus.destination.address);
+  assert.equal(input.props.onChange, undefined);
+  tree = harness.render({ destinationAddress: '' });
+  assert.equal(find(tree, 'FundingSubmit').props.disabled, true);
+});
+
+test('an automatic Banxa country choice never replaces the default Transak preference for a later supported country', async t => {
+  const submitted = [];
+  const harness = formHarness('AdministrativeSandboxFundingForm', {
+    readAdministrativeSandboxOptions: async (country, serviceProvider) => ({ country, serviceProvider,
+      paymentMethods: country === 'CO' && serviceProvider === 'TRANSAK' ? [] : ['CREDIT_DEBIT_CARD'],
+      routes: country === 'CO' && serviceProvider === 'TRANSAK' ? [] : [{ paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', minimumUsd: 50, maximumUsd: 1000 }] }] }),
+  });
+  t.after(() => harness.unmount());
+  const props = { onContinue: async value => submitted.push(value) };
+  harness.render(props); await flush(); harness.render(props); let tree = harness.render(props);
+  find(tree, 'FundingCountryField').props.onChange('CO');
+  harness.render(props); await flush(); harness.render(props); tree = harness.render(props);
+  tree.props.onSubmit({ preventDefault() {} }); await flush();
+  assert.equal(submitted[0].serviceProvider, 'BANXA');
+  find(tree, 'FundingCountryField').props.onChange('US');
+  harness.render(props); await flush(); harness.render(props); tree = harness.render(props);
+  tree.props.onSubmit({ preventDefault() {} }); await flush();
+  assert.equal(submitted[1].serviceProvider, 'TRANSAK');
+});
+
+test('each page selects only its own acknowledged request and exposes its backend destination to the review field', async t => {
+  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  Object.defineProperty(globalThis, 'window', { value: { dispatchEvent() {} }, configurable: true });
+  t.after(() => { if (previousWindow) Object.defineProperty(globalThis, 'window', previousWindow); else delete globalThis.window; });
+  const shared = load('WalletFundingUI.jsx', { 'lucide-react': icons, 'next/link': {}, '@/i18n/LanguageProvider': i18n });
+  function PersonalFundingForm() { return null; }
+  function AdministrativeSandboxFundingForm() { return null; }
+  function WalletFundingHistory() { return null; }
+  function WalletFundingStatus() { return null; }
+  let personalResult = { pending: true, checkoutReference: statusReference };
+  const personal = componentHarness('PersonalWalletFundingPage.jsx', 'PersonalWalletFunding', {
+    'lucide-react': icons, 'next/dynamic': { default: () => () => null }, '@/i18n/LanguageProvider': i18n,
+    '@/components/reown/ReownContext': { useReownWallet: () => ({ configured: true, isConnected: true, isLinked: true, address: personalStatus.destination.address,
+      linkedAddress: personalStatus.destination.address, linkStatus: 'linked', onrampStatus: 'idle', fundingRevision: 0, startOnramp: async () => personalResult }) },
+    '@/lib/personal-funding-errors.mjs': { personalFundingFailure }, './WalletFundingForm': { PersonalFundingForm },
+    './WalletFundingHistory': { default: WalletFundingHistory }, './WalletFundingStatus': { default: WalletFundingStatus }, './WalletFundingUI': shared,
+  });
+  t.after(() => personal.unmount());
+  let tree = personal.render();
+  assert.equal(find(tree, 'PersonalFundingForm').props.destinationAddress, personalStatus.destination.address);
+  await find(tree, 'PersonalFundingForm').props.onContinue({});
+  tree = personal.render();
+  assert.equal(find(tree, 'WalletFundingStatus'), undefined, 'pending wallet connection is not a checkout acknowledgement');
+  personalResult = { opened: true, checkoutReference: statusReference };
+  await find(tree, 'PersonalFundingForm').props.onContinue({});
+  tree = personal.render();
+  assert.equal(find(tree, 'WalletFundingStatus').props.walletKind, 'personal');
+  assert.equal(find(tree, 'WalletFundingStatus').props.checkoutReference, statusReference);
+  assert.equal(find(tree, 'WalletFundingStatus').props.focusKey, 0);
+  find(tree, 'WalletFundingHistory').props.onSelectRequest(secondStatusReference);
+  tree = personal.render();
+  assert.equal(find(tree, 'WalletFundingStatus').props.checkoutReference, secondStatusReference);
+  assert.equal(find(tree, 'WalletFundingStatus').props.focusKey, 1);
+
+  const administrative = componentHarness('AdministrativeWalletFundingPage.jsx', 'default', {
+    'lucide-react': icons, '@/i18n/LanguageProvider': i18n,
+    '@/lib/administrative-wallet.mjs': { readAdministrativeWallet: async () => ({ status: 'assigned', address: administrativeStatus.destination.address }) },
+    '@/lib/administrative-onramp-client.mjs': { startAdministrativeMeldOnramp: async () => ({ checkoutReference: statusReference }) },
+    './WalletFundingForm': { AdministrativeSandboxFundingForm }, './WalletFundingHistory': { default: WalletFundingHistory }, './WalletFundingStatus': { default: WalletFundingStatus }, './WalletFundingUI': shared,
+  });
+  t.after(() => administrative.unmount());
+  const props = { environment: 'sandbox' };
+  administrative.render(props); await flush(); tree = administrative.render(props);
+  assert.equal(find(tree, 'AdministrativeSandboxFundingForm').props.destinationAddress, administrativeStatus.destination.address);
+  await find(tree, 'AdministrativeSandboxFundingForm').props.onContinue({});
+  tree = administrative.render(props);
+  assert.equal(find(tree, 'WalletFundingStatus').props.walletKind, 'administrative');
+  assert.equal(find(tree, 'WalletFundingStatus').props.checkoutReference, statusReference);
+  assert.equal(find(personal.render(), 'WalletFundingStatus').props.checkoutReference, secondStatusReference, 'administrative activity cannot replace the personal selection');
+});
+
+test('a history status action selects the exact request for a read without changing its recorded payment status', async t => {
+  const selected = [], reads = [];
+  const harness = componentHarness('WalletFundingHistory.jsx', 'default', { 'lucide-react': icons, '@/i18n/LanguageProvider': i18n,
+    '@/lib/wallet-funding-client.mjs': { readWalletFundingHistory: async kind => { reads.push(kind); return { records: [{ checkoutReference: statusReference,
+      requestedAmount: 50, status: 'initiated', createdAt: '2026-11-10T21:00:00Z' }] }; } },
+  });
+  t.after(() => harness.unmount());
+  const props = { walletKind: 'personal', refreshKey: 0, onSelectRequest: reference => selected.push(reference) };
+  harness.render(props); await flush(); const tree = harness.render(props);
+  const action = find(tree, node => node?.type === 'button' && node.props.className === 'historyAction');
+  assert.ok(action.props['aria-label'].includes(statusReference.slice(-8)));
+  action.props.onClick();
+  assert.deepEqual(selected, [statusReference]);
+  assert.deepEqual(reads, ['personal']);
+  assert.match(renderToStaticMarkup(tree), /Solicitud iniciada/);
+  assert.doesNotMatch(renderToStaticMarkup(tree), /Recarga confirmada/);
+});
+
+test('all returned production methods remain visible and selectable, including PayPal and Venmo, without a card-only filter', async t => {
+  if (typeof navigator === 'undefined') { Object.defineProperty(globalThis, 'navigator', { value: { language: 'es-CO', languages: ['es-CO'] }, configurable: true }); t.after(() => { delete globalThis.navigator; }); }
+  const countries = { CO: ['CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY', 'ASTROPAY', 'NETELLER', 'PAYSAFECARD', 'SKRILL'],
+    US: ['CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY', 'PAYPAL', 'VENMO'] };
+  const submitted = [];
+  const harness = formHarness('PersonalFundingForm', { readPersonalFundingOptions: async country => ({ country, paymentMethods: countries[country],
+    routes: [{ serviceProvider: 'TOPPER', paymentMethods: countries[country].map(method => ({ method, minimumUsd: 50, maximumUsd: 1000 })) }] }),
+    readAdministrativeSandboxOptions() { assert.fail('production methods cannot use sandbox'); },
+  });
+  t.after(() => harness.unmount());
+  const props = { onContinue: async input => submitted.push(input) };
+  harness.render(props); harness.render(props); await flush(); harness.render(props); let tree = harness.render(props);
+  let field = find(tree, 'FundingMethodField');
+  let view = field.type(field.props);
+  assert.deepEqual(findAll(view, node => node?.type === 'input' && node.props.type === 'radio').map(node => node.props.value), countries.CO);
+  assert.match(renderToStaticMarkup(view), /7 opciones de pago/);
+  assert.doesNotMatch(renderToStaticMarkup(view), /PSE/);
+  const group = React.Children.toArray(tree.props.children.props.children)[0];
+  assert.deepEqual(React.Children.toArray(group.props.children).map(node => node.type.name), ['FundingCountryField', 'FundingAmountField', 'FundingMethodField']);
+  find(tree, 'FundingCountryField').props.onChange('US');
+  harness.render(props); await flush(); harness.render(props); tree = harness.render(props);
+  field = find(tree, 'FundingMethodField'); view = field.type(field.props);
+  const radios = findAll(view, node => node?.type === 'input' && node.props.type === 'radio');
+  assert.deepEqual(radios.map(node => node.props.value), countries.US);
+  const html = renderToStaticMarkup(view);
+  assert.match(html, /PayPal/); assert.match(html, /Venmo/); assert.match(html, /5 opciones de pago/);
+  assert.equal((html.match(/Límites:/g) || []).length, 1, 'selected-method limits appear once');
+  assert.equal((html.match(/El proveedor confirma disponibilidad y comisiones antes de pagar/g) || []).length, 1, 'coverage options do not promise checkout availability or final fees');
+  radios.find(node => node.props.value === 'PAYPAL').props.onChange();
+  tree = harness.render(props);
+  tree.props.onSubmit({ preventDefault() {} }); await flush();
+  assert.equal(submitted[0].paymentMethodType, 'PAYPAL');
+  assert.equal(submitted[0].countryCode, 'US');
+});
+
+test('selected method limits reflect overlapping real routes and never invent a minimum for an unavailable amount', () => {
+  const { selectedMethodLimits } = formHarness('PersonalFundingForm', {}).exports;
+  const routes = [{ paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', minimumUsd: 10, maximumUsd: 1000 }] },
+    { paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', minimumUsd: 100, maximumUsd: 2000 }] }];
+  assert.deepEqual(selectedMethodLimits(routes, 'CREDIT_DEBIT_CARD', 100), { minimumUsd: 50, maximumUsd: 2000 });
+  assert.equal(selectedMethodLimits(routes, 'PAYPAL', 100), null);
+  assert.equal(selectedMethodLimits(routes, 'CREDIT_DEBIT_CARD', 2500), null);
+});
+
+test('history-driven status focus uses native focus and scrolling, respects reduced motion and performs only scoped reads', t => {
+  const prior = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  let reduced = true;
+  Object.defineProperty(globalThis, 'window', { value: { matchMedia: () => ({ matches: reduced }) }, configurable: true });
+  t.after(() => { if (prior) Object.defineProperty(globalThis, 'window', prior); else delete globalThis.window; });
+  const reads = [], focused = [], scrolled = [];
+  const harness = componentHarness('WalletFundingStatus.jsx', 'default', statusMocks((kind, reference, { signal }) => { reads.push({ kind, reference, signal }); return new Promise(() => {}); }));
+  t.after(() => harness.unmount());
+  const props = { walletKind: 'personal', checkoutReference: statusReference, focusKey: 0 };
+  const tree = harness.render(props);
+  tree.ref.current = { focus: options => focused.push(options), scrollIntoView: options => scrolled.push(options) };
+  assert.equal(focused.length, 0, 'an automatic checkout acknowledgement cannot steal focus');
+  harness.render({ ...props, focusKey: 1 });
+  assert.deepEqual(focused, [{ preventScroll: true }]);
+  assert.deepEqual(scrolled[0], { block: 'start', behavior: 'auto' });
+  reduced = false;
+  harness.render({ ...props, focusKey: 2 });
+  assert.deepEqual(scrolled[1], { block: 'start', behavior: 'smooth' });
+  assert.equal(reads.every(read => read.kind === 'personal' && read.reference === statusReference), true);
+  assert.equal(reads[0].signal.aborted, true);
 });

@@ -73,6 +73,34 @@ export function fundingHistory(value, kind) {
   return { walletKind: kind, environment, settlement: 'unconfirmed', records };
 }
 
+/** Reads a persisted request, never a checkout callback's claimed payment result.
+ * Settlement remains unconfirmed until an authenticated provider event is
+ * implemented and stored by the backend. Opening a checkout cannot change it.
+ */
+export function fundingStatus(value, kind) {
+  if (!['personal', 'administrative'].includes(kind)) return null;
+  const environment = kind === 'personal' ? 'production' : 'sandbox';
+  const provider = kind === 'personal' ? 'reown' : 'meld';
+  const destination = value?.destination;
+  const confirmation = value?.confirmation;
+  if (!value || typeof value !== 'object' || Array.isArray(value) || value.walletKind !== kind
+    || value.environment !== environment || value.provider !== provider
+    || typeof value.checkoutReference !== 'string' || value.checkoutReference.length !== 36
+    || !FUNDING_UUID.test(value.checkoutReference) || !validFundingAmount(value.requestedAmount)
+    || typeof value.country !== 'string' || value.country.length !== 2 || !COUNTRY.test(value.country) || !STATUSES.has(value.requestStatus)
+    || (kind === 'personal' && value.requestStatus !== 'initiated')
+    || !destination || typeof destination !== 'object' || Array.isArray(destination)
+    || typeof destination.address !== 'string' || destination.address.length !== 42 || !ADDRESS.test(destination.address) || destination.asset !== 'USDT'
+    || destination.network !== 'polygon' || destination.chainId !== 137
+    || !confirmation || typeof confirmation !== 'object' || Array.isArray(confirmation)
+    || confirmation.state !== 'unconfirmed' || confirmation.source !== 'none'
+    || confirmation.testMode !== (kind === 'administrative')) return null;
+  return { checkoutReference: value.checkoutReference.toLowerCase(), walletKind: kind, environment, provider,
+    requestedAmount: value.requestedAmount, country: value.country, requestStatus: value.requestStatus,
+    destination: { address: destination.address, asset: 'USDT', network: 'polygon', chainId: 137 },
+    confirmation: { state: 'unconfirmed', source: 'none', testMode: kind === 'administrative' } };
+}
+
 export function administrativeSandboxOptions(value) {
   const safe = fundingOptions(value, 'administrative');
   if (!safe || !PROVIDERS.has(value.serviceProvider) || safe.routes.some(route => route.serviceProvider !== value.serviceProvider)) return null;

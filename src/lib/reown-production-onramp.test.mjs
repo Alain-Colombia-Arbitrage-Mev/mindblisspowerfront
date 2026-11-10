@@ -13,12 +13,17 @@ test('Reown production retains merchant attribution and records only an initiate
   assert.equal(url.searchParams.get('walletAddress'), input.address);
   assert.equal(url.searchParams.get('destinationCurrencyCode'), 'USDT_POLYGON');
   assert.equal(url.searchParams.get('sourceAmount'), '100');
-  assert.equal(url.searchParams.get('serviceProviders'), 'TOPPER,SWAPPED');
+  assert.equal(url.searchParams.has('serviceProviders'), false);
+  assert.equal(url.searchParams.has('serviceProvider'), false);
   assert.equal(url.searchParams.get('paymentMethodType'), input.paymentMethodType);
   assert.equal(url.searchParams.get('paymentMethodTypeLocked'), input.paymentMethodType);
   assert.equal(url.searchParams.get('sourceAmountLocked'), '100');
   assert.equal(url.searchParams.get('countryCodeLocked'), 'CO');
   assert.equal(url.searchParams.get('walletAddressLocked'), input.address);
+  const stale = new URL(buildReownProductionOnrampUrl({ ...input,
+    providerUrl: `${input.providerUrl}&serviceProvider=TOPPER&serviceProviders=TOPPER,SWAPPED` }));
+  assert.equal(stale.searchParams.has('serviceProvider'), false);
+  assert.equal(stale.searchParams.has('serviceProviders'), false);
 });
 test('Reown production cannot point at sandbox, another origin or a foreign merchant', () => {
   for (const providerUrl of ['https://sb.meldcrypto.com/?publicKey=sandbox', 'https://evil.test/?publicKey=bad',

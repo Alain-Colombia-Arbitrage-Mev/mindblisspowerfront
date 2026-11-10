@@ -70,7 +70,6 @@ test("personal and administrative wallets remain visibly separate without loadin
   assert.doesNotMatch(funding, /reown\.startAdministrativeOnramp/);
   assert.match(administrative, /readAdministrativeWallet/);
   assert.match(administrative, /ensureAdministrativeWallet/);
-  assert.match(personal, /funding\.personalProviderNote/);
   assert.doesNotMatch(funding, /ReownProvider|FundingForm|useState|useEffect/);
   assert.doesNotMatch(personal, /Administrative|startAdministrative|SandboxFunding/);
   assert.doesNotMatch(administrative, /Reown|PersonalFunding/);

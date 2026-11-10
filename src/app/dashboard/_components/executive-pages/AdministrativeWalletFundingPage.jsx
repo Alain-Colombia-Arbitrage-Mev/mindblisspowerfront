@@ -7,6 +7,7 @@ import { ensureAdministrativeWallet, readAdministrativeWallet } from "@/lib/admi
 import { startAdministrativeMeldOnramp } from "@/lib/administrative-onramp-client.mjs";
 import { AdministrativeSandboxFundingForm } from "./WalletFundingForm";
 import WalletFundingHistory from "./WalletFundingHistory";
+import WalletFundingStatus from "./WalletFundingStatus";
 import { administrativeFundingError, ProviderNote, WalletActionError, WalletAddress, WalletFundingScreen } from "./WalletFundingUI";
 import styles from "./wallet-funding.module.css";
 
@@ -19,6 +20,8 @@ export default function AdministrativeWalletFundingPage({ environment = "product
   const [copyError, setCopyError] = useState("");
   const [busy, setBusy] = useState(false);
   const [historyRevision, setHistoryRevision] = useState(0);
+  const [selectedReference, setSelectedReference] = useState("");
+  const [statusFocusKey, setStatusFocusKey] = useState(0);
   const checkoutRequest = useRef(null);
   const assigned = wallet.status === "assigned";
   const sandbox = environment === "sandbox";
@@ -28,7 +31,10 @@ export default function AdministrativeWalletFundingPage({ environment = "product
     if (!sandbox || checkoutRequest.current || !assigned) return;
     const controller = new AbortController(); checkoutRequest.current = controller;
     setBusy(true); setProviderError("");
-    try { await startAdministrativeMeldOnramp({ address: wallet.address, ...input }, { signal: controller.signal }); }
+    try {
+      const session = await startAdministrativeMeldOnramp({ address: wallet.address, ...input }, { signal: controller.signal });
+      if (!controller.signal.aborted) { setSelectedReference(session.checkoutReference); setStatusFocusKey(0); }
+    }
     catch (error) { if (!controller.signal.aborted) setProviderError(administrativeFundingError(error, t)); throw error; }
     finally {
       if (checkoutRequest.current === controller) checkoutRequest.current = null;
@@ -36,16 +42,16 @@ export default function AdministrativeWalletFundingPage({ environment = "product
     }
   }
 
+  function selectStatus(reference) { setSelectedReference(reference); setStatusFocusKey(value => value + 1); }
+
   return <WalletFundingScreen title={t("walletPage.administrativeTitle")} subtitle={t("walletPage.administrativeCopy")}
-    provider={sandbox ? t("funding.administrativeEnvironment") : "MELD"}>
+    provider="MELD">
     <div className={styles.sandboxNotice} role="status"><Building2 size={20} aria-hidden="true" /><div>
-      <strong>{t(sandbox ? "walletPage.administrativeSandboxTitle" : "funding.sandboxConfiguration")}</strong>
-      <p>{t("walletPage.administrativeSandboxCopy")}</p></div></div>
+      <strong>{t(sandbox ? "funding.sandbox" : "funding.sandboxConfiguration")}</strong>
+      {sandbox ? <p>{t("funding.sandboxNoticeShort")}</p> : null}</div></div>
     <div className={styles.flowLayout} id="administrative-wallet">
-      <section className={`executive-panel ${styles.formPanel}`} aria-labelledby="administrative-funding-title">
-        <div className={styles.sectionHeading}><span className="mb-wallet-funding-icon"><Building2 size={20} aria-hidden="true" /></span>
-          <div><h2 id="administrative-funding-title">{t("walletPage.addFundsAction")}</h2><p>{t("funding.sandboxFormCopy")}</p></div></div>
-        {sandbox ? <AdministrativeSandboxFundingForm disabled={!assigned} busy={busy} onContinue={openProvider} onSelectionChange={() => setProviderError("")} /> : null}
+      <section className={`executive-panel ${styles.formPanel}`} aria-label={t("walletPage.addFundsAction")}>
+        {sandbox ? <AdministrativeSandboxFundingForm disabled={!assigned} busy={busy} onContinue={openProvider} onSelectionChange={() => setProviderError("")} destinationAddress={assigned ? wallet.address : ""} /> : null}
         <WalletActionError message={providerError} />
       </section>
       <aside className={styles.details} aria-label={t("funding.destinationDetails")}>
@@ -59,7 +65,8 @@ export default function AdministrativeWalletFundingPage({ environment = "product
         </section>
       </aside>
     </div>
-    {sandbox ? <section className="executive-panel"><WalletFundingHistory walletKind="administrative" refreshKey={historyRevision} /></section> : null}
+    {sandbox && selectedReference ? <WalletFundingStatus walletKind="administrative" checkoutReference={selectedReference} focusKey={statusFocusKey} /> : null}
+    {sandbox ? <section className="executive-panel"><WalletFundingHistory walletKind="administrative" refreshKey={historyRevision} onSelectRequest={selectStatus} /></section> : null}
   </WalletFundingScreen>;
 }
 

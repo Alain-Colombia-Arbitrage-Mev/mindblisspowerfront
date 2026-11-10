@@ -1,14 +1,16 @@
 "use client";
 
-import { CheckCircle2, Loader2, RefreshCw, ShieldCheck, Wallet } from "lucide-react";
+import { CheckCircle2, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useState } from "react";
 import { useReownWallet } from "@/components/reown/ReownContext";
 import { useI18n } from "@/i18n/LanguageProvider";
 import { personalFundingFailure } from "@/lib/personal-funding-errors.mjs";
+import { FUNDING_UUID } from "@/lib/wallet-funding-contract.mjs";
 import { PersonalFundingForm } from "./WalletFundingForm";
 import WalletFundingHistory from "./WalletFundingHistory";
-import { ProviderNote, WalletActionError, WalletAddress, WalletFundingScreen, walletFailureDiagnostic } from "./WalletFundingUI";
+import WalletFundingStatus from "./WalletFundingStatus";
+import { WalletActionError, WalletAddress, WalletFundingScreen, walletFailureDiagnostic } from "./WalletFundingUI";
 import styles from "./wallet-funding.module.css";
 
 const ReownProvider = dynamic(() => import("@/components/reown/ReownProvider"), {
@@ -36,6 +38,8 @@ export function PersonalWalletFunding() {
   const [actionDiagnostic, setActionDiagnostic] = useState("");
   const [copyError, setCopyError] = useState("");
   const [actionBusy, setActionBusy] = useState(false);
+  const [selectedReference, setSelectedReference] = useState("");
+  const [statusFocusKey, setStatusFocusKey] = useState(0);
   const state = personalWalletState(reown);
   const verified = state === "verified";
   const address = reown.linkedAddress || reown.address || "";
@@ -57,18 +61,21 @@ export function PersonalWalletFunding() {
 
   async function openProvider(input) {
     setActionError(""); setActionDiagnostic("");
-    return reown.startOnramp({ walletAddress: reown.linkedAddress, ...input });
+    const result = await reown.startOnramp({ walletAddress: reown.linkedAddress, ...input });
+    if (result && typeof result === "object" && "opened" in result && result.opened === true && "checkoutReference" in result
+      && typeof result.checkoutReference === "string" && FUNDING_UUID.test(result.checkoutReference)) { setSelectedReference(result.checkoutReference); setStatusFocusKey(0); }
+    return result;
   }
+
+  function selectStatus(reference) { setSelectedReference(reference); setStatusFocusKey(value => value + 1); }
 
   const statusLabel = { unavailable: "recharge.providerConfiguration", checking: "walletPage.checking", error: "walletPage.checkFailed",
     connected: "walletPage.connectedPending", verifying: "funding.verifyingWallet", verified: "funding.walletVerified", disconnected: "funding.connectWallet" }[state];
 
   return <WalletFundingScreen title={t("walletPage.personalTitle")} subtitle={t("walletPage.personalCopy")} provider={t("funding.personalEnvironment")}>
     <div className={`${styles.flowLayout}${!verified ? ` ${styles.setupRequired}` : ""}`} id="personal-wallet">
-      <section className={`executive-panel ${styles.formPanel}`} aria-labelledby="personal-funding-title">
-        <div className={styles.sectionHeading}><span className="mb-wallet-funding-icon"><Wallet size={20} aria-hidden="true" /></span>
-          <div><h2 id="personal-funding-title">{t("walletPage.addFundsAction")}</h2><p>{t("funding.personalFormCopy")}</p></div></div>
-        <PersonalFundingForm disabled={!verified} busy={busy} onContinue={openProvider} />
+      <section className={`executive-panel ${styles.formPanel}`} aria-label={t("walletPage.addFundsAction")}>
+        <PersonalFundingForm disabled={!verified} busy={busy} onContinue={openProvider} destinationAddress={verified ? reown.linkedAddress : ""} />
         {!verified ? <p className={styles.hint}>{t("funding.verifyBeforeFunding")}</p> : null}
         <WalletActionError diagnostic={actionDiagnostic} message={actionError || (reown.onrampStatus === "error" ? personalOnrampError(reown.onrampError, t) : reown.linkError ? personalOnrampError(reown.linkError, t) : "")} />
       </section>
@@ -85,11 +92,11 @@ export function PersonalWalletFunding() {
             {t(state === "error" ? "walletPage.retryCheck" : state === "connected" ? "funding.verifyWallet" : "funding.connectWallet")}
           </button> : null}
           <WalletActionError message={copyError} />
-          <ProviderNote>{t("funding.personalProviderNote")}</ProviderNote>
         </section>
       </aside>
     </div>
-    <section className="executive-panel"><WalletFundingHistory walletKind="personal" refreshKey={reown.fundingRevision} /></section>
+    {selectedReference ? <WalletFundingStatus walletKind="personal" checkoutReference={selectedReference} focusKey={statusFocusKey} /> : null}
+    <section className="executive-panel"><WalletFundingHistory walletKind="personal" refreshKey={reown.fundingRevision} onSelectRequest={selectStatus} /></section>
   </WalletFundingScreen>;
 }
 
