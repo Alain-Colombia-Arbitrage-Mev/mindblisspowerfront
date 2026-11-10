@@ -44,7 +44,7 @@ function view(file) {
   return registrationViewHarness(`../../components/panel/overview/${file}`, {
     'next/link': { default: link }, 'lucide-react': icons,
     '@radix-ui/react-dialog': radix, '@/i18n/LanguageProvider': i18n,
-    '@/components/reown/ReownProvider': reown,
+    '@/components/reown/ReownContext': reown,
   });
 }
 
@@ -108,7 +108,7 @@ test('a confirmed empty wallet opens the welcome popup once per tab and keeps ma
   const Earnings = props => React.createElement('wallet-card', props);
   const Popup = props => React.createElement('recharge-popup', props);
   const harness = registrationViewHarness('../../components/panel/overview/OverviewDashboard.jsx', {
-    'next/link': { default: link }, 'lucide-react': icons,
+    'next/link': { default: link }, 'next/dynamic': { default: () => Popup }, 'lucide-react': icons,
     '@/app/_components/ThemeToggle': { default: () => null },
     '@/lib/member-read.mjs': {
       validMemberSummary: () => true, validMemberTree: () => true,
@@ -118,7 +118,7 @@ test('a confirmed empty wallet opens the welcome popup once per tab and keeps ma
       },
     },
     '@/lib/payment-display.mjs': { formatPaymentMoney: value => `$${value}` },
-    './EarningsCard': { default: Earnings }, './FirstRechargeDialog': { default: Popup },
+    './EarningsCard': { default: Earnings },
     './OverviewDiscoveryCard': { default: () => null }, './PositionSnapshotCard': { default: () => null },
     '@/i18n/LanguageProvider': i18n,
     '@/i18n/LanguageSwitcher': { default: () => null },
@@ -132,7 +132,7 @@ test('a confirmed empty wallet opens the welcome popup once per tab and keeps ma
   assert.equal(values.get('mindbliss:first-recharge-popup:v1'), 'seen');
   popup.props.onOpenChange(false);
   tree = harness.render();
-  assert.equal(find(tree, node => node?.type === Popup).props.open, false);
+  assert.equal(find(tree, node => node?.type === Popup), undefined);
   find(tree, node => node?.type === Earnings).props.onRecharge('methods');
   tree = harness.render();
   popup = find(tree, node => node?.type === Popup);

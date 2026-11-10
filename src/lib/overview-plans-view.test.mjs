@@ -120,17 +120,18 @@ test("the canonical summary route renders the Pen overview and the legacy home r
 test("actual summary follows the Pen bento and omits the retired long-form sections", () => {
   const react = { ...React, useState: initial => [initial, () => {}], useRef: () => ({ current: null }), useCallback: callback => callback, useEffect: () => {} };
   const mocks = { react,
+    "next/dynamic": { default: () => marker("ReownRechargeDialog") },
     "@/app/_components/ThemeToggle": { default: marker("ThemeToggle") },
     "@/lib/member-read.mjs": { readMemberParts: () => { throw new Error("Unexpected request"); }, validMemberTree: () => true, validMemberSummary: () => true },
     "@/lib/payment-display.mjs": { formatPaymentMoney: () => "not-called" },
   };
-  for (const name of ["EarningsCard", "FirstRechargeDialog", "OverviewDiscoveryCard", "PositionSnapshotCard"]) mocks[`./${name}`] = { default: marker(name) };
+  for (const name of ["EarningsCard", "OverviewDiscoveryCard", "PositionSnapshotCard"]) mocks[`./${name}`] = { default: marker(name) };
   const { default: Dashboard } = moduleAt("../components/panel/overview/OverviewDashboard.jsx", mocks);
   const html = render(React.createElement(Dashboard));
   assert.match(html, /Tu espacio Mindbliss/);
   assert.match(html, /Tu wallet, tus compras de cripto y tus membresías/);
   assert.match(html, /OverviewDiscoveryCard/);
-  assert.match(html, /FirstRechargeDialog/);
+  assert.doesNotMatch(html, /ReownRechargeDialog/);
   assert.match(html, /Mis membresías/);
   assert.match(html, /Accesos rápidos/);
   assert.match(html, /Abre Soporte para elegir un canal/);

@@ -22,6 +22,9 @@ test("Reown creates EVM wallets, links one signed address and never replaces mem
   assert.match(provider, /\/api\/member\/wallet-link\/confirm/);
   assert.match(provider, /if \(!isLinked\) throw new Error\("wallet_not_linked"\)/);
   assert.doesNotMatch(provider, /sendTransaction|privateKey|mnemonic/);
+  assert.match(provider, /appKitThemeRef\.current\.setThemeMode/);
+  assert.match(provider, /appKitThemeRef\.current\.setThemeVariables/);
+  assert.doesNotMatch(provider, /\[setThemeMode, setThemeVariables\]/);
   assert.match(dashboardGate, /rawIdToken\(\{ strictAccess: true \}\)/);
   assert.match(dashboardGate, /verifyIdTokenForSession\(token\)/);
 });
@@ -31,6 +34,16 @@ test("all Reown packages use the same pinned release", () => {
   assert.equal(pkg.dependencies["@reown/appkit"], "1.8.24");
   assert.equal(pkg.dependencies["@reown/appkit-adapter-ethers"], "1.8.24");
   assert.equal(pkg.dependencies["@reown/appkit-siwx"], undefined);
+});
+
+test("AppKit is scoped to wallet surfaces and does not slow every dashboard route", () => {
+  const shell = read("../app/dashboard/_components/DashboardShell.jsx");
+  const finance = read("../app/dashboard/_components/executive-pages/FinanceDashboardPage.jsx");
+  const overview = read("../components/panel/overview/OverviewDashboard.jsx");
+  assert.doesNotMatch(shell, /ReownProvider/);
+  assert.match(finance, /dynamic\(\(\) => import\("@\/components\/reown\/ReownProvider"\)/);
+  assert.match(overview, /dynamic\(\(\) => import\("\.\/ReownRechargeDialog"\)/);
+  assert.match(overview, /rechargeDialog\.open \? <ReownRechargeDialog/);
 });
 
 test("the public Reown identifier is sourced from environment configuration and never hardcoded in application code", () => {

@@ -1,6 +1,7 @@
 "use client";
 
 import { CreditCard, Info, Loader2, PlusCircle, ReceiptText, Wallet } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useState } from "react";
 
 import { useMemberSummary } from "@/hooks/useMemberSummary";
@@ -11,7 +12,12 @@ import NOWPaymentsBalances from "@/components/panel/NOWPaymentsBalances";
 import StripeSalesHistory from "../../packages/StripeSalesHistory";
 import { MetricCard, PageHeader, StatusPill } from "./executive-ui";
 import WalletGettingStarted from "./WalletGettingStarted";
-import { useReownWallet } from "@/components/reown/ReownProvider";
+import { useReownWallet } from "@/components/reown/ReownContext";
+
+const ReownProvider = dynamic(() => import("@/components/reown/ReownProvider"), {
+  ssr: false,
+  loading: () => <WalletProviderLoading />,
+});
 
 const PAYMENT_STATUS = {
   activated: { label: "financePage.statusActivated", tone: "success" },
@@ -24,6 +30,10 @@ const PAYMENT_STATUS = {
 };
 
 export function FinanceDashboardPage() {
+  return <ReownProvider><FinanceDashboardContent /></ReownProvider>;
+}
+
+function FinanceDashboardContent() {
   const { t } = useI18n();
   const { state, reload } = useMemberSummary();
 
@@ -35,6 +45,21 @@ export function FinanceDashboardPage() {
 
         <div id="wallet-finance" className="mb-wallet-finance">
           {state.loading ? <FinanceLoading /> : state.error ? <FinanceError onRetry={reload} /> : <FinanceContent data={state.data || {}} />}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function WalletProviderLoading() {
+  const { t } = useI18n();
+  return (
+    <section className="executive-page">
+      <div className="executive-container">
+        <PageHeader eyebrow={t("walletPage.eyebrow")} title={t("walletPage.title")} subtitle={t("walletPage.subtitle")} />
+        <div className="executive-panel flex items-center justify-center gap-2 py-16 text-sm" style={{ color: "var(--vp-muted)" }} role="status">
+          <Loader2 size={16} className="animate-spin" aria-hidden="true" />
+          {t("walletPage.loading")}
         </div>
       </div>
     </section>

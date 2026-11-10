@@ -3,7 +3,7 @@
 import { ArrowRight, CreditCard, KeyRound, MapPin, ShieldCheck, WalletCards } from "lucide-react";
 import { useState } from "react";
 import { useI18n } from "@/i18n/LanguageProvider";
-import { useReownWallet } from "@/components/reown/ReownProvider";
+import { useReownWallet } from "@/components/reown/ReownContext";
 
 const steps = [
   { number: "01", title: "walletIntro.stepCreate", copy: "walletIntro.stepCreateCopy", icon: KeyRound },

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
@@ -18,7 +19,6 @@ import { readMemberParts, validMemberSummary, validMemberTree } from "@/lib/memb
 import { formatPaymentMoney as usd } from "@/lib/payment-display.mjs";
 
 import EarningsCard from "./EarningsCard";
-import FirstRechargeDialog from "./FirstRechargeDialog";
 import OverviewDiscoveryCard from "./OverviewDiscoveryCard";
 import PositionSnapshotCard from "./PositionSnapshotCard";
 import { useI18n } from "@/i18n/LanguageProvider";
@@ -29,6 +29,7 @@ const QUICK_ACTIONS = [
 ];
 
 const RECHARGE_SEEN_KEY = "mindbliss:first-recharge-popup:v1";
+const ReownRechargeDialog = dynamic(() => import("./ReownRechargeDialog"), { ssr: false });
 
 export default function OverviewDashboard() {
   const { t } = useI18n();
@@ -149,7 +150,7 @@ export default function OverviewDashboard() {
       </section> : null}
 
       <p className="mb-overview-footnote">{t("overview.question")}</p>
-      <FirstRechargeDialog open={rechargeDialog.open} initialStep={rechargeDialog.step} onOpenChange={open => setRechargeDialog(current => ({ ...current, open }))} />
+      {rechargeDialog.open ? <ReownRechargeDialog open initialStep={rechargeDialog.step} onOpenChange={open => setRechargeDialog(current => ({ ...current, open }))} /> : null}
     </div>
   );
 }

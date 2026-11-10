@@ -6,7 +6,7 @@ import { ArrowDownLeft, ArrowRight, CreditCard, Plus, Wallet, X } from "lucide-r
 import { useEffect, useState } from "react";
 
 import { useI18n } from "@/i18n/LanguageProvider";
-import { useReownWallet } from "@/components/reown/ReownProvider";
+import { useReownWallet } from "@/components/reown/ReownContext";
 
 const VALID_STEPS = new Set(["welcome", "methods", "reminder"]);
 

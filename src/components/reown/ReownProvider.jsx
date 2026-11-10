@@ -1,32 +1,15 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createAppKit, useAppKit, useAppKitAccount, useAppKitProvider, useAppKitTheme } from "@reown/appkit/react";
 import { EthersAdapter } from "@reown/appkit-adapter-ethers";
 import { mainnet } from "@reown/appkit/networks";
 import { BrowserProvider, getAddress } from "ethers";
+import { ReownContext, useReownWallet } from "./ReownContext";
 
 const projectId = process.env.NEXT_PUBLIC_REOWN_PROJECT_ID?.trim() || "";
 const configured = /^[a-f0-9]{32}$/i.test(projectId);
 
-/**
- * @typedef {Object} ReownContextValue
- * @property {boolean} configured
- * @property {boolean} isConnected
- * @property {string} address
- * @property {string} status
- * @property {string} linkedAddress
- * @property {string} linkStatus
- * @property {boolean} isLinked
- * @property {boolean} isLinking
- * @property {() => Promise<unknown>} openConnect
- * @property {() => Promise<unknown>} openOnramp
- * @property {() => Promise<unknown>} startOnramp
- * @property {() => Promise<unknown>} linkWallet
- * @property {() => Promise<unknown>} openAccount
- */
-
-/** @type {ReownContextValue} */
 const unavailable = Object.freeze({
   configured: false,
   isConnected: false,
@@ -42,8 +25,6 @@ const unavailable = Object.freeze({
   linkWallet: async () => { throw new Error("reown_unavailable"); },
   openAccount: async () => { throw new Error("reown_unavailable"); },
 });
-
-const ReownContext = createContext(unavailable);
 
 if (configured) {
   createAppKit({
@@ -93,7 +74,9 @@ function ConfiguredReownProvider({ children }) {
   const { open } = useAppKit();
   const account = useAppKitAccount({ namespace: "eip155" });
   const { walletProvider } = useAppKitProvider("eip155");
-  const { setThemeMode, setThemeVariables } = useAppKitTheme();
+  const appKitTheme = useAppKitTheme();
+  const appKitThemeRef = useRef(appKitTheme);
+  appKitThemeRef.current = appKitTheme;
   const [binding, setBinding] = useState({ status: "loading", address: "" });
   const [isLinking, setIsLinking] = useState(false);
   const linking = useRef(null);
@@ -102,15 +85,15 @@ function ConfiguredReownProvider({ children }) {
     const root = document.documentElement;
     const syncTheme = () => {
       const mode = root.dataset.theme === "light" ? "light" : "dark";
-      setThemeMode(mode);
-      setThemeVariables(themeVariables(mode));
+      appKitThemeRef.current.setThemeMode(mode);
+      appKitThemeRef.current.setThemeVariables(themeVariables(mode));
     };
 
     syncTheme();
     const observer = new MutationObserver(syncTheme);
     observer.observe(root, { attributes: true, attributeFilter: ["data-theme"] });
     return () => observer.disconnect();
-  }, [setThemeMode, setThemeVariables]);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -222,9 +205,7 @@ function themeVariables(mode) {
   };
 }
 
-export function useReownWallet() {
-  return useContext(ReownContext);
-}
+export { useReownWallet };
 
 function isAddress(value) {
   return typeof value === "string" && /^0x[a-f0-9]{40}$/i.test(value);
