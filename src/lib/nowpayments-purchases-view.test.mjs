@@ -12,6 +12,7 @@ import * as checkoutPolicy from './checkout-policy.mjs';
 import * as purchaseCheck from './nowpayments-purchase-check.mjs';
 import * as checkoutIntent from './checkout-intent.mjs';
 import * as deadline from './browser-request-deadline.mjs';
+import { translateMessage } from '../i18n/translate.mjs';
 
 const require = createRequire(import.meta.url), orderId = 'a02f5a55-5fa3-4239-845b-ac6b699110ee', secondId = 'a02f5a55-5fa3-4239-845b-ac6b699110ef';
 const icons = new Proxy({}, { get: () => () => React.createElement('svg', { 'aria-hidden': 'true' }) });
@@ -41,6 +42,7 @@ function loadComponent(relative, mocks) {
   const module = { exports: {} };
   new Function('require', 'module', 'exports', code)(id => Object.hasOwn(mocks, id) ? mocks[id] : id === 'lucide-react' ? icons
     : id.endsWith('.module.css') ? cssModule : id === '@/lib/browser-request-deadline.mjs' ? deadline
+      : id === '@/i18n/LanguageProvider' ? { useI18n: () => ({ locale: 'es', dir: 'ltr', t: (key, values) => translateMessage('es', key, values) }) }
       : id === '@/lib/utils' ? { cn: (...values) => values.filter(Boolean).join(' ') } : require(id), module, module.exports);
   return module.exports.default;
 }

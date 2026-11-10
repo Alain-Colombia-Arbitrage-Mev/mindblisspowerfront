@@ -12,8 +12,10 @@ export function normalizeReferralCode(value) {
 }
 
 export function normalizePlacementSide(value) {
-  const side = String(value || "").trim().toUpperCase();
-  return side === "L" || side === "R" ? side : "";
+  // Placement is never a browser decision. The backend chooses the available
+  // weak-leg slot atomically when the membership is activated.
+  void value;
+  return "";
 }
 
 export function normalizeReferralEmail(value) {
@@ -27,10 +29,9 @@ export function captureReferralFromUrl(search, storage = browserStorage(), now =
   if (!code || !storage) return null;
 
   const email = normalizeReferralEmail(params.get("email"));
-  const side = normalizePlacementSide(params.get("side"));
   const attribution = {
     code,
-    side,
+    side: "",
     email: email || null,
     source: "url",
     createdAt: new Date(now).toISOString(),
@@ -55,7 +56,7 @@ export function bindReferralToEmail(email, storage = browserStorage(), now = Dat
 
   const attribution = {
     code,
-    side: normalizePlacementSide(source?.side),
+    side: "",
     email: normalizedEmail,
     source: source?.source || "registration",
     createdAt: source?.createdAt || new Date(now).toISOString(),
@@ -72,13 +73,10 @@ export function bindReferralCodeToEmail(email, code, storage = browserStorage(),
   const normalizedCode = normalizeReferralCode(code);
   if (!normalizedEmail || !normalizedCode || !storage) return null;
 
-  const current = validAttribution(readJson(storage, ATTRIBUTION_KEY), now);
-  const inheritedSide = current?.code === normalizedCode ? normalizePlacementSide(current.side) : "";
+  void preferredSide;
   const attribution = {
     code: normalizedCode,
-    // An explicit new registration hint wins even when the sponsor code stays
-    // the same but the shared binary branch differs from an older visit.
-    side: preferredSide === undefined ? inheritedSide : normalizePlacementSide(preferredSide),
+    side: "",
     email: normalizedEmail,
     source: String(source || "registration").slice(0, 48),
     createdAt: new Date(now).toISOString(),
@@ -97,15 +95,15 @@ export function referralForCheckout(email, storage = browserStorage(), now = Dat
   }
 
   const binding = readBindings(storage, now).find(item => item.email === normalizedEmail);
-  if (binding) return withPlacementSide(binding.code, normalizedEmail, binding.side);
+  if (binding) return { code: binding.code, email: normalizedEmail };
 
   const attribution = validAttribution(readJson(storage, ATTRIBUTION_KEY), now);
   if (attribution?.code && normalizeReferralEmail(attribution.email) === normalizedEmail) {
-    return withPlacementSide(normalizeReferralCode(attribution.code), normalizedEmail, attribution.side);
+    return { code: normalizeReferralCode(attribution.code), email: normalizedEmail };
   }
 
   const draft = findDraftReferral(storage, normalizedEmail, now);
-  if (draft?.code) return withPlacementSide(draft.code, normalizedEmail, draft.side);
+  if (draft?.code) return { code: draft.code, email: normalizedEmail };
 
   // Looking up A must not erase an independent hint that belongs to B.
   return { code: "", email: "" };
@@ -121,7 +119,7 @@ function findDraftReferral(storage, email, now) {
     if (!Number.isFinite(createdAt) || createdAt > now || now - createdAt > ATTRIBUTION_TTL_MS) continue;
     return {
       code,
-      side: normalizePlacementSide(draft.preferredSide || draft.side),
+      side: "",
       source: "registration_draft",
       createdAt: draft.createdAt,
     };
@@ -134,14 +132,9 @@ function validAttribution(value, now) {
   if (!code) return null;
   const createdAt = Date.parse(value.createdAt || "");
   if (!Number.isFinite(createdAt) || createdAt > now || now - createdAt > ATTRIBUTION_TTL_MS) return null;
-  return { code, side: normalizePlacementSide(value?.side), email: normalizeReferralEmail(value?.email) || null,
+  return { code, side: "", email: normalizeReferralEmail(value?.email) || null,
     source: typeof value?.source === 'string' ? value.source.slice(0, 48) : 'registration',
     createdAt: new Date(createdAt).toISOString() };
-}
-
-function withPlacementSide(code, email, side) {
-  const normalizedSide = normalizePlacementSide(side);
-  return normalizedSide ? { code, email, side: normalizedSide } : { code, email };
 }
 
 function readBindings(storage, now) {

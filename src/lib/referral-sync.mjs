@@ -63,7 +63,7 @@ function clearVisit(visit, browser) {
   // disagrees must block checkout, not silently accept that older choice.
   store(browser, { ...visit, confirmed: true });
 }
-const matches = (result, visit) => result.positioned || (result.ref === visit.ref && result.preferred_side === visit.preferred_side);
+const matches = (result, visit) => result.positioned || result.ref === visit.ref;
 
 async function postVisit(visit, { browser = browserDefault(), fetchImpl = fetch } = {}) {
   const state = syncState(browser), { writes, owners } = state;
@@ -186,5 +186,5 @@ export async function verifiedReferralForCheckout(email, options = {}) {
   if (!result.positioned && !result.ref) {
     if (browserReferralChoice(email, options)) return { ok: false, error: 'unconfirmed' };
   }
-  return { ok: true, code: result.ref, email: result.ref ? normalizeReferralEmail(email) : '', side: result.preferred_side };
+  return { ok: true, code: result.ref, email: result.ref ? normalizeReferralEmail(email) : '' };
 }

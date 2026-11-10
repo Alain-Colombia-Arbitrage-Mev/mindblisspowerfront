@@ -32,7 +32,7 @@ const ALL_SECTIONS = [
   {
     section: 'FINANZAS',
     items: [
-      { icon: Wallet, label: 'Retiros', to: '/dashboard/withdrawals', module: 'withdrawals' },
+      { icon: Wallet, label: 'Billetera', to: '/dashboard/payments', module: 'withdrawals' },
     ]
   },
   {

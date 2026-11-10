@@ -20,7 +20,7 @@ activity: {
     ],
     cards: [
       { title: "Registro claro", text: "Cada accion debe dejar evidencia, fecha y modulo de origen.", icon: FileText, status: "Activo" },
-      { title: "Actividad sensible", text: "Retiros, KYC y seguridad requieren trazabilidad adicional.", icon: Shield, status: "Controlado" },
+      { title: "Actividad sensible", text: "Pagos, acceso y seguridad requieren trazabilidad adicional.", icon: Shield, status: "Controlado" },
       { title: "Filtros", text: "La vista queda preparada para filtrar por modulo, estado y fecha.", icon: Filter, status: "Listo" },
     ],
     tableTitle: "Eventos",

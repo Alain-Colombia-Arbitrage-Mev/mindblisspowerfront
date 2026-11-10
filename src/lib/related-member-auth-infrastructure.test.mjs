@@ -7,7 +7,6 @@ import { AuthServiceUnavailable } from './better-auth-bridge.mjs';
 const routes = [
   { name: 'ranks', path: 'member/ranks', method: 'GET' },
   { name: 'BMP status', path: 'payments/bmp-status', method: 'GET', service: 'withdrawals', upstreamPath: '/api/payments/bmp-status' },
-  { name: 'withdrawal', path: 'payments/withdraw', method: 'POST', service: 'withdrawals', upstreamPath: '/api/payments/withdraw', body: { amount: '100.00', bank_info: 'synthetic bank' } },
   { name: 'existing KYC documents route', path: 'member/kyc/documents', method: 'GET', service: 'payments', upstreamPath: '/api/member/kyc/documents' },
   { name: 'existing KYC confirmation route', path: 'member/kyc/confirm', method: 'POST', service: 'payments', upstreamPath: '/api/member/kyc/confirm', body: { document_id: 42 } },
 ];

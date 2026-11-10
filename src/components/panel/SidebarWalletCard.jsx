@@ -6,7 +6,7 @@ import { useI18n } from "@/i18n/LanguageProvider";
 export default function SidebarWalletCard({ onNavigate }) {
   const { t } = useI18n();
   return (
-    <Link href="/dashboard/withdrawals" onClick={onNavigate} className="vp-sidebar-wallet">
+    <Link href="/dashboard/payments" onClick={onNavigate} className="vp-sidebar-wallet">
       <span className="vp-sidebar-wallet-label">{t("nav.myWallet")}</span>
       <strong>— USDC</strong>
       <span className="vp-sidebar-wallet-action">

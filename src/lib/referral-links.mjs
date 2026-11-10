@@ -24,22 +24,19 @@ export function referralBrowserOrigin() {
   } catch { return REFERRAL_PUBLIC_ORIGIN; }
 }
 
-export function buildReferralLinks(value, origin = referralBrowserOrigin()) {
+export function buildReferralLink(value, origin = referralBrowserOrigin()) {
   const code = referralLinkCode(value);
-  if (!code) return { left: '', right: '' };
+  if (!code) return '';
   const base = referralPublicOrigin({ AUTH_PUBLIC_ORIGIN: origin });
-  const link = side => {
-    const url = new URL('/register', base);
-    url.searchParams.set('ref', code);
-    url.searchParams.set('side', side);
-    return url.toString();
-  };
-  return { left: link('L'), right: link('R') };
+  const url = new URL('/register', base);
+  url.searchParams.set('ref', code);
+  return url.toString();
 }
 
-// Old API links may have an obsolete host. The code is the opaque hint; never
-// copy an arbitrary returned URL, credential, redirect, email or extra query.
-export function referralLinksFrom(data, origin = referralBrowserOrigin()) {
-  if (data?.positioned !== true) return { left: '', right: '' };
-  return buildReferralLinks(data.code, origin);
+// Old API links may have an obsolete host or a client-selected side. The code
+// is the only opaque hint we retain: binary placement is selected atomically by
+// the backend when the paid membership is activated.
+export function referralLinkFrom(data, origin = referralBrowserOrigin()) {
+  if (data?.positioned !== true) return '';
+  return buildReferralLink(data.code, origin);
 }

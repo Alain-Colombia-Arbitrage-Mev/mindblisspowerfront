@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, Copy, MapPin, Network, ShieldCheck, Trophy } from "lucide-react";
-import { referralLinksFrom } from '@/lib/referral-links.mjs';
+import { referralLinkFrom } from '@/lib/referral-links.mjs';
 import { createClipboardFeedback } from '@/lib/member-view-effects.mjs';
 
 function money(value) {
@@ -86,10 +86,10 @@ export default function PositionCard({
 }) {
   const [copyFeedback, setCopyFeedback] = useState({ pending: '', copied: '', error: '' });
   const clipboard = useRef(null);
-  const copied = copyFeedback.copied === 'left';
+  const copied = copyFeedback.copied === 'link';
   const hasRankProgress = Boolean(rankProgress);
   const nextRank = rankProgress?.nextRank;
-  const referralLink = referralLinksFrom(referral).left;
+  const referralLink = referralLinkFrom(referral);
   const referralCode = referral?.code || "";
 
   useEffect(() => {
@@ -100,7 +100,7 @@ export default function PositionCard({
 
   const copyReferral = async () => {
     if (!referralLink) return;
-    await clipboard.current?.copy(referralLink, 'left');
+    await clipboard.current?.copy(referralLink, 'link');
   };
 
   return (
@@ -147,7 +147,7 @@ export default function PositionCard({
       <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
         <StatBox label="Disponible" value={money(commissions?.available)} tone="success" />
         <StatBox label="En maduración" value={money(commissions?.maturing)} tone="accent" />
-        <StatBox label="Retirable" value={money(commissions?.withdrawable)} tone="text" />
+        <StatBox label="Saldo de wallet" value={money(commissions?.wallet)} tone="text" />
       </div>
 
       <div
@@ -199,7 +199,7 @@ export default function PositionCard({
           style={{
             background: copied ? "var(--vp-accent)" : "var(--vp-surface-raised)",
             borderColor: copied ? "var(--vp-accent-strong)" : "var(--vp-border)",
-            color: copied ? "#000000" : "var(--vp-text)",
+            color: copied ? "var(--vp-on-accent)" : "var(--vp-text)",
             cursor: referralLink ? "pointer" : "default",
           }}
         >

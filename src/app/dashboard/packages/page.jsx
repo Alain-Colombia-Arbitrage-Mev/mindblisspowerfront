@@ -11,6 +11,7 @@ import MyPaymentsPanel from "./MyPaymentsPanel";
 import PaymentResultModal from "./PaymentResultModal";
 import PaywallGate from "./PaywallGate";
 import { MemberSummaryProvider } from "@/hooks/useMemberSummary";
+import LocalizedText from "@/i18n/LocalizedText";
 
 export const dynamic = "force-dynamic";
 
@@ -48,10 +49,8 @@ export default async function PackagesPage({ searchParams } = {}) {
       <div className="executive-container">
         <div className="executive-page-header">
           <div>
-            <h1 id="memberships-title" tabIndex={-1} className="executive-title">Compara las membresías</h1>
-            <p className="executive-subtitle">
-              Selecciona el plan que mejor encaja contigo y revisa con claridad precio, beneficios y condiciones.
-            </p>
+            <LocalizedText as="h1" id="membershipsPage.title" htmlId="memberships-title" tabIndex={-1} className="executive-title" />
+            <LocalizedText as="p" id="membershipsPage.subtitle" className="executive-subtitle" />
           </div>
           <span className="executive-icon-badge">
             <Package size={20} />
@@ -64,7 +63,7 @@ export default async function PackagesPage({ searchParams } = {}) {
 
         {unavailable || packages.length === 0 ? (
           <div className="executive-panel text-sm font-semibold" style={{ color: "var(--vp-muted)" }}>
-            El catalogo estara disponible al finalizar la sincronizacion de datos.
+            <LocalizedText id="membershipsPage.catalogSyncing" />
           </div>
         ) : (
           <PaywallGate initialShowPlans>
@@ -85,12 +84,12 @@ export default async function PackagesPage({ searchParams } = {}) {
                   {featured && (
                     <span className="executive-status warning mb-4 w-fit">
                       <Sparkles size={11} />
-                      Recomendado
+                      <LocalizedText id="membershipsPage.recommended" />
                     </span>
                   )}
                   <h2 className="executive-card-label">{pkg.name}</h2>
                   <div className="executive-card-value" style={{ color: featured ? "var(--vp-amber)" : "var(--vp-text)" }}>
-                    {quote ? quote.baseUSD : "Precio no disponible"}
+                    {quote ? quote.baseUSD : <LocalizedText id="membershipsPage.priceUnavailable" />}
                   </div>
                   <div className="mt-2 text-xs font-semibold" style={{ color: "var(--vp-muted)" }}>
                     {Number(pkg.pv).toLocaleString("en-US")} PV · {pkg.type}
@@ -99,38 +98,38 @@ export default async function PackagesPage({ searchParams } = {}) {
                   <ul className="mt-5 space-y-3 text-sm leading-6" style={{ color: "var(--vp-text-soft)" }}>
                     <li className="flex items-start gap-2">
                       <ShieldCheck size={15} className="mt-0.5 shrink-0" style={{ color: "var(--vp-accent)" }} />
-                      Las comisiones calculadas quedan pendientes un mes calendario desde su generación, no 30 días.
+                      <LocalizedText id="membershipsPage.commissionTerm" />
                     </li>
                     <li className="flex items-start gap-2">
                       <ShieldCheck size={15} className="mt-0.5 shrink-0" style={{ color: "var(--vp-accent)" }} />
-                      El capital de la membresía y el ROI del CD permanecen bloqueados durante 365 días.
+                      <LocalizedText id="membershipsPage.capitalTerm" />
                     </li>
                     <li className="flex items-start gap-2">
                       <ShieldCheck size={15} className="mt-0.5 shrink-0" style={{ color: "var(--vp-accent)" }} />
-                      El capital vencido queda elegible para solicitud y validación; no se devuelve ni se retira automáticamente.
+                      <LocalizedText id="membershipsPage.maturedCapital" />
                     </li>
                   </ul>
 
                   {quote ? <>
                     <dl className="mt-5 space-y-2 text-sm" aria-label={`Desglose del precio de ${pkg.name}`}>
                       <div className="flex flex-wrap justify-between gap-x-4 gap-y-1" style={{ color: "var(--vp-text-soft)" }}>
-                        <dt>Precio del plan</dt><dd className="font-semibold">{quote.baseUSD}</dd>
+                        <LocalizedText as="dt" id="membershipsPage.planPrice" /><dd className="font-semibold">{quote.baseUSD}</dd>
                       </div>
                       <div className="flex flex-wrap justify-between gap-x-4 gap-y-1" style={{ color: "var(--vp-text-soft)" }}>
-                        <dt>Comisión de procesamiento (1%, incluida)</dt><dd className="font-semibold">{quote.feeUSD}</dd>
+                        <LocalizedText as="dt" id="membershipsPage.processingFee" /><dd className="font-semibold">{quote.feeUSD}</dd>
                       </div>
                       <div className="flex flex-wrap justify-between gap-x-4 gap-y-1" style={{ color: "var(--vp-text-soft)" }}>
-                        <dt>Base para cálculo de comisiones (99%)</dt><dd className="font-semibold">{quote.commissionBaseUSD}</dd>
+                        <LocalizedText as="dt" id="membershipsPage.commissionBase" /><dd className="font-semibold">{quote.commissionBaseUSD}</dd>
                       </div>
                       <div className="flex flex-wrap justify-between gap-x-4 gap-y-1 border-t pt-2 font-semibold" style={{ color: "var(--vp-text)", borderColor: "var(--vp-border)" }}>
-                        <dt>Total a pagar</dt><dd>{quote.totalUSD}</dd>
+                        <LocalizedText as="dt" id="membershipsPage.total" /><dd>{quote.totalUSD}</dd>
                       </div>
                     </dl>
-                    <p className="mt-2 text-xs leading-5" style={{ color: "var(--vp-muted)" }}>La comisión está incluida; no se suma al precio.</p>
-                    <p className="mt-2 text-xs leading-5" style={{ color: "var(--vp-muted)" }}>Sin reembolso anticipado ordinario, sin perjuicio de los derechos aplicables. Una comisión vencida puede seguir retenida por revisión o financiación; su vencimiento no confirma un pago.</p>
+                    <LocalizedText as="p" id="membershipsPage.feeIncluded" className="mt-2 text-xs leading-5" style={{ color: "var(--vp-muted)" }} />
+                    <LocalizedText as="p" id="membershipsPage.refundNotice" className="mt-2 text-xs leading-5" style={{ color: "var(--vp-muted)" }} />
                     <ActivatePackageButton packageId={pkg.id} featured={featured} stripeEnabled={stripeEnabled} nowpaymentsEnabled={nowpaymentsEnabled} />
                   </> : <p role="status" className="mt-5 text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
-                    No se pudo confirmar el precio de este plan. No se puede iniciar un cobro. Intenta nuevamente más tarde.
+                    <LocalizedText id="membershipsPage.priceFailure" />
                   </p>}
                 </article>
               );
@@ -143,15 +142,15 @@ export default async function PackagesPage({ searchParams } = {}) {
           <div className="executive-panel mt-8">
             <h2 className="executive-section-title">
               <Trophy size={18} style={{ color: "var(--vp-accent)" }} />
-              Carrera de rangos
+              <LocalizedText id="membershipsPage.rankPath" />
             </h2>
             <div className="executive-table-wrap">
               <table className="executive-table">
                 <thead>
                   <tr>
-                    <th>Rango</th>
-                    <th>Puntos</th>
-                    <th>Bono</th>
+                    <LocalizedText as="th" id="rankPage.rank" />
+                    <LocalizedText as="th" id="rankPage.points" />
+                    <LocalizedText as="th" id="rankPage.bonus" />
                   </tr>
                 </thead>
                 <tbody>

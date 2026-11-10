@@ -6,6 +6,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import ts from "typescript";
 import { membershipPriceQuote } from "./membership-price-quote.mjs";
+import { translateMessage } from "../i18n/translate.mjs";
 
 const require = createRequire(import.meta.url);
 const icon = () => React.createElement("svg", { "aria-hidden": true });
@@ -17,13 +18,9 @@ function moduleAt(relative, mocks = {}) {
   const module = { exports: {} };
   new Function("require", "module", "exports", code)(id => id === "lucide-react" ? new Proxy({}, { get: () => icon })
     : id === "next/link" ? { default: Link }
-    : id === "@/i18n/LanguageProvider" ? { useI18n: () => ({ t: key => ({
-      "overview.title": "Tu espacio Mindbliss", "overview.subtitle": "Tu wallet, tus compras de cripto y tus membresías.",
-      "overview.myMemberships": "Mis membresías", "overview.pending": "Por consultar", "overview.memberships": "membresías registradas",
-      "overview.reviewMembership": "Revisar mi membresía", "overview.quickAccess": "Accesos rápidos", "overview.payments": "Mis pagos",
-      "overview.completeProfile": "Completar mi perfil", "overview.question": "¿Tienes una consulta? Abre Soporte para elegir un canal de atención.",
-      "common.update": "Actualizar",
-    }[key] || key) }) }
+    : id === "@/i18n/LanguageProvider" ? { useI18n: () => ({ locale: "es", dir: "ltr", t: (key, values) => translateMessage("es", key, values) }) }
+    : id === "@/i18n/LanguageSwitcher" ? { default: marker("LanguageSwitcher") }
+    : id === "@/i18n/LocalizedText" ? { default: ({ as = "span", id: messageId, htmlId, values, ...props }) => React.createElement(as, { id: htmlId, ...props }, translateMessage("es", messageId, values)) }
     : Object.hasOwn(mocks, id) ? mocks[id] : require(id), module, module.exports);
   return module.exports;
 }
@@ -44,7 +41,7 @@ test("overview renders all catalog plans once on the server, keeping exact USD p
   assert.equal((html.match(/<article/g) || []).length, 13);
   for (let index = 0; index < packages.length; index++) {
     assert.ok(html.includes(`href="/dashboard/packages?plan=${index + 1}#plan-${index + 1}"`));
-    assert.ok(html.includes(`aria-label="Comprar plan ${packages[index].name.trim()}"`));
+    assert.ok(html.includes(`<span>Comprar plan</span><span class="sr-only"> ${packages[index].name.trim()}</span>`));
     assert.ok(html.includes(`>${packages[index].name.trim()}</h3>`));
     assert.ok(html.includes(`$${((index + 1) * 100).toLocaleString("en-US")}.01 USD`));
   }
@@ -127,12 +124,13 @@ test("actual summary follows the Pen bento and omits the retired long-form secti
     "@/lib/member-read.mjs": { readMemberParts: () => { throw new Error("Unexpected request"); }, validMemberTree: () => true, validMemberSummary: () => true },
     "@/lib/payment-display.mjs": { formatPaymentMoney: () => "not-called" },
   };
-  for (const name of ["EarningsCard", "OverviewDiscoveryCard", "PositionSnapshotCard"]) mocks[`./${name}`] = { default: marker(name) };
+  for (const name of ["EarningsCard", "FirstRechargeDialog", "OverviewDiscoveryCard", "PositionSnapshotCard"]) mocks[`./${name}`] = { default: marker(name) };
   const { default: Dashboard } = moduleAt("../components/panel/overview/OverviewDashboard.jsx", mocks);
   const html = render(React.createElement(Dashboard));
   assert.match(html, /Tu espacio Mindbliss/);
   assert.match(html, /Tu wallet, tus compras de cripto y tus membresías/);
   assert.match(html, /OverviewDiscoveryCard/);
+  assert.match(html, /FirstRechargeDialog/);
   assert.match(html, /Mis membresías/);
   assert.match(html, /Accesos rápidos/);
   assert.match(html, /Abre Soporte para elegir un canal/);

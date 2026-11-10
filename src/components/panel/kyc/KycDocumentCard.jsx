@@ -81,7 +81,7 @@ export default function KycDocumentCard({ docType, currentDocument, onUploaded }
       <div className="flex items-start justify-between gap-3">
         <span
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
-          style={{ background: "rgba(250, 204, 21, 0.1)", border: "1px solid rgba(250, 204, 21, 0.2)" }}
+          style={{ background: "var(--vp-amber-muted)", border: "1px solid var(--vp-amber-border)" }}
         >
           <Icon size={16} style={{ color: "var(--vp-accent)" }} />
         </span>
@@ -96,12 +96,12 @@ export default function KycDocumentCard({ docType, currentDocument, onUploaded }
       </p>
 
       {currentDocument?.status === "rejected" && currentDocument.reject_reason ? (
-        <p className="m-0 mt-2 text-xs" style={{ color: "#f87171" }}>
+        <p className="m-0 mt-2 text-xs" style={{ color: "var(--vp-danger)" }}>
           Motivo: {currentDocument.reject_reason}
         </p>
       ) : null}
       {error ? (
-        <p className="m-0 mt-2 text-xs" style={{ color: "#f87171" }}>
+        <p className="m-0 mt-2 text-xs" style={{ color: "var(--vp-danger)" }}>
           {error}
         </p>
       ) : null}

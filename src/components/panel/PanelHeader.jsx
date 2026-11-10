@@ -20,9 +20,9 @@ export default function PanelHeader({
         <button
           aria-expanded={mobileMenuOpen}
           aria-controls="mobile-dashboard-nav"
-          aria-label="Abrir menú"
+          aria-label={t("dashboard.openMenu")}
           className="vp-shell-icon vp-mobile-menu"
-          title="Abrir menú"
+          title={t("dashboard.openMenu")}
           type="button"
           onClick={onToggleMobileMenu}
         >
@@ -47,8 +47,8 @@ export default function PanelHeader({
         <Link
           className="vp-shell-icon"
           href="/dashboard/profile"
-          aria-label="Mi perfil"
-          title="Mi perfil"
+          aria-label={t("pages.profile")}
+          title={t("pages.profile")}
         >
           <UserRound size={18} />
         </Link>

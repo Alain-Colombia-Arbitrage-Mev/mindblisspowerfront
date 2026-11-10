@@ -31,7 +31,7 @@ function browser(t) {
   return destinations;
 }
 
-test('every login visitor gets an explicit registration path without an account-existence lookup and without losing referral side', t => {
+test('every login visitor gets an explicit registration path without an account lookup or client-selected side', t => {
   const destinations = browser(t);
   t.mock.method(globalThis, 'fetch', () => assert.fail('render or registration link must not query an account'));
   for (const authMode of ['better-auth', 'cognito']) {
@@ -39,7 +39,7 @@ test('every login visitor gets an explicit registration path without an account-
     const tree = harness.render({ authMode, initialEmail: ' MEMBER@EXAMPLE.TEST ', initialRef: 'MP-REFERRED', initialSide: 'R' });
     assert.match(renderToStaticMarkup(tree), /Crear cuenta nueva/);
     find(tree, node => node?.props?.children === 'Crear cuenta nueva').props.onClick();
-    assert.equal(destinations.at(-1), '/register?email=member%40example.test&ref=MP-REFERRED&side=R');
+    assert.equal(destinations.at(-1), '/register?email=member%40example.test&ref=MP-REFERRED');
     harness.unmount();
   }
 });
@@ -49,7 +49,7 @@ test('Better Auth password verification receives a safe registration continuatio
   const harness = magicView();
   const tree = harness.render({ authMode: 'better-auth', initialMode: 'password', initialEmail: 'member@example.test', initialRef: 'MP-REFERRED', initialSide: 'L' });
   const password = find(tree, node => node?.type === passwordView);
-  assert.equal(password.props.registrationHref, '/register?email=member%40example.test&ref=MP-REFERRED&side=L&resume=1');
+  assert.equal(password.props.registrationHref, '/register?email=member%40example.test&ref=MP-REFERRED&resume=1');
   harness.unmount();
 });
 
@@ -59,7 +59,7 @@ test('login offers email registration without phone validation or SMS sign-in', 
   const tree = harness.render({ authMode: 'better-auth', initialEmail: 'member@example.test', initialRef: 'MP-REFERRED', initialSide: 'R' });
   const button = find(tree, node => node?.props?.children === 'Crear cuenta nueva');
   button.props.onClick();
-  assert.equal(destinations[0], '/register?email=member%40example.test&ref=MP-REFERRED&side=R');
+  assert.equal(destinations[0], '/register?email=member%40example.test&ref=MP-REFERRED');
   assert.doesNotMatch(renderToStaticMarkup(tree), /SMS|validar teléfono/);
   harness.unmount();
 });
@@ -85,12 +85,12 @@ test('the real password form preserves the supplied safe continuation after EMAI
     './better-auth-login.mjs': auth, '../register/registration-model.mjs': registration,
   });
   const props = { email: 'member@example.test', setEmail() {}, onBusy() {}, onError() {}, onNotice() {}, rememberReferral() {},
-    registrationHref: '/register?email=member%40example.test&ref=MP-REFERRED&side=R&resume=1' };
+    registrationHref: '/register?email=member%40example.test&ref=MP-REFERRED&resume=1' };
   harness.render(props);
   harness.state[0] = 'Synthetic Existing Password';
   const tree = harness.render(props);
   await find(tree, node => node?.type === 'form').props.onSubmit({ preventDefault() {} });
-  assert.match(renderToStaticMarkup(harness.render(props)), /href="\/register\?email=member%40example.test&amp;ref=MP-REFERRED&amp;side=R&amp;resume=1"/);
+  assert.match(renderToStaticMarkup(harness.render(props)), /href="\/register\?email=member%40example.test&amp;ref=MP-REFERRED&amp;resume=1"/);
 });
 
 test('real email-login send and explicit resend handlers get 30 seconds but verification keeps its 12-second deadline', async t => {
@@ -275,7 +275,7 @@ test('legacy-account guidance and its registration link are generic and availabl
     assert.match(html, /Si todavía no tienes un acceso, utiliza Registro/);
     assert.doesNotMatch(html, /aún no creaste tu nuevo acceso, créalo en Registro/);
     const register = find(tree, node => node?.type === 'a' && node.props.children === 'Crear acceso en Registro');
-    assert.equal(register.props.href, '/register?email=member%40example.test&ref=MP-REFERRED&side=R');
+    assert.equal(register.props.href, '/register?email=member%40example.test&ref=MP-REFERRED');
     if (stage === 'request') await find(tree, node => node?.type === 'form').props.onSubmit({ preventDefault() {} });
     else if (stage === 'confirm') find(tree, node => node?.props?.children === 'Cambiar email').props.onClick();
     tree = harness.render(props);
@@ -294,7 +294,7 @@ test('a definitively missing OTP account goes to registration instead of an impo
   });
   const harness = magicView(), props = { authMode: 'better-auth', initialEmail: ' NEW@EXAMPLE.TEST ', initialRef: 'MP-REFERRED', initialSide: 'R' };
   await find(harness.render(props), node => node?.type === 'form').props.onSubmit({ preventDefault() {} });
-  assert.deepEqual(destinations, ['/register?ref=MP-REFERRED&side=R&reason=registration-required']);
+  assert.deepEqual(destinations, ['/register?ref=MP-REFERRED&reason=registration-required']);
   assert.equal(registration.consumeRegistrationPrefill(window), 'new@example.test');
   assert.equal(data.size, 0);
   assert.equal(calls.length, 1);
@@ -356,7 +356,7 @@ test('a definitively missing password account clears the password and retains th
   const harness = realPasswordView();
   harness.render(props); harness.state[0] = 'Synthetic private password';
   await find(harness.render(props), node => node?.type === 'form').props.onSubmit({ preventDefault() {} });
-  assert.deepEqual(destinations, ['/register?ref=MP-REFERRED&side=L&reason=registration-required']);
+  assert.deepEqual(destinations, ['/register?ref=MP-REFERRED&reason=registration-required']);
   assert.equal(harness.state[0], '');
   assert.equal(registration.consumeRegistrationPrefill(window), 'new@example.test');
   assert.deepEqual(paths, ['/api/auth/sign-in/email']);

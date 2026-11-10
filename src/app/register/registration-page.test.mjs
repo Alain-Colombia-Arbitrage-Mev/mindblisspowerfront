@@ -30,7 +30,7 @@ test('the real server page keys each permitted registration context so navigatio
   assert.equal(first.key, first.props.initialSearch);
   assert.equal(second.key, second.props.initialSearch);
   assert.deepEqual(Object.fromEntries(new URLSearchParams(second.props.initialSearch)), {
-    email: 'second@example.test', ref: 'MP-SECOND', side: 'R', resume: '1',
+    email: 'second@example.test', ref: 'MP-SECOND', resume: '1',
   });
 });
 
@@ -39,6 +39,7 @@ test('unsupported, duplicate-shaped and privileged query values cannot change th
   const first = await app.render({ searchParams: Promise.resolve({ ref: 'MP-FIRST', side: 'L' }) });
   const same = await app.render({ searchParams: Promise.resolve({ ref: 'MP-FIRST', side: 'L', role: 'admin', password: 'private', next: 'https://attacker.test' }) });
   assert.equal(first.key, same.key);
+  assert.equal(new URLSearchParams(first.props.initialSearch).has('side'), false);
   assert.doesNotMatch(same.props.initialSearch, /admin|private|attacker|password|next/);
   const invalid = await app.render({ searchParams: Promise.resolve({ email: ['first@example.test', 'second@example.test'], ref: {}, side: true }) });
   assert.equal(invalid.props.initialSearch, '');

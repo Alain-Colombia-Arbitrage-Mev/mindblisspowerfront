@@ -134,7 +134,7 @@ function TreeButton({ children, active = false, disabled, onClick, title = "" })
       style={{
         background: active ? "var(--vp-accent)" : "var(--vp-surface-raised)",
         borderColor: active ? "var(--vp-accent-strong)" : "var(--vp-border)",
-        color: active ? "#000000" : "var(--vp-text-soft)",
+        color: active ? "var(--vp-on-accent)" : "var(--vp-text-soft)",
         cursor: disabled ? "default" : "pointer",
       }}
     >
@@ -148,10 +148,10 @@ function NodeCard({ node, root, side, leftCount = 0, rightCount = 0, collapsedCo
   const active = node.status === "active";
   const hasPackage = Boolean(node.activePackage);
   const online = !unavailable && (root || hasPackage || active);
-  const avatarText = unavailable ? "#ffffff" : root ? "var(--vp-accent)" : online ? "var(--vp-text)" : "var(--vp-muted)";
+  const avatarText = unavailable ? "var(--vp-text)" : root ? "var(--vp-accent)" : online ? "var(--vp-text)" : "var(--vp-muted)";
   const stateLabel = unavailable ? "Not Available" : root ? "Tu cuenta" : hasPackage ? "Paquete activo" : active ? "Nodo activo" : "Inactivo";
   const rankLabel = unavailable ? "Cuenta protegida" : node.rank?.name || "Sin rango";
-  const dotColor = unavailable ? "var(--vp-danger)" : online ? "var(--vp-accent)" : "#6b7280";
+  const dotColor = unavailable ? "var(--vp-danger)" : online ? "var(--vp-accent)" : "var(--vp-subtle)";
 
   return (
     <div
@@ -162,8 +162,8 @@ function NodeCard({ node, root, side, leftCount = 0, rightCount = 0, collapsedCo
       data-side={side || undefined}
       data-unavailable={unavailable || undefined}
       style={{
-        background: unavailable ? "#050505" : highlighted ? "color-mix(in srgb, var(--vp-accent) 11%, var(--vp-surface-raised))" : "var(--vp-surface-raised)",
-        borderColor: unavailable ? "#27272a" : root || highlighted ? "var(--vp-accent)" : "var(--vp-border)",
+        background: unavailable ? "var(--vp-surface)" : highlighted ? "color-mix(in srgb, var(--vp-accent) 11%, var(--vp-surface-raised))" : "var(--vp-surface-raised)",
+        borderColor: unavailable ? "var(--vp-danger-border)" : root || highlighted ? "var(--vp-accent)" : "var(--vp-border)",
         borderWidth: root ? 2 : 1,
         boxShadow: highlighted ? "0 0 0 2px color-mix(in srgb, var(--vp-accent) 18%, transparent)" : "none",
       }}
@@ -183,29 +183,29 @@ function NodeCard({ node, root, side, leftCount = 0, rightCount = 0, collapsedCo
           className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2"
           style={{
             background: dotColor,
-            borderColor: unavailable ? "#050505" : "var(--vp-surface-raised)",
+            borderColor: unavailable ? "var(--vp-surface)" : "var(--vp-surface-raised)",
           }}
           title={stateLabel}
         />
       </div>
 
-      <span className="vp-node-name" style={{ color: unavailable ? "#ffffff" : undefined }} title={unavailable ? "Not Available" : node.name}>
+      <span className="vp-node-name" style={{ color: unavailable ? "var(--vp-text)" : undefined }} title={unavailable ? "Not Available" : node.name}>
         {unavailable ? "Not Available" : node.name || `Nodo #${node.id}`}
       </span>
 
-      <span className="vp-node-pack" style={{ color: unavailable ? "#d4d4d8" : undefined, background: unavailable ? "#111111" : undefined, borderColor: unavailable ? "#3f3f46" : undefined }} title={rankLabel}>
-        {unavailable ? <AlertTriangle size={10} style={{ color: "#a1a1aa" }} /> : <Award size={10} style={{ color: "var(--vp-accent)" }} />}
+      <span className="vp-node-pack" style={{ color: unavailable ? "var(--vp-muted)" : undefined, background: unavailable ? "var(--vp-surface-raised)" : undefined, borderColor: unavailable ? "var(--vp-border)" : undefined }} title={rankLabel}>
+        {unavailable ? <AlertTriangle size={10} style={{ color: "var(--vp-subtle)" }} /> : <Award size={10} style={{ color: "var(--vp-accent)" }} />}
         <span className="truncate">{rankLabel}</span>
       </span>
 
       <span className="vp-node-metrics grid w-full grid-cols-2 overflow-hidden border text-left" style={{ background: "var(--vp-bg)", borderColor: "var(--vp-border)" }}>
         <span className="min-w-0 px-1.5 py-1">
           <span className="block text-[7px] font-black uppercase tracking-wide" style={{ color: "var(--vp-subtle)" }}>Red I</span>
-          <span className="block truncate text-[9px] font-bold" style={{ color: unavailable ? "#ffffff" : "var(--vp-text)" }}>{compactNumber(leftCount)}</span>
+          <span className="block truncate text-[9px] font-bold" style={{ color: "var(--vp-text)" }}>{compactNumber(leftCount)}</span>
         </span>
         <span className="min-w-0 border-l px-1.5 py-1" style={{ borderColor: "var(--vp-border)" }}>
           <span className="block text-[7px] font-black uppercase tracking-wide" style={{ color: "var(--vp-subtle)" }}>Red D</span>
-          <span className="block truncate text-[9px] font-bold" style={{ color: unavailable ? "#ffffff" : "var(--vp-text)" }}>{compactNumber(rightCount)}</span>
+          <span className="block truncate text-[9px] font-bold" style={{ color: "var(--vp-text)" }}>{compactNumber(rightCount)}</span>
         </span>
       </span>
 
@@ -806,7 +806,7 @@ export default function BinaryTreeView({ nodes, me, meta, depth, onDepthChange, 
           <span className="h-2 w-2 rounded-full" style={{ background: "var(--vp-accent)" }} /> Activo
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-full" style={{ background: "#6b7280" }} /> Inactivo
+          <span className="h-2 w-2 rounded-full" style={{ background: "var(--vp-subtle)" }} /> Inactivo
         </span>
         <span className="flex items-center gap-1.5">
           <span className="h-2 w-2 rounded-full" style={{ background: "var(--vp-border)" }} /> Disponible

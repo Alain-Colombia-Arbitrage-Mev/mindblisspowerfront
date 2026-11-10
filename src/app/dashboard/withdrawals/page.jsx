@@ -1,5 +1,5 @@
-import { FinanceDashboardPage } from "../_components/executive-pages/FinanceDashboardPage";
+import { redirect } from "next/navigation";
 
 export default function WithdrawalsPage() {
-  return <FinanceDashboardPage />;
+  redirect("/dashboard/payments");
 }

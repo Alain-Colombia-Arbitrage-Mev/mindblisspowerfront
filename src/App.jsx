@@ -100,7 +100,6 @@ import MemberTeam from './legacy-pages/member/MemberTeam';
 import MemberBonuses from './legacy-pages/member/MemberBonuses';
 import MemberBonusesElite from './legacy-pages/member/MemberBonusesElite';
 import MemberReferrals from './legacy-pages/member/MemberReferrals';
-import MemberWithdrawals from './legacy-pages/member/MemberWithdrawals';
 import MemberCommunications from './legacy-pages/member/MemberCommunications';
 import MemberRank from './legacy-pages/member/MemberRank';
 import MemberProducts from './legacy-pages/member/MemberProducts';
@@ -224,9 +223,7 @@ const AuthenticatedApp = () => {
         <Route path="/dashboard/referrals" element={<MemberProtectedRoute><MemberLayout /></MemberProtectedRoute>}>
           <Route index element={<MemberReferrals />} />
         </Route>
-        <Route path="/dashboard/withdrawals" element={<MemberProtectedRoute><MemberLayout /></MemberProtectedRoute>}>
-          <Route index element={<MemberWithdrawals />} />
-        </Route>
+        <Route path="/dashboard/withdrawals" element={<Navigate to="/dashboard/payments" replace />} />
         <Route path="/dashboard/communications" element={<MemberProtectedRoute><MemberLayout /></MemberProtectedRoute>}>
           <Route index element={<MemberCommunications />} />
         </Route>

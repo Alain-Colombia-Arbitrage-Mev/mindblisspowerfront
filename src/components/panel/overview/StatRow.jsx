@@ -20,7 +20,7 @@ export default function StatRow({ icon: Icon, label, value, trendUp = false }) {
         <span className="text-lg font-semibold" style={{ color: "var(--vp-text)" }}>
           {value}
         </span>
-        {trendUp ? <ArrowUp size={11} style={{ color: "#22c55e" }} /> : null}
+        {trendUp ? <ArrowUp size={11} style={{ color: "var(--vp-success)" }} /> : null}
       </span>
     </div>
   );

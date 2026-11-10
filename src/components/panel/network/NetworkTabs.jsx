@@ -1,13 +1,13 @@
 "use client";
 
+import { useI18n } from "@/i18n/LanguageProvider";
+
 export const NETWORK_TABS = [
-  { id: "tree", label: "Árbol Binario" },
-  { id: "generation", label: "Generación" },
-  { id: "rank", label: "Por Rango" },
-  { id: "list", label: "Lista Operativa" },
+  { id: "tree", label: "networkPage.tabTree" }, { id: "generation", label: "networkPage.tabGeneration" }, { id: "rank", label: "networkPage.tabRank" }, { id: "list", label: "networkPage.tabList" },
 ];
 
 export default function NetworkTabs({ active, onChange }) {
+  const { t } = useI18n();
   return (
     <div className="flex flex-wrap items-center gap-2 border-b pb-1" style={{ borderColor: "var(--vp-border)" }}>
       {NETWORK_TABS.map((tab) => {
@@ -31,7 +31,7 @@ export default function NetworkTabs({ active, onChange }) {
             type="button"
             onClick={() => onChange(tab.id)}
           >
-            {tab.label}
+            {t(tab.label)}
           </button>
         );
       })}

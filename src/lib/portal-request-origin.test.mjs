@@ -5,7 +5,7 @@ import { portalRequestEnvironment, REWON_PUBLIC_ORIGIN, REWON_TEMPORARY_ORIGIN }
 import { cloudflarePortalGuard, cloudflarePortalRequest } from './cloudflare-portal-guard.mjs';
 import { runtimeEnvironment, runCloudflareRequest } from './cloudflare-runtime.mjs';
 import { fetchBetterAuth, browserAuthCookie, proxyBetterAuth } from './better-auth-bridge.mjs';
-import { buildReferralLinks, referralPublicOrigin } from './referral-links.mjs';
+import { buildReferralLink, referralPublicOrigin } from './referral-links.mjs';
 
 const env = Object.freeze({ AUTH_PROVIDER: 'better-auth', AUTH_PUBLIC_ORIGIN: REWON_PUBLIC_ORIGIN,
   AUTH_ALTERNATE_ORIGIN: REWON_TEMPORARY_ORIGIN, BETTER_AUTH_BACKEND_URL: 'https://auth.core.internal',
@@ -83,7 +83,7 @@ test('concurrent canonical and alternate BFF requests never share their effectiv
       await Promise.resolve();
       assert.equal(runtimeEnvironment().AUTH_PUBLIC_ORIGIN, origin);
       assert.equal(referralPublicOrigin(runtimeEnvironment()), origin);
-      assert.equal(new URL(buildReferralLinks('SyntheticSponsor', origin).right).origin, origin);
+      assert.equal(new URL(buildReferralLink('SyntheticSponsor', origin)).origin, origin);
       return Response.json({ origin });
     });
   }));

@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, ArrowDownLeft, ArrowDownRight, ArrowRight, Check, Clock, Copy, Loader2, RotateCw, Share2, Users } from 'lucide-react';
+import { AlertCircle, ArrowRight, Check, Clock, Copy, Link2, Loader2, RotateCw, Share2, Users } from 'lucide-react';
 import { motion } from 'framer-motion';
 import ReferralShareModal from './ReferralShareModal';
 import { readMemberJson, validMemberReferral } from '@/lib/member-read.mjs';
 import { createClipboardFeedback, createLatestViewRequest } from '@/lib/member-view-effects.mjs';
-import { referralLinksFrom } from '@/lib/referral-links.mjs';
+import { referralLinkFrom } from '@/lib/referral-links.mjs';
 
 const EMPTY_METRICS = { total: 0, active: 0, pending: 0 };
 
@@ -43,11 +43,11 @@ const buttonBase = {
 
 export default function ReferralModule() {
   const [referralCode, setReferralCode] = useState('');
-  const [referralLinks, setReferralLinks] = useState({ left: '', right: '' });
+  const [referralLink, setReferralLink] = useState('');
   const [referrals, setReferrals] = useState([]);
   const [metrics, setMetrics] = useState(EMPTY_METRICS);
   const [status, setStatus] = useState('loading');
-  const [shareSide, setShareSide] = useState('');
+  const [shareOpen, setShareOpen] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState({ pending: '', copied: '', error: '' });
   const [refreshing, setRefreshing] = useState(false);
   const request = useRef(null);
@@ -55,12 +55,12 @@ export default function ReferralModule() {
   const codeCopied = copyFeedback.copied === 'code';
   const linkCopied = copyFeedback.copied;
 
-  const hasReferral = status === 'ready' && referralCode && referralLinks.left && referralLinks.right;
+  const hasReferral = status === 'ready' && referralCode && referralLink;
 
   useEffect(() => {
     const active = createLatestViewRequest(
       signal => readMemberJson('/api/member/referral', { signal, validate: validMemberReferral }), {
-      onStart: () => { setRefreshing(true); setStatus('loading'); setShareSide(''); },
+      onStart: () => { setRefreshing(true); setStatus('loading'); setShareOpen(false); },
       onValue: applyReferral,
       onError: () => applyReferral(null),
       onSettled: () => setRefreshing(false),
@@ -83,23 +83,23 @@ export default function ReferralModule() {
     if (!data) {
       setStatus('error');
       setReferralCode('');
-      setReferralLinks({ left: '', right: '' });
+      setReferralLink('');
       setReferrals([]);
       setMetrics(EMPTY_METRICS);
       return;
     }
-    const links = referralLinksFrom(data);
-    if (!data.positioned || !data.code || !links.left || !links.right) {
+    const link = referralLinkFrom(data);
+    if (!data.positioned || !data.code || !link) {
       setStatus('pending');
       setReferralCode('');
-      setReferralLinks({ left: '', right: '' });
+      setReferralLink('');
       setReferrals([]);
       setMetrics(EMPTY_METRICS);
       return;
     }
     setStatus('ready');
     setReferralCode(data.code);
-    setReferralLinks(links);
+    setReferralLink(link);
     setReferrals(Array.isArray(data.referrals) ? data.referrals : []);
     setMetrics(data.metrics || EMPTY_METRICS);
   }
@@ -117,20 +117,18 @@ export default function ReferralModule() {
     await clipboard.current?.copy(referralCode, 'code');
   };
 
-  const copyLink = async (side) => {
-    const link = referralLinks[side];
-    if (!link) return;
-    await clipboard.current?.copy(link, side);
+  const copyLink = async () => {
+    if (!referralLink) return;
+    await clipboard.current?.copy(referralLink, 'link');
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       {hasReferral ? (
         <ReferralShareModal
-          isOpen={Boolean(shareSide)}
-          onClose={() => setShareSide('')}
+          isOpen={shareOpen}
+          onClose={() => setShareOpen(false)}
           code={referralCode}
-          side={shareSide}
         />
       ) : null}
 
@@ -214,31 +212,21 @@ export default function ReferralModule() {
         transition={{ duration: 0.18, delay: 0.04 }}
         style={{ ...cardStyle, padding: '24px clamp(20px, 3vw, 28px)', borderRadius: 16 }}
       >
-        <p style={{ ...labelStyle, marginBottom: 8 }}>Elige una rama para compartir</p>
+        <p style={{ ...labelStyle, marginBottom: 8 }}>Tu enlace único de referido</p>
         <p style={{ color: 'var(--vp-muted)', fontSize: 11, lineHeight: 1.6, margin: '0 0 16px' }}>
-          Si la primera posición está ocupada, la nueva alta continúa debajo por el mismo lado sin cambiar tu patrocinio directo.
+          El backend conserva tu patrocinio directo y asigna automáticamente la posición disponible en la pierna más débil del árbol binario.
         </p>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 12 }}>
+        <div>
           <SideShareCard
-            title="Enlace izquierdo"
-            direction="L → L"
-            Icon={ArrowDownLeft}
-            link={referralLinks.left}
+            title="Enlace automático"
+            direction="Ubicación automática"
+            Icon={Link2}
+            link={referralLink}
             status={status}
-            copied={linkCopied === 'left'}
-            onCopy={() => copyLink('left')}
-            onShare={() => hasReferral && setShareSide('left')}
-          />
-          <SideShareCard
-            title="Enlace derecho"
-            direction="R → R"
-            Icon={ArrowDownRight}
-            link={referralLinks.right}
-            status={status}
-            copied={linkCopied === 'right'}
-            onCopy={() => copyLink('right')}
-            onShare={() => hasReferral && setShareSide('right')}
+            copied={linkCopied === 'link'}
+            onCopy={copyLink}
+            onShare={() => hasReferral && setShareOpen(true)}
           />
         </div>
       </motion.section>
@@ -360,7 +348,7 @@ function SideShareCard({ title, direction, Icon, link, status, copied, onCopy, o
         </span>
         <div>
           <p style={{ color: 'var(--vp-text)', fontSize: 13, fontWeight: 850, margin: 0 }}>{title}</p>
-          <p style={{ color: 'var(--vp-subtle)', fontSize: 10, fontWeight: 750, margin: '3px 0 0' }}>Secuencia {direction}</p>
+          <p style={{ color: 'var(--vp-subtle)', fontSize: 10, fontWeight: 750, margin: '3px 0 0' }}>{direction}</p>
         </div>
       </div>
 

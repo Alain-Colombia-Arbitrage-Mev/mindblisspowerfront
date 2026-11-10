@@ -7,39 +7,31 @@ import SupportTicketForm from ".././SupportTicketForm";
 import { Activity, IdCard, KeyRound, LifeBuoy, Loader2, Shield, ShieldCheck, Wallet } from "lucide-react";
 
 import { PageHeader, MetricCard, IconCircle, StatusPill, statusTone } from './executive-ui';
+import { useI18n } from "@/i18n/LanguageProvider";
 
-const moduleConfigs = {
-support: {
-    eyebrow: "Soporte",
-    title: "Centro de soporte",
-    subtitle: "Canales de atencion, tickets y seguimiento para resolver dudas de cuenta, KYC, pagos y acceso.",
-    metrics: [
-      { label: "Tickets", value: "0", detail: "abiertos", icon: LifeBuoy, tone: "muted" },
-      { label: "Tiempo", value: "24h", detail: "respuesta objetivo", icon: Activity, tone: "info" },
-      { label: "KYC", value: "Pendiente", detail: "canal activo", icon: IdCard, tone: "warning" },
-      { label: "Cuenta", value: "Activa", detail: "sin bloqueo", icon: ShieldCheck, tone: "success" },
-    ],
-    cards: [
-      { title: "Acceso", text: "Problemas de login, codigo por correo o recuperacion de cuenta.", icon: KeyRound, status: "Canal" },
-      { title: "Cumplimiento", text: "Soporte para documentos, datos personales y revision KYC.", icon: Shield, status: "Canal" },
-      { title: "Finanzas", text: "Consultas de billetera, retiros y estados de liquidacion.", icon: Wallet, status: "Canal" },
-    ],
-  }
-};
-
-const TICKET_STATUS_LABELS = { open: "Abierto", answered: "Respondido", closed: "Cerrado" };
-
-const TICKET_PRIORITY_LABELS = { critical: "Critico", high: "Alta", normal: "Normal", low: "Baja" };
-
-function formatTicketDate(iso) {
+function formatTicketDate(iso, locale) {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("es", { year: "numeric", month: "short", day: "numeric" });
+  return d.toLocaleDateString(locale, { year: "numeric", month: "short", day: "numeric" });
 }
 
 export function SupportDashboardPage() {
-  const config = moduleConfigs.support;
+  const { t, locale } = useI18n();
+  const config = {
+    eyebrow: t("supportPage.eyebrow"), title: t("supportPage.title"), subtitle: t("supportPage.subtitle"),
+    metrics: [
+      { label: t("supportPage.tickets"), value: "0", detail: t("supportPage.open"), icon: LifeBuoy, tone: "muted" },
+      { label: t("supportPage.time"), value: "24h", detail: t("supportPage.responseTarget"), icon: Activity, tone: "info" },
+      { label: "KYC", value: t("supportPage.pending"), detail: t("supportPage.activeChannel"), icon: IdCard, tone: "warning" },
+      { label: t("supportPage.account"), value: t("supportPage.active"), detail: t("supportPage.unblocked"), icon: ShieldCheck, tone: "success" },
+    ],
+    cards: [
+      { title: t("supportPage.access"), text: t("supportPage.accessCopy"), icon: KeyRound, status: t("supportPage.channel") },
+      { title: t("supportPage.compliance"), text: t("supportPage.complianceCopy"), icon: Shield, status: t("supportPage.channel") },
+      { title: t("supportPage.finance"), text: t("supportPage.financeCopy"), icon: Wallet, status: t("supportPage.channel") },
+    ],
+  };
   const [tickets, setTickets] = useState([]);
   const [state, setState] = useState("loading"); // loading | ready | error
 
@@ -64,7 +56,7 @@ export function SupportDashboardPage() {
   }, [load]);
 
   const metrics = config.metrics.map((m) =>
-    m.label === "Tickets" && state === "ready" ? { ...m, value: String(tickets.length) } : m,
+    m.label === t("supportPage.tickets") && state === "ready" ? { ...m, value: String(tickets.length) } : m,
   );
 
   return (
@@ -101,32 +93,32 @@ export function SupportDashboardPage() {
           <div className="mb-5 flex flex-col justify-between gap-4 md:flex-row md:items-center">
             <h2 className="executive-section-title mb-0">
               <LifeBuoy size={18} style={{ color: "var(--vp-accent)" }} />
-              Mis tickets
+              {t("supportPage.myTickets")}
             </h2>
           </div>
 
           {state === "loading" && (
             <div className="flex items-center gap-2 py-8" style={{ color: "var(--vp-muted)" }}>
               <Loader2 size={16} className="animate-spin" />
-              <span className="text-sm">Cargando tus tickets…</span>
+              <span className="text-sm">{t("supportPage.loadingTickets")}</span>
             </div>
           )}
 
           {state === "error" && (
             <div role="status" className="flex flex-col items-start gap-3 rounded-xl px-4 py-5" style={{ background: "var(--vp-info-muted)", border: "1px solid var(--vp-info-border)" }}>
-              <span className="text-sm font-semibold" style={{ color: "var(--vp-info)" }}>Tickets en sincronización</span>
+              <span className="text-sm font-semibold" style={{ color: "var(--vp-info)" }}>{t("supportPage.ticketsSyncing")}</span>
               <p className="m-0 text-xs leading-6" style={{ color: "var(--vp-muted)" }}>
-                Puedes seguir usando soporte. El historial aparecerá cuando finalice la actualización.
+                {t("supportPage.syncingCopy")}
               </p>
               <button className="executive-button" type="button" onClick={load}>
-                Actualizar tickets
+                {t("supportPage.refreshTickets")}
               </button>
             </div>
           )}
 
           {state === "ready" && tickets.length === 0 && (
             <div className="py-8 text-sm" style={{ color: "var(--vp-muted)" }}>
-              Aún no tienes tickets.
+              {t("supportPage.noTickets")}
             </div>
           )}
 
@@ -135,25 +127,25 @@ export function SupportDashboardPage() {
               <table className="executive-table">
                 <thead>
                   <tr>
-                    <th>Asunto</th>
-                    <th>Estado</th>
-                    <th>Prioridad</th>
-                    <th>Respuesta</th>
-                    <th>Fecha</th>
+                    <th>{t("supportPage.subject")}</th>
+                    <th>{t("supportPage.status")}</th>
+                    <th>{t("supportPage.priority")}</th>
+                    <th>{t("supportPage.answer")}</th>
+                    <th>{t("supportPage.date")}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {tickets.map((t) => {
-                    const label = TICKET_STATUS_LABELS[t.status] || t.status;
+                  {tickets.map((ticket) => {
+                    const label = t(`supportPage.status_${ticket.status}`);
                     return (
-                      <tr key={t.id}>
-                        <td>{t.subject}</td>
+                      <tr key={ticket.id}>
+                        <td>{ticket.subject}</td>
                         <td>
                           <StatusPill tone={statusTone(label)}>{label}</StatusPill>
                         </td>
-                        <td>{TICKET_PRIORITY_LABELS[t.priority] || t.priority || "Normal"}</td>
-                        <td>{t.answer || (t.status === "open" ? "En revision" : "-")}</td>
-                        <td>{formatTicketDate(t.created_at)}</td>
+                        <td>{t(`supportPage.priority_${ticket.priority || "normal"}`)}</td>
+                        <td>{ticket.answer || (ticket.status === "open" ? t("supportPage.inReview") : "-")}</td>
+                        <td>{formatTicketDate(ticket.created_at, locale)}</td>
                       </tr>
                     );
                   })}

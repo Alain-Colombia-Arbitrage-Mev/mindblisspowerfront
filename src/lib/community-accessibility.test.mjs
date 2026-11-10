@@ -6,8 +6,10 @@ import { fileURLToPath } from "node:url";
 
 const src = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-test("community controls keep accessible touch targets", async () => {
+test("community controls keep accessible touch targets without manual branch selection", async () => {
   const css = await readFile(path.join(src, "index.css"), "utf8");
-  assert.match(css, /\.mb-community-branch-switch button\s*\{[^}]*min-height:\s*44px/s);
   assert.match(css, /\.mb-community-tools :is\(a, button\)\s*\{[^}]*min-height:\s*44px/s);
+  const source = await readFile(path.join(src, "app", "dashboard", "_components", "executive-pages", "CommunityInviteCard.jsx"), "utf8");
+  assert.doesNotMatch(source, /branch-switch|community\.left|community\.right|setSide/);
+  assert.match(source, /referralLinkFrom/);
 });

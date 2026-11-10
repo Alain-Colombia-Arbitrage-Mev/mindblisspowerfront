@@ -546,7 +546,7 @@ export default function RegisterForm() {
               disabled={loading}
               className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg px-4 text-center text-xs font-black transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
               style={{
-                color: "#000",
+                color: "var(--vp-on-accent)",
                 background: "var(--vp-accent, #ffc700)",
                 border: "1px solid var(--vp-accent, #ffc700)",
               }}
@@ -642,7 +642,6 @@ export default function RegisterForm() {
               <ClipboardCheck size={17} style={{ color: "var(--vp-accent)" }} />
               <span className="min-w-0">
                 Referido aplicado: <span style={{ color: "var(--vp-accent)" }}>{form.referralCode}</span>
-                {form.preferredSide ? ` · Rama ${form.preferredSide === "L" ? "izquierda" : "derecha"}` : ""}
               </span>
             </div>
           )}
@@ -760,7 +759,7 @@ export default function RegisterForm() {
 
         <div className="mt-6 grid gap-3 border-t pt-5 sm:grid-cols-2" style={{ borderColor: "var(--vp-border)" }}>
           <Link
-            href={form.referralCode ? `/login?ref=${encodeURIComponent(form.referralCode)}${form.preferredSide ? `&side=${form.preferredSide}` : ""}` : "/login"}
+            href={form.referralCode ? `/login?ref=${encodeURIComponent(form.referralCode)}` : "/login"}
             className="flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition"
             style={{
               color: "var(--vp-text)",
@@ -807,7 +806,7 @@ function BannedModal() {
           className="mx-auto mb-5 inline-flex h-16 w-16 items-center justify-center rounded-full"
           style={{ background: "rgba(220,38,38,0.12)" }}
         >
-          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2.2" strokeLinecap="round">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ color: "var(--vp-danger)" }} strokeWidth="2.2" strokeLinecap="round">
             <circle cx="12" cy="12" r="9" />
             <line x1="5.6" y1="5.6" x2="18.4" y2="18.4" />
           </svg>

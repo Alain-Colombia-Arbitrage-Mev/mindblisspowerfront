@@ -11,6 +11,7 @@ import NetworkTabs, { NETWORK_TABS } from "@/components/panel/network/NetworkTab
 import PositionCard from "@/components/panel/network/PositionCard";
 import { treeRefreshFailure } from "@/lib/tree-read-model.mjs";
 import { createMemberNetworkReader } from "@/lib/member-network-reader.mjs";
+import { useI18n } from "@/i18n/LanguageProvider";
 
 // Keep the route shell and the data requests small. A view is downloaded only
 // when selected; the initial one is warmed alongside the reads below so the
@@ -21,11 +22,12 @@ const RankView = dynamic(() => import("@/components/panel/network/RankView"), { 
 const OperativeListView = dynamic(() => import("@/components/panel/network/OperativeListView"), { loading: NetworkViewLoading });
 
 function NetworkViewLoading() {
+  const { t } = useI18n();
   return <section className="flex min-h-80 items-center justify-center gap-3 rounded-2xl border p-6"
     style={{ background: "var(--vp-surface)", borderColor: "var(--vp-border)", color: "var(--vp-muted)" }}
     role="status" aria-busy="true">
     <Loader2 size={18} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
-    <span className="text-sm font-semibold">Cargando vista de la red…</span>
+    <span className="text-sm font-semibold">{t("networkPage.loadingView")}</span>
   </section>;
 }
 
@@ -54,66 +56,57 @@ function money(value) {
   return `$${Number(value ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function paymentStatusCopy(status, active) {
+function paymentStatusCopy(status, active, t) {
   if (active) {
     return {
-      title: "Membresía activa, posición pendiente",
-      detail: "La cuenta tiene membresía activa, pero todavía no aparece una posición activa en el árbol.",
+      title: t("networkPage.activePendingTitle"), detail: t("networkPage.activePendingCopy"),
       tone: "var(--vp-amber)",
     };
   }
   const map = {
     created: {
-      title: "Checkout iniciado, falta confirmación de pago",
-      detail: "Cuando se confirme el pago, el backend podrá activar la membresía y colocar la cuenta en el árbol.",
+      title: t("networkPage.checkoutStarted"), detail: t("networkPage.checkoutStartedCopy"),
       tone: "var(--vp-amber)",
     },
     paid: {
-      title: "Pago recibido, sincronizando árbol",
-      detail: "El pago ya entró y la pantalla se actualizará mientras se confirma la colocación binaria.",
+      title: t("networkPage.paymentReceived"), detail: t("networkPage.paymentReceivedCopy"),
       tone: "var(--vp-accent)",
     },
     activated: {
-      title: "Activación registrada, sincronizando posición",
-      detail: "La activación existe y se está refrescando la lectura del árbol.",
+      title: t("networkPage.activationRecorded"), detail: t("networkPage.activationRecordedCopy"),
       tone: "var(--vp-accent)",
     },
     needs_placement: {
-      title: "Pago recibido, requiere colocación manual",
-      detail: "Operaciones debe asignar sponsor o nodo antes de mostrar esta cuenta dentro del árbol.",
+      title: t("networkPage.manualPlacement"), detail: t("networkPage.manualPlacementCopy"),
       tone: "var(--vp-amber)",
     },
     failed: {
-      title: "Pago fallido",
-      detail: "La cuenta no puede entrar al árbol con este intento. Debe iniciar un pago válido.",
+      title: t("networkPage.paymentFailed"), detail: t("networkPage.paymentFailedCopy"),
       tone: "var(--vp-danger)",
     },
     expired: {
-      title: "Checkout expirado",
-      detail: "El intento venció antes de confirmar pago. Debe iniciar un checkout nuevo.",
+      title: t("networkPage.checkoutExpired"), detail: t("networkPage.checkoutExpiredCopy"),
       tone: "var(--vp-danger)",
     },
     refunded: {
-      title: "Pago reembolsado",
-      detail: "Un pago reembolsado no habilita colocación activa dentro del árbol.",
+      title: t("networkPage.paymentRefunded"), detail: t("networkPage.paymentRefundedCopy"),
       tone: "var(--vp-danger)",
     },
     security_blocked: {
-      title: "Bloqueado por seguridad",
-      detail: "La cuenta fue retenida por reglas de seguridad y no debe colocarse en el árbol.",
+      title: t("networkPage.securityBlocked"), detail: t("networkPage.securityBlockedCopy"),
       tone: "var(--vp-danger)",
     },
   };
   return map[status] || {
-    title: status ? "Posición pendiente" : "Sin pago registrado",
+    title: status ? t("networkPage.positionPending") : t("networkPage.noPayment"),
     detail: status
-      ? "La cuenta aún no tiene una ubicación activa en el árbol binario."
-      : "La posición se habilita cuando se confirma la primera membresía.",
+      ? t("networkPage.positionPendingCopy") : t("networkPage.noPaymentCopy"),
     tone: status ? "var(--vp-amber)" : "var(--vp-muted)",
   };
 }
 
 function DetailTile({ icon: Icon, label, value, accent = false }) {
+  const { t } = useI18n();
   return (
     <div
       className="flex min-w-0 items-start gap-3 rounded-xl border p-4"
@@ -129,8 +122,8 @@ function DetailTile({ icon: Icon, label, value, accent = false }) {
         <p className="m-0 text-[10px] font-semibold uppercase" style={{ color: "var(--vp-muted)" }}>
           {label}
         </p>
-        <p className="m-0 mt-1 truncate text-sm font-bold" style={{ color: "var(--vp-text)" }} title={String(value || "Pendiente")}>
-          {value || "Pendiente"}
+        <p className="m-0 mt-1 truncate text-sm font-bold" style={{ color: "var(--vp-text)" }} title={String(value || t("networkPage.pending"))}>
+          {value || t("networkPage.pending")}
         </p>
       </div>
     </div>
@@ -138,23 +131,25 @@ function DetailTile({ icon: Icon, label, value, accent = false }) {
 }
 
 function ReadIssues({ state, onRetry }) {
-  const issues = [["Pagos", state.summaryError], ["Enlaces de red", state.referralError]].filter(([, error]) => error);
+  const { t } = useI18n();
+  const issues = [[t("networkPage.payments"), state.summaryError], [t("networkPage.networkLinks"), state.referralError]].filter(([, error]) => error);
   if (!issues.length) return null;
   return <div role="status" className="flex flex-wrap items-center gap-3 border-y py-3 text-sm" style={{ borderColor: "var(--vp-info-border)", color: "var(--vp-info)" }}>
     <ShieldAlert size={18} /><div className="min-w-0 flex-1">{issues.map(([label, error]) => <p key={label} className="m-0">{label}: {error.message}</p>)}</div>
-    <button type="button" className="executive-button" onClick={onRetry} disabled={state.refreshing}><RefreshCw size={16} />Actualizar</button>
+    <button type="button" className="executive-button" onClick={onRetry} disabled={state.refreshing}><RefreshCw size={16} />{t("common.update")}</button>
   </div>;
 }
 
-function networkReadFailure(previous, error) {
+function networkReadFailure(previous, error, t) {
   const next = treeRefreshFailure(previous, error.status, error.message);
   if (next.refreshError && error.status === 503 && error.code === "authentication_unavailable") {
-    return { ...next, refreshError: `${error.message} Se mantiene visible la última lectura confirmada.` };
+    return { ...next, refreshError: `${error.message} ${t("networkPage.lastReadVisible")}` };
   }
   return next;
 }
 
 export default function NetworkPage() {
+  const { t } = useI18n();
   const searchParams = useSearchParams();
   const requestedTab = searchParams.get("tab");
   const validTabs = useMemo(() => new Set(NETWORK_TABS.map((item) => item.id)), []);
@@ -177,10 +172,10 @@ export default function NetworkPage() {
       onStart: full => setState(prev => ({ ...prev, loading: !prev.data, refreshing: Boolean(prev.data), error: "", errorStatus: 0, refreshError: "",
         ...(full ? { summary: null, referral: null, summaryError: null, referralError: null } : {}), syncing: false })),
       onPart: (key, result) => setState(prev => key === "tree"
-        ? result.error ? networkReadFailure(prev, result.error)
+        ? result.error ? networkReadFailure(prev, result.error, t)
           : { ...prev, loading: false, refreshing: false, error: "", errorStatus: 0, refreshError: "", data: result.data }
         : { ...prev, [key]: result.data || null, [`${key}Error`]: result.error || null }),
-      onDenied: error => setState(prev => networkReadFailure(prev, error)),
+      onDenied: error => setState(prev => networkReadFailure(prev, error, t)),
       onSync: syncing => setState(prev => ({ ...prev, syncing })),
     });
     reader.current = current;
@@ -189,7 +184,7 @@ export default function NetworkPage() {
       current.dispose();
       if (reader.current === current) reader.current = null;
     };
-  }, []);
+  }, [t]);
 
   const previousRefresh = useRef(refreshTick);
   useEffect(() => {
@@ -207,7 +202,7 @@ export default function NetworkPage() {
         <StatusCard>
           <Loader2 className="animate-spin" size={16} style={{ color: "var(--vp-accent)" }} />
           <span className="text-sm font-semibold" style={{ color: "var(--vp-muted)" }}>
-            Cargando tu posición en la red…
+            {t("networkPage.loadingPosition")}
           </span>
         </StatusCard>
       </div>
@@ -219,15 +214,15 @@ export default function NetworkPage() {
       <div className="p-6">
         <StatusCard>
           <span role="alert" className="text-sm font-semibold" style={{ color: "var(--vp-muted)" }}>
-            {state.error === "account_suspended" ? "Esta cuenta tiene el acceso a la red restringido."
+            {state.error === "account_suspended" ? t("networkPage.accountRestricted")
               : state.error === "tree-unavailable"
-              ? "El árbol estará disponible cuando finalice la migración."
+              ? t("networkPage.treeMigrating")
               : /^[a-z0-9_-]+$/.test(state.error)
-                ? "No se pudo cargar tu red en este momento. Intenta de nuevo más tarde."
+                ? t("networkPage.loadFailed")
                 : state.error}
           </span>
-          {state.errorStatus === 401 ? <Link href="/login" className="executive-button">Iniciar sesion</Link>
-            : <button type="button" className="executive-button" onClick={() => setRefreshTick(tick => tick + 1)}><RefreshCw size={15} />Reintentar</button>}
+          {state.errorStatus === 401 ? <Link href="/login" className="executive-button">{t("dashboard.signIn")}</Link>
+            : <button type="button" className="executive-button" onClick={() => setRefreshTick(tick => tick + 1)}><RefreshCw size={15} />{t("networkPage.retry")}</button>}
         </StatusCard>
       </div>
     );
@@ -239,9 +234,9 @@ export default function NetworkPage() {
     const active = Number(state.summary?.active_packages ?? 0) > 0;
     const paymentReceived = active || ["paid", "activated", "needs_placement"].includes(latestStatus);
     const needsPlacement = latestStatus === "needs_placement";
-    const statusCopy = state.summary ? paymentStatusCopy(latestStatus, active) : {
-      title: state.summaryError ? "Estado de pago no disponible" : "Consultando estado de pago",
-      detail: state.summaryError ? "No se pudo confirmar el estado de tus pagos." : "Esperando la consulta de pagos.",
+    const statusCopy = state.summary ? paymentStatusCopy(latestStatus, active, t) : {
+      title: state.summaryError ? t("networkPage.paymentUnavailable") : t("networkPage.checkingPayment"),
+      detail: state.summaryError ? t("networkPage.paymentUnavailableCopy") : t("networkPage.checkingPaymentCopy"),
       tone: "var(--vp-muted)",
     };
     const sponsorLabel =
@@ -249,7 +244,7 @@ export default function NetworkPage() {
       latestPayment?.sponsor_email ||
       (latestPayment?.sponsor_affiliate_id ? `Afiliado #${latestPayment.sponsor_affiliate_id}` : "");
     const checkoutLabel = latestPayment
-      ? `Paquete ${latestPayment.package_id} · ${money(latestPayment.amount_usd)}`
+      ? t("networkPage.packageAmount", { id: latestPayment.package_id, amount: money(latestPayment.amount_usd) })
       : "";
 
     return (
@@ -264,25 +259,25 @@ export default function NetworkPage() {
           <div>
             <p className="m-0 text-sm font-bold" style={{ color: "var(--vp-text)" }}>
               {needsPlacement
-                ? "Tu pago requiere colocación manual"
+                ? t("networkPage.yourPaymentManual")
                 : paymentReceived
-                  ? "Estamos sincronizando tu posición"
+                  ? t("networkPage.syncingPosition")
                   : statusCopy.title}
             </p>
             <p className="m-0 mt-1 text-xs" style={{ color: "var(--vp-muted)" }}>
               {needsPlacement
-                ? "Operaciones debe asignar tu patrocinador o nodo antes de mostrarte en el árbol binario."
+                ? t("networkPage.yourPaymentManualCopy")
                 : paymentReceived
-                  ? "Tu pago ya fue recibido. Esta pantalla se actualiza sola mientras el backend termina de reflejar tu ubicación."
+                  ? t("networkPage.syncingPositionCopy")
                   : statusCopy.detail}
             </p>
           </div>
         </StatusCard>
 
         <section className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-          <DetailTile icon={CreditCard} label="Último checkout" value={checkoutLabel} accent={Boolean(latestPayment)} />
-          <DetailTile icon={UserCheck} label="Sponsor previsto" value={sponsorLabel} accent={Boolean(sponsorLabel)} />
-          <DetailTile icon={MapPin} label="Estado de árbol" value={latestStatus === "created" ? "Esperando pago" : "Sin posición activa"} />
+          <DetailTile icon={CreditCard} label={t("networkPage.latestCheckout")} value={checkoutLabel} accent={Boolean(latestPayment)} />
+          <DetailTile icon={UserCheck} label={t("networkPage.expectedSponsor")} value={sponsorLabel} accent={Boolean(sponsorLabel)} />
+          <DetailTile icon={MapPin} label={t("networkPage.treeStatus")} value={latestStatus === "created" ? t("networkPage.waitingPayment") : t("networkPage.noActivePosition")} />
         </section>
 
         <section
@@ -293,10 +288,10 @@ export default function NetworkPage() {
             <ShieldAlert size={18} className="mt-0.5 shrink-0" style={{ color: statusCopy.tone }} />
             <div className="min-w-0">
               <p className="m-0 text-sm font-bold" style={{ color: "var(--vp-text)" }}>
-                No se muestra una ubicación hasta que exista activación real
+                {t("networkPage.noPositionUntilActive")}
               </p>
               <p className="m-0 mt-1 text-xs leading-5" style={{ color: "var(--vp-muted)" }}>
-                Esto evita que un checkout fallido, expirado o abierto genere puntos, comisiones o una posición falsa dentro del árbol.
+                {t("networkPage.noPositionUntilActiveCopy")}
               </p>
             </div>
           </div>
@@ -308,11 +303,11 @@ export default function NetworkPage() {
               style={{ background: "var(--vp-surface-raised)", borderColor: "var(--vp-border)", color: "var(--vp-text)" }}
             >
               <RefreshCw size={14} />
-              Actualizar
+              {t("common.update")}
             </button>
             {state.summary && !paymentReceived ? (
-              <Link href="/dashboard/packages" className="inline-flex min-h-10 items-center justify-center rounded-lg px-3 text-xs font-bold no-underline" style={{ background: "var(--vp-accent)", color: "#000000" }}>
-                Completar membresía
+              <Link href="/dashboard/packages" className="inline-flex min-h-10 items-center justify-center rounded-lg px-3 text-xs font-bold no-underline" style={{ background: "var(--vp-accent)", color: "var(--vp-on-accent)" }}>
+                {t("networkPage.completeMembership")}
               </Link>
             ) : null}
           </div>
@@ -332,25 +327,18 @@ export default function NetworkPage() {
   const withPackage = tree.filter((node) => node.activePackage).length;
 
   const summaryMetrics = [
-    { label: "Visible", value: tree.length, tone: "positive" },
-    { label: "Izquierda", value: leftCount, tone: "positive" },
-    { label: "Derecha", value: rightCount, tone: "accent" },
-    { label: "Con paquete", value: withPackage, tone: "accent" },
-    { label: "Directos", value: directs.length, tone: "default" },
-    { label: "Gen Max", value: maxGen, tone: "default" },
-    { label: "Con Rango", value: withRank, tone: "default" },
-    { label: "Mi Nivel", value: me.depth, tone: "positive", span: 2 },
+    { label: t("networkPage.visible"), value: tree.length, tone: "positive" }, { label: t("networkPage.left"), value: leftCount, tone: "positive" }, { label: t("networkPage.right"), value: rightCount, tone: "accent" }, { label: t("networkPage.withPackage"), value: withPackage, tone: "accent" }, { label: t("networkPage.directs"), value: directs.length, tone: "default" }, { label: t("networkPage.maxGeneration"), value: maxGen, tone: "default" }, { label: t("networkPage.withRank"), value: withRank, tone: "default" }, { label: t("networkPage.myLevel"), value: me.depth, tone: "positive", span: 2 },
   ];
 
   return (
     <div className="flex min-h-full flex-col gap-6 p-6">
       <ReadIssues state={state} onRetry={() => setRefreshTick(tick => tick + 1)} />
-      {state.refreshError ? <div role="alert" className="flex flex-wrap items-center gap-3 border-y py-3 text-sm" style={{ borderColor: "var(--vp-amber-border)", color: "var(--vp-amber)" }}><ShieldAlert size={18} /><span className="flex-1">{state.refreshError}</span><button type="button" className="executive-button" onClick={() => setRefreshTick((tick) => tick + 1)}><RefreshCw size={16} />Reintentar</button></div> : null}
+      {state.refreshError ? <div role="alert" className="flex flex-wrap items-center gap-3 border-y py-3 text-sm" style={{ borderColor: "var(--vp-amber-border)", color: "var(--vp-amber)" }}><ShieldAlert size={18} /><span className="flex-1">{state.refreshError}</span><button type="button" className="executive-button" onClick={() => setRefreshTick((tick) => tick + 1)}><RefreshCw size={16} />{t("networkPage.retry")}</button></div> : null}
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <PositionCard
           rank={me.rank?.name}
-          depth={`Nivel ${me.depth}`}
-          side={me.side === "L" ? "Izquierda" : me.side === "R" ? "Derecha" : "Raíz"}
+          depth={t("networkPage.level", { level: me.depth })}
+          side={me.side === "L" ? t("networkPage.left") : me.side === "R" ? t("networkPage.right") : t("networkPage.root")}
           sponsor={me.sponsor}
           parent={me.parent}
           affiliateId={me.affiliateId}
@@ -359,16 +347,15 @@ export default function NetworkPage() {
           commissions={{
             available: state.summary?.commission_available_usd,
             maturing: state.summary?.commission_maturing_usd,
-            withdrawable: state.summary?.available_for_withdrawal_usd,
             wallet: state.summary?.wallet_balance_usd,
           }}
           referral={state.referral}
-          leftLeg={leftDirect ? leftDirect.name || `Nodo #${leftDirect.id}` : null}
-          rightLeg={rightDirect ? rightDirect.name || `Nodo #${rightDirect.id}` : null}
+          leftLeg={leftDirect ? leftDirect.name || t("networkPage.node", { id: leftDirect.id }) : null}
+          rightLeg={rightDirect ? rightDirect.name || t("networkPage.node", { id: rightDirect.id }) : null}
           childSlotsKnown={me.childrenComplete === true}
         />
         <NetworkSummaryCard
-          memberName={me.name || "Mi red"}
+          memberName={me.name || t("pages.network")}
           leftCount={leftCount}
           rightCount={rightCount}
           metrics={summaryMetrics}

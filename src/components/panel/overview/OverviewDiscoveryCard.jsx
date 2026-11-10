@@ -5,14 +5,14 @@ import { useI18n } from "@/i18n/LanguageProvider";
 export default function OverviewDiscoveryCard() {
   const { t } = useI18n();
   return (
-    <div className="mb-overview-discovery" aria-label="Wallet y membresías">
+    <div className="mb-overview-discovery" aria-label={t("overview.subtitle")}>
       <section className="executive-card mb-buy-crypto-card">
         <div className="mb-discovery-top"><span><WalletCards size={20} aria-hidden="true" /></span><b>{t("overview.buyCryptoTag")}</b></div>
         <div>
           <h2>{t("overview.buyCrypto")}</h2>
           <p>{t("overview.buyCryptoCopy")}</p>
         </div>
-        <Link className="executive-button primary" href="/dashboard/withdrawals">
+        <Link className="executive-button primary" href="/dashboard/payments">
           {t("overview.createAndBuy")} <ArrowRight size={14} />
         </Link>
       </section>

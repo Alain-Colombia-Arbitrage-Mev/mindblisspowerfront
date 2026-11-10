@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { handleRegistration } from './registration-auth.mjs';
 import { handleMembershipCheckout } from './checkout-bff.mjs';
-import { buildReferralLinks } from './referral-links.mjs';
+import { buildReferralLink } from './referral-links.mjs';
 import { bindReferralCodeToEmail, captureReferralFromUrl, referralForCheckout } from './referral-attribution.js';
 import { betterAuthAccess, verifiedEmailSignIn } from '../app/login/better-auth-login.mjs';
 
@@ -28,14 +28,14 @@ const request = (path, body) => new Request(`${env.AUTH_PUBLIC_ORIGIN}${path}`, 
   body: JSON.stringify(body),
 });
 
-for (const side of ['L', 'R']) test(`shared ${side} link survives registration, verified access and owner-scoped NOW checkout`, async () => {
+test('the single sponsor link survives registration, verified access and automatic NOW checkout placement', async () => {
   const storage = newStorage();
-  const links = buildReferralLinks('MP9101', env.AUTH_PUBLIC_ORIGIN);
-  const entry = new URL(side === 'L' ? links.left : links.right);
+  const entry = new URL(buildReferralLink('MP9101', env.AUTH_PUBLIC_ORIGIN));
   assert.equal(entry.pathname, '/register');
+  assert.equal(entry.searchParams.has('side'), false);
   captureReferralFromUrl(entry.search, storage, now);
   const registration = { fullName: claims.name, email: email.toUpperCase(), acceptsPrivacy: true,
-    referralCode: entry.searchParams.get('ref'), preferredSide: entry.searchParams.get('side'),
+    referralCode: entry.searchParams.get('ref'),
     personId: 'forged-person', sponsorId: 'forged-sponsor', emailVerified: true, role: 'super_admin' };
   let registered = false;
   let verified = false;
@@ -73,7 +73,7 @@ for (const side of ['L', 'R']) test(`shared ${side} link survives registration, 
   const signup = await handleRegistration(request('/api/auth/register', registration), 'register', { env, fetchImpl: authTransport });
   assert.equal(signup.status, 201);
   assert.equal((await signup.json()).requiresConfirmation, true);
-  bindReferralCodeToEmail(email, registration.referralCode, storage, now, 'registration', side);
+  bindReferralCodeToEmail(email, registration.referralCode, storage, now, 'registration');
 
   const confirmation = await handleRegistration(request('/api/auth/confirm', { email, code: '123456' }), 'confirm', { env, fetchImpl: authTransport });
   assert.equal(confirmation.status, 200);
@@ -88,17 +88,17 @@ for (const side of ['L', 'R']) test(`shared ${side} link survives registration, 
   captureReferralFromUrl('?ref=MP9999&side=L&email=other%40example.test', storage, now + 1);
   bindReferralCodeToEmail('other@example.test', 'MP9999', storage, now + 1, 'registration', 'L');
   const hint = referralForCheckout(email, storage, now + 2);
-  assert.deepEqual(hint, { code: 'MP9101', email, side });
+  assert.deepEqual(hint, { code: 'MP9101', email });
   let invoices = 0;
   const checkout = await handleMembershipCheckout(request('/api/payments/checkout', {
     provider: 'nowpayments', package_id: 1, purchase_subject: claims.sub, purchase_request_id: requestID,
-    ref: hint.code, ref_email: hint.email, preferred_side: hint.side,
+    ref: hint.code, ref_email: hint.email,
     sponsor_id: 'forged-sponsor', person_id: 'forged-person', amount_usd: '0.01',
   }), { env, identity: async () => ({ token: 'synthetic-verified-service-jwt', claims }), fetchImpl: async (target, options) => {
     assert.equal(target, `${env.VP_PAYMENTS_URL}/api/payments/checkout`);
     assert.equal(options.cache, 'no-store');
     assert.deepEqual(JSON.parse(options.body), { provider: 'nowpayments', email, package_id: 1,
-      ref: 'MP9101', preferred_side: side, purchase_request_id: requestID, name: claims.name, phone: '' });
+      ref: 'MP9101', preferred_side: '', purchase_request_id: requestID, name: claims.name, phone: '' });
     invoices++;
     return Response.json({ provider: 'nowpayments', url: 'https://nowpayments.io/payment/?iid=12345', total_usd: '100.00',
       fee_usd: '0.00', fulfillment_status: 'awaiting_payment' });

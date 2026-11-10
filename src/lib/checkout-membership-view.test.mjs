@@ -10,6 +10,7 @@ import { cn } from './utils.js';
 import { handleMembershipCheckout } from './checkout-bff.mjs';
 import * as intentPolicy from './checkout-intent.mjs';
 import * as deadline from './browser-request-deadline.mjs';
+import { translateMessage } from '../i18n/translate.mjs';
 
 const require = createRequire(import.meta.url);
 const subject = 'synthetic-verified-owner';
@@ -39,7 +40,8 @@ function checkoutComponent({ provider, error = '', loading = false, session = nu
   const mocks = { react: mockedReact, 'lucide-react': { ArrowRight: () => null, Loader2: () => null },
     '@/lib/referral-sync.mjs': { verifiedReferralForCheckout: async email => referralResult || ({ ok: true, ...referralResolver(email) }) },
     '@/lib/member-session-context': { useMemberSession: () => session }, '@/lib/checkout-policy.mjs': policy,
-    '@/lib/checkout-intent.mjs': intentPolicy, '@/lib/utils': { cn }, '@/lib/browser-request-deadline.mjs': deadline };
+    '@/lib/checkout-intent.mjs': intentPolicy, '@/lib/utils': { cn }, '@/lib/browser-request-deadline.mjs': deadline,
+    '@/i18n/LanguageProvider': { useI18n: () => ({ locale: 'es', dir: 'ltr', t: (key, values) => translateMessage('es', key, values) }) } };
   new Function('require', 'module', 'exports', code)(id => Object.hasOwn(mocks, id) ? mocks[id] : require(id), module, module.exports);
   return { Component: module.exports.default, stateChanges };
 }
@@ -167,7 +169,7 @@ test('ready shell context removes a sequential session GET while a cold context 
             privateCalls++; const forwarded = JSON.parse(init.body);
             assert.equal(forwarded.email, 'member@example.test', 'presentation context can never choose the owner');
             assert.equal(forwarded.ref, label === 'stale' ? '' : 'SYNTHETIC-REFERRAL');
-            assert.equal(forwarded.preferred_side, label === 'stale' ? '' : 'R');
+            assert.equal(forwarded.preferred_side, '');
             assert.match(forwarded.purchase_request_id, /^[0-9a-f-]{36}$/);
             return Response.json({ provider: 'nowpayments', url: 'https://nowpayments.io/payment/?iid=12345',
               total_usd: '100.00', fee_usd: '0.00', fulfillment_status: 'awaiting_payment' });
@@ -202,7 +204,7 @@ test('cold checkout reads canonical access without waiting on optional referral 
     if (target === '/api/auth/session') return Response.json({ error: 'optional_display_unavailable' }, { status: 503 });
     assert.equal(target, '/api/payments/checkout');
     const body = JSON.parse(options.body);
-    assert.equal(body.ref, 'ConfirmedSponsor'); assert.equal(body.preferred_side, 'R');
+    assert.equal(body.ref, 'ConfirmedSponsor'); assert.equal(body.preferred_side, '');
     assert.equal(body.ref_email, 'member@example.test'); assert.equal(body.purchase_subject, subject);
     return Response.json({ provider: 'nowpayments', url: 'https://nowpayments.io/payment/?iid=12345',
       fulfillment_status: 'awaiting_payment', checkout_environment: 'production' });
@@ -376,7 +378,8 @@ function checkoutRuntime(resolveReferral = async () => ({ ok: true, code: '', em
     '@/lib/referral-sync.mjs': { verifiedReferralForCheckout: resolveReferral },
     '@/lib/member-session-context': { useMemberSession: () => current.session },
     '@/lib/checkout-policy.mjs': policy, '@/lib/checkout-intent.mjs': intentPolicy, '@/lib/utils': { cn },
-    '@/lib/browser-request-deadline.mjs': deadline };
+    '@/lib/browser-request-deadline.mjs': deadline,
+    '@/i18n/LanguageProvider': { useI18n: () => ({ locale: 'es', dir: 'ltr', t: (key, values) => translateMessage('es', key, values) }) } };
   new Function('require', 'module', 'exports', code)(id => Object.hasOwn(mocks, id) ? mocks[id] : require(id), module, module.exports);
   return {
     create(packageId = 7, session = { subject, email: 'member@example.test' }) {

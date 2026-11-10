@@ -34,14 +34,16 @@ function privateResponse(response) {
   assert.equal(response.headers.get('set-cookie'), null);
 }
 
-test('member referral generates both public branches from runtime configuration rather than the old build-time alias', async () => {
+test('member referral generates one automatic-placement link from runtime configuration', async () => {
   for (const env of [{ AUTH_PUBLIC_ORIGIN: 'https://mindblisspower.com', REFERRAL_BASE_URL: 'https://app.mindblisspower.com' },
     { AUTH_PUBLIC_ORIGIN: 'https://preview.example.test' }]) {
     const fixture = route({ env }), response = await fixture.get();
     assert.equal(response.status, 200); privateResponse(response);
     const data = await response.json(); assert.equal(data.positioned, true); assert.equal(data.code, 'OpaqueHandle');
-    assert.deepEqual(data.links, links.buildReferralLinks(data.code, env.AUTH_PUBLIC_ORIGIN));
-    assert.equal(data.link, data.links.left); assert.equal(data.link_right, data.links.right); assert.equal(fixture.calls(), 3);
+    assert.equal(data.link, links.buildReferralLink(data.code, env.AUTH_PUBLIC_ORIGIN));
+    assert.equal(data.placement, 'automatic');
+    assert.equal(new URL(data.link).searchParams.has('side'), false);
+    assert.equal(data.links, undefined); assert.equal(data.link_right, undefined); assert.equal(fixture.calls(), 3);
   }
 });
 

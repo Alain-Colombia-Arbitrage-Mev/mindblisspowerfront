@@ -67,8 +67,11 @@ export async function handleMembershipCheckout(request, { env, identity, fetchIm
   const refEmail = typeof body.ref_email === 'string' ? body.ref_email.trim().toLowerCase() : '';
   if (rawRef.length > 64 || /[\u0000-\u0020\u007f]/.test(rawRef) || refEmail.length > 254) return reply({ error: 'invalid_referral_code' }, 400);
   const ref = rawRef && refEmail === email ? rawRef : '';
-  const side = typeof body.preferred_side === 'string' ? body.preferred_side.trim().toUpperCase() : '';
-  if (ref && side && !['L', 'R'].includes(side)) return reply({ error: 'invalid_preferred_side' }, 400);
+  const requestedSide = typeof body.preferred_side === 'string' ? body.preferred_side.trim().toUpperCase() : '';
+  if (ref && requestedSide && !['L', 'R'].includes(requestedSide)) return reply({ error: 'invalid_preferred_side' }, 400);
+  // Browser-selected placement is intentionally ignored. Only sponsor
+  // attribution crosses the BFF; the backend binary engine chooses the slot.
+  const side = '';
   if (provider === 'stripe' && !stripeCheckoutEnabled(env)) return reply({ error: 'stripe_checkout_disabled' }, 503);
   if (provider === 'nowpayments' && !nowpaymentsMembershipsEnabled(env)) return reply({ error: 'nowpayments_checkout_disabled' }, 503);
   // Presentation context may be stale after another tab changes the cookie.

@@ -32,10 +32,8 @@ export function validMemberSummary(data) {
 export function validMemberReferral(data) {
   if (typeof data.positioned !== "boolean") return false;
   if (!data.positioned) return true;
-  return typeof data.code === "string" && data.code.length > 0
-    && [data.links?.left || data.link_left || data.link, data.links?.right || data.link_right || data.link].every(link => {
-      try { return ["https:", "http:"].includes(new URL(link).protocol); } catch { return false; }
-    });
+  if (typeof data.code !== "string" || data.code.length === 0 || typeof data.link !== "string") return false;
+  try { return ["https:", "http:"].includes(new URL(data.link).protocol); } catch { return false; }
 }
 
 function messageFor(status, code) {

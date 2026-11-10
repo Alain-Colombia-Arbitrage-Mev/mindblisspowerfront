@@ -16,10 +16,25 @@ export const viewport = {
   initialScale: 1,
 };
 
+const themeInitScript = `(() => {
+  let theme = "dark";
+  try {
+    const saved = localStorage.getItem("vp-theme");
+    if (saved === "light" || saved === "dark") theme = saved;
+  } catch {}
+  const root = document.documentElement;
+  root.dataset.theme = theme;
+  root.classList.toggle("dark", theme === "dark");
+  root.style.colorScheme = theme;
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", theme === "dark" ? "#050f19" : "#f3f5fb");
+})();`;
+
 export default function RootLayout({ children }) {
   return (
-    <html lang="es" data-theme="dark" suppressHydrationWarning>
+    <html lang="es" data-theme="dark" className="dark" suppressHydrationWarning>
       <head>
+        <meta name="theme-color" content="#050f19" />
+        <script id="vp-theme-init" dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         <link
           rel="preload"
           href="/fonts/manrope-latin-wght.woff2"

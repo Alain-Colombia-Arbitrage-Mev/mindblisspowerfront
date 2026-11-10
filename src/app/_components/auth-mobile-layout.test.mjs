@@ -104,6 +104,29 @@ test('mobile auth safe-area and keyboard styles are scoped, preserve zoom and do
   }
 });
 
+test('tablet login keeps the identity column proportioned and centers its message', () => {
+  const css = postcss.parse(source('../../index.css'));
+  const tablet = css.nodes.find(node => node.type === 'atrule' && node.name === 'media'
+    && node.params === '(min-width: 720px) and (max-width: 980px)');
+  assert.ok(tablet, 'Missing tablet auth layout');
+  const declarations = selector => Object.fromEntries(tablet.nodes
+    .find(node => node.type === 'rule' && node.selector === selector)
+    .nodes.filter(node => node.type === 'decl').map(node => [node.prop, node.value]));
+  const shell = declarations('.auth-shell');
+  assert.match(shell['grid-template-columns'], /clamp\(280px, 36vw, 360px\)/);
+  assert.equal(declarations('.auth-shell:not(.auth-shell--long)')['align-items'], 'start');
+  const identity = declarations('.auth-shell:not(.auth-shell--long) .auth-identity');
+  assert.equal(identity['aspect-ratio'], '3 / 5');
+  assert.match(identity['max-height'], /620px/);
+  assert.equal(identity.position, 'sticky');
+  assert.equal(identity.top, '50dvh');
+  assert.equal(identity['align-self'], 'start');
+  assert.equal(identity.transform, 'translateY(-50%)');
+  const copy = declarations('.auth-shell:not(.auth-shell--long) .auth-identity-copy');
+  assert.equal(copy.top, '50%');
+  assert.equal(copy.transform, 'translateY(-50%)');
+});
+
 test('real login controls declare readable mobile input text and 44-pixel-or-larger touch contracts', () => {
   const { EmailField, PasswordField, CodeField, ModeButton } = compile('../login/MagicLinkLoginForm.jsx', loginMocks,
     'export { EmailField, PasswordField, CodeField, ModeButton };');

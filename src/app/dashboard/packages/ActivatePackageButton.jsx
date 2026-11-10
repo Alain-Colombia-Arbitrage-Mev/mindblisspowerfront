@@ -8,11 +8,13 @@ import { checkoutErrorNotice, hostedCheckoutURL } from "@/lib/checkout-policy.mj
 import { clearCheckoutIntent, getOrCreateCheckoutIntent, readCheckoutIntent } from "@/lib/checkout-intent.mjs";
 import { cn } from "@/lib/utils";
 import { browserRequestDeadline } from '@/lib/browser-request-deadline.mjs';
+import { useI18n } from '@/i18n/LanguageProvider';
 
 /**
  * El proveedor cobra una membresía; regresar al portal no confirma su activación.
  */
 export default function ActivatePackageButton({ packageId, featured, stripeEnabled = false, nowpaymentsEnabled = false }) {
+  const { t } = useI18n();
   const memberSession = useMemberSession();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -67,7 +69,7 @@ export default function ActivatePackageButton({ packageId, featured, stripeEnabl
       setProcessed(false);
       setError("");
     } catch {
-      setError("No pudimos preparar otra compra segura. Permite el almacenamiento de esta pestaña y vuelve a intentarlo.");
+      setError(t("checkout.prepareAnotherFailed"));
     }
   }
 
@@ -82,7 +84,7 @@ export default function ActivatePackageButton({ packageId, featured, stripeEnabl
       return;
     }
     if (!providerEnabled) {
-      setError("Selecciona un método de pago disponible.");
+      setError(t("checkout.selectMethod"));
       return;
     }
     pending.current = true;
@@ -120,10 +122,9 @@ export default function ActivatePackageButton({ packageId, featured, stripeEnabl
       if (!mounted.current || activeRequest.current !== controller || controller.signal.aborted) return;
       if (!referral.ok) {
         setError(referral.error === 'pending'
-          ? 'Tu enlace de referido aún no quedó confirmado. Usa «Reintentar guardar enlace» en el aviso del panel antes de comprar. No se inició ningún cobro.'
+          ? t("checkout.referralPending")
           : referral.error === 'unconfirmed'
-            ? 'El servidor no tiene confirmado tu enlace de referido. En el aviso del panel, revisa el referido y usa «Guardar este enlace como mi elección» antes de comprar. No se inició ningún cobro.'
-          : 'No pudimos comprobar tu enlace de referido de forma segura. Recarga el panel o inténtalo más tarde. No se inició ningún cobro.');
+            ? t("checkout.referralUnconfirmed") : t("checkout.referralFailed"));
         setLoading(false);
         pending.current = false;
         return;
@@ -148,7 +149,7 @@ export default function ActivatePackageButton({ packageId, featured, stripeEnabl
           provider,
           ref: attribution.code,
           ref_email: attribution.email,
-          preferred_side: attribution.side || "",
+          preferred_side: "",
           ...(provider === "nowpayments" ? {
             purchase_request_id: purchaseRequest.current.requestId,
             purchase_subject: purchaseRequest.current.subject,
@@ -171,7 +172,7 @@ export default function ActivatePackageButton({ packageId, featured, stripeEnabl
     } catch {
       if (!mounted.current || activeRequest.current !== controller || controller.signal.aborted) return;
       setError(!requestSent && provider === "nowpayments"
-        ? "No pudimos preparar una compra segura. Recarga la página o permite el almacenamiento de esta pestaña. No se inició ningún cobro."
+        ? t("checkout.prepareFailed")
         : checkoutErrorNotice("payments-unreachable", provider));
       setLoading(false);
       pending.current = false;
@@ -181,7 +182,7 @@ export default function ActivatePackageButton({ packageId, featured, stripeEnabl
   return (
     <div className="mt-5" aria-busy={loading}>
       <label htmlFor={`${id}-provider`} className="mb-2 block text-sm font-semibold" style={{ color: "var(--vp-text-soft)" }}>
-        Método de pago
+        {t("checkout.method")}
       </label>
       <select
         id={`${id}-provider`}
@@ -192,15 +193,14 @@ export default function ActivatePackageButton({ packageId, featured, stripeEnabl
         className="mb-3 min-h-11 w-full rounded-lg border px-3 py-2 text-base focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
         style={{ background: "var(--vp-surface-raised)", color: "var(--vp-text)", borderColor: "var(--vp-border)", outlineColor: "var(--vp-accent)" }}
       >
-        {stripeEnabled === true ? <option value="stripe">Tarjeta · Stripe</option> : null}
-        <option value="nowpayments" disabled={nowpaymentsEnabled !== true}>Cripto · NOWPayments{nowpaymentsEnabled !== true ? " (no habilitado)" : ""}</option>
+        {stripeEnabled === true ? <option value="stripe">{t("checkout.card")}</option> : null}
+        <option value="nowpayments" disabled={nowpaymentsEnabled !== true}>{t("checkout.crypto")}{nowpaymentsEnabled !== true ? ` (${t("checkout.disabled")})` : ""}</option>
       </select>
       <p id={`${id}-hint`} className="mb-3 text-xs leading-5" style={{ color: "var(--vp-muted)" }}>
         {!providerEnabled
-          ? "Los pagos de membresías aún no están habilitados para este método. No se ha iniciado ningún cobro. No es una recarga de saldo."
+          ? t("checkout.disabledHint")
           : provider === "nowpayments"
-            ? "Realizarás un pago real de membresía. El servidor debe validar el pago y confirmar su activación. No es una recarga de saldo."
-          : "La membresía se confirma cuando el servidor verifica el pago. No es una recarga de saldo."}
+            ? t("checkout.cryptoHint") : t("checkout.cardHint")}
       </p>
       <button
         type="button"
@@ -214,21 +214,21 @@ export default function ActivatePackageButton({ packageId, featured, stripeEnabl
             : { background: "var(--vp-surface-raised)", color: "var(--vp-text)", border: "1px solid var(--vp-border)" }
         }
       >
-        {loading ? <><Loader2 size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> Preparando pago…</>
-          : providerEnabled ? <>Continuar al pago <ArrowRight size={15} aria-hidden="true" /></> : "Pagos no disponibles"}
+        {loading ? <><Loader2 size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> {t("checkout.preparing")}</>
+          : providerEnabled ? <>{t("checkout.continue")} <ArrowRight size={15} aria-hidden="true" /></> : t("checkout.unavailable")}
       </button>
       {error && (
         <p id={`${id}-error`} role="alert" className="mt-2 text-xs font-semibold" style={{ color: "var(--vp-danger)" }}>
           {error}
         </p>
       )}
-      {error && <a href="#nowpayments-purchases" className="mt-2 inline-block text-xs underline" style={{ color: "var(--vp-accent)" }}>Revisar historial NOWPayments</a>}
+      {error && <a href="#nowpayments-purchases" className="mt-2 inline-block text-xs underline" style={{ color: "var(--vp-accent)" }}>{t("checkout.reviewHistory")}</a>}
       {provider === "nowpayments" && (prepared || processed) && <div className="mt-3">
         <p className="text-xs leading-5" style={{ color: "var(--vp-muted)" }}>
-          Continuar reintenta la misma compra. Preparar otra conserva las facturas anteriores y permite pagar ambas por separado.
+          {t("checkout.retryCopy")}
         </p>
         <button type="button" disabled={loading} className="executive-button mt-2 w-full" onClick={prepareAnotherPurchase}>
-          {processed ? "Iniciar otra compra de esta membresía" : "Preparar otra compra independiente"}
+          {processed ? t("checkout.startAnother") : t("checkout.prepareAnother")}
         </button>
       </div>}
     </div>

@@ -33,9 +33,9 @@ export default function MessageReader({ message, onSendReply = null }) {
           <span
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold"
             style={{
-              color: "#3b82f6",
-              background: "rgba(37, 99, 235, 0.2)",
-              border: "1px solid rgba(59, 130, 246, 0.3)",
+              color: "var(--vp-link)",
+              background: "var(--vp-accent-muted)",
+              border: "1px solid var(--vp-accent-border)",
             }}
           >
             {initialsOf(message.from)}

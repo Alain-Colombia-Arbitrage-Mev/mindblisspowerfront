@@ -25,7 +25,7 @@ test('mobile referral persistence and reads keep exact owner/ACK contracts witho
     } };
     assert.equal((await beginVerifiedReferralSync(email, 'MobileSponsor', 'R', options)).ok, true);
     assert.equal(pendingVerifiedReferral(email, { browser: owner }), null);
-    assert.deepEqual(JSON.parse(calls[0].body), { ref: 'MobileSponsor', preferred_side: 'R', expected_email: email });
+    assert.deepEqual(JSON.parse(calls[0].body), { ref: 'MobileSponsor', preferred_side: '', expected_email: email });
     assert.equal(calls[0].keepalive, true);
     assert.deepEqual(await readVerifiedReferral(email, options), serverHint('MobileSponsor', 'R'));
     assert.equal(calls[1].method, undefined);
@@ -45,7 +45,7 @@ test('verified entry starts one small keepalive save without waiting, stores onl
   assert.equal(calls.length, 1, 'the caller can immediately navigate while the save remains pending');
   assert.equal(calls[0].path, '/api/member/referral-attribution');
   assert.equal(calls[0].options.keepalive, true); assert.equal(calls[0].options.credentials, 'same-origin');
-  assert.deepEqual(JSON.parse(calls[0].options.body), { ref: 'LocalSponsor', preferred_side: 'L', expected_email: email });
+  assert.deepEqual(JSON.parse(calls[0].options.body), { ref: 'LocalSponsor', preferred_side: '', expected_email: email });
   assert.equal(pendingVerifiedReferral(email, { browser: owner }).ref, 'LocalSponsor');
   assert.equal(pendingVerifiedReferral('other@example.test', { browser: owner }), null);
   assert.doesNotMatch(JSON.stringify([...owner.sessionStorage.values.values()]), /token|password|person_id|role|affiliate_id/);
@@ -61,7 +61,7 @@ test('old browser attribution is never posted on a read and never overwrites a d
   const result = await verifiedReferralForCheckout(email, { browser: owner, fetchImpl: async (path, options) => {
     calls.push({ path, options }); return Response.json(serverHint('NewDeviceSponsor', 'R'));
   } });
-  assert.deepEqual(result, { ok: true, code: 'NewDeviceSponsor', email, side: 'R' });
+  assert.deepEqual(result, { ok: true, code: 'NewDeviceSponsor', email });
   assert.equal(calls.length, 1); assert.equal(calls[0].options.method, undefined);
   assert.equal(calls[0].options.headers['X-VP-Expected-Email'], email);
   assert.equal(calls[0].options.body, undefined);
@@ -87,7 +87,7 @@ test('failed saves retain both browser hints and a marker; reads do not retry, e
   assert.equal(pendingVerifiedReferral(email, { browser: owner }), null);
   assert.equal(referralForCheckout(email, owner.localStorage).code, 'CurrentLink');
   assert.deepEqual(await verifiedReferralForCheckout(email, { browser: owner, fetchImpl: async () => Response.json(serverHint('CurrentLink', 'L')) }),
-    { ok: true, code: 'CurrentLink', email, side: 'L' });
+    { ok: true, code: 'CurrentLink', email });
 });
 
 test('immutable placement ignores pending hints while a missing durable attribution does not silently erase a known browser referral', async () => {
@@ -97,7 +97,7 @@ test('immutable placement ignores pending hints while a missing durable attribut
     { ok: false, error: 'unconfirmed' });
   await beginVerifiedReferralSync(email, 'NewSponsor', 'R', { browser: owner, fetchImpl: async () => Response.json({ error: 'unavailable' }, { status: 503 }) });
   assert.deepEqual(await verifiedReferralForCheckout(email, { browser: owner, fetchImpl: async () => Response.json(serverHint('', '', true)) }),
-    { ok: true, code: '', email: '', side: '' });
+    { ok: true, code: '', email: '' });
   assert.equal(pendingVerifiedReferral(email, { browser: owner }), null);
   assert.equal(referralForCheckout(email, owner.localStorage).code, 'OldSponsor', 'no node placement or browser binding is rewritten');
 });
@@ -146,7 +146,7 @@ test('a checkout read started before a confirmed write cannot authorize an older
   assert.equal(reads, 1);
   assert.equal((await retryVerifiedReferral(email, { browser: owner, fetchImpl: async () => Response.json(serverHint('CurrentVisit', 'L')) })).ok, true);
   stale.resolve(Response.json(serverHint('OlderDurable', 'R')));
-  assert.deepEqual(await checkout, { ok: true, code: 'CurrentVisit', email, side: 'L' });
+  assert.deepEqual(await checkout, { ok: true, code: 'CurrentVisit', email });
   assert.equal(reads, 2, 'one fresh GET replaces the reply that predates the completed write');
 });
 
@@ -163,7 +163,7 @@ test('reads observe an already-started verified save without resending it, even 
     } });
     assert.deepEqual(methods, ['POST'], 'a read waits for the existing request rather than racing or replaying it');
     transport.resolve(Response.json(serverHint('CurrentVisit', 'L'))); await saving;
-    assert.deepEqual(await checkout, { ok: true, code: 'CurrentVisit', email, side: 'L' });
+    assert.deepEqual(await checkout, { ok: true, code: 'CurrentVisit', email });
     assert.deepEqual(methods, ['POST', 'GET']);
   }
 });
@@ -204,11 +204,11 @@ test('expired or unavailable tab markers retain the browser backup as a visible 
     assert.deepEqual(await verifiedReferralForCheckout(email, options), { ok: false, error: unavailable ? 'pending' : 'unconfirmed' });
     assert.equal(calls.length, 1); assert.equal(calls[0].method, undefined, 'preflight never reposts the old cache');
     const choice = browserReferralChoice(email, { browser: owner });
-    assert.deepEqual(choice, { code: 'BrowserBackup', email, side: 'L' });
+    assert.deepEqual(choice, { code: 'BrowserBackup', email });
     // Another tab changes the cache after the exact choice was displayed.
     bindReferralCodeToEmail(email, 'OtherTab', owner.localStorage, undefined, 'login', 'R');
     const confirmed = await chooseBrowserReferral(email, choice, { browser: owner, fetchImpl: async (_path, input) => {
-      calls.push(input); assert.deepEqual(JSON.parse(input.body), { ref: 'BrowserBackup', preferred_side: 'L', expected_email: email });
+      calls.push(input); assert.deepEqual(JSON.parse(input.body), { ref: 'BrowserBackup', preferred_side: '', expected_email: email });
       return Response.json(serverHint('BrowserBackup', 'L'));
     } });
     assert.equal(confirmed.ok, true); assert.equal(calls.length, 2); assert.equal(calls[1].method, 'POST');
@@ -234,7 +234,7 @@ test('same-owner choices are saved in selection order and checkout observes the 
   assert.deepEqual(methods, ['FirstChoice'], 'the second POST and checkout GET wait for the existing owner save');
   assert.equal(pendingVerifiedReferral(email, { browser: owner }).ref, 'LastChoice');
   firstReply.resolve(); await first; await second;
-  assert.deepEqual(await checkout, { ok: true, code: 'LastChoice', email, side: 'R' });
+  assert.deepEqual(await checkout, { ok: true, code: 'LastChoice', email });
   assert.deepEqual(methods, ['FirstChoice', 'LastChoice', 'GET']);
   assert.equal(pendingVerifiedReferral(email, { browser: owner }), null);
 });
@@ -266,7 +266,7 @@ test('denied browser stores retain failed choices per owner and checkout fails c
   assert.deepEqual(await verifiedReferralForCheckout(email, options), { ok: false, error: 'pending' });
   assert.deepEqual(calls, ['GET']);
   assert.deepEqual(await verifiedReferralForCheckout(email, { browser: owner, fetchImpl: async () => Response.json(serverHint('', '', true)) }),
-    { ok: true, code: '', email: '', side: '' });
+    { ok: true, code: '', email: '' });
   assert.equal(pendingVerifiedReferral(email, { browser: owner }), null);
 });
 
@@ -309,7 +309,7 @@ test('a read never overwrites a newer stored choice; ambiguous same-time choices
       assert.equal(input.method, undefined); reads++;
       return Response.json(serverHint('OtherDocumentChoice', 'L'));
     } });
-    assert.deepEqual(result, newer ? { ok: true, code: 'OtherDocumentChoice', email, side: 'L' } : { ok: false, error: 'pending' });
+    assert.deepEqual(result, newer ? { ok: true, code: 'OtherDocumentChoice', email } : { ok: false, error: 'pending' });
     assert.equal(pendingVerifiedReferral(email, { browser: owner })?.ref || null, newer ? null : 'LocalLastChoice');
     assert.equal(owner.sessionStorage.getItem('mp_ref_verified_visit.v1'), replacement);
     assert.equal(reads, 1);
@@ -332,7 +332,7 @@ test('corrupt same-owner storage or failed reads cannot erase this context\'s va
     t.mock.timers.tick(31 * 60 * 1000);
     assert.equal(pendingVerifiedReferral(email, { browser: owner }), null);
     assert.deepEqual(await verifiedReferralForCheckout(email, { browser: owner, fetchImpl: async () => Response.json(serverHint('', '')) }),
-      { ok: true, code: '', email: '', side: '' });
+      { ok: true, code: '', email: '' });
   }
 });
 
@@ -353,7 +353,7 @@ test('real client and BFF keep one verified owner end to end without browser aut
   });
   assert.equal((await beginVerifiedReferralSync(email, 'LatestLink', 'R', { browser: owner, fetchImpl: transport })).ok, true);
   assert.deepEqual(await verifiedReferralForCheckout(email, { browser: browser(), fetchImpl: transport }),
-    { ok: true, code: 'LatestLink', email, side: 'R' });
+    { ok: true, code: 'LatestLink', email });
   assert.equal(calls.length, 2); assert.equal(calls[0].input.method, 'POST'); assert.equal(calls[1].input.method, 'GET');
   assert.equal(calls[0].input.headers['X-VP-Id-Token'], 'synthetic-verified-jwt');
   assert.doesNotMatch(calls[0].input.body, /expected_email|position|sponsor_id|person_id|password|otp/);

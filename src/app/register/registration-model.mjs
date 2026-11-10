@@ -84,11 +84,10 @@ export function registrationPendingDelivery(status, payload, email) {
 export function registrationHints(search) {
   const params = new URLSearchParams(search);
   const referralCode = referralLinkCode(params.get('ref'));
-  const side = String(params.get('side') || '').toUpperCase();
   return {
     email: registrationEmail(params.get('email')),
     referralCode,
-    preferredSide: referralCode && ['L', 'R'].includes(side) ? side : '',
+    preferredSide: '',
     resume: params.get('resume') === '1',
   };
 }
@@ -111,6 +110,7 @@ export function registrationFailure(status, action = 'register', code = '') {
 }
 
 export function registrationLoginUrl(email, referralCode = '', preferredSide = '') {
+  void preferredSide;
   const params = new URLSearchParams();
   params.set('mode', 'code');
   const normalizedEmail = registrationEmail(email);
@@ -118,19 +118,18 @@ export function registrationLoginUrl(email, referralCode = '', preferredSide = '
   const referral = referralLinkCode(referralCode);
   if (referral) {
     params.set('ref', referral);
-    if (['L', 'R'].includes(preferredSide)) params.set('side', preferredSide);
   }
   return `/login${params.size ? `?${params}` : ''}`;
 }
 
 export function registrationUrl(email, referralCode = '', preferredSide = '', resume = false) {
+  void preferredSide;
   const params = new URLSearchParams();
   const normalizedEmail = registrationEmail(email);
   if (normalizedEmail) params.set('email', normalizedEmail);
   const referral = referralLinkCode(referralCode);
   if (referral) {
     params.set('ref', referral);
-    if (['L', 'R'].includes(preferredSide)) params.set('side', preferredSide);
   }
   if (resume) params.set('resume', '1');
   return `/register${params.size ? `?${params}` : ''}`;

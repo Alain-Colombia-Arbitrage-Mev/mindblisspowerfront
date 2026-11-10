@@ -93,6 +93,7 @@ test('real return modal treats payment/status/paid query parameters only as an o
       'lucide-react': new Proxy({}, { get: () => () => null }), '@/lib/utils': { cn: (...values) => values.join(' ') },
       '@/hooks/useCheckoutActivation': { useCheckoutActivation: options => { activationEnabled = options.enabled; return {}; } },
       '@/lib/checkout-status.mjs': { checkoutStatusCopy: () => ({}) }, '@/hooks/useMemberSummary': { useMemberSummary: () => ({ reload() {} }) },
+      '@/i18n/LanguageProvider': { useI18n: () => ({ locale: 'es', dir: 'ltr', t: key => key }) },
       './NOWPaymentsReceiptPopup': { default: () => null } };
     new Function('require', 'module', 'exports', code)(id => Object.hasOwn(mocks, id) ? mocks[id] : require(id), module, module.exports);
     const tree = module.exports.default();

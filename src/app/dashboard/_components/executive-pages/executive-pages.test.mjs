@@ -7,6 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 import * as paymentDisplay from '../../../../lib/payment-display.mjs';
 import * as deadline from '../../../../lib/browser-request-deadline.mjs';
+import { translateMessage } from '../../../../i18n/translate.mjs';
 
 const require = createRequire(import.meta.url);
 const pageNames = [
@@ -20,7 +21,7 @@ const routes = {
   auto: 'AutoModeDashboardPage', bonificaciones: 'BonusesDashboardPage', legal: 'LegalDashboardPage',
   products: 'ProductsDashboardPage', profile: 'ProfileDashboardPage', rank: 'RankDashboardPage',
   ranks: 'RankDashboardPage', referrals: 'ReferralsDashboardPage', support: 'SupportDashboardPage',
-  team: 'TeamDashboardPage', 'team-pro': 'TeamDashboardPage', withdrawals: 'FinanceDashboardPage',
+  team: 'TeamDashboardPage', 'team-pro': 'TeamDashboardPage', payments: 'FinanceDashboardPage',
 };
 const iconStub = () => React.createElement('svg', { 'aria-hidden': 'true' });
 const icons = new Proxy({}, { get: () => iconStub });
@@ -38,13 +39,14 @@ function loadPages({ summary = { loading: true, data: null, error: '' }, health 
     '@/lib/payment-display.mjs': paymentDisplay,
     '@/lib/browser-request-deadline.mjs': deadline,
     '@/lib/member-read.mjs': { isRecoverySummary: data => data?.recovery_mode === true },
-    '@/i18n/LanguageProvider': { useI18n: () => ({ locale: 'es', t: key => key }) },
+    '@/i18n/LanguageProvider': { useI18n: () => ({ locale: 'es', dir: 'ltr', t: (key, values) => translateMessage('es', key, values) }) },
     '@/lib/useNetworkHealth': { useNetworkHealth: () => health },
     '@/lib/useSustainability': { useSustainability: () => ({ loading: false, data: null, error: '' }) },
     '@/lib/rank-catalog.mjs': { readRankCatalog: async () => { throw Error('Unexpected render-time request'); } },
     '@/components/member/ReferralModule': { default: emptyComponent },
     './CommunityInviteCard': { default: emptyComponent },
     '@/components/panel/NOWPaymentsBalances': { default: emptyComponent },
+    'next/link': { default: ({ children, ...props }) => React.createElement('a', props, children) },
   };
   function load(url) {
     const key = url.href;
@@ -119,7 +121,7 @@ test('Better Auth profile stays email-only, with saves disabled until the stored
   assert.match(html, /Persona Prueba/);
   assert.match(html, /verified@example.test/);
   assert.match(html, /REF-123/);
-  assert.match(html, /autenticación de tu cuenta se realiza por correo electrónico/);
+  assert.match(html, /autenticación se realiza por correo electrónico/);
   assert.match(html, /disabled="">Guardar cambios/);
   assert.match(html, /Cargando los datos guardados de tu perfil/);
   assert.doesNotMatch(html, /Enviar SMS|Código SMS|Validación del teléfono/);
@@ -143,11 +145,11 @@ test('phone verification keeps provider and configuration diagnostics out of the
 
 test('finance loading and failures do not invent an available zero balance', () => {
   const loading = render(loadPages().FinanceDashboardPage);
-  assert.match(loading, /Cargando tu saldo/);
+  assert.match(loading, /Cargando tu wallet/);
   assert.doesNotMatch(loading, /\$0\.00/);
   const failure = render(loadPages({ summary: { loading: false, error: 'unavailable', data: null } }).FinanceDashboardPage);
   assert.match(failure, /Reintentar/);
-  assert.doesNotMatch(failure, /\$0\.00|Cargando tu saldo/);
+  assert.doesNotMatch(failure, /\$0\.00|Cargando tu wallet/);
 });
 
 test('advisor failure and member support loading still render their existing states after extraction', () => {

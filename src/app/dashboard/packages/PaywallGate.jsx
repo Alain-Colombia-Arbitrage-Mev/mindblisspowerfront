@@ -4,6 +4,7 @@ import { useState } from "react";
 import { CheckCircle2, ChevronDown, ChevronUp, Network, ReceiptText } from "lucide-react";
 import Link from "next/link";
 import { useMemberSummary } from "@/hooks/useMemberSummary";
+import { useI18n } from "@/i18n/LanguageProvider";
 
 const PLAN_LABEL = {
   starter: "Starter",
@@ -19,12 +20,13 @@ const PLAN_LABEL = {
  * in-flight request never loses its identity or pending guard.
  */
 export default function PaywallGate({ children, initialShowPlans = false }) {
+  const { t } = useI18n();
   const { state } = useMemberSummary({ fresh: true });
   const [showPlans, setShowPlans] = useState(initialShowPlans === true);
 
   const active = !state.loading && !state.error && Number(state.data?.active_packages) > 0;
   const d = state.data;
-  const plan = d?.plan ? PLAN_LABEL[d.plan] || d.plan : null;
+  const plan = d?.plan ? (d.plan === "basic" ? t("membershipGate.basic") : PLAN_LABEL[d.plan] || d.plan) : null;
   const rank = d?.rank && d.rank !== "—" ? d.rank : null;
 
   return (
@@ -44,27 +46,27 @@ export default function PaywallGate({ children, initialShowPlans = false }) {
           <CheckCircle2 size={32} style={{ color: "var(--vp-accent)" }} />
         </span>
         <h2 className="m-0 text-2xl font-bold" style={{ color: "var(--vp-text)" }}>
-          Tu membresía está activa
+          {t("membershipGate.activeTitle")}
         </h2>
         <p className="mt-3 text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
-          Tu posición en la red está habilitada. Ya puedes invitar, construir tu equipo y hacer seguimiento de tu progreso.
+          {t("membershipGate.activeCopy")}
         </p>
         <p className="mt-2 text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
-          Puedes comprar otra membresía, incluso del mismo plan. Cada compra activada tiene su propio CD y bloqueo de 365 días. Continuar una factura pendiente no crea otra membresía.
+          {t("membershipGate.extraCopy")}
         </p>
 
         <div className="mt-6 grid gap-3 sm:grid-cols-3">
-          <Stat label="Membresías activas" value={String(d?.active_packages ?? 1)} accent />
-          <Stat label="Plan" value={plan || "Activo"} />
-          <Stat label="Rango" value={rank || "En progreso"} />
+          <Stat label={t("membershipGate.activeMemberships")} value={String(d?.active_packages ?? 1)} accent />
+          <Stat label={t("membershipGate.plan")} value={plan || t("membershipGate.active")} />
+          <Stat label={t("membershipGate.rank")} value={rank || t("membershipGate.inProgress")} />
         </div>
 
         <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
           <Link href="/dashboard/network?tab=tree" className="executive-button primary justify-center no-underline">
-            <Network size={16} /> Ir a mi red
+            <Network size={16} /> {t("membershipGate.network")}
           </Link>
           <Link href="/dashboard/referrals" className="executive-button justify-center no-underline">
-            <ReceiptText size={16} /> Mi enlace de referido
+            <ReceiptText size={16} /> {t("membershipGate.referral")}
           </Link>
         </div>
       </div> : null}
@@ -77,7 +79,7 @@ export default function PaywallGate({ children, initialShowPlans = false }) {
           className="executive-button ghost"
         >
           {showPlans ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-          {showPlans ? "Ocultar planes" : "Comprar otra membresía"}
+          {showPlans ? t("membershipGate.hidePlans") : t("membershipGate.buyAnother")}
         </button>
       </div> : null}
 

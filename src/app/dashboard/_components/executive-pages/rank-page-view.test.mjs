@@ -4,6 +4,7 @@ import test from 'node:test';
 import ts from 'typescript';
 import { readMemberJson } from '../../../../lib/member-read.mjs';
 import * as model from './rank-page-model.mjs';
+import { translateMessage } from '../../../../i18n/translate.mjs';
 
 const bronze = { positioned: true, me: { affiliateId: '123', rank: { code: 'BRONZE', name: 'Bronce' } }, tree: [] };
 const catalog = { ranks: [{ code: 'BRONZE', name_es: 'Bronce', required_points: '100', bonus_amount_usd: '50.00' },
@@ -28,6 +29,7 @@ function view({ readCatalog = async () => catalog, fetchImpl = async () => Respo
       requests.push({ target, init }); return fetchImpl(target, init);
     } }) },
     './rank-page-model.mjs': model,
+    '@/i18n/LanguageProvider': { useI18n: () => ({ locale: 'es', dir: 'ltr', t: (key, values) => translateMessage('es', key, values) }) },
     'lucide-react': new Proxy({}, { get: () => () => null }),
     './executive-ui': { ExecutiveModulePage: () => null },
     'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }) },

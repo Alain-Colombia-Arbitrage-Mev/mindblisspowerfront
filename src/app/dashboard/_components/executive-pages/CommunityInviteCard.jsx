@@ -6,18 +6,16 @@ import { useEffect, useRef, useState } from "react";
 import { useI18n } from "@/i18n/LanguageProvider";
 import { readMemberJson, validMemberReferral } from "@/lib/member-read.mjs";
 import { createClipboardFeedback, createLatestViewRequest } from "@/lib/member-view-effects.mjs";
-import { referralLinksFrom } from "@/lib/referral-links.mjs";
+import { referralLinkFrom } from "@/lib/referral-links.mjs";
 
 export default function CommunityInviteCard({ editorOpen, onCloseEditor }) {
   const { locale, t } = useI18n();
   const [status, setStatus] = useState("loading");
-  const [links, setLinks] = useState({ left: "", right: "" });
-  const [side, setSide] = useState("left");
+  const [link, setLink] = useState("");
   const [feedback, setFeedback] = useState({ pending: "", copied: "", error: "" });
   const [message, setMessage] = useState(() => t("community.editorDefault"));
   const request = useRef(null);
   const clipboard = useRef(null);
-  const activeLink = links[side];
 
   useEffect(() => {
     const active = createLatestViewRequest(
@@ -25,11 +23,11 @@ export default function CommunityInviteCard({ editorOpen, onCloseEditor }) {
       {
         onStart: () => setStatus("loading"),
         onValue: data => {
-          const next = referralLinksFrom(data);
-          setLinks(next);
-          setStatus(next.left && next.right ? "ready" : "pending");
+          const next = referralLinkFrom(data);
+          setLink(next);
+          setStatus(next ? "ready" : "pending");
         },
-        onError: () => { setLinks({ left: "", right: "" }); setStatus("error"); },
+        onError: () => { setLink(""); setStatus("error"); },
         onSettled: () => {},
       },
     );
@@ -47,7 +45,7 @@ export default function CommunityInviteCard({ editorOpen, onCloseEditor }) {
   useEffect(() => setMessage(t("community.editorDefault")), [locale, t]);
 
   const linkCopy = async () => {
-    if (activeLink) await clipboard.current?.copy(activeLink, "link");
+    if (link) await clipboard.current?.copy(link, "link");
   };
   const messageCopy = async () => clipboard.current?.copy(message, "message");
 
@@ -59,14 +57,10 @@ export default function CommunityInviteCard({ editorOpen, onCloseEditor }) {
         <div className="mb-community-link-field">
           <div className="mb-community-link-label">
             <span>{t("community.yourLink")}</span>
-            <div className="mb-community-branch-switch" aria-label={t("community.branchLabel")}>
-              <button type="button" data-active={side === "left" || undefined} onClick={() => setSide("left")}>{t("community.left")}</button>
-              <button type="button" data-active={side === "right" || undefined} onClick={() => setSide("right")}>{t("community.right")}</button>
-            </div>
           </div>
-          <strong title={activeLink}>{linkText(status, activeLink, t)}</strong>
+          <strong title={link}>{linkText(status, link, t)}</strong>
         </div>
-        <button className="executive-button primary mb-community-copy" type="button" disabled={!activeLink || feedback.pending === "link"} onClick={linkCopy}>
+        <button className="executive-button primary mb-community-copy" type="button" disabled={!link || feedback.pending === "link"} onClick={linkCopy}>
           {feedback.pending === "link" ? <Loader2 className="animate-spin" size={16} /> : feedback.copied === "link" ? <Check size={16} /> : <Copy size={16} />}
           {feedback.copied === "link" ? t("community.copied") : t("community.copyLink")}
         </button>

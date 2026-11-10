@@ -7,6 +7,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import ts from "typescript";
 import { createMemberSummaryResource } from "./member-summary-resource.mjs";
 import { readMemberJson } from "./member-read.mjs";
+import { translateMessage } from "../i18n/translate.mjs";
 
 const require = createRequire(import.meta.url);
 const icon = () => React.createElement("svg", { "aria-hidden": true });
@@ -14,7 +15,9 @@ function component(relative, mocks) {
   const source = readFileSync(new URL(relative, import.meta.url), "utf8");
   const code = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
   const module = { exports: {} };
-  new Function("require", "module", "exports", code)(id => id === "lucide-react" ? new Proxy({}, { get: () => icon }) : Object.hasOwn(mocks, id) ? mocks[id] : require(id), module, module.exports);
+  new Function("require", "module", "exports", code)(id => id === "lucide-react" ? new Proxy({}, { get: () => icon })
+    : id === "@/i18n/LanguageProvider" ? { useI18n: () => ({ locale: "es", dir: "ltr", t: (key, values) => translateMessage("es", key, values) }) }
+    : Object.hasOwn(mocks, id) ? mocks[id] : require(id), module, module.exports);
   return module.exports.default;
 }
 

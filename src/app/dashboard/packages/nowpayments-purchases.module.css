@@ -395,13 +395,13 @@
 .primary {
   border-color: var(--vp-accent);
   background: var(--vp-accent);
-  color: #101010;
+  color: var(--vp-on-accent);
 }
 
 .primary:hover:not(:disabled) {
   border-color: var(--vp-accent-strong);
   background: var(--vp-accent-strong);
-  color: #101010;
+  color: var(--vp-on-accent);
 }
 
 .tertiary {

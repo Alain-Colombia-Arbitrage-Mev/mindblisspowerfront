@@ -49,7 +49,7 @@ export default function MessageFolders({ folders, activeFolder, onSelectFolder, 
               {folder.count ? (
                 <span
                   className="rounded-full px-2 py-0.5 text-[11px] font-bold"
-                  style={{ background: "var(--vp-accent)", color: "#000000" }}
+                  style={{ background: "var(--vp-accent)", color: "var(--vp-on-accent)" }}
                 >
                   {folder.count}
                 </span>

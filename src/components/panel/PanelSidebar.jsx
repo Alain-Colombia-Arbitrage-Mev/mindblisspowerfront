@@ -23,7 +23,7 @@ const NAV_GROUPS = [
   { label: "nav.account", items: [
     { icon: LayoutDashboard, label: "nav.summary", href: "/dashboard", exact: true, also: ["/dashboard/home"] },
     { icon: Package, label: "nav.memberships", href: "/dashboard/packages" },
-    { icon: Wallet, label: "nav.wallet", href: "/dashboard/withdrawals", also: ["/dashboard/payments"] },
+    { icon: Wallet, label: "nav.wallet", href: "/dashboard/payments" },
   ] },
   { label: "nav.communityGroup", items: [
     { icon: Users, label: "nav.community", href: "/dashboard/referrals" },
@@ -42,7 +42,7 @@ export default function PanelSidebar({ pathname, member, onNavigate = undefined 
       <SidebarLogo onNavigate={onNavigate} />
       <SidebarWalletCard onNavigate={onNavigate} />
 
-      <nav aria-label="Navegación del miembro" className="vp-sidebar-nav">
+      <nav aria-label={t("dashboard.memberNavigation")} className="vp-sidebar-nav">
         {NAV_GROUPS.map((group) => (
           <div className="vp-sidebar-nav-group" key={group.label}>
             <p>{t(group.label)}</p>

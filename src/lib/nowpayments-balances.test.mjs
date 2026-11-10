@@ -30,13 +30,13 @@ test('NOW read model displays independent backend totals without combining princ
  assert.equal(balances.nowpaymentsBalanceView(data).status,'operational');
  const html=render(data);
  for(const text of ['Comisiones pendientes de liberación','Comisiones vencidas disponibles (contables)','Comisiones retenidas por financiación',
-  'Acreditadas internamente, no pagadas al banco','Retiros externos NOW registrados','Capital de membresías bloqueado','Capital vencido, elegible para solicitud','ROI de CD bloqueado']) assert.ok(html.includes(text),text);
+  'Acreditadas internamente, no pagadas al banco','Pagos externos históricos registrados','Capital de membresías bloqueado','Capital vencido, pendiente de validación','ROI de CD bloqueado']) assert.ok(html.includes(text),text);
  assert.match(html,/un mes calendario desde su generación, no a los 30 días/);
- assert.match(html,/retiros externos de NOWPayments siguen deshabilitados/);
+ assert.match(html,/Wallet destinada únicamente a recargas/);
  assert.match(html,/crédito interno no es un pago recibido/);
  assert.match(html,/Crédito líquido/); assert.match(html,/liberada sólo parcialmente/);
  assert.match(html,/\$2\.00 USD/);
- assert.match(html,/365 días.*elegible para solicitud/s);
+ assert.match(html,/365 días.*sujeto a validación/s);
  assert.match(html,/sin perjuicio de los derechos aplicables/);
  assert.doesNotMatch(html,/<button|<form|pago automático garantizado|\$150\.00/);
  assert.equal(JSON.stringify(data),before);
@@ -99,16 +99,16 @@ test('past dates never override server risk or funding holds and do not turn loc
  assert.equal(JSON.stringify(data),before,'presentation must not mature or unlock records locally');
 });
 
-test('the redesign keeps each exact backend amount beside its semantic label and the withdrawal warning outside collapsed details',()=>{
+test('the redesign keeps each exact backend amount beside its semantic label and the top-up policy outside collapsed details',()=>{
  const data=model(),html=render(data);
- const amounts=[['Capital de membresías bloqueado','100.00'],['Capital vencido, elegible para solicitud','0.00'],
+ const amounts=[['Capital de membresías bloqueado','100.00'],['Capital vencido, pendiente de validación','0.00'],
   ['Comisiones pendientes de liberación','10.00'],['Comisiones vencidas disponibles (contables)','5.00'],
   ['Comisiones retenidas por financiación','3.00'],['ROI de CD bloqueado','2.00'],['ROI de CD vencido (contable)','0.00'],
-  ['Acreditadas internamente, no pagadas al banco','20.00'],['Retiros externos NOW registrados','0.00']];
+  ['Acreditadas internamente, no pagadas al banco','20.00'],['Pagos externos históricos registrados','0.00']];
  const escape=value=>value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
  for(const[label,value]of amounts) assert.match(html,new RegExp(`<dt[^>]*>${escape(label)}</dt><dd[^>]*>${escape(balances.nowpaymentsMoney(value))}</dd>`),label);
  for(const heading of ['Capital','Comisiones','ROI de membresías']) assert.ok(html.includes(`<h4>${heading}</h4>`));
- assert.ok(html.indexOf('Retiros externos no habilitados')<html.indexOf('<details'));
+ assert.ok(html.indexOf('Wallet destinada únicamente a recargas')<html.indexOf('<details'));
  assert.match(html,/<summary>Cómo se liberan y registran los importes/);
  assert.match(html,/<caption[^>]*>Capital y ROI/);assert.match(html,/<caption[^>]*>Comisiones NOWPayments/);
  for(const column of ['Capital','Vencimiento del bloqueo (Bogotá)','Comisión calculada','Crédito líquido','Vencimiento (Bogotá)','Estado']) assert.ok(html.includes(`data-label="${column}"`));
@@ -121,10 +121,14 @@ test('financial detail surfaces consume only the nested NOW read model while the
  const overview=readFileSync(new URL('../components/panel/overview/OverviewDashboard.jsx',import.meta.url),'utf8');
  assert.doesNotMatch(overview,/NOWPaymentsBalances|nowpayments\.(?:commissions|membership)|principal_locked_usd|roi_locked_usd/);
  const page=readFileSync(new URL('../app/dashboard/packages/page.jsx',import.meta.url),'utf8');
- assert.match(page,/un mes calendario desde su generación, no 30 días/);
- assert.match(page,/capital de la membresía y el ROI del CD permanecen bloqueados durante 365 días/);
- assert.match(page,/Sin reembolso anticipado ordinario, sin perjuicio de los derechos aplicables/);
- assert.ok(page.indexOf('Sin reembolso anticipado ordinario')<page.indexOf('<ActivatePackageButton'));
+ const translations=readFileSync(new URL('../i18n/dashboard-messages.js',import.meta.url),'utf8');
+ assert.match(page,/membershipsPage\.commissionTerm/);
+ assert.match(translations,/un mes calendario desde su generación, no 30 días/);
+ assert.match(page,/membershipsPage\.capitalTerm/);
+ assert.match(translations,/capital de la membresía y el ROI del CD permanecen bloqueados durante 365 días/);
+ assert.match(page,/membershipsPage\.refundNotice/);
+ assert.match(translations,/Sin reembolso anticipado ordinario, sin perjuicio de los derechos aplicables/);
+ assert.ok(page.indexOf('membershipsPage.refundNotice')<page.indexOf('<ActivatePackageButton'));
  const button=readFileSync(new URL('../app/dashboard/packages/ActivatePackageButton.jsx',import.meta.url),'utf8');
  assert.doesNotMatch(button,/accepts_membership|policy_version|termsAccepted|type="checkbox"/);
 });

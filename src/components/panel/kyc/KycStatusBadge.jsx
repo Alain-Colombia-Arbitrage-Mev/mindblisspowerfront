@@ -1,9 +1,9 @@
 import { KYC_STATUS_LABELS } from "./kycConfig";
 
 const TONES = {
-  green: { color: "#4ade80", background: "rgba(34, 197, 94, 0.1)", border: "rgba(34, 197, 94, 0.3)" },
-  amber: { color: "var(--vp-accent)", background: "rgba(250, 204, 21, 0.1)", border: "rgba(250, 204, 21, 0.3)" },
-  red: { color: "#f87171", background: "rgba(220, 38, 38, 0.1)", border: "rgba(220, 38, 38, 0.3)" },
+  green: { color: "var(--vp-success)", background: "var(--vp-success-muted)", border: "var(--vp-success-border)" },
+  amber: { color: "var(--vp-amber)", background: "var(--vp-amber-muted)", border: "var(--vp-amber-border)" },
+  red: { color: "var(--vp-danger)", background: "var(--vp-danger-muted)", border: "var(--vp-danger-border)" },
   gray: { color: "var(--vp-muted)", background: "var(--vp-surface-raised)", border: "var(--vp-border)" },
 };
 

@@ -48,7 +48,7 @@ test('membership checkout forwards verified JWT and catalog ID, never client mon
     assert.equal(options.redirect, 'manual'); assert.equal(options.cache, 'no-store');
     assert.equal(options.headers['X-VP-Id-Token'], 'synthetic-verified-jwt');
     assert.deepEqual(JSON.parse(options.body), { provider: 'nowpayments', email: 'member@example.test', package_id: 1,
-      ref: 'MP-SYNTHETIC', preferred_side: 'L', purchase_request_id: purchaseRequestId, name: 'Synthetic Member', phone: '+12025550101' });
+      ref: 'MP-SYNTHETIC', preferred_side: '', purchase_request_id: purchaseRequestId, name: 'Synthetic Member', phone: '+12025550101' });
     assert.doesNotMatch(JSON.stringify(options), /synthetic-not-for-the-portal|attacker|person_id|sponsor_id|is_admin|amount_usd/);
     return Response.json({ ...payload, private: 'private-account-data', token: 'private-token' }, { headers: { 'set-cookie': 'private-cookie' } });
   } });

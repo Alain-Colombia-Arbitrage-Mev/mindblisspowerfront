@@ -9,6 +9,7 @@ import { useCheckoutActivation } from "@/hooks/useCheckoutActivation";
 import { checkoutStatusCopy } from "@/lib/checkout-status.mjs";
 import { useMemberSummary } from "@/hooks/useMemberSummary";
 import NOWPaymentsReceiptPopup from './NOWPaymentsReceiptPopup';
+import { useI18n } from '@/i18n/LanguageProvider';
 
 /**
  * Popup de resultado del pago. Stripe redirige a
@@ -17,6 +18,7 @@ import NOWPaymentsReceiptPopup from './NOWPaymentsReceiptPopup';
  * refresh no re-muestre el popup.
  */
 export default function PaymentResultModal() {
+  const { t } = useI18n();
   const router = useRouter();
   const searchParams = useSearchParams();
   const nowpayments = searchParams.get('payment_provider') === 'nowpayments';
@@ -86,19 +88,20 @@ export default function PaymentResultModal() {
         </span>
 
         <Dialog.Title className="m-0 text-2xl font-bold" style={{ color: "var(--vp-text)" }}>
-          {paid ? copy.title : "Tu compra quedó pendiente"}
+          {paid ? copy.title : t("paymentResult.pendingTitle")}
         </Dialog.Title>
         <Dialog.Description className="mt-3 text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
-          {paid ? copy.description : "La compra no se completó en esta pantalla. Si observaste un cargo, revisa Mis pagos antes de volver a intentarlo."}
+          {paid ? copy.description : t("paymentResult.pendingCopy")}
         </Dialog.Description>
 
         {paid && (
           <div className="mt-5 grid gap-2 text-left sm:grid-cols-2">
-            <ActivationStep label="Membresía" ready={activation.active} loading={activation.checking && !activation.active} />
+            <ActivationStep label={t("paymentResult.membership")} ready={activation.active} loading={activation.checking && !activation.active} t={t} />
             <ActivationStep
-              label="Árbol binario"
+              label={t("paymentResult.binaryTree")}
               ready={activation.positioned}
               loading={activation.checking && activation.active && !activation.positioned}
+              t={t}
             />
           </div>
         )}
@@ -107,11 +110,11 @@ export default function PaymentResultModal() {
           {paid && (
             <button type="button" className="executive-button primary w-full justify-center" onClick={goToNetwork}>
               <Network size={15} />
-              Ver mi red
+              {t("paymentResult.viewNetwork")}
             </button>
           )}
           <button type="button" className={cn("executive-button w-full justify-center", !paid && "primary")} onClick={close}>
-            {paid ? "Ver mis pagos" : "Elegir mi membresía"}
+            {paid ? t("paymentResult.viewPayments") : t("paymentResult.chooseMembership")}
           </button>
         </div>
         </Dialog.Content>
@@ -120,7 +123,7 @@ export default function PaymentResultModal() {
   );
 }
 
-function ActivationStep({ label, ready, loading = false }) {
+function ActivationStep({ label, ready, loading = false, t }) {
   return (
     <div
       className="rounded-xl p-3"
@@ -136,7 +139,7 @@ function ActivationStep({ label, ready, loading = false }) {
           <Loader2 size={15} className="animate-spin" style={{ color: "var(--vp-accent)" }} />
         ) : (
           <span className="text-[10px] font-bold" style={{ color: "var(--vp-muted)" }}>
-            En proceso
+            {t("paymentResult.processing")}
           </span>
         )}
       </div>

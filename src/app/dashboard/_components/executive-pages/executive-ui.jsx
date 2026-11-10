@@ -118,7 +118,7 @@ function ExecutiveModulePage({ config, extra = null }) {
             </h2>
             <div className="relative w-full md:w-72">
               <Search size={15} style={{ color: "var(--vp-muted)", left: 13, position: "absolute", top: "50%", transform: "translateY(-50%)" }} />
-              <input className="executive-input leading-icon" placeholder="Buscar..." type="search" />
+              <input className="executive-input leading-icon" placeholder={config.searchPlaceholder || "Buscar..."} type="search" />
             </div>
           </div>
           <ExecutiveTable columns={config.columns} rows={config.rows} emptyMessage={config.tableMessage} />

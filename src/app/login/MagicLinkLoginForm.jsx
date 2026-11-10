@@ -196,7 +196,6 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     const params = new URLSearchParams(extraParams);
     if (normalizedEmail) params.set("email", normalizedEmail);
     if (referralCode) params.set("ref", referralCode);
-    if (referralCode && preferredSide) params.set("side", preferredSide);
     const query = params.toString();
     return query ? `${path}?${query}` : path;
   }
@@ -419,7 +418,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
             onClick={requestAccessHelp}
             className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg px-4 text-center text-xs font-black transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             style={{
-              color: "#000",
+              color: "var(--vp-on-accent)",
               background: "var(--vp-accent, #ffc700)",
               border: "1px solid var(--vp-accent, #ffc700)",
             }}
@@ -1044,7 +1043,7 @@ function PrimaryButton({ disabled, loading, icon, children }) {
       disabled={disabled}
       className="auth-primary-button flex min-h-12 w-full items-center justify-center gap-2 rounded-lg px-5 py-3 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-60"
       style={{
-        color: "#ffffff",
+        color: "var(--vp-on-action)",
         background: "var(--vp-action)",
         border: "1px solid var(--vp-action-border)",
       }}
@@ -1065,7 +1064,7 @@ function SecondaryButton({ disabled, onClick, icon, children, variant = "default
       onClick={onClick}
       className={`flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 text-center text-xs font-black transition hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-60 ${className}`}
       style={{
-        color: accent ? "#ffffff" : "var(--vp-text-soft)",
+        color: accent ? "var(--vp-on-accent)" : "var(--vp-text)",
         background: accent ? "var(--vp-accent)" : "var(--vp-surface-raised)",
         border: accent ? "1px solid var(--vp-accent-strong)" : "1px solid var(--vp-border)",
       }}
@@ -1085,8 +1084,8 @@ function ModeButton({ active, onClick, children, disabled = false }) {
       onClick={onClick}
       className="min-h-11 rounded-md px-3 py-2 text-sm font-bold leading-5 transition"
       style={{
-        color: active ? "var(--vp-accent)" : "var(--vp-muted)",
-        background: active ? "var(--vp-accent-muted)" : "transparent",
+        color: active ? "var(--vp-on-selected)" : "var(--vp-link)",
+        background: active ? "var(--vp-selected)" : "transparent",
         border: active ? "1px solid var(--vp-accent-border)" : "1px solid transparent",
       }}
     >

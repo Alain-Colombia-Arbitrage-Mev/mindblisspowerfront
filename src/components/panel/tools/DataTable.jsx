@@ -3,9 +3,9 @@
 import { Pen, Trash2 } from "lucide-react";
 
 const BADGE_TONES = {
-  green: { color: "#4ade80", background: "rgba(34, 197, 94, 0.1)", border: "transparent" },
-  blue: { color: "#60a5fa", background: "rgba(59, 130, 246, 0.1)", border: "transparent" },
-  amber: { color: "#fbbf24", background: "rgba(245, 158, 11, 0.2)", border: "rgba(245, 158, 11, 0.3)" },
+  green: { color: "var(--vp-success)", background: "var(--vp-success-muted)", border: "var(--vp-success-border)" },
+  blue: { color: "var(--vp-info)", background: "var(--vp-info-muted)", border: "var(--vp-info-border)" },
+  amber: { color: "var(--vp-amber)", background: "var(--vp-amber-muted)", border: "var(--vp-amber-border)" },
   gray: { color: "var(--vp-text-soft)", background: "var(--vp-surface-raised)", border: "transparent" },
 };
 

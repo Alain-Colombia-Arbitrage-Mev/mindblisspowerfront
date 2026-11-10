@@ -45,7 +45,7 @@ test('pending delivery recovery requires the exact 503 acknowledgement and the r
 
 test('URL prefills are bounded hints only and never provide password, consent or identity binding', () => {
   assert.deepEqual(registrationHints('?email=TEST%40EXAMPLE.TEST&ref=person&side=r&resume=1&role=admin&password=bad&acceptsPrivacy=true'), {
-    email: 'test@example.test', referralCode: 'person', preferredSide: 'R', resume: true,
+    email: 'test@example.test', referralCode: 'person', preferredSide: '', resume: true,
   });
   assert.equal(registrationHints('?side=L').preferredSide, '');
   assert.equal(registrationHints(`?ref=${'a'.repeat(80)}&side=admin`).referralCode, '');
@@ -96,7 +96,7 @@ test('registration links and failures never imply network onboarding or expose p
   assert.equal(new URL(href, 'https://example.test').searchParams.get('mode'), 'code');
   assert.equal(new URL(href, 'https://example.test').searchParams.get('email'), 'test@example.test');
   assert.equal(new URL(href, 'https://example.test').searchParams.get('ref'), 'ref?role=admin');
-  assert.equal(new URL(href, 'https://example.test').searchParams.get('side'), 'R');
+  assert.equal(new URL(href, 'https://example.test').searchParams.has('side'), false);
   assert.ok(!href.includes('/onboarding'));
   assert.ok(registrationFailure(503).includes('no está disponible'));
   assert.ok(registrationFailure(400, 'confirm', 'internal_secret').includes('código'));
@@ -120,12 +120,12 @@ test('only the explicit existing-account registration failure offers the matchin
 test('existing-account login continuation remains explicit email-code entry without adding authority or sending a message', () => {
   const url = new URL(registrationLoginUrl(valid.email, 'MP-REFERRED', 'R'), 'https://example.test');
   assert.equal(url.pathname, '/login');
-  assert.deepEqual(Object.fromEntries(url.searchParams), { mode: 'code', email: 'test@example.test', ref: 'MP-REFERRED', side: 'R' });
+  assert.deepEqual(Object.fromEntries(url.searchParams), { mode: 'code', email: 'test@example.test', ref: 'MP-REFERRED' });
 });
 
-test('registration links preserve bounded email, referral and binary-side hints without accepting redirects or privileges', () => {
+test('registration links preserve bounded email and sponsor hints without accepting placement, redirects or privileges', () => {
   const href = registrationUrl(' MEMBER@EXAMPLE.TEST ', 'MP-REFERRED', 'R', true);
-  assert.equal(href, '/register?email=member%40example.test&ref=MP-REFERRED&side=R&resume=1');
+  assert.equal(href, '/register?email=member%40example.test&ref=MP-REFERRED&resume=1');
   assert.equal(registrationUrl('bad', '', 'L'), '/register');
   assert.equal(registrationUrl('', 'bad ref', 'R'), '/register');
   const malicious = new URL(registrationUrl('', 'ref?role=admin', 'L'), 'https://example.test');
@@ -145,7 +145,7 @@ test('oversized or malformed shared referral hints are rejected instead of trunc
     assert.equal(registrationHints(input.toString()).preferredSide, '');
   }
   assert.equal(registrationHints('ref=OpaqueHandle&side=r').referralCode, 'OpaqueHandle');
-  assert.equal(registrationHints('ref=OpaqueHandle&side=r').preferredSide, 'R');
+  assert.equal(registrationHints('ref=OpaqueHandle&side=r').preferredSide, '');
 });
 
 test('only the explicit missing-account contract requests registration, never permissions, throttling or an outage', () => {
@@ -168,7 +168,7 @@ function temporaryBrowser() {
 test('missing-account continuation keeps email out of URLs and stores only a five-minute one-shot hint', () => {
   const browser = temporaryBrowser(), now = 1800000000000;
   const href = registrationRedirect(' MEMBER@EXAMPLE.TEST ', 'MP-REFERRED', 'R', browser, now);
-  assert.equal(href, '/register?ref=MP-REFERRED&side=R&reason=registration-required');
+  assert.equal(href, '/register?ref=MP-REFERRED&reason=registration-required');
   assert.equal(new URL(href, 'https://example.test').searchParams.get('email'), null);
   assert.equal(new URL(href, 'https://example.test').searchParams.get('resume'), null);
   assert.deepEqual(JSON.parse([...browser.data.values()][0]), { email: 'member@example.test', createdAt: now });
@@ -200,7 +200,7 @@ test('blocked browser storage still navigates to a fixed registration path witho
   assert.equal(url.searchParams.get('email'), null);
   assert.equal(url.searchParams.get('role'), null);
   assert.equal(url.searchParams.get('next'), null);
-  assert.equal(url.searchParams.get('side'), 'L');
+  assert.equal(url.searchParams.get('side'), null);
   assert.equal(consumeRegistrationPrefill(browser), '');
   assert.equal(registrationRedirect('invalid', 'invalid ref', 'R'), '/register?reason=registration-required');
 });

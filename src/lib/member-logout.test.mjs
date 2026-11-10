@@ -92,7 +92,8 @@ test('the actual shell logout button blocks duplicate clicks and exposes a gener
   const code=ts.transpileModule(source,{compilerOptions:{jsx:ts.JsxEmit.ReactJSX,module:ts.ModuleKind.CommonJS}}).outputText;
   const module={exports:{}};
   new Function('require','module','exports',code)(id=>id==='react'?react:id==='@/lib/member-logout.mjs'?{logoutMember:()=>{calls++;return new Promise((_resolve,fail)=>{reject=fail;});}}
-    :id==='@/lib/utils'?{cn:(...values)=>values.filter(Boolean).join(' ')}:require(id),module,module.exports);
+    :id==='@/lib/utils'?{cn:(...values)=>values.filter(Boolean).join(' ')}
+    :id==='@/i18n/LanguageProvider'?{useI18n:()=>({t:key=>({ 'session.close': 'Cerrar sesión', 'session.closing': 'Cerrando sesión', 'session.closeFailed': 'No pudimos confirmar el cierre de sesión. Intenta de nuevo.' }[key]||key)})}:require(id),module,module.exports);
   const tree=(props={})=>{stateIndex=refIndex=0;return module.exports.default({children:'Cerrar sesión',className:'vp-sidebar-link',...props});};
   const button=value=>React.Children.toArray(value.props.children).find(child=>child.type==='button');
   let initial=tree();assert.match(renderToStaticMarkup(initial),/<button[^>]*type="button"/);assert.doesNotMatch(renderToStaticMarkup(initial),/<a|href=/);

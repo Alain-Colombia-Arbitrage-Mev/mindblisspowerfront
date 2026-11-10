@@ -9,10 +9,9 @@ export default async function HomePage({ searchParams } = {}) {
   const params = (await searchParams) ?? {};
   const ref = referralLinkCode(params.ref);
   if (ref) {
-    const side = typeof params.side === "string" ? params.side.trim().toUpperCase() : "";
-    // Old root links enter a real registration flow. Only the public code and
-    // branch survive; no mailbox, redirect target, identity or role is copied.
-    redirect(registrationUrl("", ref, side));
+    // Old root links enter a real registration flow. Only the public sponsor
+    // code survives; binary placement remains a backend decision.
+    redirect(registrationUrl("", ref));
   }
   redirect("/dashboard");
 }

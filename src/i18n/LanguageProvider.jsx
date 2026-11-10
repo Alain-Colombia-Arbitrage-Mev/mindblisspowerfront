@@ -1,41 +1,27 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { LOCALE_OPTIONS, messages, SUPPORTED_LOCALES } from "./messages";
+import { LOCALE_OPTIONS } from "./messages";
+import { normalizeLocale, translateMessage } from "./translate.mjs";
 
 const LanguageContext = createContext(null);
-
-function normalizedLocale(value) {
-  const candidate = String(value || "").toLowerCase().split(/[-_]/)[0];
-  return SUPPORTED_LOCALES.includes(candidate) ? candidate : "es";
-}
 
 function storedLocale() {
   try {
     const saved = localStorage.getItem("mindbliss-locale");
-    if (saved) return normalizedLocale(saved);
+    if (saved) return normalizeLocale(saved);
   } catch {
     /* The browser language remains available without storage. */
   }
   const cookie = document.cookie.match(/(?:^|;\s*)mindbliss_locale=([^;]+)/)?.[1];
-  return normalizedLocale(cookie || navigator.language);
-}
-
-function messageAt(locale, key) {
-  const path = key.split(".");
-  let value = messages[locale];
-  for (const part of path) value = value?.[part];
-  if (typeof value === "string") return value;
-  value = messages.es;
-  for (const part of path) value = value?.[part];
-  return typeof value === "string" ? value : key;
+  return normalizeLocale(cookie || navigator.language);
 }
 
 export function LanguageProvider({ children }) {
   const [locale, setLocaleState] = useState("es");
 
   const applyLocale = useCallback((nextValue) => {
-    const next = normalizedLocale(nextValue);
+    const next = normalizeLocale(nextValue);
     const option = LOCALE_OPTIONS.find((item) => item.code === next) || LOCALE_OPTIONS[0];
     document.documentElement.lang = next;
     document.documentElement.dir = option.dir;
@@ -52,9 +38,7 @@ export function LanguageProvider({ children }) {
   useEffect(() => applyLocale(storedLocale()), [applyLocale]);
 
   const t = useCallback((key, variables = undefined) => {
-    let value = messageAt(locale, key);
-    if (variables) for (const [name, replacement] of Object.entries(variables)) value = value.replaceAll(`{${name}}`, String(replacement));
-    return value;
+    return translateMessage(locale, key, variables);
   }, [locale]);
 
   const value = useMemo(() => ({ locale, setLocale: applyLocale, t, dir: locale === "ar" ? "rtl" : "ltr" }), [applyLocale, locale, t]);

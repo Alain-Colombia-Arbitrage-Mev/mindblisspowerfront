@@ -68,7 +68,7 @@ export async function handleReferralAttribution(request, { env, identity, fetchI
     const upstream = await fetchImpl(target.href, { method: request.method, redirect: 'manual', cache: 'no-store', signal,
       headers: { 'X-VP-Service-Token': env.PAYMENTS_SERVICE_TOKEN, 'X-VP-Id-Token': verified.token,
         ...(mutation ? { 'Content-Type': 'application/json' } : {}) },
-      ...(mutation ? { body: JSON.stringify({ email, ref: input.ref, preferred_side: input.preferred_side }) } : {}),
+      ...(mutation ? { body: JSON.stringify({ email, ref: input.ref, preferred_side: '' }) } : {}),
     });
     const body = await boundedJSON(upstream, signal);
     if (upstream.status !== 200) return reply({ error: 'referral_unavailable' },
@@ -77,6 +77,6 @@ export async function handleReferralAttribution(request, { env, identity, fetchI
       || body.ok !== true || typeof body.positioned !== 'boolean' || !validCode(body.ref)
       || !validSide(body.preferred_side) || (body.positioned && (body.ref || body.preferred_side))
       || (!body.ref && body.preferred_side)) return reply({ error: 'referral_unavailable' }, 503);
-    return reply({ ok: true, ref: body.ref, preferred_side: body.preferred_side, positioned: body.positioned });
+    return reply({ ok: true, ref: body.ref, preferred_side: '', positioned: body.positioned });
   } catch { return reply({ error: 'referral_unavailable' }, 503); }
 }

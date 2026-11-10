@@ -26,20 +26,27 @@ function view(filename) {
     'lucide-react': icons, 'framer-motion': { motion, AnimatePresence: ({ children }) => children },
     '@/lib/referral-links.mjs': links, '@/lib/member-view-effects.mjs': effects,
     '@/lib/member-read.mjs': { validMemberReferral: () => true, readMemberJson: async () => data },
+    '@/i18n/LanguageProvider': { useI18n: () => ({ t: (key, values) => ({
+      'referralCard.title': 'Tu enlace de red', 'referralCard.code': `Código: ${values?.code || ''}`,
+      'referralCard.loading': 'Consultando enlaces de red…', 'referralCard.ready': 'Comparte un solo enlace.',
+      'referralCard.pending': 'Pendiente de activación', 'referralCard.signIn': 'Iniciar sesión', 'referralCard.retry': 'Reintentar enlace',
+      'referralCard.automatic': 'Enlace automático', 'referralCard.automaticHint': 'El backend elige la posición',
+      'referralCard.inputLabel': 'Enlace automático', 'referralCard.copyLabel': 'Copiar enlace automático',
+      'referralCard.loadingValue': 'Cargando enlace…', 'referralCard.unavailable': 'No disponible en este momento',
+      'referralCard.pendingValue': 'Pendiente de activación',
+    }[key] || key) }) },
   });
 }
 
-test('overview copies canonical left/right links and reports a denied clipboard instead of claiming success', async t => {
+test('overview copies the canonical automatic link and reports a denied clipboard instead of claiming success', async t => {
   const copied = [];
   navigator(t, async value => { copied.push(value); });
   const harness = view('panel/overview/ReferralLinkCard.jsx');
   harness.render(); await flush();
-  for (const [label, side] of [['Rama izquierda', 'left'], ['Rama derecha', 'right']]) {
-    await find(harness.render(), node => node?.props?.label === label).props.onCopy();
-    assert.equal(copied.at(-1), links.buildReferralLinks(data.code)[side]);
-  }
+  await find(harness.render(), node => node?.props?.label === 'Enlace automático').props.onCopy();
+  assert.equal(copied.at(-1), links.buildReferralLink(data.code));
   globalThis.navigator.clipboard.writeText = async () => { throw new Error('private-clipboard-detail'); };
-  await find(harness.render(), node => node?.props?.label === 'Rama derecha').props.onCopy();
+  await find(harness.render(), node => node?.props?.label === 'Enlace automático').props.onCopy();
   const html = renderToStaticMarkup(harness.render());
   assert.match(html, /role="alert"/); assert.match(html, /manualmente/);
   assert.doesNotMatch(html, /private-clipboard-detail|old\.example|app\.mindblisspower/);
@@ -57,20 +64,20 @@ test('the tree position card never reports copied after clipboard rejection and 
   harness.unmount();
 });
 
-test('the share modal keeps the selected right branch for clipboard, WhatsApp and email without trusting a supplied URL', async t => {
+test('the share modal uses one automatic link for clipboard, WhatsApp and email without trusting a supplied URL', async t => {
   const copied = [], opened = [], previous = globalThis.window;
   globalThis.window = { location: { origin: 'https://mindblisspower.com' }, open: (...args) => opened.push(args) };
   t.after(() => { if (previous === undefined) delete globalThis.window; else globalThis.window = previous; });
   navigator(t, async value => { copied.push(value); });
-  const harness = view('member/ReferralShareModal.jsx'), props = { isOpen: true, onClose() {}, code: data.code, side: 'right', link: 'https://evil.example?email=private@example.test' };
+  const harness = view('member/ReferralShareModal.jsx'), props = { isOpen: true, onClose() {}, code: data.code, link: 'https://evil.example?email=private@example.test' };
   await button(harness.render(props), 'Copiar Enlace').props.onClick();
-  assert.deepEqual(copied, [links.buildReferralLinks(data.code).right]);
+  assert.deepEqual(copied, [links.buildReferralLink(data.code)]);
   button(harness.render(props), 'WhatsApp').props.onClick();
   button(harness.render(props), 'Email').props.onClick();
   assert.equal(opened.length, 2);
   for (const [url, target, features] of opened) {
     const destination = new URL(url), message = destination.searchParams.get(destination.protocol === 'mailto:' ? 'body' : 'text');
-    assert.match(message, /rama derecha/); assert.match(message, /side=R/);
+    assert.match(message, /automáticamente tu posición/); assert.doesNotMatch(message, /[?&]side=/);
     assert.doesNotMatch(message, /evil\.example|private@example/);
     assert.equal(target, '_blank'); assert.equal(features, 'noopener,noreferrer');
   }

@@ -138,7 +138,7 @@ function CanceledView() {
             className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full"
             style={{ background: "rgba(239, 68, 68, 0.10)", border: "1px solid rgba(239, 68, 68, 0.3)" }}
           >
-            <XCircle size={38} style={{ color: "#ef4444" }} />
+            <XCircle size={38} style={{ color: "var(--vp-danger)" }} />
           </span>
           <h1 className="executive-title m-0 text-3xl font-bold" style={{ color: "var(--vp-text)" }}>
             Pago cancelado

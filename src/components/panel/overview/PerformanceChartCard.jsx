@@ -92,7 +92,7 @@ export default function PerformanceChartCard({
 
       <div className="flex justify-end gap-5">
         <LegendDot color="var(--vp-accent)" label="Volumen de Equipo" />
-        <LegendDot color="#4b5563" label="Volumen Personal" />
+        <LegendDot color="var(--vp-muted)" label="Volumen Personal" />
       </div>
 
       <svg
@@ -115,7 +115,7 @@ export default function PerformanceChartCard({
         <path
           d={smoothPath(personalPoints)}
           fill="none"
-          stroke="#4b5563"
+          stroke="var(--vp-muted)"
           strokeLinecap="round"
           strokeLinejoin="round"
           strokeWidth="2"
@@ -130,7 +130,7 @@ export default function PerformanceChartCard({
         />
 
         {personalPoints.map(([x, y]) => (
-          <circle key={`p-${x}`} cx={x} cy={y} fill="var(--vp-surface)" r="3.5" stroke="#4b5563" strokeWidth="2" />
+          <circle key={`p-${x}`} cx={x} cy={y} fill="var(--vp-surface)" r="3.5" stroke="var(--vp-muted)" strokeWidth="2" />
         ))}
         {teamPoints.map(([x, y]) => (
           <circle key={`t-${x}`} cx={x} cy={y} fill="var(--vp-surface)" r="4" stroke="var(--vp-accent)" strokeWidth="2" />
@@ -144,12 +144,12 @@ export default function PerformanceChartCard({
 
         <defs>
           <linearGradient id="teamGradient" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0" stopColor="#facc15" stopOpacity="0.35" />
-            <stop offset="1" stopColor="#facc15" stopOpacity="0" />
+            <stop offset="0" stopColor="var(--vp-amber)" stopOpacity="0.35" />
+            <stop offset="1" stopColor="var(--vp-amber)" stopOpacity="0" />
           </linearGradient>
           <linearGradient id="personalGradient" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0" stopColor="#9ca3af" stopOpacity="0.15" />
-            <stop offset="1" stopColor="#9ca3af" stopOpacity="0" />
+            <stop offset="0" stopColor="var(--vp-muted)" stopOpacity="0.15" />
+            <stop offset="1" stopColor="var(--vp-muted)" stopOpacity="0" />
           </linearGradient>
         </defs>
       </svg>

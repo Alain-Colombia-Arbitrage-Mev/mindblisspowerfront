@@ -4,8 +4,8 @@ const PAGES = [
   ["/dashboard/communications", "Mensajes", "Comunidad"],
   ["/dashboard/support", "Soporte", "Mi cuenta"],
   ["/dashboard/packages", "Membresías", "Mi cuenta"],
-  ["/dashboard/payments", "Pagos", "Finanzas"],
-  ["/dashboard/withdrawals", "Billetera y retiros", "Finanzas"],
+  ["/dashboard/payments", "Billetera", "Mi cuenta"],
+  ["/dashboard/withdrawals", "Billetera", "Mi cuenta"],
   ["/dashboard/coupons", "Cupones", "Mi cuenta"],
   ["/dashboard/profile", "Mi perfil", "Mi cuenta"],
   ["/dashboard/ranks", "Rangos", "Mi red"],
@@ -13,6 +13,23 @@ const PAGES = [
   ["/dashboard/team", "Mi equipo", "Mi red"],
   ["/dashboard/network", "Red binaria", "Mi red"],
   ["/dashboard/tools", "Herramientas", "Mi cuenta"],
+];
+
+const PAGE_KEYS = [
+  ["/dashboard/communications/news", "pages.news", "pages.community"],
+  ["/dashboard/communications/testimonials", "pages.testimonials", "pages.community"],
+  ["/dashboard/communications", "pages.messages", "pages.community"],
+  ["/dashboard/support", "pages.support", "pages.account"],
+  ["/dashboard/packages", "pages.memberships", "pages.account"],
+  ["/dashboard/payments", "nav.wallet", "pages.account"],
+  ["/dashboard/withdrawals", "nav.wallet", "pages.account"],
+  ["/dashboard/coupons", "pages.coupons", "pages.account"],
+  ["/dashboard/profile", "pages.profile", "pages.account"],
+  ["/dashboard/ranks", "pages.ranks", "pages.network"],
+  ["/dashboard/rank", "pages.ranks", "pages.network"],
+  ["/dashboard/team", "pages.team", "pages.network"],
+  ["/dashboard/network", "pages.binaryNetwork", "pages.network"],
+  ["/dashboard/tools", "pages.tools", "pages.account"],
 ];
 
 export function memberPageFor(pathname = "") {
@@ -23,6 +40,17 @@ export function memberPageFor(pathname = "") {
   return {
     title: match?.[1] ?? "Mi cuenta",
     section: match?.[2] ?? "Mindbliss Power",
+  };
+}
+
+export function memberPageKeysFor(pathname = "") {
+  if (pathname === "/dashboard" || matchesRoute(pathname, "/dashboard/home")) {
+    return { title: "pages.summary", section: "pages.account" };
+  }
+  const match = PAGE_KEYS.find(([prefix]) => matchesRoute(pathname, prefix));
+  return {
+    title: match?.[1] ?? "pages.account",
+    section: match?.[2] ?? "pages.product",
   };
 }
 

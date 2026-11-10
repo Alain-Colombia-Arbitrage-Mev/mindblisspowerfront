@@ -23,13 +23,16 @@ function moduleAt(relative, mocks = {}) {
     if (id === "./IntentLink") return { default: Link };
     if (id === "@/lib/member-navigation.mjs") return { matchesRoute };
     if (id === "@/i18n/LanguageProvider") return { useI18n: () => ({ t: key => ({
-      "nav.account": "CUENTA", "nav.summary": "Resumen", "nav.memberships": "Membresías", "nav.wallet": "Billetera y retiros",
+      "nav.account": "CUENTA", "nav.summary": "Resumen", "nav.memberships": "Membresías", "nav.wallet": "Billetera",
       "nav.communityGroup": "COMUNIDAD", "nav.community": "Comunidad", "nav.referrals": "Referidos por niveles", "nav.ranks": "Rangos",
       "nav.settings": "AJUSTES", "nav.profile": "Mi perfil", "nav.logout": "Cerrar sesión", "nav.myWallet": "Mi wallet",
+      "nav.openWallet": "Abrir wallet", "nav.personalAccount": "Cuenta personal", "nav.helpCenter": "Centro de ayuda y soporte",
+      "dashboard.memberNavigation": "Navegación del miembro", "session.close": "Cerrar sesión", "session.closing": "Cerrando sesión",
     }[key] || key) }) };
     if (id === './LogoutButton') return moduleAt('../components/panel/LogoutButton.jsx', {
       '@/lib/member-logout.mjs': { logoutMember: async () => {} },
       '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' ') },
+      '@/i18n/LanguageProvider': { useI18n: () => ({ t: key => ({ 'session.close': 'Cerrar sesión', 'session.closing': 'Cerrando sesión', 'session.closeFailed': 'No pudimos confirmar el cierre de sesión. Intenta de nuevo.' }[key] || key) }) },
     });
     if (id.startsWith("./Sidebar")) return moduleAt(`../components/panel/${id.slice(2)}.jsx`);
     return require(id);
@@ -45,7 +48,7 @@ test("actual member sidebar removes identity verification while preserving accou
   }));
   assert.doesNotMatch(html, /\/dashboard\/kyc|Verificación de identidad|KYC|Identidad verificada/);
   for (const href of ["/dashboard", "/dashboard/referrals", "/dashboard/support", "/dashboard/packages",
-    "/dashboard/withdrawals", "/dashboard/profile", "/dashboard/rank", "/dashboard/network"]) {
+    "/dashboard/payments", "/dashboard/profile", "/dashboard/rank", "/dashboard/network"]) {
     assert.ok(html.includes(`href="${href}"`), `missing retained destination ${href}`);
   }
   assert.match(html, /<button[^>]*type="button"[^>]*aria-label="Cerrar sesión"/);

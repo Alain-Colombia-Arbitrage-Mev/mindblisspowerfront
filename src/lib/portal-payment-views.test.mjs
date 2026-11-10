@@ -6,6 +6,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 import * as paymentDisplay from './payment-display.mjs';
+import { translateMessage } from '../i18n/translate.mjs';
 
 const require = createRequire(import.meta.url);
 const iconStub = () => React.createElement('svg', { 'aria-hidden': 'true' });
@@ -17,6 +18,7 @@ function component(relative, mocks) {
   const code = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
   const module = { exports: {} };
   new Function('require', 'module', 'exports', code)(id => id === 'lucide-react' ? icons : id.endsWith('.module.css') ? cssModule
+    : id === '@/i18n/LanguageProvider' ? { useI18n: () => ({ locale: 'es', dir: 'ltr', t: (key, values) => translateMessage('es', key, values) }) }
     : Object.hasOwn(mocks, id) ? mocks[id] : require(id), module, module.exports);
   return module.exports.default;
 }

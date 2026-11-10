@@ -12,7 +12,7 @@ export default function NewsPreviewCard({ news, onClose }) {
     >
       <div
         className="flex items-center justify-between border-b px-4 py-3"
-        style={{ borderColor: "var(--vp-border)", background: "rgba(10, 10, 10, 0.5)" }}
+        style={{ borderColor: "var(--vp-border)", background: "var(--vp-surface-raised)" }}
       >
         <span className="text-sm font-semibold" style={{ color: "var(--vp-accent)" }}>
           New Preview
@@ -44,13 +44,13 @@ export default function NewsPreviewCard({ news, onClose }) {
 
           <div
             className="mt-4 flex h-24 items-center justify-center rounded"
-            style={{ background: "linear-gradient(180deg, #1e3a8a, #000000)" }}
+            style={{ background: "linear-gradient(180deg, var(--vp-action), var(--vp-action-muted))" }}
           >
             <span
               className="flex h-12 w-12 items-center justify-center rounded-full"
-              style={{ background: "rgba(255, 255, 255, 0.1)" }}
+              style={{ background: "color-mix(in srgb, var(--vp-on-action) 14%, transparent)" }}
             >
-              <Landmark size={22} style={{ color: "#ffffff" }} />
+              <Landmark size={22} style={{ color: "var(--vp-on-action)" }} />
             </span>
           </div>
 

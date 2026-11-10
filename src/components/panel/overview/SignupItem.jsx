@@ -17,7 +17,7 @@ export default function SignupItem({ signup }) {
         <div className="relative h-12 w-12 shrink-0">
           <span
             className="flex h-12 w-12 items-center justify-center rounded-full text-sm font-bold"
-            style={{ background: "linear-gradient(45deg, #1f2937, #374151)", color: "var(--vp-text)" }}
+            style={{ background: "linear-gradient(45deg, var(--vp-action-muted), var(--vp-surface-raised))", color: "var(--vp-text)" }}
           >
             {initialsOf(signup.name)}
           </span>
@@ -40,7 +40,7 @@ export default function SignupItem({ signup }) {
         className="flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5"
         style={{ background: "var(--vp-bg)", border: "1px solid var(--vp-border)" }}
       >
-        <Package size={12} style={{ color: signup.active ? "var(--vp-accent)" : "#6b7280" }} />
+        <Package size={12} style={{ color: signup.active ? "var(--vp-accent)" : "var(--vp-subtle)" }} />
         <span
           className="text-xs font-semibold"
           style={{ color: signup.active ? "var(--vp-text)" : "var(--vp-muted)" }}

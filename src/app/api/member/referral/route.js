@@ -5,7 +5,7 @@ import { memberDb } from "@/lib/member-db";
 import { verifiedEmailFromIdTokenForSession as verifiedEmailFromIdToken } from "@/lib/verify-id-token";
 import { AuthServiceUnavailable } from "@/lib/better-auth-bridge.mjs";
 import { runtimeEnvironment } from '@/lib/cloudflare-runtime.mjs';
-import { buildReferralLinks, referralPublicOrigin } from '@/lib/referral-links.mjs';
+import { buildReferralLink, referralPublicOrigin } from '@/lib/referral-links.mjs';
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -90,10 +90,8 @@ export async function GET() {
 
     const affiliate = rows[0];
     const code = affiliate.invitation_link || deriveCode(affiliate.id);
-    const links = buildReferralLinks(code, referralPublicOrigin(runtimeEnvironment()));
-    if (!links.left || !links.right) throw new Error('invalid_referral_code');
-    const linkLeft = links.left;
-    const linkRight = links.right;
+    const link = buildReferralLink(code, referralPublicOrigin(runtimeEnvironment()));
+    if (!link) throw new Error('invalid_referral_code');
     const referrals = await sql`
       SELECT child.id,
              trim(rp.first_name || ' ' || split_part(rp.last_name, ' ', 1)) AS display_name,
@@ -133,11 +131,8 @@ export async function GET() {
     return referralResponse({
       positioned: true,
       code,
-      // `link` remains for older clients; new UI uses the explicit pair.
-      link: linkLeft,
-      link_left: linkLeft,
-      link_right: linkRight,
-      links: { left: linkLeft, right: linkRight },
+      link,
+      placement: 'automatic',
       generated: !affiliate.invitation_link,
       metrics: {
         total: normalizedReferrals.length,

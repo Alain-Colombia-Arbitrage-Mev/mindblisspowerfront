@@ -4,6 +4,22 @@ import { Moon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useI18n } from "@/i18n/LanguageProvider";
 
+const THEME_STORAGE_KEY = "vp-theme";
+const THEME_EVENT = "vp:theme-change";
+const THEME_COLORS = { dark: "#050f19", light: "#f3f5fb" };
+
+function isTheme(value) {
+  return value === "light" || value === "dark";
+}
+
+function applyTheme(next) {
+  const root = document.documentElement;
+  root.dataset.theme = next;
+  root.classList.toggle("dark", next === "dark");
+  root.style.colorScheme = next;
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", THEME_COLORS[next]);
+}
+
 export default function ThemeToggle() {
   const { t } = useI18n();
   const [theme, setTheme] = useState("dark");
@@ -11,24 +27,43 @@ export default function ThemeToggle() {
   useEffect(() => {
     let next = "dark";
     try {
-      const saved = localStorage.getItem("vp-theme");
-      if (saved === "light" || saved === "dark") next = saved;
+      const saved = localStorage.getItem(THEME_STORAGE_KEY);
+      if (isTheme(saved)) next = saved;
     } catch {
       /* ignore */
     }
-    document.documentElement.dataset.theme = next;
+    applyTheme(next);
     setTheme(next);
+
+    const syncTheme = (event) => {
+      const incoming = event.detail?.theme;
+      if (!isTheme(incoming)) return;
+      applyTheme(incoming);
+      setTheme(incoming);
+    };
+    const syncStorage = (event) => {
+      if (event.key !== THEME_STORAGE_KEY || !isTheme(event.newValue)) return;
+      applyTheme(event.newValue);
+      setTheme(event.newValue);
+    };
+    window.addEventListener(THEME_EVENT, syncTheme);
+    window.addEventListener("storage", syncStorage);
+    return () => {
+      window.removeEventListener(THEME_EVENT, syncTheme);
+      window.removeEventListener("storage", syncStorage);
+    };
   }, []);
 
   function toggleTheme() {
     const next = theme === "dark" ? "light" : "dark";
-    document.documentElement.dataset.theme = next;
+    applyTheme(next);
     setTheme(next);
     try {
-      localStorage.setItem("vp-theme", next);
+      localStorage.setItem(THEME_STORAGE_KEY, next);
     } catch {
       /* The theme still works for this session when storage is unavailable. */
     }
+    window.dispatchEvent(new CustomEvent(THEME_EVENT, { detail: { theme: next } }));
   }
 
   const nextLabel = theme === "dark" ? t("theme.enableLight") : t("theme.enableDark");

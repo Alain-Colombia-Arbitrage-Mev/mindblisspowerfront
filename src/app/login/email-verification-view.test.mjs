@@ -276,7 +276,7 @@ test('a stale password completion cannot navigate after its parent has been unmo
   assert.deepEqual(destinations, []);
 });
 
-test('automatic entry keeps this tab sponsor and branch bound to its own email despite another tab changing global referral context', async t => {
+test('automatic entry keeps this tab sponsor bound to its own email while discarding every branch hint', async t => {
   const destinations = browser(t), values = new Map();
   const storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, String(value)), removeItem: key => values.delete(key) };
   window.localStorage = storage;
@@ -290,9 +290,9 @@ test('automatic entry keeps this tab sponsor and branch bound to its own email d
   referral.bindReferralCodeToEmail('other@example.test', 'SponsorOther', storage, undefined, 'login', 'R');
   await enterCode(harness);
   assert.deepEqual(destinations, ['/dashboard']);
-  assert.deepEqual(saves, [[email, 'SponsorA', 'L']], 'a pending background save never delays entry or uses the other tab hint');
-  assert.deepEqual(referral.referralForCheckout(email, storage), { code: 'SponsorA', email, side: 'L' });
-  assert.deepEqual(referral.referralForCheckout('other@example.test', storage), { code: 'SponsorOther', email: 'other@example.test', side: 'R' });
+  assert.deepEqual(saves, [[email, 'SponsorA', '']], 'a pending background save never delays entry, uses another tab or selects a branch');
+  assert.deepEqual(referral.referralForCheckout(email, storage), { code: 'SponsorA', email });
+  assert.deepEqual(referral.referralForCheckout('other@example.test', storage), { code: 'SponsorOther', email: 'other@example.test' });
   harness.unmount();
 });
 

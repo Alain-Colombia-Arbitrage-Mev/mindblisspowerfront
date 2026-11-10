@@ -37,7 +37,7 @@ test("binds a referral code to the registration email before checkout", () => {
   });
 });
 
-test("keeps the requested binary side bound to the same registration email", () => {
+test("ignores a requested binary side and leaves placement to the backend", () => {
   const storage = new MemoryStorage();
   captureReferralFromUrl("?ref=martinezl14&side=L", storage, now);
   bindReferralToEmail("left@example.com", storage, now);
@@ -45,7 +45,6 @@ test("keeps the requested binary side bound to the same registration email", () 
   assert.deepEqual(referralForCheckout("left@example.com", storage, now), {
     code: "martinezl14",
     email: "left@example.com",
-    side: "L",
   });
 });
 
@@ -150,26 +149,26 @@ test("a new referral link does not inherit an older bound email", () => {
   });
 });
 
-test('registration retains an explicit right branch even before visiting login and replaces an older side for the same opaque code', () => {
+test('registration retains the sponsor but never a client-selected branch', () => {
   const storage = new MemoryStorage();
   bindReferralCodeToEmail('member@example.test', 'MixedCaseHandle', storage, now, 'registration', 'L');
   bindReferralCodeToEmail('member@example.test', 'MixedCaseHandle', storage, now, 'registration', 'R');
   assert.deepEqual(referralForCheckout(' MEMBER@EXAMPLE.TEST ', storage, now), {
-    code: 'MixedCaseHandle', email: 'member@example.test', side: 'R',
+    code: 'MixedCaseHandle', email: 'member@example.test',
   });
 });
 
-test('independent tabs bind their own explicit sponsor and branch even after another tab captures a different link', () => {
+test('independent tabs bind their own sponsor while discarding branch hints', () => {
   const storage = new MemoryStorage();
   const firstTab = captureReferralFromUrl('?ref=FirstSponsor&side=R', storage, now);
   const secondTab = captureReferralFromUrl('?ref=SecondSponsor&side=L', storage, now + 1);
   bindReferralCodeToEmail('first@example.test', firstTab.code, storage, now + 2, 'login', firstTab.side);
   bindReferralCodeToEmail('second@example.test', secondTab.code, storage, now + 3, 'login', secondTab.side);
   assert.deepEqual(referralForCheckout('first@example.test', storage, now + 4), {
-    code: 'FirstSponsor', email: 'first@example.test', side: 'R',
+    code: 'FirstSponsor', email: 'first@example.test',
   });
   assert.deepEqual(referralForCheckout('second@example.test', storage, now + 4), {
-    code: 'SecondSponsor', email: 'second@example.test', side: 'L',
+    code: 'SecondSponsor', email: 'second@example.test',
   });
   assert.deepEqual(referralForCheckout('unrelated@example.test', storage, now + 4), { code: '', email: '' });
 });
@@ -179,9 +178,9 @@ test('a newer explicit registration hint wins over a stale legacy draft without 
   const storage = new MemoryStorage({ mp_registration_draft: oldDraft });
   bindReferralCodeToEmail('member@example.test', 'NewSponsor', storage, now, 'registration', 'R');
   bindReferralCodeToEmail('other@example.test', 'OtherSponsor', storage, now, 'registration', 'L');
-  assert.deepEqual(referralForCheckout('member@example.test', storage, now), { code: 'NewSponsor', email: 'member@example.test', side: 'R' });
+  assert.deepEqual(referralForCheckout('member@example.test', storage, now), { code: 'NewSponsor', email: 'member@example.test' });
   assert.deepEqual(referralForCheckout('unknown@example.test', storage, now), { code: '', email: '' });
-  assert.deepEqual(referralForCheckout('other@example.test', storage, now), { code: 'OtherSponsor', email: 'other@example.test', side: 'L' });
+  assert.deepEqual(referralForCheckout('other@example.test', storage, now), { code: 'OtherSponsor', email: 'other@example.test' });
   assert.equal(storage.getItem('mp_registration_draft'), oldDraft);
 });
 

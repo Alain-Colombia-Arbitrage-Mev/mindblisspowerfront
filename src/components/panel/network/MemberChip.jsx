@@ -16,7 +16,7 @@ export default function MemberChip({ name, detail, active }) {
     >
       <span
         className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold"
-        style={{ background: active ? "#22c55e" : "var(--vp-accent)", color: "#000000" }}
+        style={{ background: active ? "var(--vp-success-muted)" : "var(--vp-accent-muted)", color: active ? "var(--vp-success)" : "var(--vp-link)" }}
       >
         {initialsOf(name)}
       </span>

@@ -9,13 +9,12 @@ import { formatPaymentMoney as money } from "@/lib/payment-display.mjs";
 import { requestProfile } from "../../profile/profile-model.mjs";
 import { browserRequestDeadline } from '@/lib/browser-request-deadline.mjs';
 
-import { Copy, CreditCard, KeyRound, Loader2, Send, Shield, ShieldCheck, User } from "lucide-react";
+import { Copy, KeyRound, Loader2, Send, Shield, ShieldCheck, User } from "lucide-react";
 
 import { PageHeader, StatusPill, Field } from './executive-ui';
 
 import { member } from './member-defaults.mjs';
-
-const PLAN_LABEL = { passive_investor: "Inversionista pasivo", network: "Red" };
+import { useI18n } from "@/i18n/LanguageProvider";
 
 function normalizeProfilePhone(value) {
   if (typeof value !== 'string' || value.length > 40 || !/^[+\d ()-]+$/.test(value)) return '';
@@ -23,22 +22,23 @@ function normalizeProfilePhone(value) {
   return /^\+[1-9]\d{7,14}$/.test(phone) ? phone : '';
 }
 
-function phoneVerificationFailure(status, action) {
-  if (status === 401) return "Vuelve a iniciar sesión para continuar con la validación del teléfono.";
-  if (status === 403) return "La validación del teléfono no está habilitada para esta cuenta.";
-  if (status === 429) return "Espera unos minutos antes de volver a intentarlo.";
+function phoneVerificationFailure(status, action, t) {
+  if (status === 401) return t("profilePage.phoneSessionExpired");
+  if (status === 403) return t("profilePage.phoneUnavailable");
+  if (status === 429) return t("profilePage.phoneWait");
   if (status === 400) return action === "confirm"
-    ? "Revisa el código SMS o solicita uno nuevo."
-    : "Revisa el teléfono en formato internacional.";
-  return "La validación por SMS está temporalmente en sincronización. Intenta más tarde.";
+    ? t("profilePage.phoneCodeInvalid")
+    : t("profilePage.phoneFormatInvalid");
+  return t("profilePage.phoneSyncing");
 }
 
 export function ProfileDashboardPage({ authMode = 'cognito' }) {
+  const { t } = useI18n();
   const modernAuth = authMode === 'better-auth';
   const session = useMemberSession();
   const me = { name: session?.name || "", email: session?.email || "", referralCode: session?.referralCode || "" };
   const [summary, setSummary] = useState(null);
-  const [form, setForm] = useState({ name: "", phone: "", country: "", payout_wallet_usdc: "" });
+  const [form, setForm] = useState({ name: "", phone: "", country: "" });
   const [phoneVerify, setPhoneVerify] = useState({ sending: false, confirming: false, pending: false, code: "", type: "", text: "" });
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState({ type: "", text: "" });
@@ -85,18 +85,11 @@ export function ProfileDashboardPage({ authMode = 'cognito' }) {
     savingRef.current = true;
     setSaving(true);
     setSaveMsg({ type: "", text: "" });
-    const wallet = (form.payout_wallet_usdc || "").trim();
     const phone = normalizeProfilePhone(form.phone);
-    if (wallet && !/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
-      savingRef.current = false;
-      setSaving(false);
-      setSaveMsg({ type: "err", text: "La dirección USDC debe ser una address ERC-20 válida (0x + 40 hex)." });
-      return;
-    }
     if ((form.phone || "").trim() && !phone) {
       savingRef.current = false;
       setSaving(false);
-      setSaveMsg({ type: "err", text: "Ingresa el teléfono en formato internacional, por ejemplo +573001234567." });
+      setSaveMsg({ type: "err", text: t("profilePage.phoneExample") });
       return;
     }
     const controller = new AbortController();
@@ -106,15 +99,14 @@ export function ProfileDashboardPage({ authMode = 'cognito' }) {
           name: (form.name || "").trim(),
           phone,
           country: (form.country || "").trim(),
-          payout_wallet_usdc: wallet,
         }, { signal: controller.signal });
       if (controller.signal.aborted || !profileMounted.current) return;
       setForm(current);
       editedRef.current = false;
-      setSaveMsg({ type: "ok", text: "Cambios guardados y confirmados por el servidor." });
+      setSaveMsg({ type: "ok", text: t("profilePage.saved") });
       try { window.dispatchEvent(new CustomEvent("vp:profile-updated", { detail: { name: current.name } })); } catch { /* ignore */ }
     } catch {
-      if (!controller.signal.aborted && profileMounted.current) setSaveMsg({ type: "err", text: "No pudimos confirmar el guardado. Conservamos tus datos en pantalla; no se reenviarán automáticamente." });
+      if (!controller.signal.aborted && profileMounted.current) setSaveMsg({ type: "err", text: t("profilePage.saveFailed") });
     } finally {
       savingRef.current = false;
       if (profileMounted.current) setSaving(false);
@@ -125,7 +117,7 @@ export function ProfileDashboardPage({ authMode = 'cognito' }) {
     if (modernAuth) return;
     const phone = normalizeProfilePhone(form.phone);
     if (!phone) {
-      setPhoneVerify({ sending: false, confirming: false, pending: false, code: "", type: "err", text: "Usa formato internacional: +573001234567." });
+      setPhoneVerify({ sending: false, confirming: false, pending: false, code: "", type: "err", text: t("profilePage.phoneExampleShort") });
       return;
     }
     setPhoneVerify((current) => ({ ...current, sending: true, type: "", text: "" }));
@@ -137,13 +129,13 @@ export function ProfileDashboardPage({ authMode = 'cognito' }) {
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok || !d.ok) {
-        setPhoneVerify((current) => ({ ...current, sending: false, type: "err", text: phoneVerificationFailure(r.status, "request") }));
+        setPhoneVerify((current) => ({ ...current, sending: false, type: "err", text: phoneVerificationFailure(r.status, "request", t) }));
         return;
       }
       setForm((current) => ({ ...current, phone: d.phone || phone }));
-      setPhoneVerify({ sending: false, confirming: false, pending: true, code: "", type: "ok", text: "Código SMS enviado. Escríbelo para validar tu teléfono." });
+      setPhoneVerify({ sending: false, confirming: false, pending: true, code: "", type: "ok", text: t("profilePage.smsSent") });
     } catch {
-      setPhoneVerify((current) => ({ ...current, sending: false, type: "err", text: "Sin conexión. Intenta de nuevo." }));
+      setPhoneVerify((current) => ({ ...current, sending: false, type: "err", text: t("supportPage.offline") }));
     }
   }
 
@@ -151,7 +143,7 @@ export function ProfileDashboardPage({ authMode = 'cognito' }) {
     if (modernAuth) return;
     const code = phoneVerify.code.replace(/[\s-]+/g, "");
     if (!/^\d{4,8}$/.test(code)) {
-      setPhoneVerify((current) => ({ ...current, type: "err", text: "Ingresa el código SMS recibido." }));
+      setPhoneVerify((current) => ({ ...current, type: "err", text: t("profilePage.enterSms") }));
       return;
     }
     setPhoneVerify((current) => ({ ...current, confirming: true, type: "", text: "" }));
@@ -163,38 +155,39 @@ export function ProfileDashboardPage({ authMode = 'cognito' }) {
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok || !d.ok) {
-        setPhoneVerify((current) => ({ ...current, confirming: false, type: "err", text: phoneVerificationFailure(r.status, "confirm") }));
+        setPhoneVerify((current) => ({ ...current, confirming: false, type: "err", text: phoneVerificationFailure(r.status, "confirm", t) }));
         return;
       }
-      setPhoneVerify({ sending: false, confirming: false, pending: false, code: "", type: "ok", text: "Teléfono validado." });
+      setPhoneVerify({ sending: false, confirming: false, pending: false, code: "", type: "ok", text: t("profilePage.phoneVerified") });
     } catch {
-      setPhoneVerify((current) => ({ ...current, confirming: false, type: "err", text: "Sin conexión. Intenta de nuevo." }));
+      setPhoneVerify((current) => ({ ...current, confirming: false, type: "err", text: t("supportPage.offline") }));
     }
   }
 
-  const displayName = me.name || "Mi cuenta";
+  const displayName = me.name || t("pages.account");
   const displayEmail = me.email || member.email;
   const displayReferral = me.referralCode || member.referralCode;
   const displayInitial = (displayName || "M").trim().charAt(0).toUpperCase();
   const displayRank = summary?.rank && summary.rank !== "—" ? summary.rank : member.rank;
   const displayJoined = summary?.joined_at || member.joined;
-  const displayPlan = summary?.plan ? (PLAN_LABEL[summary.plan] || summary.plan) : member.plan;
+  const planLabel = summary?.plan ? t(`profilePage.plan_${summary.plan}`) : "";
+  const displayPlan = summary?.plan ? (planLabel.startsWith("profilePage.") ? summary.plan : planLabel) : member.plan;
   const displayBalance = money(summary?.wallet_balance_usd);
 
   return (
     <section className="executive-page">
       <div className="executive-container">
         <PageHeader
-          eyebrow="Perfil"
-          title="Mi perfil"
-          subtitle="Gestiona datos personales, seguridad, billetera de retiro y preferencias de notificacion."
+          eyebrow={t("profilePage.eyebrow")}
+          title={t("profilePage.title")}
+          subtitle={t("walletPage.profileSubtitle")}
           action={
             <div className="flex flex-col items-end gap-1">
               <button className="executive-button primary" type="button" onClick={saveProfile} disabled={saving || profileState !== 'ready'}>
-                {saving ? "Guardando…" : "Guardar cambios"}
+                {saving ? t("profilePage.saving") : t("profilePage.saveChanges")}
               </button>
               {saveMsg.text && (
-                <span role={saveMsg.type === 'ok' ? 'status' : 'alert'} className="text-xs font-semibold" style={{ color: saveMsg.type === "ok" ? "var(--vp-accent)" : "#f87171" }}>
+                <span role={saveMsg.type === 'ok' ? 'status' : 'alert'} className="text-xs font-semibold" style={{ color: saveMsg.type === "ok" ? "var(--vp-success)" : "var(--vp-danger)" }}>
                   {saveMsg.text}
                 </span>
               )}
@@ -202,8 +195,8 @@ export function ProfileDashboardPage({ authMode = 'cognito' }) {
           }
         />
 
-        {profileState === 'loading' ? <p role="status" className="executive-panel">Cargando los datos guardados de tu perfil…</p> : null}
-        {profileState === 'error' ? <div role="status" className="executive-panel" style={{ borderColor: "var(--vp-info-border)" }}><p className="font-semibold" style={{ color: "var(--vp-text)" }}>Perfil en sincronización</p><p className="mt-2 text-sm" style={{ color: "var(--vp-muted)" }}>La edición permanece bloqueada hasta confirmar los datos guardados.</p><button className="executive-button mt-3" type="button" onClick={() => { void loadProfile(); }}>Actualizar perfil</button></div> : null}
+        {profileState === 'loading' ? <p role="status" className="executive-panel">{t("profilePage.loading")}</p> : null}
+        {profileState === 'error' ? <div role="status" className="executive-panel" style={{ borderColor: "var(--vp-info-border)" }}><p className="font-semibold" style={{ color: "var(--vp-text)" }}>{t("profilePage.syncing")}</p><p className="mt-2 text-sm" style={{ color: "var(--vp-muted)" }}>{t("profilePage.syncingCopy")}</p><button className="executive-button mt-3" type="button" onClick={() => { void loadProfile(); }}>{t("profilePage.refresh")}</button></div> : null}
 
         <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
           <div className="space-y-6">
@@ -225,20 +218,20 @@ export function ProfileDashboardPage({ authMode = 'cognito' }) {
               </div>
               <div className="mt-7 grid grid-cols-2 gap-4 border-t pt-5 text-left" style={{ borderColor: "var(--vp-border)" }}>
                 <div>
-                  <p className="executive-card-label mb-1">Registro</p>
+                  <p className="executive-card-label mb-1">{t("profilePage.joined")}</p>
                   <p className="m-0 text-sm font-semibold" style={{ color: "var(--vp-text)" }}>
                     {displayJoined}
                   </p>
                 </div>
                 <div>
-                  <p className="executive-card-label mb-1">Plan</p>
+                  <p className="executive-card-label mb-1">{t("profilePage.plan")}</p>
                   <p className="m-0 text-sm font-semibold" style={{ color: "var(--vp-text)" }}>
                     {displayPlan}
                   </p>
                 </div>
                 {displayBalance != null && (
                   <div className="col-span-2">
-                    <p className="executive-card-label mb-1">Balance billetera</p>
+                    <p className="executive-card-label mb-1">{t("profilePage.walletBalance")}</p>
                     <p className="m-0 text-lg font-semibold" style={{ color: "var(--vp-accent)" }}>
                       {displayBalance}
                     </p>
@@ -250,17 +243,17 @@ export function ProfileDashboardPage({ authMode = 'cognito' }) {
             <div className="executive-panel">
               <h2 className="executive-section-title">
                 <Copy size={18} style={{ color: "var(--vp-accent)" }} />
-                Referido
+                {t("profilePage.referral")}
               </h2>
               <div className="rounded-2xl p-4" style={{ background: "var(--vp-bg)", border: "1px solid var(--vp-border)" }}>
-                <p className="executive-card-label">Codigo unico</p>
+                <p className="executive-card-label">{t("profilePage.uniqueCode")}</p>
                 {displayReferral ? (
                   <p className="m-0 text-4xl font-light" style={{ color: "var(--vp-text)" }}>
                     {displayReferral}
                   </p>
                 ) : (
                   <p className="m-0 mt-1 text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
-                    Tu código estará disponible cuando actives tu membresía y quedes colocado en la red.
+                    {t("profilePage.codePending")}
                   </p>
                 )}
               </div>
@@ -271,33 +264,33 @@ export function ProfileDashboardPage({ authMode = 'cognito' }) {
             <div className="executive-panel">
               <h2 className="executive-section-title">
                 <User size={18} style={{ color: "var(--vp-accent)" }} />
-                Informacion personal
+                {t("profilePage.personalInfo")}
               </h2>
               <div className="grid gap-5 md:grid-cols-2">
-                <Field label="Nombre completo">
-                  <input className="executive-input" value={form.name} onChange={setField("name")} disabled={saving || profileState !== 'ready'} maxLength={240} placeholder="Tu nombre y apellido" />
+                <Field label={t("profilePage.fullName")}>
+                  <input className="executive-input" value={form.name} onChange={setField("name")} disabled={saving || profileState !== 'ready'} maxLength={240} placeholder={t("profilePage.namePlaceholder")} />
                 </Field>
-                <Field label="Usuario">
+                <Field label={t("profilePage.username")}>
                   <input className="executive-input" key={displayEmail} defaultValue={displayEmail ? displayEmail.split("@")[0] : member.username} readOnly />
                 </Field>
-                <Field label="Correo electronico">
+                <Field label={t("profilePage.email")}>
                   <input className="executive-input" key={displayEmail} defaultValue={displayEmail} readOnly type="email" />
                 </Field>
-                <Field label="Telefono">
+                <Field label={t("profilePage.phone")}>
                   <input className="executive-input" value={form.phone} onChange={setField("phone")} disabled={saving || profileState !== 'ready'} maxLength={32} type="tel" placeholder="+57 300 000 0000" />
                 </Field>
                 <div className="md:col-span-2 border-t pt-4" style={{ borderColor: "var(--vp-border)" }}>
-                  {modernAuth ? <p className="text-sm leading-6" style={{ color: 'var(--vp-muted)' }}>El teléfono se guarda únicamente como dato de contacto. La autenticación de tu cuenta se realiza por correo electrónico.</p> : <>
+                  {modernAuth ? <p className="text-sm leading-6" style={{ color: 'var(--vp-muted)' }}>{t("profilePage.phoneContactOnly")}</p> : <>
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
                     <div className="min-w-0 flex-1">
-                      <p className="m-0 text-sm font-bold" style={{ color: "var(--vp-text)" }}>Validación del teléfono</p>
+                      <p className="m-0 text-sm font-bold" style={{ color: "var(--vp-text)" }}>{t("profilePage.phoneValidation")}</p>
                       <p className="m-0 mt-1 text-xs leading-5" style={{ color: "var(--vp-muted)" }}>
-                        Valida este número en Cognito para poder recibir códigos de acceso por SMS si el correo falla.
+                        {t("profilePage.phoneValidationCopy")}
                       </p>
                     </div>
                     <button className="executive-button" type="button" onClick={requestPhoneVerification} disabled={saving || phoneVerify.sending || phoneVerify.confirming}>
                       {phoneVerify.sending ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}
-                      {phoneVerify.sending ? "Enviando…" : "Enviar SMS"}
+                      {phoneVerify.sending ? t("profilePage.sending") : t("profilePage.sendSms")}
                     </button>
                   </div>
                   {phoneVerify.pending && (
@@ -309,58 +302,42 @@ export function ProfileDashboardPage({ authMode = 'cognito' }) {
                         inputMode="numeric"
                         autoComplete="one-time-code"
                         maxLength={8}
-                        placeholder="Código SMS"
+                        placeholder={t("profilePage.smsCode")}
                       />
                       <button className="executive-button primary" type="button" onClick={confirmPhoneVerification} disabled={phoneVerify.confirming}>
                         {phoneVerify.confirming ? <Loader2 className="animate-spin" size={16} /> : <ShieldCheck size={16} />}
-                        Validar
+                        {t("profilePage.validate")}
                       </button>
                     </div>
                   )}
                   {phoneVerify.text && (
-                    <p className="m-0 mt-3 text-xs font-semibold" style={{ color: phoneVerify.type === "ok" ? "var(--vp-accent)" : "#f87171" }}>
+                    <p className="m-0 mt-3 text-xs font-semibold" style={{ color: phoneVerify.type === "ok" ? "var(--vp-success)" : "var(--vp-danger)" }}>
                       {phoneVerify.text}
                     </p>
                   )}
                   </>}
                 </div>
-                <Field label="Pais">
-                  <input className="executive-input" value={form.country} onChange={setField("country")} disabled={saving || profileState !== 'ready'} maxLength={120} placeholder="País" />
+                <Field label={t("profilePage.country")}>
+                  <input className="executive-input" value={form.country} onChange={setField("country")} disabled={saving || profileState !== 'ready'} maxLength={120} placeholder={t("profilePage.country")} />
                 </Field>
-                <Field label="Patrocinador">
+                <Field label={t("profilePage.sponsor")}>
                   <input className="executive-input" defaultValue={member.sponsor} readOnly />
                 </Field>
               </div>
             </div>
 
-            <div className="executive-grid two">
-              <div className="executive-panel">
-                <h2 className="executive-section-title">
-                  <CreditCard size={18} style={{ color: "var(--vp-accent)" }} />
-                  Billetera retiros
-                </h2>
-                <p className="mb-5 text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
-                  Configura una direccion USDC (red Ethereum · ERC-20) antes de solicitar retiros.
-                </p>
-                <Field label="Direccion USDC (ERC-20)">
-                  <input className="executive-input" value={form.payout_wallet_usdc} onChange={setField("payout_wallet_usdc")} disabled={saving || profileState !== 'ready'} maxLength={42} placeholder="0x..." />
-                </Field>
-                <button className="executive-button mt-4 w-full" type="button" onClick={saveProfile} disabled={saving || profileState !== 'ready'}>
-                  {saving ? "Guardando…" : "Actualizar billetera"}
-                </button>
-              </div>
-
+            <div className="executive-grid">
               <div className="executive-panel">
                 <h2 className="executive-section-title">
                   <Shield size={18} style={{ color: "var(--vp-accent)" }} />
-                  Seguridad
+                  {t("profilePage.security")}
                 </h2>
-                <p className="text-sm leading-6" style={{ color: 'var(--vp-muted)' }}>La autenticación usa tu correo electrónico. No hay un segundo factor (2FA) habilitado desde este panel. Las preferencias de resumen por email y el cambio de contraseña aún no están disponibles aquí.</p>
+                <p className="text-sm leading-6" style={{ color: 'var(--vp-muted)' }}>{t("profilePage.securityCopy")}</p>
                 <button className="executive-button mt-4 w-full" type="button" disabled aria-describedby="profile-password-unavailable">
                   <KeyRound size={16} />
-                  Cambiar contrasena
+                  {t("profilePage.changePassword")}
                 </button>
-                <p id="profile-password-unavailable" className="mt-2 text-sm" style={{ color: 'var(--vp-muted)' }}>Función pendiente de integración; no se ha modificado tu contraseña.</p>
+                <p id="profile-password-unavailable" className="mt-2 text-sm" style={{ color: 'var(--vp-muted)' }}>{t("profilePage.passwordUnavailable")}</p>
               </div>
             </div>
           </div>

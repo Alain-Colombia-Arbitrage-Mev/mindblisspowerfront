@@ -4,7 +4,7 @@ import { matchesRoute, memberPageFor } from "./member-navigation.mjs";
 
 test("member pages have Spanish titles for overview, payments and nested messages", () => {
   assert.equal(memberPageFor("/dashboard").title, "Resumen");
-  assert.equal(memberPageFor("/dashboard/payments").title, "Pagos");
+  assert.equal(memberPageFor("/dashboard/payments").title, "Billetera");
   assert.equal(
     memberPageFor("/dashboard/communications/news").title,
     "Noticias",

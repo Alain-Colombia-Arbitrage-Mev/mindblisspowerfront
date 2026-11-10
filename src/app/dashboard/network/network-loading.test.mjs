@@ -6,6 +6,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 import { treeRefreshFailure } from '../../../lib/tree-read-model.mjs';
+import { translateMessage } from '../../../i18n/translate.mjs';
 
 const require = createRequire(import.meta.url);
 const source = readFileSync(new URL('./page.jsx', import.meta.url), 'utf8');
@@ -61,6 +62,7 @@ function networkView({ query = '', loading = false, stateOverride = {} } = {}) {
       return Component;
     } },
     '@/lib/tree-read-model.mjs': { treeRefreshFailure },
+    '@/i18n/LanguageProvider': { useI18n: () => ({ locale: 'es', dir: 'ltr', t: (key, values) => translateMessage('es', key, values) }) },
     '@/lib/member-network-reader.mjs': { createMemberNetworkReader: handlers => { callbacks.push(handlers); return {
       refresh: async () => { events.push('reads-started'); },
       changeDepth: async () => {},

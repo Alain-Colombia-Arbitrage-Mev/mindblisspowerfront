@@ -22,7 +22,7 @@ export default function GenerationView({ nodes }) {
             <div className="flex items-center gap-2">
               <span
                 className="rounded-md px-2 py-0.5 text-[10px] font-bold"
-                style={{ background: "var(--vp-accent)", color: "#000000" }}
+                style={{ background: "var(--vp-accent)", color: "var(--vp-on-accent)" }}
               >
                 G{gen}
               </span>

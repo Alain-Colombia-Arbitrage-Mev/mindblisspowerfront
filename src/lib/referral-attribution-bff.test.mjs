@@ -6,7 +6,7 @@ import { handleReferralAttribution } from './referral-attribution-bff.mjs';
 const env = { AUTH_PUBLIC_ORIGIN: 'https://portal.example.test', PAYMENTS_SERVICE_TOKEN: 'synthetic-private-service' };
 const claims = { sub: 'synthetic-member-subject', email: ' MEMBER@example.test ', email_verified: true };
 const identity = async () => ({ token: 'synthetic-verified-jwt', claims });
-const body = { ref: 'OpaqueSponsor', preferred_side: 'R', expected_email: 'member@example.test' };
+const body = { ref: 'OpaqueSponsor', preferred_side: '', expected_email: 'member@example.test' };
 const answer = { ok: true, ref: body.ref, preferred_side: body.preferred_side, positioned: false };
 function request(method = 'POST', input = body, headers = {}, suffix = '') {
   return new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/referral-attribution${suffix}`, { method,
@@ -71,13 +71,13 @@ test('stale-cookie equality guards cannot write or read a hint for another signe
   assert.equal((await run(missingGuard, { fetchImpl: never })).status, 409);
 });
 
-test('owner-only post forwards just verified email and the validated preference through private service transport', async () => {
+test('owner-only post forwards verified email and sponsor while forcing automatic placement', async () => {
   const response = await run(request(), { fetchImpl: async (url, options) => {
     assert.equal(url, 'https://payments.core.internal/api/payments/referral-attribution');
     assert.equal(options.method, 'POST'); assert.equal(options.cache, 'no-store'); assert.equal(options.redirect, 'manual');
     assert.equal(options.headers['X-VP-Service-Token'], env.PAYMENTS_SERVICE_TOKEN);
     assert.equal(options.headers['X-VP-Id-Token'], 'synthetic-verified-jwt');
-    assert.deepEqual(JSON.parse(options.body), { email: 'member@example.test', ref: 'OpaqueSponsor', preferred_side: 'R' });
+    assert.deepEqual(JSON.parse(options.body), { email: 'member@example.test', ref: 'OpaqueSponsor', preferred_side: '' });
     assert.doesNotMatch(options.body, /expected_email|sub|person_id|role|amount/);
     return Response.json(answer,
       { headers: { 'set-cookie': 'private-cookie', location: 'https://untrusted.test' } });

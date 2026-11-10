@@ -39,7 +39,7 @@ function route(name, { rawToken, tokenError, calls }) {
     '@/lib/member-read-policy.mjs': { memberReadLimit: denied('member budget'), withMemberTreeCapacity: denied('tree query') },
     '@/lib/tree-read-model.mjs': { childCoverage: denied('tree projection'), loadedChildCounts: denied('child projection') },
     '@/lib/cloudflare-runtime.mjs': { coreFetch: denied('payments provider transport'), runtimeEnvironment: denied('runtime configuration') },
-    '@/lib/referral-links.mjs': { buildReferralLinks: denied('referral links'), referralPublicOrigin: denied('referral origin') },
+    '@/lib/referral-links.mjs': { buildReferralLink: denied('referral link'), referralPublicOrigin: denied('referral origin') },
   };
   const module = { exports: {} };
   new Function('require', 'module', 'exports', compiled)(id => {

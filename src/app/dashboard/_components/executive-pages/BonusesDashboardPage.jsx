@@ -9,12 +9,12 @@ bonuses: {
     eyebrow: "Bonuses",
     title: "Bonificaciones",
     subtitle: "Resumen de pagos, cierres y estados de liquidacion. Actualmente se muestran valores en cero porque no hay bonus runs publicados.",
-    action: { label: "Ver finanzas", href: "/dashboard/withdrawals", icon: Wallet },
+    action: { label: "Ver wallet", href: "/dashboard/payments", icon: Wallet },
     metrics: [
       { label: "Disponible", value: "$0.00", detail: "wallet actual", icon: Wallet, tone: "muted" },
       { label: "Historico", value: "$0.00", detail: "movimientos", icon: DollarSign, tone: "muted" },
       { label: "Runs cerrados", value: "0", detail: "periodos", icon: Activity, tone: "info" },
-      { label: "Pendiente", value: "$0.00", detail: "retiros", icon: CreditCard, tone: "muted" },
+      { label: "Pendiente", value: "$0.00", detail: "pagos", icon: CreditCard, tone: "muted" },
     ],
     cards: [
       { title: "Cero real", text: "No se muestran ganancias simuladas como si fueran pagos disponibles.", icon: ShieldCheck, status: "Protegido" },

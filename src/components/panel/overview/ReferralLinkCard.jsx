@@ -2,17 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowDownLeft, ArrowDownRight, Check, Copy, RefreshCw, Share2 } from "lucide-react";
+import { Check, Copy, Link2, RefreshCw, Share2 } from "lucide-react";
 import { readMemberJson, validMemberReferral } from "@/lib/member-read.mjs";
-import { referralLinksFrom } from '@/lib/referral-links.mjs';
+import { referralLinkFrom } from '@/lib/referral-links.mjs';
 import { createClipboardFeedback } from '@/lib/member-view-effects.mjs';
+import { useI18n } from '@/i18n/LanguageProvider';
 
-const EMPTY_LINKS = { left: "", right: "" };
-
-// Resumen de los dos enlaces binarios. Cada enlace conserva el mismo sponsor,
-// pero solicita que la colocación derrame por la rama elegida.
 export default function ReferralLinkCard() {
-  const [links, setLinks] = useState(EMPTY_LINKS);
+  const { t } = useI18n();
+  const [link, setLink] = useState("");
   const [code, setCode] = useState("");
   const [copyFeedback, setCopyFeedback] = useState({ pending: '', copied: '', error: '' });
   const [status, setStatus] = useState("loading");
@@ -24,20 +22,20 @@ export default function ReferralLinkCard() {
     request.current?.abort();
     const controller = new AbortController();
     request.current = controller;
-    setStatus("loading"); setError(null); setLinks(EMPTY_LINKS); setCode("");
+    setStatus("loading"); setError(null); setLink(""); setCode("");
     return readMemberJson("/api/member/referral", { signal: controller.signal, validate: validMemberReferral })
       .then((data) => {
         if (controller.signal.aborted) return;
         if (!data.positioned) {
           setStatus("pending");
-          setLinks(EMPTY_LINKS);
+          setLink("");
           setCode("");
           return;
         }
-        const nextLinks = referralLinksFrom(data);
-        setLinks(nextLinks);
+        const nextLink = referralLinkFrom(data);
+        setLink(nextLink);
         setCode(data.code || "");
-        setStatus(nextLinks.left && nextLinks.right ? "ready" : "pending");
+        setStatus(nextLink ? "ready" : "pending");
       })
       .catch((failure) => {
         if (!controller.signal.aborted) { setStatus("error"); setError(failure); }
@@ -50,38 +48,35 @@ export default function ReferralLinkCard() {
     return () => { active.dispose(); if (clipboard.current === active) clipboard.current = null; };
   }, []);
 
-  async function copy(side) {
-    const link = links[side];
+  async function copy() {
     if (!link) return;
-    await clipboard.current?.copy(link, side);
+    await clipboard.current?.copy(link, "link");
   }
 
   return (
     <div className="vp-overview-referral">
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <Share2 size={18} style={{ color: "var(--vp-accent)" }} />
-        <h2 className="text-sm font-bold" style={{ color: "var(--vp-text)" }}>Tus enlaces de red</h2>
-        {code ? <span className="ml-auto text-xs font-semibold" style={{ color: "var(--vp-muted)" }}>Código: {code}</span> : null}
+        <h2 className="text-sm font-bold" style={{ color: "var(--vp-text)" }}>{t("referralCard.title")}</h2>
+        {code ? <span className="ml-auto text-xs font-semibold" style={{ color: "var(--vp-muted)" }}>{t("referralCard.code", { code })}</span> : null}
       </div>
       <p className="mb-4 text-xs leading-5" style={{ color: "var(--vp-muted)" }}>
-        {status === "error" ? error?.message : status === "loading" ? "Consultando enlaces de red..." : status === "ready"
-          ? "Elige la rama antes de compartir. Si el puesto está ocupado, el nuevo usuario continúa debajo por ese mismo lado."
-          : "Tus enlaces se activan cuando tu membresía queda pagada y tu posición existe en el árbol."}
+        {status === "error" ? t("referralCard.unavailable") : status === "loading" ? t("referralCard.loading") : status === "ready"
+          ? t("referralCard.ready") : t("referralCard.pending")}
       </p>
       {status === "error" ? <div role="alert" className="mb-3">{error?.status === 401
-        ? <Link href="/login" className="executive-button">Iniciar sesion</Link>
-        : <button type="button" onClick={load} className="executive-button"><RefreshCw size={15} />Reintentar enlaces</button>}</div> : null}
+        ? <Link href="/login" className="executive-button">{t("referralCard.signIn")}</Link>
+        : <button type="button" onClick={load} className="executive-button"><RefreshCw size={15} />{t("referralCard.retry")}</button>}</div> : null}
 
-      <div className="grid gap-3 lg:grid-cols-2">
-        <SideLink label="Rama izquierda" hint="Colocación L → L" Icon={ArrowDownLeft} link={links.left} status={status} copied={copyFeedback.copied === "left"} onCopy={() => copy("left")} />
-        <SideLink label="Rama derecha" hint="Colocación R → R" Icon={ArrowDownRight} link={links.right} status={status} copied={copyFeedback.copied === "right"} onCopy={() => copy("right")} />
+      <div>
+        <SideLink label={t("referralCard.automatic")} hint={t("referralCard.automaticHint")} Icon={Link2} link={link} status={status} copied={copyFeedback.copied === "link"} onCopy={copy} t={t} />
       </div>
       {copyFeedback.error ? <p role="alert" className="mt-2 text-xs" style={{ color: 'var(--vp-danger)' }}>{copyFeedback.error}</p> : null}
     </div>
   );
 }
 
-function SideLink({ label, hint, Icon, link, status, copied, onCopy }) {
+function SideLink({ label, hint, Icon, link, status, copied, onCopy, t }) {
   return (
     <section className="min-w-0 rounded-xl border p-3" style={{ background: "var(--vp-surface)", borderColor: "var(--vp-border)" }}>
       <div className="mb-2 flex items-center gap-2">
@@ -94,8 +89,8 @@ function SideLink({ label, hint, Icon, link, status, copied, onCopy }) {
         </div>
       </div>
       <div className="flex gap-2">
-        <input readOnly value={displayValue(status, link)} onFocus={(event) => event.target.select()} aria-label={`Enlace para ${label.toLowerCase()}`} className="min-h-11 w-full min-w-0 rounded-lg px-3 text-xs font-semibold outline-none" style={{ background: "var(--vp-bg)", border: "1px solid var(--vp-border)", color: "var(--vp-text)" }} />
-        <button type="button" onClick={onCopy} disabled={!link} aria-label={`Copiar enlace de ${label.toLowerCase()}`} className="executive-button primary flex min-h-11 w-11 shrink-0 items-center justify-center p-0 disabled:opacity-60">
+        <input readOnly value={displayValue(status, link, t)} onFocus={(event) => event.target.select()} aria-label={t("referralCard.inputLabel", { label })} className="min-h-11 w-full min-w-0 rounded-lg px-3 text-xs font-semibold outline-none" style={{ background: "var(--vp-bg)", border: "1px solid var(--vp-border)", color: "var(--vp-text)" }} />
+        <button type="button" onClick={onCopy} disabled={!link} aria-label={t("referralCard.copyLabel", { label })} className="executive-button primary flex min-h-11 w-11 shrink-0 items-center justify-center p-0 disabled:opacity-60">
           {copied ? <Check size={16} /> : <Copy size={16} />}
         </button>
       </div>
@@ -103,9 +98,9 @@ function SideLink({ label, hint, Icon, link, status, copied, onCopy }) {
   );
 }
 
-function displayValue(status, link) {
+function displayValue(status, link, t) {
   if (link) return link;
-  if (status === "loading") return "Cargando enlace...";
-  if (status === "error") return "No disponible en este momento";
-  return "Pendiente de activación";
+  if (status === "loading") return t("referralCard.loadingValue");
+  if (status === "error") return t("referralCard.unavailable");
+  return t("referralCard.pendingValue");
 }

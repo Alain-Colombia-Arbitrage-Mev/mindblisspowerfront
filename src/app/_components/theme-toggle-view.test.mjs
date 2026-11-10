@@ -12,7 +12,20 @@ test('theme control exposes a real switch with both visual states and a current-
   assert.match(component, /vp-theme-glyph--moon/);
   assert.match(component, /theme === "dark" \? t\("theme\.dark"\) : t\("theme\.light"\)/);
   assert.match(component, /theme === "dark" \? t\("theme\.enableLight"\) : t\("theme\.enableDark"\)/);
-  assert.match(component, /localStorage\.setItem\("vp-theme", next\)/);
+  assert.match(component, /localStorage\.setItem\(THEME_STORAGE_KEY, next\)/);
+  assert.match(component, /classList\.toggle\("dark", next === "dark"\)/);
+  assert.match(component, /root\.style\.colorScheme = next/);
+  assert.match(component, /window\.dispatchEvent\(new CustomEvent\(THEME_EVENT/);
+  assert.match(component, /window\.addEventListener\(THEME_EVENT, syncTheme\)/);
+});
+
+test('root layout applies the saved theme before paint and initializes Tailwind dark mode', () => {
+  const layout = source('../layout.jsx');
+  assert.match(layout, /className="dark"/);
+  assert.match(layout, /id="vp-theme-init"/);
+  assert.match(layout, /root\.classList\.toggle\("dark", theme === "dark"\)/);
+  assert.match(layout, /root\.style\.colorScheme = theme/);
+  assert.match(layout, /meta name="theme-color"/);
 });
 
 test('theme switch keeps a 44px target, visible focus and a reduced-motion state', () => {

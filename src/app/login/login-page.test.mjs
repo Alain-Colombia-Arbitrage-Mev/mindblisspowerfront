@@ -66,14 +66,14 @@ test('rewon opens email OTP first and only switches to password when explicitly 
   assert.equal((await app.render({ mode: 'reset' })).props.initialMode, 'code');
 });
 
-test('the login server page passes the same current referral and side to both top navigation actions without trusting redirects or roles', async t => {
+test('the login server page passes the same sponsor to both top navigation actions without trusting branch, redirects or roles', async t => {
   t.mock.method(globalThis, 'fetch', () => assert.fail('auth navigation must not send messages or read a session'));
   const app = page(), output = await app.renderTree({ email: ' MEMBER@EXAMPLE.TEST ', ref: 'Sponsor&A#?+', side: 'R',
     next: 'https://attacker.test', role: 'admin' });
   for (const [prop, path] of [['loginHref', '/login'], ['registrationHref', '/register']]) {
     const url = new URL(output.props[prop], 'https://portal.example.test');
     assert.equal(url.origin, 'https://portal.example.test'); assert.equal(url.pathname, path);
-    assert.equal(url.searchParams.get('ref'), 'Sponsor&A#?+'); assert.equal(url.searchParams.get('side'), 'R');
+    assert.equal(url.searchParams.get('ref'), 'Sponsor&A#?+'); assert.equal(url.searchParams.has('side'), false);
     assert.equal(url.searchParams.get('email'), 'member@example.test');
     assert.equal(url.searchParams.has('next'), false); assert.equal(url.searchParams.has('role'), false);
   }

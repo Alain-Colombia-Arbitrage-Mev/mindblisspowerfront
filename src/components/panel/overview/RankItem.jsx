@@ -1,10 +1,10 @@
 import { Gem, Medal } from "lucide-react";
 
 const RANK_STYLES = {
-  diamond: { icon: Gem, color: "#60a5fa", bg: "rgba(59, 130, 246, 0.1)", border: "rgba(59, 130, 246, 0.3)" },
-  emerald: { icon: Gem, color: "#34d399", bg: "rgba(34, 197, 94, 0.1)", border: "rgba(34, 197, 94, 0.3)" },
-  sapphire: { icon: Gem, color: "#3b82f6", bg: "rgba(37, 99, 235, 0.1)", border: "rgba(37, 99, 235, 0.3)" },
-  gold: { icon: Medal, color: "#facc15", bg: "rgba(250, 204, 21, 0.1)", border: "rgba(250, 204, 21, 0.3)" },
+  diamond: { icon: Gem, color: "var(--vp-info)", bg: "var(--vp-info-muted)", border: "var(--vp-info-border)" },
+  emerald: { icon: Gem, color: "var(--vp-success)", bg: "var(--vp-success-muted)", border: "var(--vp-success-border)" },
+  sapphire: { icon: Gem, color: "var(--vp-link)", bg: "var(--vp-accent-muted)", border: "var(--vp-accent-border)" },
+  gold: { icon: Medal, color: "var(--vp-amber)", bg: "var(--vp-amber-muted)", border: "var(--vp-amber-border)" },
 };
 
 export default function RankItem({ rank }) {

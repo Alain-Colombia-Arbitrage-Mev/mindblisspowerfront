@@ -4,9 +4,9 @@ import { Check, Pen, Trash2, X } from "lucide-react";
 
 function BoolCell({ value }) {
   return value ? (
-    <Check size={14} style={{ color: "#22c55e" }} />
+    <Check size={14} style={{ color: "var(--vp-success)" }} />
   ) : (
-    <X size={14} style={{ color: "#dc2626" }} />
+    <X size={14} style={{ color: "var(--vp-danger)" }} />
   );
 }
 
@@ -16,7 +16,7 @@ export default function NewsTableRow({ item, highlighted, onSelect, onDelete, on
       className="cursor-pointer border-b"
       style={{
         borderColor: "var(--vp-border)",
-        background: highlighted ? "rgba(250, 204, 21, 0.05)" : "transparent",
+        background: highlighted ? "var(--vp-amber-muted)" : "transparent",
       }}
       onClick={() => onSelect?.(item)}
     >

@@ -20,7 +20,7 @@ export default function NOWPaymentsBalances({ data }) {
     <div className={styles.groups}>
       <BalanceGroup Icon={Wallet} title="Capital" period="365 días" description="Cada membresía conserva su propio plazo.">
         <Balance label="Capital de membresías bloqueado" amount={membership.principal_locked_usd} primary />
-        <Balance label="Capital vencido, elegible para solicitud" amount={membership.principal_available_usd} />
+        <Balance label="Capital vencido, pendiente de validación" amount={membership.principal_available_usd} />
       </BalanceGroup>
       <BalanceGroup Icon={Clock3} title="Comisiones" period="1 mes calendario" description="Vencimiento sujeto a las retenciones vigentes.">
         <Balance label="Comisiones pendientes de liberación" amount={commissions.pending_usd} primary />
@@ -33,21 +33,21 @@ export default function NOWPaymentsBalances({ data }) {
       </BalanceGroup>
     </div>
     <div className={styles.notice} role="status"><LockKeyhole size={19} aria-hidden="true" /><div>
-      <strong>Retiros externos no habilitados</strong><p>Los retiros externos de NOWPayments siguen deshabilitados. El vencimiento no implica un pago automático. El capital y el ROI se muestran separados de las comisiones y del histórico Stripe; no deben sumarse como saldo retirable.</p>
+      <strong>Wallet destinada únicamente a recargas</strong><p>Esta wallet no ofrece transferencias salientes. El capital, el ROI y las comisiones se muestran por separado como información contable y no deben sumarse al saldo disponible.</p>
     </div></div>
     <details className={styles.conditions}>
       <summary>Cómo se liberan y registran los importes <ChevronDown size={17} aria-hidden="true" /></summary>
       <div className={styles.conditionsBody}>
         <p>Las comisiones calculadas vencen un mes calendario desde su generación, no a los 30 días. Una retención por seguridad o financiación puede impedir su liberación.</p>
         <p>Un crédito interno no es un pago recibido y puede incluir asignaciones a jubilación. Las acreditaciones acumuladas no se suman a los estados de comisión. Una fila puede estar liberada sólo parcialmente: su comisión calculada no equivale al crédito líquido ni al importe disponible.</p>
-        <p>El capital permanece bloqueado durante 365 días y después queda elegible para solicitud y validación. No hay reembolso anticipado ordinario, sin perjuicio de los derechos aplicables. Tampoco hay devolución ni retiro automático al vencer.</p>
+        <p>El capital permanece bloqueado durante 365 días y después queda sujeto a validación. No hay reembolso anticipado ordinario, sin perjuicio de los derechos aplicables. El vencimiento no genera una transferencia automática.</p>
       </div>
     </details>
     <div className={styles.reconciliation}>
       <div><h4>Registro de acreditaciones</h4><p>Importes históricos de registro, no saldos adicionales.</p></div>
       <dl className={styles.reconciliationAmounts}>
         <Balance label="Acreditadas internamente, no pagadas al banco" amount={commissions.credited_usd} />
-        <Balance label="Retiros externos NOW registrados" amount={commissions.paid_external_usd} />
+        <Balance label="Pagos externos históricos registrados" amount={commissions.paid_external_usd} />
       </dl>
     </div>
     {membershipItems.length > 0 && <div className={styles.detail}>

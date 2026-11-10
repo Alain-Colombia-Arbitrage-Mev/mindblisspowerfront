@@ -1,8 +1,7 @@
-import Link from "next/link";
-import { ArrowDownLeft, ArrowUpRight, Plus } from "lucide-react";
+import { ArrowUpRight, Plus } from "lucide-react";
 import { useI18n } from "@/i18n/LanguageProvider";
 
-export default function EarningsCard({ total = "—", ready = false, historical = false, preview = false }) {
+export default function EarningsCard({ total = "—", ready = false, historical = false, preview = false, onRecharge }) {
   const { t } = useI18n();
   return (
     <section className="mb-wallet-card">
@@ -16,9 +15,8 @@ export default function EarningsCard({ total = "—", ready = false, historical 
       </div>
       <p className="mb-wallet-copy">{preview ? t("overview.demoCopy") : t("overview.emptyWalletCopy")}</p>
       <div className="mb-wallet-actions">
-        <Link className="executive-button primary" href="/dashboard/withdrawals"><Plus size={14} />{t("overview.createWallet")}</Link>
-        <Link className="executive-button" href="/dashboard/withdrawals"><ArrowDownLeft size={14} />{t("overview.receive")}</Link>
-        <Link className="executive-button" href="/dashboard/support">{t("overview.howItWorks")}<ArrowUpRight size={14} /></Link>
+        <button className="executive-button primary" type="button" onClick={() => onRecharge?.("methods")}><Plus size={14} />{t("overview.topUp")}</button>
+        <button className="executive-button" type="button" onClick={() => onRecharge?.("welcome")}>{t("overview.howItWorks")}<ArrowUpRight size={14} /></button>
       </div>
     </section>
   );

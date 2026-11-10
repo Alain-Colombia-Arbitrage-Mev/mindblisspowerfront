@@ -1,8 +1,12 @@
+"use client";
+
+import { useI18n } from "@/i18n/LanguageProvider";
+
 function MetricBox({ label, value, tone = "default", span }) {
   const colors = {
     default: "var(--vp-text)",
     accent: "var(--vp-accent)",
-    positive: "#4ade80",
+    positive: "var(--vp-success)",
   };
   return (
     <div
@@ -20,6 +24,7 @@ function MetricBox({ label, value, tone = "default", span }) {
 }
 
 export default function NetworkSummaryCard({ memberName, leftCount, rightCount, metrics }) {
+  const { t } = useI18n();
   return (
     <section
       className="flex flex-col justify-between rounded-2xl border p-5"
@@ -34,9 +39,9 @@ export default function NetworkSummaryCard({ memberName, leftCount, rightCount, 
         </span>
         <span
           className="shrink-0 rounded border px-2 py-0.5 text-[10px]"
-          style={{ color: "var(--vp-muted)", background: "rgba(0,0,0,0.4)", borderColor: "var(--vp-border)" }}
+          style={{ color: "var(--vp-muted)", background: "var(--vp-surface-raised)", borderColor: "var(--vp-border)" }}
         >
-          Resumen General
+          {t("networkPage.generalSummary")}
         </span>
       </div>
 

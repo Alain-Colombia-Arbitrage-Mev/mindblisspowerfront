@@ -27,7 +27,7 @@ function view(cooldown = { active: false, label: '', start() {} }, attribution =
     './registration-model.mjs': model,
   });
 }
-const props = { initialSearch: 'ref=MP-REFERRAL&side=R' };
+const props = { initialSearch: 'ref=MP-REFERRAL' };
 function enterValid(harness, values = valid) {
   let tree = harness.render(props);
   for (const [id, value] of Object.entries(values)) {
@@ -75,7 +75,7 @@ test('registration guidance explains the manual email-first steps and optional p
   harness.unmount();
 });
 
-test('registration top navigation preserves the current local sponsor, branch and edited recipient in both directions without an API or global-storage read', t => {
+test('registration top navigation preserves the local sponsor and edited recipient without carrying a branch hint', t => {
   t.mock.method(globalThis, 'fetch', () => assert.fail('navigation must not register or send an OTP'));
   const harness = view(), context = { initialSearch: 'ref=Sponsor%26A%23%3F%2B&side=R' };
   let tree = harness.render(context);
@@ -84,7 +84,7 @@ test('registration top navigation preserves the current local sponsor, branch an
   for (const [prop, path] of [['loginHref', '/login'], ['registrationHref', '/register']]) {
     const url = new URL(tree.props[prop], 'https://portal.example.test');
     assert.equal(url.pathname, path); assert.equal(url.origin, 'https://portal.example.test');
-    assert.equal(url.searchParams.get('ref'), 'Sponsor&A#?+'); assert.equal(url.searchParams.get('side'), 'R');
+    assert.equal(url.searchParams.get('ref'), 'Sponsor&A#?+'); assert.equal(url.searchParams.has('side'), false);
     assert.equal(url.searchParams.get('email'), valid.email);
     assert.equal(url.searchParams.has('resume'), false);
   }
@@ -164,7 +164,7 @@ test('blank contacts do not block signup and do not add contact or verification 
   t.mock.method(globalThis, 'fetch', async (path, options) => { calls.push({ path, body: JSON.parse(options.body) }); return signupAck(); });
   const harness = view(); await submit(enterValid(harness));
   assert.deepEqual(calls, [{ path: '/api/auth/register', body: { fullName: valid.fullName, email: valid.email, acceptsPrivacy: true,
-    referralCode: 'MP-REFERRAL', preferredSide: 'R' } }]);
+    referralCode: 'MP-REFERRAL', preferredSide: '' } }]);
   const html = renderToStaticMarkup(harness.render(props));
   assert.match(html, /Paso 2 de 2/); assert.match(html, /Verifica tu correo/);
   assert.match(html, /Solicitud recibida/);
@@ -173,7 +173,7 @@ test('blank contacts do not block signup and do not add contact or verification 
   assert.equal(Object.hasOwn(harness.state[1], 'password'), false); assert.equal(Object.hasOwn(harness.state[1], 'confirmPassword'), false);
 });
 
-test('a direct shared registration URL preserves its exact sponsor and right branch for later checkout before login captures the URL', async t => {
+test('a direct shared registration URL preserves its sponsor and leaves checkout placement automatic', async t => {
   const previous = globalThis.window, values = new Map();
   const storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, String(value)), removeItem: key => values.delete(key) };
   globalThis.window = { localStorage: storage };
@@ -181,7 +181,7 @@ test('a direct shared registration URL preserves its exact sponsor and right bra
   t.mock.method(globalThis, 'fetch', async () => signupAck());
   const harness = view(undefined, referral);
   await submit(enterValid(harness));
-  assert.deepEqual(referral.referralForCheckout(valid.email, storage), { code: 'MP-REFERRAL', email: valid.email, side: 'R' });
+  assert.deepEqual(referral.referralForCheckout(valid.email, storage), { code: 'MP-REFERRAL', email: valid.email });
   assert.deepEqual(referral.referralForCheckout('another@example.test', storage), { code: '', email: '' });
   assert.equal(find(harness.render(props), node => node?.props?.id === 'code').props.value, '');
   harness.unmount();
@@ -337,7 +337,7 @@ test('registration confirmation is duplicate-locked and a late rejected transpor
   assert.deepEqual(paths, ['/api/auth/register/confirm']);
 });
 
-test('resumed registration preserves its local sponsor and branch before automatic entry without claiming another email hint', async t => {
+test('resumed registration preserves its local sponsor without claiming another email hint or branch', async t => {
   const destinations = browser(t), values = new Map();
   const storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, String(value)), removeItem: key => values.delete(key) };
   window.localStorage = storage;
@@ -351,9 +351,9 @@ test('resumed registration preserves its local sponsor and branch before automat
   find(tree, node => node?.props?.id === 'code').props.onChange({ target: { value: '001234' } });
   await submit(harness.render(resume));
   assert.deepEqual(destinations, ['/dashboard']);
-  assert.deepEqual(saves, [[valid.email, 'LocalSponsor', 'L']], 'entry does not wait for background persistence');
-  assert.deepEqual(referral.referralForCheckout(valid.email, storage), { code: 'LocalSponsor', email: valid.email, side: 'L' });
-  assert.deepEqual(referral.referralForCheckout('other@example.test', storage), { code: 'OtherSponsor', email: 'other@example.test', side: 'R' });
+  assert.deepEqual(saves, [[valid.email, 'LocalSponsor', '']], 'entry does not wait for background persistence');
+  assert.deepEqual(referral.referralForCheckout(valid.email, storage), { code: 'LocalSponsor', email: valid.email });
+  assert.deepEqual(referral.referralForCheckout('other@example.test', storage), { code: 'OtherSponsor', email: 'other@example.test' });
   harness.unmount();
 });
 

@@ -3,6 +3,7 @@ import test from 'node:test';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { registrationViewHarness, findRegistrationNode as find } from '../../register/registration-view-test-harness.mjs';
+import { translateMessage } from '../../../i18n/translate.mjs';
 
 const email = 'member@example.test';
 const session = { authenticated: true, mode: 'better-auth', email, subject: 'synthetic-owner' };
@@ -19,7 +20,8 @@ function view(sync) {
     '@/components/panel/PanelHeader': { default: () => null },
     '@/components/panel/PanelSidebar': { default: () => null },
     '@/components/panel/NavigationDrawer': { default: ({ children }) => children },
-    '@/lib/member-navigation.mjs': { memberPageFor: () => ({ title: 'Resumen', section: '' }) },
+    '@/lib/member-navigation.mjs': { memberPageKeysFor: () => ({ titleKey: 'pages.summary', sectionKey: '' }) },
+    '@/i18n/LanguageProvider': { useI18n: () => ({ locale: 'es', dir: 'ltr', t: (key, values) => translateMessage('es', key, values) }) },
     '@/lib/member-session-context': { MemberSessionContext: { Provider: ({ children }) => children } },
     '@/lib/referral-sync.mjs': sync, '@/components/panel/panel-shell.css': {},
   });
@@ -82,7 +84,7 @@ test('an abandoned explicit retry cannot update the next view when a late succes
   }
 });
 
-test('a browser-only backup is shown with its owner, code and branch and is saved only as the exact explicit choice displayed', async t => {
+test('a browser-only backup is shown with its owner and sponsor while placement stays automatic', async t => {
   browser(t);
   const choice = { email, code: 'BrowserBackup', side: 'L' }, saves = [];
   t.mock.method(globalThis, 'fetch', async () => Response.json(session));
@@ -94,7 +96,7 @@ test('a browser-only backup is shown with its owner, code and branch and is save
   harness.render(); await settle();
   const tree = harness.render(), markup = renderToStaticMarkup(tree);
   assert.match(markup, /sólo en este dispositivo, sin confirmar en el servidor/);
-  assert.match(markup, /member@example\.test/); assert.match(markup, /Referido: BrowserBackup/); assert.match(markup, /Rama: izquierda/);
+  assert.match(markup, /member@example\.test/); assert.match(markup, /Sponsor: BrowserBackup/); assert.match(markup, /Ubicación binaria: automática/);
   assert.equal(saves.length, 0);
   await find(tree, node => node?.props?.children === 'Guardar este enlace como mi elección').props.onClick();
   assert.deepEqual(saves, [[email, choice]]);
@@ -148,7 +150,7 @@ test('an expired marker retry that reads an empty server offers the exact browse
   marker = null;
   await find(harness.render(), node => node?.props?.children === 'Reintentar guardar enlace').props.onClick();
   const markup = renderToStaticMarkup(harness.render());
-  assert.match(markup, /sin confirmar en el servidor/); assert.match(markup, /Referido: BrowserBackup/);
+  assert.match(markup, /sin confirmar en el servidor/); assert.match(markup, /Sponsor: BrowserBackup/);
   assert.match(markup, /Guardar este enlace como mi elección/); assert.equal(saves, 0);
   await find(harness.render(), node => node?.props?.children === 'Guardar este enlace como mi elección').props.onClick();
   assert.equal(saves, 1);
@@ -167,10 +169,10 @@ test('an unavailable initial lookup keeps a retry action and later exposes the b
   harness.render(); await settle();
   let markup = renderToStaticMarkup(harness.render());
   assert.match(markup, /No pudimos consultar tu enlace de referido/);
-  assert.match(markup, /Reintentar comprobación/); assert.doesNotMatch(markup, /Referido: BrowserBackup|Reintentar guardar enlace|confirmar el guardado/);
+  assert.match(markup, /Reintentar comprobación/); assert.doesNotMatch(markup, /Sponsor: BrowserBackup|Reintentar guardar enlace|confirmar el guardado/);
   await find(harness.render(), node => node?.props?.children === 'Reintentar comprobación').props.onClick();
   markup = renderToStaticMarkup(harness.render());
-  assert.match(markup, /Referido: BrowserBackup/); assert.match(markup, /Rama: derecha/);
+  assert.match(markup, /Sponsor: BrowserBackup/); assert.match(markup, /Ubicación binaria: automática/);
   assert.match(markup, /Guardar este enlace como mi elección/); assert.equal(saves, 0);
   harness.unmount();
 });

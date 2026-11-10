@@ -50,7 +50,7 @@ test("malformed Stripe evidence is rejected rather than rendered as a verified s
 });
 test("referral failures cannot pretend that activation is pending", async () => {
   assert.equal(validMemberReferral({ positioned: false }), true);
-  assert.equal(validMemberReferral({ positioned: true, code: "MP101", links: { left: "https://example.test/?side=L", right: "https://example.test/?side=R" } }), true);
+  assert.equal(validMemberReferral({ positioned: true, code: "MP101", link: "https://example.test/register?ref=MP101" }), true);
   for (const payload of [{}, { positioned: true }, { positioned: true, code: "MP101", link: "javascript:alert(1)" }]) await assert.rejects(read(payload, validMemberReferral), error => error.status === 502);
 });
 for (const status of [401, 403, 429, 500, 502, 503]) test(`member read preserves HTTP ${status} without exposing private messages`, async () => {

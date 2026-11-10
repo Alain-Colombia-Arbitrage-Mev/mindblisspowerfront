@@ -7,12 +7,14 @@ import PanelHeader from "@/components/panel/PanelHeader";
 import PanelSidebar from "@/components/panel/PanelSidebar";
 import NavigationDrawer from "@/components/panel/NavigationDrawer";
 import SupportWidget from "@/components/panel/SupportWidget";
-import { memberPageFor } from "@/lib/member-navigation.mjs";
+import { memberPageKeysFor } from "@/lib/member-navigation.mjs";
 import { MemberSessionContext } from "@/lib/member-session-context";
 import { browserReferralChoice, chooseBrowserReferral, pendingVerifiedReferral, readVerifiedReferral, retryVerifiedReferral } from '@/lib/referral-sync.mjs';
+import { useI18n } from "@/i18n/LanguageProvider";
 import "@/components/panel/panel-shell.css";
 
 export default function DashboardShell({ authMode: _authMode, children }) {
+  const { t } = useI18n();
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [member, setMember] = useState(null);
@@ -28,15 +30,15 @@ export default function DashboardShell({ authMode: _authMode, children }) {
     const visit = pendingVerifiedReferral(recipient);
     const positioned = result?.ok === true && result.positioned === true && result.ref === '' && result.preferred_side === '';
     const confirmed = result?.ok === true && (positioned || (result.positioned === false && result.ref
-      && (!visit || (result.ref === visit.ref && result.preferred_side === visit.preferred_side))));
+      && (!visit || result.ref === visit.ref)));
     let notice = '', choice = null;
     if (!confirmed && visit) {
-      notice = 'No pudimos confirmar que tu enlace de referido quedó guardado. Reintenta antes de comprar; no se ha cambiado tu posición en la red.';
+      notice = 'dashboard.referralSaveFailed';
     } else if (result?.ok !== true) {
-      notice = 'No pudimos consultar tu enlace de referido. Puedes reintentar la comprobación; esta consulta no guarda enlaces ni cambia tu posición en la red.';
+      notice = 'dashboard.referralReadFailed';
     } else if (!positioned && !result.ref) {
       choice = browserReferralChoice(recipient);
-      if (choice) notice = 'Hay un enlace guardado sólo en este dispositivo, sin confirmar en el servidor. Puedes elegirlo de nuevo antes de comprar; no se guardará automáticamente ni cambiará una posición existente.';
+      if (choice) notice = 'dashboard.referralLocalOnly';
     }
     setReferralChoice(choice);
     setReferralPending(Boolean(visit && !confirmed));
@@ -126,14 +128,14 @@ export default function DashboardShell({ authMode: _authMode, children }) {
     }
   }
 
-  const { title, section } = memberPageFor(pathname);
+  const pageKeys = memberPageKeysFor(pathname);
   const overview = pathname === "/dashboard" || pathname === "/dashboard/home";
 
   return (
     <MemberSessionContext.Provider value={member}>
       <div className="vp-dashboard-shell">
         <a className="vp-skip-link" href="#member-main">
-          Ir al contenido
+          {t("dashboard.skipToContent")}
         </a>
         <NavigationDrawer open={mobileMenuOpen} onClose={closeMenu}>
           <PanelSidebar
@@ -148,8 +150,8 @@ export default function DashboardShell({ authMode: _authMode, children }) {
 
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <PanelHeader
-            title={title}
-            section={section}
+            title={t(pageKeys.title)}
+            section={t(pageKeys.section)}
             overview={overview}
             mobileMenuOpen={mobileMenuOpen}
             onToggleMobileMenu={() => setMobileMenuOpen((current) => !current)}
@@ -161,11 +163,11 @@ export default function DashboardShell({ authMode: _authMode, children }) {
           >
             <div className="vp-dashboard-content">
               {referralNotice ? <div role="alert" className="vp-dashboard-notice rounded-lg border border-[var(--vp-border)] bg-[var(--vp-surface)] p-4 text-sm leading-6 text-[var(--vp-text)]">
-                <p>{referralNotice}</p>
-                {referralChoice ? <p className="mt-2 break-words">Cuenta: {referralChoice.email}. Referido: {referralChoice.code}. Rama: {referralChoice.side === 'L' ? 'izquierda' : referralChoice.side === 'R' ? 'derecha' : 'sin preferencia'}.</p> : null}
+                <p>{t(referralNotice)}</p>
+                {referralChoice ? <p className="mt-2 break-words">{t("dashboard.referralChoice", { email: referralChoice.email, code: referralChoice.code })}</p> : null}
                 <button type="button" onClick={retryReferral} disabled={referralSaving} className="executive-button mt-3 disabled:opacity-60">
-                  {referralSaving ? (referralChoice || referralPending ? 'Guardando enlace…' : 'Comprobando enlace…')
-                    : referralChoice ? 'Guardar este enlace como mi elección' : referralPending ? 'Reintentar guardar enlace' : 'Reintentar comprobación'}
+                  {referralSaving ? (referralChoice || referralPending ? t("dashboard.savingReferral") : t("dashboard.checkingReferral"))
+                    : referralChoice ? t("dashboard.saveReferral") : referralPending ? t("dashboard.retrySaveReferral") : t("dashboard.retryReferralCheck")}
                 </button>
               </div> : null}
               {children}
