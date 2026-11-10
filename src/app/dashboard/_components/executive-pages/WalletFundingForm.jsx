@@ -6,7 +6,7 @@ import { useI18n } from "@/i18n/LanguageProvider";
 import { browserOnrampRegion } from "@/lib/meld-onramp.mjs";
 import { ONRAMP_COUNTRIES } from "@/lib/meld-onramp-client.mjs";
 import { fundingRequestId, readAdministrativeSandboxOptions, readPersonalFundingOptions } from "@/lib/wallet-funding-client.mjs";
-import { validFundingAmount } from "@/lib/wallet-funding-contract.mjs";
+import { PERSONAL_FUNDING_COUNTRIES, validFundingAmount } from "@/lib/wallet-funding-contract.mjs";
 import styles from "./wallet-funding.module.css";
 
 const EMPTY_OPTIONS = { status: "idle", country: "", sourceCurrencyCode: "USD", paymentMethods: [], routes: [] };
@@ -68,7 +68,7 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
 
   useEffect(() => {
     const detected = browserOnrampRegion([...(navigator.languages || [navigator.language])], Intl.DateTimeFormat().resolvedOptions().timeZone);
-    if (ONRAMP_COUNTRIES.some(([country]) => country === detected)) setCountryCode(detected);
+    setCountryCode(PERSONAL_FUNDING_COUNTRIES.includes(detected) ? detected : "");
   }, []);
 
   useEffect(() => {
@@ -95,7 +95,7 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
   return <form className="mb-onramp-simple" onSubmit={event => void submit(event).catch(() => {})} aria-label={t("walletPage.personalWalletLabel")}>
     <div className="mb-onramp-simple-main">
       <div className={styles.formFields}>
-        <FundingCountryField id={id} value={countryCode} onChange={value => { changeSelection(setCountryCode, value); if (sourceCurrencyCode !== "USD") setAmount("50"); setSourceCurrencyCode("USD"); }} busy={busy} />
+        <FundingCountryField id={id} value={countryCode} countries={ONRAMP_COUNTRIES.filter(([code]) => PERSONAL_FUNDING_COUNTRIES.includes(code))} onChange={value => { changeSelection(setCountryCode, value); if (sourceCurrencyCode !== "USD") setAmount("50"); setSourceCurrencyCode("USD"); }} busy={busy} />
         <FundingCurrencyField id={id} country={countryCode} value={sourceCurrencyCode} onChange={value => { changeSelection(setSourceCurrencyCode, value); setAmount(value === "USD" ? "50" : ""); }} busy={busy} />
         <FundingAmountField id={id} amount={amount} sourceCurrencyCode={sourceCurrencyCode} onChange={value => changeSelection(setAmount, value)} busy={busy} />
         <FundingMethodField id={id} value={methods.includes(method) ? method : ""} methods={methods} status={current ? options.status : "loading"}
@@ -210,12 +210,12 @@ function FundingCurrencyField({ id, country, value, onChange, busy }) {
     </select></label>;
 }
 
-function FundingCountryField({ id, value, onChange, busy, label = "" }) {
+function FundingCountryField({ id, value, onChange, busy, label = "", countries = ONRAMP_COUNTRIES }) {
   const { t, locale } = useI18n();
   function countryName(code) { try { return new Intl.DisplayNames([locale], { type: "region" }).of(code) || code; } catch { return code; } }
   return <label className={`mb-onramp-country-picker ${styles.countryField}`} htmlFor={`${id}-country`}><span>{label || t("onramp.countryLabel")}</span>
     <select id={`${id}-country`} value={value} onChange={event => onChange(event.target.value)} disabled={busy} required>
-      <option value="">{t("funding.countryPrompt")}</option>{ONRAMP_COUNTRIES.map(([code]) => <option value={code} key={code}>{countryName(code)}</option>)}
+      <option value="">{t("funding.countryPrompt")}</option>{countries.map(([code]) => <option value={code} key={code}>{countryName(code)}</option>)}
     </select></label>;
 }
 

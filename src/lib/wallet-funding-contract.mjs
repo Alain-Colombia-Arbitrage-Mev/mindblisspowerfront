@@ -5,6 +5,8 @@ const CURRENCY = /^[A-Z]{3}$/;
 const METHOD = /^[A-Z0-9_]{2,40}$/;
 const PROVIDERS = new Set(['TRANSAK', 'BANXA']);
 const PERSONAL_PROVIDERS = new Set(['TOPPER', 'SWAPPED']);
+export const PERSONAL_FUNDING_COUNTRIES = Object.freeze(['US', 'MX', 'ES']);
+export const PERSONAL_FUNDING_BLOCKED_METHODS = Object.freeze(['NETELLER', 'SKRILL']);
 const STATUSES = new Set(['initiated', 'session_created', 'unavailable', 'failed']);
 export const WALLET_GATEWAY_FAILURE_REASONS = Object.freeze(['gateway_route_missing', 'gateway_service_unavailable',
   'gateway_rejected', 'invalid_gateway_response', 'gateway_transport_unavailable']);
@@ -17,6 +19,14 @@ export function validFundingAmount(value) {
 /** Currency syntax is not eligibility: the selected provider must return a route. */
 export function fundingCurrencyCode(value = 'USD') {
   return typeof value === 'string' && CURRENCY.test(value) ? value : null;
+}
+
+export function personalFundingCountry(value) {
+  return typeof value === 'string' && PERSONAL_FUNDING_COUNTRIES.includes(value);
+}
+
+export function personalFundingMethod(value) {
+  return typeof value === 'string' && METHOD.test(value) && !PERSONAL_FUNDING_BLOCKED_METHODS.includes(value);
 }
 
 function validFiatAmount(value) {
@@ -33,6 +43,7 @@ export function fundingInput(value, kind) {
     || !(currency === 'USD' ? validFundingAmount(value.amount) : validFiatAmount(value.amount))
     || typeof value.paymentMethodType !== 'string' || !METHOD.test(value.paymentMethodType)) return null;
   if (kind === 'administrative' && !PROVIDERS.has(value.serviceProvider)) return null;
+  if (kind === 'personal' && (!personalFundingCountry(value.country) || !personalFundingMethod(value.paymentMethodType))) return null;
   return Object.fromEntries(keys.filter(key => value[key] !== undefined).map(key => [key, value[key]]));
 }
 
@@ -62,7 +73,7 @@ export function fundingAcknowledgement(value, kind) {
     if (!checkoutUrl) return null;
     return { ...safe, checkoutUrl };
   }
-  if (!METHOD.test(value.paymentMethodType || '') || !Array.isArray(value.allowedProviders)
+  if (!personalFundingMethod(value.paymentMethodType) || !Array.isArray(value.allowedProviders)
     || value.allowedProviders.length < 1 || value.allowedProviders.length > 2
     || value.allowedProviders.some(provider => !PERSONAL_PROVIDERS.has(provider))
     || new Set(value.allowedProviders).size !== value.allowedProviders.length) return null;
@@ -131,6 +142,7 @@ function fundingOptions(value, kind) {
   const sourceCurrencyCode = fundingCurrencyCode(value?.sourceCurrencyCode);
   if (!value || typeof value !== 'object' || Array.isArray(value) || value.walletKind !== kind
     || value.environment !== environment || value.provider !== provider || !COUNTRY.test(value.country || '') || !sourceCurrencyCode
+    || (!administrative && !personalFundingCountry(value.country))
     || !Array.isArray(value.paymentMethods) || value.paymentMethods.length > 40
     || value.paymentMethods.some(method => typeof method !== 'string' || !METHOD.test(method))
     || new Set(value.paymentMethods).size !== value.paymentMethods.length
@@ -162,5 +174,9 @@ function fundingOptions(value, kind) {
   if (routes.some(route => !route) || new Set(routes.map(route => route.serviceProvider)).size !== routes.length) return null;
   const methods = new Set(routes.flatMap(route => route.paymentMethods.map(method => method.method)));
   if (methods.size !== value.paymentMethods.length || value.paymentMethods.some(method => !methods.has(method))) return null;
-  return { walletKind: kind, environment, provider, country: value.country, sourceCurrencyCode, paymentMethods: [...value.paymentMethods], routes };
+  const safeRoutes = administrative ? routes : routes.map(route => ({ ...route,
+    paymentMethods: route.paymentMethods.filter(method => personalFundingMethod(method.method)),
+  })).filter(route => route.paymentMethods.length > 0);
+  return { walletKind: kind, environment, provider, country: value.country, sourceCurrencyCode,
+    paymentMethods: administrative ? [...value.paymentMethods] : value.paymentMethods.filter(personalFundingMethod), routes: safeRoutes };
 }

@@ -58,6 +58,16 @@ only administrative sandbox choices approved for this release. Personal discover
 and backend request eligibility allow only Topper/Swapped production routes.
 Method, form, session and history state are never shared between screens.
 
+The personal wallet currently permits only United States (`US`), Mexico (`MX`)
+and Spain (`ES`), per the user's latest country policy. `NETELLER` and `SKRILL`
+are excluded from its eligible methods. The form, client boundaries, BFF and
+backend enforce this policy; direct API input cannot restore a removed choice.
+Historical requests from other countries remain readable. The administrative
+sandbox retains its own independent country and method catalogue.
+The AppKit built-in on-ramp shortcut is hidden; funding starts through the
+Mindbliss form and its recorded, verified destination. The pinned SDK's Meld
+controller configuration still supplies the production checkout URL.
+
 `GET /api/member/wallet-funding/personal/options?country=CO` reads production
 routes using the public Meld checkout key published by the pinned Reown SDK.
 It does not read the administrative secret. Discovery is authenticated at the

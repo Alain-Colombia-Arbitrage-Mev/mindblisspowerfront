@@ -1,7 +1,24 @@
-import { FUNDING_UUID, validFundingAmount } from './wallet-funding-contract.mjs';
+import { FUNDING_UUID, validFundingAmount, fundingCurrencyCode, personalFundingCountry, personalFundingMethod } from './wallet-funding-contract.mjs';
+
+/** Validate before linking, selecting a provider or creating a personal intent. */
+export function reownFundingCurrency(sourceCurrencyCode = 'USD') {
+  if (!fundingCurrencyCode(sourceCurrencyCode)) throw new Error('invalid_request');
+  if (sourceCurrencyCode !== 'USD') throw new Error('wallet_funding_valuation_unavailable');
+  return sourceCurrencyCode;
+}
+
+export function reownFundingSelection(selection = {}, detectCountry = () => '') {
+  const sourceCurrencyCode = reownFundingCurrency(selection.sourceCurrencyCode);
+  if (selection.country && selection.countryCode && selection.country !== selection.countryCode) throw new Error('invalid_request');
+  const countryCode = selection.country || selection.countryCode || detectCountry();
+  if (!personalFundingCountry(countryCode)) throw new Error('wallet_funding_invalid_country');
+  if (!personalFundingMethod(selection.paymentMethodType)) throw new Error('wallet_funding_method_unavailable');
+  return { sourceCurrencyCode, countryCode };
+}
 
 /** Reown supplies its production checkout key; Mindbliss only records the requested funding. */
-export function buildReownProductionOnrampUrl({ providerUrl, address, projectId, checkoutReference, countryCode, amount, paymentMethodType, allowedProviders }) {
+export function buildReownProductionOnrampUrl({ providerUrl, address, projectId, checkoutReference, countryCode, sourceCurrencyCode = 'USD', amount, paymentMethodType, allowedProviders }) {
+  reownFundingSelection({ sourceCurrencyCode, countryCode, paymentMethodType });
   const url = new URL(providerUrl || '');
   if (url.origin !== 'https://meldcrypto.com' || url.pathname !== '/' || url.username || url.password || url.hash
     || !url.searchParams.get('publicKey')) throw new Error('reown_provider_invalid');
@@ -14,14 +31,14 @@ export function buildReownProductionOnrampUrl({ providerUrl, address, projectId,
   if (url.searchParams.get('externalCustomerId') !== projectId) throw new Error('reown_provider_invalid');
   url.searchParams.set('walletAddress', address);
   url.searchParams.set('externalSessionId', checkoutReference);
-  url.searchParams.set('sourceCurrencyCode', 'USD');
+  url.searchParams.set('sourceCurrencyCode', sourceCurrencyCode);
   url.searchParams.set('destinationCurrencyCode', 'USDT_POLYGON');
   url.searchParams.set('sourceAmount', String(amount));
   url.searchParams.set('countryCode', countryCode);
   url.searchParams.set('paymentMethodType', paymentMethodType);
   // Checkout's documented locks use the actual values, not boolean flags.
   for (const [key, value] of Object.entries({ walletAddress: address, countryCode,
-    sourceCurrencyCode: 'USD', destinationCurrencyCode: 'USDT_POLYGON', sourceAmount: String(amount), paymentMethodType })) {
+    sourceCurrencyCode, destinationCurrencyCode: 'USDT_POLYGON', sourceAmount: String(amount), paymentMethodType })) {
     url.searchParams.set(`${key}Locked`, value);
   }
   // Internal provider restrictions are merchant configuration. The public

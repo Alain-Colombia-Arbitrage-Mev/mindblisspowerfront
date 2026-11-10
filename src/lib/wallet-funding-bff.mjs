@@ -66,7 +66,7 @@ export async function handleWalletFunding(request, action, {
     optionsContext = personalProductionOptions({ walletKind: 'personal', environment: 'production', provider: 'reown', country, sourceCurrencyCode, paymentMethods: [], routes: [] });
     if (!optionsContext || [...url.searchParams.keys()].some(key => !['country', 'sourceCurrencyCode'].includes(key))
       || url.searchParams.getAll('country').length !== 1 || url.searchParams.getAll('sourceCurrencyCode').length > 1) return reply({ error: 'invalid_request' }, 400);
-    path = `/api/member/wallet-funding/personal/options?country=${country}&sourceCurrencyCode=${sourceCurrencyCode}`;
+    path = `/api/member/wallet-funding/personal/options?country=${country}${sourceCurrencyCode === 'USD' ? '' : `&sourceCurrencyCode=${sourceCurrencyCode}`}`;
   } else if (action === 'options') {
     const url = new URL(request.url);
     const country = url.searchParams.get('country');
@@ -77,7 +77,7 @@ export async function handleWalletFunding(request, action, {
     if (!optionsContext || [...url.searchParams.keys()].some(key => !['country', 'sourceCurrencyCode', 'serviceProvider'].includes(key))
       || url.searchParams.getAll('country').length !== 1 || url.searchParams.getAll('sourceCurrencyCode').length > 1
       || url.searchParams.getAll('serviceProvider').length !== 1) return reply({ error: 'invalid_request' }, 400);
-    path = `/api/member/wallet-funding/administrative/options?country=${country}&sourceCurrencyCode=${sourceCurrencyCode}&serviceProvider=${serviceProvider}`;
+    path = `/api/member/wallet-funding/administrative/options?country=${country}${sourceCurrencyCode === 'USD' ? '' : `&sourceCurrencyCode=${sourceCurrencyCode}`}&serviceProvider=${serviceProvider}`;
   } else if (action === 'history') {
     const url = new URL(request.url);
     kind = url.searchParams.get('walletKind');

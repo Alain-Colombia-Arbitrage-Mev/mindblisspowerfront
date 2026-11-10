@@ -8,7 +8,7 @@ import { mainnet, polygon } from "@reown/appkit/networks";
 import { BrowserProvider, getAddress } from "ethers";
 import { useMemberSession } from "@/lib/member-session-context";
 import { browserOnrampRegion } from "@/lib/meld-onramp.mjs";
-import { buildReownProductionOnrampUrl } from "@/lib/reown-production-onramp.mjs";
+import { buildReownProductionOnrampUrl, reownFundingSelection } from "@/lib/reown-production-onramp.mjs";
 import { createPersonalFundingIntent, fundingRequestId } from "@/lib/wallet-funding-client.mjs";
 import { PERSONAL_WALLET_ASSET, PERSONAL_WALLET_MINIMUM_USD } from "@/lib/personal-wallet.mjs";
 import { readWalletBinding, requestWalletLink, walletBindingFailure } from "@/lib/wallet-binding.mjs";
@@ -17,6 +17,12 @@ import { ReownContext, useReownWallet } from "./ReownContext";
 
 const projectId = process.env.NEXT_PUBLIC_REOWN_PROJECT_ID?.trim() || "";
 const configured = /^[a-f0-9]{32}$/i.test(projectId);
+
+function detectPersonalFundingCountry() {
+  const locale = navigator.languages?.[0] || navigator.language || '';
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+  return browserOnrampRegion([...(navigator.languages || [locale])], timeZone);
+}
 
 const unavailable = Object.freeze({
   configured: false,
@@ -69,7 +75,8 @@ if (configured) {
       send: false,
       receive: false,
       history: false,
-      onramp: true,
+      // Funding starts in Mindbliss's country/method-validated, recorded flow.
+      onramp: false,
     },
     themeMode: "dark",
     themeVariables: themeVariables("dark"),
@@ -235,6 +242,14 @@ function ConfiguredReownProvider({ children }) {
   }, [account.isConnected, binding.address, binding.status, currentAddress, walletProvider]);
 
   const runOnramp = useCallback((selection = onrampSelection.current || {}) => {
+    let context;
+    try {
+      context = reownFundingSelection(selection, detectPersonalFundingCountry);
+    } catch (error) {
+      setOnrampState({ status: "error", error: personalFundingFailure(error) });
+      return Promise.reject(error);
+    }
+    const { sourceCurrencyCode, countryCode } = context;
     if (onrampFlow.current) return onrampFlow.current;
     let phase = 'link';
     const operation = (async () => {
@@ -258,9 +273,6 @@ function ConfiguredReownProvider({ children }) {
       }
       if (!mounted.current) throw new DOMException("Aborted", "AbortError");
       setOnrampState({ status: "opening", error: "" });
-      const locale = navigator.languages?.[0] || navigator.language || "";
-      const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
-      const countryCode = selection.country || selection.countryCode || browserOnrampRegion([...(navigator.languages || [locale])], timeZone);
       const provider = OnRampController.state.providers.find(item => item.name === "meld");
       if (!provider) throw new Error("onramp_provider_unavailable");
       OnRampController.setSelectedProvider(provider);
@@ -269,6 +281,7 @@ function ConfiguredReownProvider({ children }) {
       onrampAbort.current = controller;
       const intent = await createPersonalFundingIntent({
         requestId: selection.requestId || fundingRequestId(), walletAddress: verifiedAddress, country: countryCode,
+        sourceCurrencyCode,
         amount: selection.amount ?? PERSONAL_WALLET_MINIMUM_USD,
         paymentMethodType: selection.paymentMethodType,
       }, { signal: controller.signal });
@@ -281,6 +294,7 @@ function ConfiguredReownProvider({ children }) {
         projectId,
         checkoutReference: intent.checkoutReference,
         countryCode,
+        sourceCurrencyCode,
         amount: intent.requestedAmount,
         paymentMethodType: intent.paymentMethodType,
         allowedProviders: intent.allowedProviders,
@@ -308,6 +322,12 @@ function ConfiguredReownProvider({ children }) {
   const openOnramp = useCallback(() => runOnramp(), [runOnramp]);
 
   const startOnramp = useCallback(async (selection = {}) => {
+    try {
+      reownFundingSelection(selection, detectPersonalFundingCountry);
+    } catch (error) {
+      setOnrampState({ status: "error", error: personalFundingFailure(error) });
+      throw error;
+    }
     onrampSelection.current = selection;
     if (selection.walletAddress && !isAddress(selection.walletAddress)) {
       onrampSelection.current = null;

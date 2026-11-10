@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { personalProductionOptions, administrativeSandboxOptions, fundingAcknowledgement } from './wallet-funding-contract.mjs';
+import { personalProductionOptions, administrativeSandboxOptions, fundingAcknowledgement, fundingInput, fundingHistory, fundingStatus,
+  PERSONAL_FUNDING_COUNTRIES } from './wallet-funding-contract.mjs';
 import { readAdministrativeSandboxOptions, readPersonalFundingOptions, createPersonalFundingIntent, createAdministrativeSandboxSession } from './wallet-funding-client.mjs';
 import { handleWalletFunding } from './wallet-funding-bff.mjs';
 
@@ -144,4 +145,55 @@ test('a dollar acknowledgement cannot relabel its requested amount as local fiat
     status: 'initiated', requestedAmount: 50, createdAt: '2026-11-10T15:00:00Z',
     paymentMethodType: 'CREDIT_DEBIT_CARD', allowedProviders: ['TOPPER'], sourceCurrencyCode: 'MXN' };
   assert.equal(fundingAcknowledgement(value, 'personal'), null);
+});
+
+test('new personal funding allows only configured countries and excludes Neteller and Skrill before transport', async () => {
+  const original = globalThis.fetch;
+  const valid = { ...input, country: 'US', sourceCurrencyCode: 'USD', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' };
+  assert.deepEqual(PERSONAL_FUNDING_COUNTRIES, ['US', 'MX', 'ES']);
+  for (const country of PERSONAL_FUNDING_COUNTRIES) assert.ok(fundingInput({ ...valid, country }, 'personal'));
+  try {
+    globalThis.fetch = async () => assert.fail('an excluded country or method reached transport');
+    for (const changed of [{ country: 'CO' }, { country: 'PA' }, { paymentMethodType: 'NETELLER' }, { paymentMethodType: 'SKRILL' }]) {
+      await assert.rejects(createPersonalFundingIntent({ ...valid, ...changed }), { message: 'invalid_request' });
+    }
+    await assert.rejects(readPersonalFundingOptions('CO'), { message: 'invalid_request' });
+  } finally { globalThis.fetch = original; }
+  for (const country of ['CO', 'PA']) {
+    const response = await handleWalletFunding(get(`personal/options?country=${country}`), 'personal-options', {
+      env, serviceRequest: async () => assert.fail('an excluded country reached the private API'),
+    });
+    assert.equal(response.status, 400);
+  }
+});
+
+test('personal method filtering preserves valid routes while administrative country and methods stay independent', () => {
+  const method = name => ({ method: name, currencyCode: 'USD', minimumAmount: 10, maximumAmount: 1000,
+    minimumUsd: 10, maximumUsd: 1000 });
+  const personal = { ...options('personal'), country: 'US', sourceCurrencyCode: 'USD',
+    paymentMethods: ['NETELLER', 'CREDIT_DEBIT_CARD', 'SKRILL'], routes: [
+      { serviceProvider: 'TOPPER', paymentMethods: [method('NETELLER')] },
+      { serviceProvider: 'SWAPPED', paymentMethods: [method('CREDIT_DEBIT_CARD'), method('SKRILL')] },
+    ] };
+  const parsed = personalProductionOptions(personal);
+  assert.deepEqual(parsed.paymentMethods, ['CREDIT_DEBIT_CARD']);
+  assert.deepEqual(parsed.routes, [{ serviceProvider: 'SWAPPED', paymentMethods: [method('CREDIT_DEBIT_CARD')] }]);
+  assert.equal(personalProductionOptions({ ...personal, country: 'CO' }), null);
+  const admin = { ...options('administrative'), country: 'CO', sourceCurrencyCode: 'USD', serviceProvider: 'BANXA',
+    paymentMethods: ['NETELLER', 'SKRILL'], routes: [{ serviceProvider: 'BANXA', paymentMethods: [method('NETELLER'), method('SKRILL')] }] };
+  assert.deepEqual(administrativeSandboxOptions(admin), admin);
+  assert.ok(fundingInput({ ...input, country: 'CO', amount: 100, sourceCurrencyCode: 'USD', paymentMethodType: 'SKRILL', serviceProvider: 'BANXA' }, 'administrative'));
+});
+
+test('previous personal Colombia and Skrill requests remain readable after new funding restrictions', () => {
+  const record = { checkoutReference: requestId, requestedAmount: 100, country: 'CO', status: 'initiated',
+    createdAt: '2026-11-10T15:00:00Z', provider: 'reown', paymentMethodType: 'SKRILL' };
+  const history = fundingHistory({ walletKind: 'personal', environment: 'production', settlement: 'unconfirmed', records: [record] }, 'personal');
+  assert.equal(history.records[0].country, 'CO');
+  const status = fundingStatus({ checkoutReference: requestId, walletKind: 'personal', environment: 'production', provider: 'reown',
+    country: 'CO', requestedAmount: 100, requestStatus: 'initiated', paymentMethodType: 'SKRILL',
+    destination: { address: input.walletAddress, asset: 'USDT', network: 'polygon', chainId: 137 },
+    confirmation: { state: 'unconfirmed', source: 'none', testMode: false } }, 'personal');
+  assert.equal(status.country, 'CO');
+  assert.equal(status.confirmation.state, 'unconfirmed');
 });

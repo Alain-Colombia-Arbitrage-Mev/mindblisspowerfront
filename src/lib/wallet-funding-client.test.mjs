@@ -24,25 +24,25 @@ test('administrative methods never borrow personal provider options or invent an
 
 test('personal country methods reject sandbox payloads and do not fall back to administrative discovery', async () => {
   const original = globalThis.fetch;
-  const personal = { walletKind: 'personal', environment: 'production', provider: 'reown', country: 'CO', sourceCurrencyCode: 'USD',
+  const personal = { walletKind: 'personal', environment: 'production', provider: 'reown', country: 'US', sourceCurrencyCode: 'USD',
     paymentMethods: ['CREDIT_DEBIT_CARD'], routes: [{ serviceProvider: 'TOPPER',
       paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount: 10, maximumAmount: 25000, minimumUsd: 10, maximumUsd: 25000 }] }] };
   const paths = [];
   try {
     globalThis.fetch = async path => { paths.push(path); return Response.json(personal); };
-    assert.deepEqual(await readPersonalFundingOptions('CO'), personal);
-    assert.deepEqual(paths, ['/api/member/wallet-funding/personal/options?country=CO&sourceCurrencyCode=USD']);
+    assert.deepEqual(await readPersonalFundingOptions('US'), personal);
+    assert.deepEqual(paths, ['/api/member/wallet-funding/personal/options?country=US&sourceCurrencyCode=USD']);
     globalThis.fetch = async () => Response.json(options);
-    await assert.rejects(readPersonalFundingOptions('CO'), { message: 'funding_unavailable' });
+    await assert.rejects(readPersonalFundingOptions('US'), { message: 'funding_unavailable' });
     globalThis.fetch = async () => Response.json({ ...personal, routes: [{ ...personal.routes[0], serviceProvider: 'TRANSAK' }] });
-    await assert.rejects(readPersonalFundingOptions('CO'), { message: 'funding_unavailable' });
+    await assert.rejects(readPersonalFundingOptions('US'), { message: 'funding_unavailable' });
   } finally { globalThis.fetch = original; }
 });
 
 test('a personal intent cannot silently change the requested payment method', async () => {
   const original = globalThis.fetch;
   const input = { requestId: 'd8a4c010-cc33-44da-a297-8b3c6440f491', walletAddress: `0x${'1'.repeat(40)}`,
-    country: 'CO', amount: 50, paymentMethodType: 'CREDIT_DEBIT_CARD' };
+    country: 'US', amount: 50, paymentMethodType: 'CREDIT_DEBIT_CARD' };
   try {
     globalThis.fetch = async () => Response.json({ checkoutReference: input.requestId, walletKind: 'personal',
       environment: 'production', provider: 'reown', status: 'initiated', requestedAmount: 50,

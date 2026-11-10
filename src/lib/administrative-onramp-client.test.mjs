@@ -17,7 +17,7 @@ test('administrative funding opens the exact sandbox session URL without rebuild
     createSession: async (body, options) => {
       calls++; assert.equal(options.signal, controller.signal);
       assert.deepEqual(body, { requestId: input.requestId, walletAddress: input.address, country: 'US', amount: 100,
-        serviceProvider: 'TRANSAK', paymentMethodType: 'CREDIT_DEBIT_CARD' });
+        sourceCurrencyCode: 'USD', serviceProvider: 'TRANSAK', paymentMethodType: 'CREDIT_DEBIT_CARD' });
       return session();
     }, openCheckout: url => opened.push(url),
   });
@@ -50,4 +50,19 @@ test('a failed sandbox request never opens a payment page or claims a completed 
     createSession: async () => { throw new Error('sandbox_route_unavailable'); },
     openCheckout: () => assert.fail('failed checkout opened'),
   }), { message: 'sandbox_route_unavailable' });
+});
+
+test('administrative helper rejects local fiat before invoking even an injected session creator', async () => {
+  for (const sourceCurrencyCode of ['MXN', 'COP']) {
+    await assert.rejects(startAdministrativeMeldOnramp({ ...input, sourceCurrencyCode }, {
+      createSession: async () => assert.fail('unvalued local fiat created a session'),
+      openCheckout: () => assert.fail('unvalued local fiat opened a checkout'),
+    }), { message: 'wallet_funding_valuation_unavailable' });
+  }
+  for (const sourceCurrencyCode of ['', 'usd', null, ['USD']]) {
+    await assert.rejects(startAdministrativeMeldOnramp({ ...input, sourceCurrencyCode }, {
+      createSession: async () => assert.fail('invalid currency created a session'),
+      openCheckout: () => assert.fail('invalid currency opened a checkout'),
+    }), { message: 'invalid_request' });
+  }
 });

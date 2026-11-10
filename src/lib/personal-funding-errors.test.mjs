@@ -11,6 +11,8 @@ test('personal recovery distinguishes verification, request persistence and prov
     assert.equal(personalFundingFailure(new Error('unauthenticated'), phase), 'session');
     assert.equal(personalFundingFailure(new Error('ACTION_REJECTED'), phase), 'rejected');
     assert.equal(personalFundingFailure(new Error('wallet_funding_method_unavailable'), phase), 'method');
+    assert.equal(personalFundingFailure(new Error('wallet_funding_invalid_country'), phase), 'method');
     assert.equal(personalFundingFailure(new Error('wallet_identity_unavailable'), phase), 'identity');
+    assert.equal(personalFundingFailure(new Error('wallet_funding_valuation_unavailable'), phase), 'valuation');
   }
 });

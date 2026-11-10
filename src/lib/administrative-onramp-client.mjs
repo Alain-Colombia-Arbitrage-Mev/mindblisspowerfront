@@ -1,16 +1,18 @@
 import { createAdministrativeSandboxSession } from './wallet-funding-client.mjs';
-import { fundingAcknowledgement } from './wallet-funding-contract.mjs';
+import { fundingAcknowledgement, fundingCurrencyCode } from './wallet-funding-contract.mjs';
 
 /**
  * Administrative funding has its own checkout and never imports a personal wallet SDK.
- * @param {{requestId: string, address: string, amount: number, countryCode: string, paymentMethodType?: string, serviceProvider: string}} input
+ * @param {{requestId: string, address: string, amount: number, countryCode: string, sourceCurrencyCode?: string, paymentMethodType?: string, serviceProvider: string}} input
  * @param {{signal?: AbortSignal, createSession?: typeof createAdministrativeSandboxSession, openCheckout?: (url: string) => void}} [options]
  */
-export async function startAdministrativeMeldOnramp({ requestId, address, amount, countryCode, paymentMethodType, serviceProvider }, {
+export async function startAdministrativeMeldOnramp({ requestId, address, amount, countryCode, sourceCurrencyCode = 'USD', paymentMethodType, serviceProvider }, {
   signal, createSession = createAdministrativeSandboxSession, openCheckout = openMeldCheckout,
 } = {}) {
   if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-  const response = await createSession({ requestId, walletAddress: address, country: countryCode, amount, paymentMethodType, serviceProvider }, { signal });
+  if (!fundingCurrencyCode(sourceCurrencyCode)) throw new Error('invalid_request');
+  if (sourceCurrencyCode !== 'USD') throw new Error('wallet_funding_valuation_unavailable');
+  const response = await createSession({ requestId, walletAddress: address, country: countryCode, sourceCurrencyCode, amount, paymentMethodType, serviceProvider }, { signal });
   if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
   const session = fundingAcknowledgement(response, 'administrative');
   if (!session || session.requestedAmount !== amount || session.checkoutReference !== requestId

@@ -6,7 +6,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 import { translateMessage } from '../../../../i18n/translate.mjs';
-import { validFundingAmount, WALLET_GATEWAY_FAILURE_REASONS, FUNDING_UUID, fundingStatus } from '../../../../lib/wallet-funding-contract.mjs';
+import { PERSONAL_FUNDING_COUNTRIES, validFundingAmount, WALLET_GATEWAY_FAILURE_REASONS, FUNDING_UUID, fundingStatus } from '../../../../lib/wallet-funding-contract.mjs';
 import { personalFundingFailure } from '../../../../lib/personal-funding-errors.mjs';
 
 const require = createRequire(import.meta.url);
@@ -20,7 +20,7 @@ function load(filename, mocks) {
   const module = { exports: {} };
   new Function('require', 'module', 'exports', code)(id => {
     if (Object.hasOwn(mocks, id)) return mocks[id];
-    if (id === '@/lib/wallet-funding-contract.mjs') return { validFundingAmount, WALLET_GATEWAY_FAILURE_REASONS, FUNDING_UUID, fundingStatus };
+    if (id === '@/lib/wallet-funding-contract.mjs') return { PERSONAL_FUNDING_COUNTRIES, validFundingAmount, WALLET_GATEWAY_FAILURE_REASONS, FUNDING_UUID, fundingStatus };
     if (id.endsWith('.module.css')) return styles;
     if (id === 'react/jsx-runtime' || id === 'react') return require(id);
     assert.fail(`Unexpected dependency ${id}`);
@@ -44,11 +44,11 @@ function componentHarness(filename, name, mocks) {
     unmount() { for (const effect of effects) effect?.cleanup?.(); }, exports, state };
 }
 
-function formHarness(name, api) {
+function formHarness(name, api, detectedCountry = 'US') {
   const harness = componentHarness('WalletFundingForm.jsx', name, { 'lucide-react': icons, '@/i18n/LanguageProvider': i18n,
-    '@/lib/meld-onramp.mjs': { browserOnrampRegion: () => 'CO' }, '@/lib/meld-onramp-client.mjs': { ONRAMP_COUNTRIES: [['CO'], ['US']] },
+    '@/lib/meld-onramp.mjs': { browserOnrampRegion: () => detectedCountry }, '@/lib/meld-onramp-client.mjs': { ONRAMP_COUNTRIES: [['CO'], ['US'], ['MX'], ['ES'], ['PA']] },
     '@/lib/wallet-funding-client.mjs': { fundingRequestId: () => 'd8a4c010-cc33-44da-a297-8b3c6440f491', ...api },
-    '@/lib/wallet-funding-contract.mjs': { validFundingAmount },
+    '@/lib/wallet-funding-contract.mjs': { PERSONAL_FUNDING_COUNTRIES, validFundingAmount },
   });
   const render = harness.render;
   return { ...harness, render(props = {}) { return render({ destinationAddress: `0x${'1'.repeat(40)}`, ...props }); } };
@@ -106,15 +106,15 @@ test('personal countries discard canceled responses, respect route limits and su
   const props = { onContinue: async value => submitted.push(value) };
   harness.render(props); harness.render(props);
   let tree = harness.render(props);
-  assert.equal(calls[0].country, 'CO');
-  find(tree, 'FundingCountryField').props.onChange('US');
+  assert.equal(calls[0].country, 'US');
+  find(tree, 'FundingCountryField').props.onChange('MX');
   harness.render(props);
   assert.equal(calls[0].signal.aborted, true);
-  calls[0].resolve({ country: 'CO', paymentMethods: ['BANK_TRANSFER'], routes: [{ paymentMethods: [{ method: 'BANK_TRANSFER', minimumUsd: 50, maximumUsd: 500 }] }] });
+  calls[0].resolve({ country: 'US', paymentMethods: ['BANK_TRANSFER'], routes: [{ paymentMethods: [{ method: 'BANK_TRANSFER', minimumUsd: 50, maximumUsd: 500 }] }] });
   await flush();
   tree = harness.render(props);
   assert.deepEqual(find(tree, 'FundingMethodField').props.methods, []);
-  calls[1].resolve({ country: 'US', paymentMethods: ['CREDIT_DEBIT_CARD'], routes: [{ paymentMethods: methods }] });
+  calls[1].resolve({ country: 'MX', paymentMethods: ['CREDIT_DEBIT_CARD'], routes: [{ paymentMethods: methods }] });
   await flush(); tree = harness.render(props);
   assert.deepEqual(find(tree, 'FundingMethodField').props.methods, [], '50 USD cannot use a 75 USD route');
   find(tree, 'FundingAmountField').props.onChange('100');
@@ -122,7 +122,7 @@ test('personal countries discard canceled responses, respect route limits and su
   assert.deepEqual(find(tree, 'FundingMethodField').props.methods, ['CREDIT_DEBIT_CARD'], JSON.stringify(harness.state));
   tree.props.onSubmit({ preventDefault() {} }); await flush();
   assert.equal(submitted.length, 1);
-  assert.equal(submitted[0].countryCode, 'US');
+  assert.equal(submitted[0].countryCode, 'MX');
   assert.equal(submitted[0].paymentMethodType, 'CREDIT_DEBIT_CARD');
   assert.equal(submitted[0].amount, 100);
   assert.equal(Object.hasOwn(submitted[0], 'serviceProvider'), false);
@@ -724,8 +724,8 @@ test('all returned production methods remain visible and selectable, including P
   harness.render(props); harness.render(props); await flush(); harness.render(props); let tree = harness.render(props);
   let field = find(tree, 'FundingMethodField');
   let view = field.type(field.props);
-  assert.deepEqual(findAll(view, node => node?.type === 'input' && node.props.type === 'radio').map(node => node.props.value), countries.CO);
-  assert.match(renderToStaticMarkup(view), /7 opciones de pago/);
+  assert.deepEqual(findAll(view, node => node?.type === 'input' && node.props.type === 'radio').map(node => node.props.value), countries.US);
+  assert.match(renderToStaticMarkup(view), /5 opciones de pago/);
   assert.doesNotMatch(renderToStaticMarkup(view), /PSE/);
   const group = React.Children.toArray(tree.props.children.props.children)[0];
   assert.deepEqual(React.Children.toArray(group.props.children).map(node => node.type.name), ['FundingCountryField', 'FundingCurrencyField', 'FundingAmountField', 'FundingMethodField']);
@@ -838,4 +838,18 @@ test('administrative MXN methods stay within sandbox provider and currency conte
   tree.props.onSubmit({ preventDefault() {} }); await flush();
   assert.equal(submitted.length, 0);
   assert.equal(calls.filter(call => call.sourceCurrencyCode !== 'MXN').every(call => call.signal.aborted), true);
+});
+
+test('personal country choices are US Mexico Spain while administrative countries remain separate', async t => {
+  const personal = formHarness('PersonalFundingForm', { readPersonalFundingOptions: async country => ({ country, routes: [] }) }, 'CO');
+  const administrative = formHarness('AdministrativeSandboxFundingForm', { readAdministrativeSandboxOptions: async (country, serviceProvider) => ({ country, serviceProvider, routes: [] }) });
+  t.after(() => { personal.unmount(); administrative.unmount(); });
+  personal.render(); const personalTree = personal.render();
+  const field = find(personalTree, 'FundingCountryField');
+  assert.equal(field.props.value, '', 'unsupported browser detection must request a choice, not invent US residence');
+  assert.deepEqual(field.props.countries.map(([code]) => code), ['US', 'MX', 'ES']);
+  const html = renderToStaticMarkup(field.type(field.props));
+  assert.doesNotMatch(html, /value="(?:CO|PA|GB|CR|DO|GT|UY)"/);
+  administrative.render(); const adminField = find(administrative.render(), 'FundingCountryField');
+  assert.match(renderToStaticMarkup(adminField.type(adminField.props)), /value="CO"/);
 });
