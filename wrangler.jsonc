@@ -85,7 +85,7 @@
         }
       ],
       "vars": {
-        "CLOUDFLARE_DEPLOYMENT_READY": "false",
+        "CLOUDFLARE_DEPLOYMENT_READY": "true",
         "MEMBER_DB_PROVIDER": "hyperdrive",
         "MEMBER_DB_QUERY_CACHE_DISABLED": "true",
         "AUTH_PROVIDER": "better-auth",
