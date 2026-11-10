@@ -1,7 +1,9 @@
 # MELD sandbox routing support request
 
-Status: prepared; not submitted. No production keys or customer wallet addresses
-are included. Submission requires the user's chosen contact channel and email.
+Status: prepared; not submitted. On 2026-11-10 the user explicitly chose to keep
+this report as a draft. Do not send it or its private diagnostic reference unless
+the user gives new authorization. No production keys or customer wallet
+addresses are included.
 
 Subject: Shared Banxa sandbox authentication failure and USDT Polygon coverage
 
@@ -46,10 +48,14 @@ Colombia with USDT Polygon. In particular, please explain the gap between
 published routes and a provider session that fails authentication. If those
 corridors cannot be tested in sandbox, please identify the supported test path.
 
-Please also document how an account can receive a reliable fiat USD/MXN gross
-reference before selecting MXN methods while preserving a USD 50 app minimum.
-The crypto quote response has no documented independent fiat USD valuation;
-we will not invent a conversion rate or treat net USDT as gross USD.
+Please document the provider-managed local-currency checkout flow, including MXN
+and SPEI: the on-ramp must calculate and disclose its own conversion, fees and
+limits. Mindbliss does not want to operate a separate FX service. Explain whether
+a USD 50 reference amount can be converted and preserved by the provider when
+selecting MXN, and which authenticated response fields identify the final fiat
+currency, fiat amount, crypto received and settlement. If the API only accepts an
+amount in the selected fiat currency, please document that constraint explicitly;
+we will not relabel USD as MXN or treat net USDT as gross USD.
 
 No API secret, signature, checkout URL/token, customer email, address, KYC document
 or payment details are attached.

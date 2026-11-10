@@ -133,9 +133,29 @@ credentials and the administrative account scope:
 | Colombia | Topper, Swapped | Banxa |
 
 These are discovery results, not guarantees of a quote or payment. Banxa sandbox
-rejected the tested Colombia checkout; Transak US opened a sandbox quote. The
+rejected the tested US checkout; Transak US opened a sandbox quote. The
 frontend fetches fresh methods when the country changes and applies provider
 limits to each amount; it does not create card methods for an unavailable route.
+
+### Provider-managed currency conversion
+
+The user's decision on 2026-11-10 is to leave conversion, fees and local payment
+processing to each on-ramp provider. Do not introduce a separate Mindbliss FX
+service as a prerequisite for local payment methods. The current release still
+uses USD amounts and USD limits throughout discovery, checkout locks and request
+records; it does not yet implement a currency-aware MXN/SPEI flow.
+
+Future local-currency support must keep amount and currency together in each
+wallet's own provider discovery, checkout and records. Use the provider's actual
+quote and authenticated settlement information. A USD reference amount alone
+does not prove the local-currency minimum, and removing the currency lock is not
+proof that a provider preserves the USD equivalent. Never relabel 50 USD as
+50 MXN, treat net USDT as gross USD, or claim a USD minimum was verified when the
+provider has not returned evidence for that valuation. Confirm the supported
+provider conversion contract before enabling such a route.
+
+The MELD sandbox support report remains a draft by the user's explicit decision;
+do not send it without new authorization.
 
 ## Webhook
 
