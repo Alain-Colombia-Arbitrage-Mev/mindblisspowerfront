@@ -5,7 +5,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useI18n } from "@/i18n/LanguageProvider";
 import { browserOnrampRegion } from "@/lib/browser-onramp-region.mjs";
 import { fundingRequestId, readPersonalFundingOptions } from "@/lib/wallet-funding-client.mjs";
-import { PERSONAL_FUNDING_COUNTRIES, personalFundingMethod, validFundingAmount } from "@/lib/wallet-funding-contract.mjs";
+import { PERSONAL_FUNDING_COUNTRIES, PERSONAL_FUNDING_MINIMUM_USD, personalFundingMethod, validFundingAmount } from "@/lib/wallet-funding-contract.mjs";
 import styles from "./wallet-funding.module.css";
 
 const EMPTY_OPTIONS = { status: "idle", country: "", sourceCurrencyCode: "USD", paymentMethods: [], routes: [] };
@@ -14,7 +14,7 @@ export function eligiblePaymentMethods(routes, amount, sourceCurrencyCode = "USD
   if (!Array.isArray(routes) || (sourceCurrencyCode === "USD" && !validFundingAmount(amount))) return [];
   const entered = Number.isFinite(amount) && amount > 0;
   return [...new Set(routes.flatMap(route => (route.paymentMethods || [])
-    .filter(item => { const limits = routeLimits(item, sourceCurrencyCode); return personalFundingMethod(item.method) && limits && (!entered || (amount >= limits.minimumAmount && amount <= limits.maximumAmount)); })
+    .filter(item => { const limits = routeLimits(item, sourceCurrencyCode); return personalFundingMethod(item.method) && (sourceCurrencyCode === "USD" || (sourceCurrencyCode === "MXN" && item.method === "SPEI")) && limits && (!entered || (amount >= limits.minimumAmount && amount <= limits.maximumAmount)); })
     .map(item => item.method)))];
 }
 
@@ -26,8 +26,10 @@ function routeLimits(item, sourceCurrencyCode) {
 }
 
 function lowestRouteMinimum(routes, sourceCurrencyCode = "USD") {
-  const limits = (routes || []).flatMap(route => route.paymentMethods || []).map(item => routeLimits(item, sourceCurrencyCode)?.minimumAmount).filter(Number.isFinite);
-  return limits.length ? Math.max(sourceCurrencyCode === "USD" ? 50 : 0, Math.min(...limits)) : null;
+  const limits = (routes || []).flatMap(route => route.paymentMethods || [])
+    .filter(item => personalFundingMethod(item.method) && (sourceCurrencyCode === "USD" || (sourceCurrencyCode === "MXN" && item.method === "SPEI")))
+    .map(item => routeLimits(item, sourceCurrencyCode)?.minimumAmount).filter(Number.isFinite);
+  return limits.length ? Math.max(sourceCurrencyCode === "USD" ? PERSONAL_FUNDING_MINIMUM_USD : 0, Math.min(...limits)) : null;
 }
 
 export function selectedMethodLimits(routes, method, amount, sourceCurrencyCode = "USD") {
@@ -35,7 +37,7 @@ export function selectedMethodLimits(routes, method, amount, sourceCurrencyCode 
     .filter(item => item.method === method).map(item => routeLimits(item, sourceCurrencyCode))
     .filter(item => item && (!(amount > 0) || (amount >= item.minimumAmount && amount <= item.maximumAmount)));
   if (!matches.length) return null;
-  const minimumAmount = Math.max(sourceCurrencyCode === "USD" ? 50 : 0, Math.min(...matches.map(item => item.minimumAmount)));
+  const minimumAmount = Math.max(sourceCurrencyCode === "USD" ? PERSONAL_FUNDING_MINIMUM_USD : 0, Math.min(...matches.map(item => item.minimumAmount)));
   const maximumAmount = Math.min(sourceCurrencyCode === "USD" ? 25000 : 1_000_000_000, Math.max(...matches.map(item => item.maximumAmount)));
   return sourceCurrencyCode === "USD" ? { minimumUsd: minimumAmount, maximumUsd: maximumAmount } : { minimumAmount, maximumAmount };
 }
@@ -49,17 +51,22 @@ export function fundingCurrencyChoices(country) { return [...new Set(["USD", LOC
 export function PersonalFundingForm({ disabled = false, busy = false, onContinue, onSelectionChange = undefined, destinationAddress = "" }) {
   const { t } = useI18n();
   const id = useId();
-  const [amount, setAmount] = useState("50");
+  const [amount, setAmount] = useState(String(PERSONAL_FUNDING_MINIMUM_USD));
   const [countryCode, setCountryCode] = useState("");
   const [method, setMethod] = useState("");
   const [options, setOptions] = useState(EMPTY_OPTIONS);
   const [revision, setRevision] = useState(0);
   const [sourceCurrencyCode, setSourceCurrencyCode] = useState("USD");
   const submitting = useRef(false);
+  const seededMinimum = useRef("");
   const current = options.country === countryCode && (options.sourceCurrencyCode || "USD") === sourceCurrencyCode;
   const methods = current && options.status === "ready" ? eligiblePaymentMethods(options.routes, Number(amount), sourceCurrencyCode) : [];
   const methodsKey = methods.join(",");
-  const valid = sourceCurrencyCode === "USD" && validFundingAmount(Number(amount)) && PERSONAL_FUNDING_COUNTRIES.includes(countryCode) && methods.includes(method) && /^0x[0-9a-f]{40}$/i.test(destinationAddress);
+  const parsedAmount = Number(amount);
+  const validAmount = sourceCurrencyCode === "USD" ? validFundingAmount(parsedAmount)
+    : sourceCurrencyCode === "MXN" && countryCode === "MX" && method === "SPEI" && Number.isFinite(parsedAmount) && parsedAmount > 0 && parsedAmount <= 1_000_000_000
+      && Math.abs(parsedAmount * 100 - Math.round(parsedAmount * 100)) < 0.000001;
+  const valid = validAmount && PERSONAL_FUNDING_COUNTRIES.includes(countryCode) && methods.includes(method) && /^0x[0-9a-f]{40}$/i.test(destinationAddress);
 
   function changeSelection(update, value) {
     update(value);
@@ -84,6 +91,16 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
 
   useEffect(() => { setMethod(methodsKey.split(",").includes("CREDIT_DEBIT_CARD") ? "CREDIT_DEBIT_CARD" : methodsKey.split(",")[0] || ""); }, [methodsKey, countryCode, amount]);
 
+  useEffect(() => {
+    if (sourceCurrencyCode !== "MXN" || !current || options.status !== "ready") return;
+    const key = `${countryCode}:${sourceCurrencyCode}:${revision}`;
+    if (seededMinimum.current === key) return;
+    seededMinimum.current = key;
+    if (amount !== "") return;
+    const limits = selectedMethodLimits(options.routes, "SPEI", 0, "MXN");
+    if (limits) setAmount((Math.ceil(limits.minimumAmount * 100) / 100).toFixed(2));
+  }, [amount, countryCode, sourceCurrencyCode, revision, current, options]);
+
   async function submit(event) {
     event.preventDefault();
     if (disabled || busy || submitting.current || !valid) return;
@@ -95,15 +112,15 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
   return <form className="mb-onramp-simple" onSubmit={event => void submit(event).catch(() => {})} aria-label={t("walletPage.personalWalletLabel")}>
     <div className="mb-onramp-simple-main">
       <div className={styles.formFields}>
-        <FundingCountryField id={id} value={countryCode} countries={PERSONAL_COUNTRIES} onChange={value => { changeSelection(setCountryCode, value); if (sourceCurrencyCode !== "USD") setAmount("50"); setSourceCurrencyCode("USD"); }} busy={busy} />
-        <FundingCurrencyField id={id} country={countryCode} value={sourceCurrencyCode} onChange={value => { changeSelection(setSourceCurrencyCode, value); setAmount(value === "USD" ? "50" : ""); }} busy={busy} />
+        <FundingCountryField id={id} value={countryCode} countries={PERSONAL_COUNTRIES} onChange={value => { seededMinimum.current = ""; changeSelection(setCountryCode, value); if (sourceCurrencyCode !== "USD") setAmount(String(PERSONAL_FUNDING_MINIMUM_USD)); setSourceCurrencyCode("USD"); }} busy={busy} />
+        <FundingCurrencyField id={id} country={countryCode} value={sourceCurrencyCode} onChange={value => { seededMinimum.current = ""; changeSelection(setSourceCurrencyCode, value); setAmount(value === "USD" ? String(PERSONAL_FUNDING_MINIMUM_USD) : ""); }} busy={busy} />
         <FundingAmountField id={id} amount={amount} sourceCurrencyCode={sourceCurrencyCode} onChange={value => changeSelection(setAmount, value)} busy={busy} />
         <FundingMethodField id={id} value={methods.includes(method) ? method : ""} methods={methods} status={current ? options.status : "loading"}
           countrySelected={Boolean(countryCode)} sourceCurrencyCode={sourceCurrencyCode} minimumUsd={current ? lowestRouteMinimum(options.routes, sourceCurrencyCode) : null}
           limits={current ? selectedMethodLimits(options.routes, method, Number(amount), sourceCurrencyCode) : null} onChange={value => changeSelection(setMethod, value)} onRetry={() => setRevision(value => value + 1)} busy={busy} />
       </div>
       <FundingDestination address={destinationAddress} />
-      {sourceCurrencyCode !== "USD" ? <p className={styles.hint} role="status">{t("funding.localMinimumPending")}</p> : null}
+      {sourceCurrencyCode === "MXN" ? <p className={styles.hint} role="status">{t("funding.personalSpeiMinimum")}</p> : null}
       <FundingSubmit disabled={disabled || !valid} busy={busy} />
     </div>
   </form>;
@@ -112,15 +129,15 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
 function FundingAmountField({ id, amount, sourceCurrencyCode = "USD", onChange, busy }) {
   const { t, locale } = useI18n();
   const usd = sourceCurrencyCode === "USD";
-  const invalid = amount !== "" && (usd ? !validFundingAmount(Number(amount)) : !(Number(amount) > 0 && Number(amount) <= 1_000_000_000));
+  const invalid = amount !== "" && (usd ? !validFundingAmount(Number(amount)) : !(Number(amount) > 0 && Number(amount) <= 1_000_000_000 && Math.abs(Number(amount) * 100 - Math.round(Number(amount) * 100)) < 0.000001));
   return <fieldset className={`mb-onramp-amount-fieldset ${styles.amountField}`} disabled={busy}>
     <legend>{t("onramp.amountLabel")}</legend>
-    {usd ? <div className="mb-onramp-quick-amounts">{[50, 100, 250, 500].map(value => <button type="button" key={value}
+    {usd ? <div className="mb-onramp-quick-amounts">{[PERSONAL_FUNDING_MINIMUM_USD, 50, 100, 250].map(value => <button type="button" key={value}
       className={Number(amount) === value ? "active" : ""} aria-pressed={Number(amount) === value} onClick={() => onChange(String(value))}>
       {new Intl.NumberFormat(locale, { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value)}</button>)}</div> : null}
-    <label className="mb-onramp-amount-input" htmlFor={`${id}-amount`}><span>{sourceCurrencyCode}</span><input id={`${id}-amount`} type="number" min={usd ? "50" : "0.01"} max={usd ? "25000" : "1000000000"} step="0.01" inputMode="decimal"
+    <label className="mb-onramp-amount-input" htmlFor={`${id}-amount`}><span>{sourceCurrencyCode}</span><input id={`${id}-amount`} type="number" min={usd ? String(PERSONAL_FUNDING_MINIMUM_USD) : "0.01"} max={usd ? "25000" : "1000000000"} step="0.01" inputMode="decimal"
       value={amount} onChange={event => onChange(event.target.value)} aria-label={t("onramp.amountLabel")} aria-invalid={invalid || undefined} aria-describedby={invalid ? `${id}-amount-hint` : undefined} required /></label>
-    {invalid ? <small id={`${id}-amount-hint`} role="alert" className="mb-onramp-disclosure">{t(usd ? "funding.amountRange" : "funding.localAmountRequired")}</small> : null}
+    {invalid ? <small id={`${id}-amount-hint`} role="alert" className="mb-onramp-disclosure">{t(usd ? "funding.personalAmountRange" : "funding.localAmountRequired")}</small> : null}
   </fieldset>;
 }
 

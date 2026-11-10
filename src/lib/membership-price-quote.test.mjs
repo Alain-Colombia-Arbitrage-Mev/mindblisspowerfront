@@ -4,6 +4,7 @@ import { membershipPriceQuote } from './membership-price-quote.mjs';
 
 test('catalog quote includes the one percent cost while keeping the exact catalog charge', () => {
   for (const [base, fee, commissionBase, total] of [
+    ['20.00', '$0.20 USD', '$19.80 USD', '$20.00 USD'],
     ['100.00', '$1.00 USD', '$99.00 USD', '$100.00 USD'],
     ['250.00', '$2.50 USD', '$247.50 USD', '$250.00 USD'],
     ['100000.00', '$1,000.00 USD', '$99,000.00 USD', '$100,000.00 USD'],
@@ -13,6 +14,7 @@ test('catalog quote includes the one percent cost while keeping the exact catalo
     assert.equal(quote.commissionBaseUSD, commissionBase);
     assert.equal(quote.totalUSD, total);
   }
+  assert.equal(membershipPriceQuote('20.00').baseUSD, '$20.00 USD');
   assert.equal(membershipPriceQuote('100.00').baseUSD, '$100.00 USD');
   assert.equal(membershipPriceQuote('250.00').baseUSD, '$250.00 USD');
   assert.equal(membershipPriceQuote('100000.00').baseUSD, '$100,000.00 USD');

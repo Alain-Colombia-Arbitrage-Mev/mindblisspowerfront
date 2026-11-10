@@ -11,7 +11,7 @@ const input = { requestId, walletAddress: `0x${'1'.repeat(40)}`, country: 'US', 
 const ack = kind => ({ checkoutReference: requestId, walletKind: kind, environment: kind === 'personal' ? 'production' : 'sandbox',
   provider: kind === 'personal' ? 'reown' : 'meld', status: kind === 'personal' ? 'initiated' : 'session_created',
   requestedAmount: 100, createdAt: '2026-11-10T15:00:00.000Z', ...(kind === 'administrative' ? { checkoutUrl: 'https://sb.meldcrypto.com/?token=synthetic' }
-    : { paymentMethodType: input.paymentMethodType, allowedProviders: ['TOPPER', 'SWAPPED'] }) });
+    : { paymentMethodType: input.paymentMethodType, allowedProviders: ['SWAPPED', 'MERCURYO'] }) });
 const request = (body = input, headers = {}) => new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/wallet-funding/personal/intent`, {
   method: 'POST', headers: { cookie: 'better-auth.session_token=synthetic-session', origin: env.AUTH_PUBLIC_ORIGIN,
     'sec-fetch-site': 'same-origin', 'content-type': 'application/json', 'cf-connecting-ip': '198.51.100.10', ...headers }, body: JSON.stringify(body),
@@ -32,7 +32,7 @@ test('personal funding records one native request without Meld credentials, quot
 
 test('funding rejects foreign origins, extra identity fields and invalid money before private transport', async () => {
   const never = async () => assert.fail('invalid transport');
-  for (const body of [{ ...input, subject: 'another-user' }, { ...input, amount: 49 }, { ...input, amount: 100.001 },
+  for (const body of [{ ...input, subject: 'another-user' }, { ...input, amount: 19.99 }, { ...input, amount: 100.001 },
     { ...input, amount: '100' }, { ...input, walletAddress: 'bad' }]) {
     assert.equal((await handleWalletFunding(request(body), 'personal', { env, serviceRequest: never })).status, 400);
   }

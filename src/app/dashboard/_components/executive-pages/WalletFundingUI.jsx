@@ -6,11 +6,11 @@ import { useI18n } from "@/i18n/LanguageProvider";
 import { WALLET_GATEWAY_FAILURE_REASONS } from "@/lib/wallet-funding-contract.mjs";
 import styles from "./wallet-funding.module.css";
 
-export function WalletFundingScreen({ title, subtitle, provider, children }) {
+export function WalletFundingScreen({ title, subtitle, provider = "", children }) {
   const { t } = useI18n();
   return <section className="executive-page"><div className={`executive-container ${styles.screen}`}>
     <Link href="/dashboard/payments" prefetch={false} className={styles.back}><ArrowLeft size={16} aria-hidden="true" />{t("funding.backToSummary")}</Link>
-    <header className={styles.pageHeading}><div><h1>{title}</h1><span>{subtitle}</span></div><p className={styles.providerBadge}>{provider}</p></header>
+    <header className={styles.pageHeading}><div><h1>{title}</h1><span>{subtitle}</span></div>{provider ? <p className={styles.providerBadge}>{provider}</p> : null}</header>
     {children}
   </div></section>;
 }

@@ -25,7 +25,7 @@ test('administrative methods never borrow personal provider options or invent an
 test('personal country methods reject sandbox payloads and do not fall back to administrative discovery', async () => {
   const original = globalThis.fetch;
   const personal = { walletKind: 'personal', environment: 'production', provider: 'reown', country: 'US', sourceCurrencyCode: 'USD',
-    paymentMethods: ['CREDIT_DEBIT_CARD'], routes: [{ serviceProvider: 'TOPPER',
+    paymentMethods: ['CREDIT_DEBIT_CARD'], routes: [{ serviceProvider: 'SWAPPED',
       paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount: 10, maximumAmount: 25000, minimumUsd: 10, maximumUsd: 25000 }] }] };
   const paths = [];
   try {
@@ -46,7 +46,7 @@ test('a personal intent cannot silently change the requested payment method', as
   try {
     globalThis.fetch = async () => Response.json({ checkoutReference: input.requestId, walletKind: 'personal',
       environment: 'production', provider: 'reown', status: 'initiated', requestedAmount: 50,
-      createdAt: '2026-11-10T15:00:00Z', paymentMethodType: 'APPLE_PAY', allowedProviders: ['TOPPER'] });
+      createdAt: '2026-11-10T15:00:00Z', paymentMethodType: 'APPLE_PAY', allowedProviders: ['SWAPPED'] });
     await assert.rejects(createPersonalFundingIntent(input), { message: 'funding_unavailable' });
   } finally { globalThis.fetch = original; }
 });

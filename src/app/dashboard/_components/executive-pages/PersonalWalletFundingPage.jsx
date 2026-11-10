@@ -70,13 +70,21 @@ export function PersonalWalletFunding() {
 
   function selectStatus(reference) { setSelectedReference(reference); setStatusFocusKey(value => value + 1); }
 
+  function cancelConnection() {
+    reown.cancelOnramp();
+    setActionBusy(false);
+    setActionDiagnostic("");
+    setActionError(t("funding.requestCancelled"));
+  }
+
   const statusLabel = { unavailable: "recharge.providerConfiguration", checking: "walletPage.checking", error: "walletPage.checkFailed",
     connected: "walletPage.connectedPending", verifying: "funding.verifyingWallet", verified: "funding.walletVerified", disconnected: "funding.connectWallet" }[state];
 
-  return <WalletFundingScreen title={t("walletPage.personalTitle")} subtitle={t("walletPage.personalCopy")} provider={t("funding.personalEnvironment")}>
+  return <WalletFundingScreen title={t("walletPage.personalTitle")} subtitle={t("walletPage.personalCopy")}>
     <div className={`${styles.flowLayout}${!verified ? ` ${styles.setupRequired}` : ""}`} id="personal-wallet">
       <section className={`executive-panel ${styles.formPanel}`} aria-label={t("walletPage.addFundsAction")}>
         <PersonalFundingForm disabled={!verified} busy={busy} onContinue={openProvider} onSelectionChange={clearSelectedStatus} destinationAddress={verified ? reown.linkedAddress : ""} />
+        {busy ? <div className={styles.connectionPending} role="status"><p>{t("funding.connectionPending")}</p><button className="executive-button" type="button" onClick={cancelConnection}>{t("funding.cancelConnection")}</button></div> : null}
         {!verified ? <p className={styles.hint}>{t("funding.verifyBeforeFunding")}</p> : null}
         <WalletActionError diagnostic={actionDiagnostic} message={actionError || (reown.onrampStatus === "error" ? personalOnrampError(reown.onrampError, t) : reown.linkError ? personalOnrampError(reown.linkError, t) : "")} />
       </section>
@@ -106,6 +114,6 @@ export function personalOnrampError(code, t) {
     rejected: "recharge.providerRejected", connection: "recharge.providerConnection", link_unavailable: "funding.personalLinkFailed",
     unavailable: "funding.personalLinkFailed", identity: "funding.identityUnavailable", rate_limited: "funding.rateLimited",
     method: "funding.methodUnavailable", intent: "funding.requestRegistrationFailed", cancelled: "funding.requestCancelled", origin: "funding.sessionOriginFailed",
-    provider: "funding.checkoutUnavailable", valuation: "funding.localMinimumPending" };
+    provider: "funding.checkoutUnavailable", valuation: "funding.personalLocalMinimumPending", connection_timeout: "funding.connectionTimeout" };
   return t(keys[code] || "funding.checkoutUnavailable");
 }

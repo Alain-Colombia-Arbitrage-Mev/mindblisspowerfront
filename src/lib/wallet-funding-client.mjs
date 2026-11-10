@@ -1,4 +1,4 @@
-import { administrativeSandboxOptions, personalProductionOptions, fundingAcknowledgement, fundingHistory, fundingInput, fundingStatus, fundingCurrencyCode, FUNDING_UUID } from './wallet-funding-contract.mjs';
+import { administrativeSandboxOptions, personalProductionOptions, fundingAcknowledgement, fundingHistory, fundingInput, fundingStatus, fundingCurrencyCode, fundingSourceSupported, FUNDING_UUID } from './wallet-funding-contract.mjs';
 import { browserRequestDeadline } from './browser-request-deadline.mjs';
 
 export function fundingRequestId() { return crypto.randomUUID(); }
@@ -63,11 +63,11 @@ export async function readWalletFundingStatus(kind, checkoutReference, { signal 
 async function createFunding(input, kind, path, { signal } = {}) {
   const body = fundingInput(input, kind);
   if (!body) throw new Error('invalid_request');
-  // Local routes can be discovered, but no unverified USD valuation may create
-  // a checkout or be stored as a dollar-denominated funding request.
-  if (fundingCurrencyCode(body.sourceCurrencyCode) !== 'USD') throw new Error('wallet_funding_valuation_unavailable');
+  // SPEI uses the provider's MXN limits and is recorded as MXN, never USD.
+  if (!fundingSourceSupported(body, kind)) throw new Error('wallet_funding_valuation_unavailable');
   const data = fundingAcknowledgement(await request(path, { method: 'POST', signal, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }), kind);
   if (!data || data.requestedAmount !== body.amount || data.checkoutReference !== body.requestId
+    || fundingCurrencyCode(data.sourceCurrencyCode) !== fundingCurrencyCode(body.sourceCurrencyCode)
     || (kind === 'personal' && (!('paymentMethodType' in data) || data.paymentMethodType !== body.paymentMethodType))) throw new Error('funding_unavailable');
   return data;
 }

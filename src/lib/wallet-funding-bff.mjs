@@ -3,7 +3,7 @@ import { betterAuthConfig, betterAuthCookies, trustedAuthClientIp } from './bett
 import { coreFetch, runtimeEnvironment } from './cloudflare-runtime.mjs';
 import { memberMutationError } from './member-mutation-policy.mjs';
 import { boundedServiceRequest } from './private-service-request.mjs';
-import { administrativeSandboxOptions, personalProductionOptions, fundingAcknowledgement, fundingHistory, fundingInput, fundingStatus, fundingCurrencyCode, FUNDING_UUID } from './wallet-funding-contract.mjs';
+import { administrativeSandboxOptions, personalProductionOptions, fundingAcknowledgement, fundingHistory, fundingInput, fundingStatus, fundingCurrencyCode, fundingSourceSupported, FUNDING_UUID } from './wallet-funding-contract.mjs';
 import { browserRequestDeadline } from './browser-request-deadline.mjs';
 
 const reply = (body, status = 200) => Response.json(body, { status, headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' } });
@@ -93,7 +93,7 @@ export async function handleWalletFunding(request, action, {
       body = fundingInput(await readInput(request), kind);
     } catch (error) { return reply({ error: error?.message === 'request_too_large' ? 'request_too_large' : 'invalid_request' }, error?.message === 'request_too_large' ? 413 : 400); }
     if (!body) return reply({ error: 'invalid_request' }, 400);
-    if (fundingCurrencyCode(body.sourceCurrencyCode) !== 'USD') return reply({ error: 'wallet_funding_valuation_unavailable' }, 503);
+    if (!fundingSourceSupported(body, kind)) return reply({ error: 'wallet_funding_valuation_unavailable' }, 503);
     path = kind === 'personal' ? '/api/member/wallet-funding/personal/intent' : '/api/member/wallet-funding/administrative/session';
   }
   try {
@@ -132,6 +132,7 @@ export async function handleWalletFunding(request, action, {
     if (!safe) { diagnostic(action, 'response_contract', result.status || 200); return reply({ error: 'funding_unavailable', reason: 'invalid_gateway_response' }, 502); }
     if (requestedReference && (!('checkoutReference' in safe) || safe.checkoutReference !== requestedReference)) return reply({ error: 'funding_unavailable' }, 502);
     if (body && (!('requestedAmount' in safe) || !('checkoutReference' in safe) || safe.requestedAmount !== body.amount
+      || fundingCurrencyCode(safe.sourceCurrencyCode) !== fundingCurrencyCode(body.sourceCurrencyCode)
       || safe.checkoutReference !== body.requestId || (kind === 'personal' && (!('paymentMethodType' in safe)
         || safe.paymentMethodType !== body.paymentMethodType)))) return reply({ error: 'funding_unavailable' }, 502);
     if (optionsContext && (!('country' in safe) || safe.country !== optionsContext.country

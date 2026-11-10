@@ -13,7 +13,7 @@ export function currentFundingView(value, walletKind, checkoutReference) {
   const safe = fundingStatus(value, walletKind);
   if (!safe || typeof checkoutReference !== "string" || !FUNDING_UUID.test(checkoutReference)
     || safe.checkoutReference.toLowerCase() !== checkoutReference.toLowerCase()) return null;
-  return { walletKind, checkoutReference: safe.checkoutReference, requestedAmount: safe.requestedAmount,
+  return { walletKind, checkoutReference: safe.checkoutReference, requestedAmount: safe.requestedAmount, sourceCurrencyCode: safe.sourceCurrencyCode || "USD",
     destination: safe.destination, testMode: safe.confirmation.testMode, requestStatus: safe.requestStatus,
     state: { session_created: "checkout_ready", unavailable: "request_unavailable", failed: "checkout_failed" }[safe.requestStatus] || "unconfirmed" };
 }
@@ -80,7 +80,7 @@ export function WalletFundingStatusView({ view }) {
     <h2 className={styles.statusHeading}><Icon size={21} aria-hidden="true" />{t(labels[state] || "funding.statusUnconfirmed")}</h2>
     <p className={styles.hint}>{t(copy[state] || "funding.statusUnconfirmedCopy")}</p>
     <dl className={styles.statusDetails}>
-      <div><dt>{t("funding.statusRequestedAmount")}</dt><dd>{new Intl.NumberFormat(locale, { style: "currency", currency: "USD" }).format(view.requestedAmount)}</dd></div>
+      <div><dt>{t("funding.statusRequestedAmount")}</dt><dd>{new Intl.NumberFormat(locale, { style: "currency", currency: view.sourceCurrencyCode || "USD" }).format(view.requestedAmount)}</dd></div>
       {confirmed ? <div><dt>{t("funding.statusReceived")}</dt><dd><bdi dir="ltr">{view.receivedAmount} USDT</bdi></dd></div> : null}
       <div><dt>{t("funding.reviewDestination")}</dt><dd><code dir="ltr">{view.destination.address}</code><small>USDT · Polygon</small></dd></div>
       {confirmed ? <div><dt>{t("funding.statusConfirmedAt")}</dt><dd>{new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(view.confirmedAt))}</dd></div> : null}

@@ -46,14 +46,14 @@ test('local methods retain their provider currency and never reinterpret USD lim
 
 test('legacy dollar discovery upgrades explicitly to USD and rejects conflicting new limits', () => {
   const legacy = { walletKind: 'personal', environment: 'production', provider: 'reown', country: 'US',
-    paymentMethods: ['CREDIT_DEBIT_CARD'], routes: [{ serviceProvider: 'TOPPER', paymentMethods: [
+    paymentMethods: ['CREDIT_DEBIT_CARD'], routes: [{ serviceProvider: 'MERCURYO', paymentMethods: [
       { method: 'CREDIT_DEBIT_CARD', minimumUsd: 20, maximumUsd: 10000 }] }] };
   const parsed = personalProductionOptions(legacy);
   assert.equal(parsed.sourceCurrencyCode, 'USD');
   assert.deepEqual(parsed.routes[0].paymentMethods[0], { method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD',
     minimumAmount: 20, maximumAmount: 10000, minimumUsd: 20, maximumUsd: 10000 });
   const method = { ...parsed.routes[0].paymentMethods[0], minimumUsd: 10 };
-  assert.equal(personalProductionOptions({ ...parsed, routes: [{ serviceProvider: 'TOPPER', paymentMethods: [method] }] }), null);
+  assert.equal(personalProductionOptions({ ...parsed, routes: [{ serviceProvider: 'MERCURYO', paymentMethods: [method] }] }), null);
 });
 
 test('currency-aware discovery forwards only its exact country, currency and provider context', async () => {
@@ -88,22 +88,90 @@ test('a superseded currency read cannot publish a late successful response', asy
   } finally { globalThis.fetch = original; }
 });
 
-test('local mutations cannot create requests or sessions without verified USD valuation', async () => {
+test('SPEI records its actual MXN amount while other local mutations remain unavailable', async () => {
   const original = globalThis.fetch;
+  const acknowledgement = { checkoutReference: requestId, walletKind: 'personal', environment: 'production', provider: 'reown',
+    status: 'initiated', requestedAmount: input.amount, sourceCurrencyCode: 'MXN', createdAt: '2026-11-10T15:00:00Z',
+    paymentMethodType: 'SPEI', allowedProviders: ['SWAPPED'] };
   try {
+    globalThis.fetch = async (path, init) => {
+      assert.equal(path, '/api/member/wallet-funding/personal/intent');
+      assert.deepEqual(JSON.parse(init.body), input);
+      return Response.json(acknowledgement);
+    };
+    assert.deepEqual(await createPersonalFundingIntent(input), acknowledgement);
+    const response = await handleWalletFunding(post(input), 'personal', { env, serviceRequest: async (url, init) => {
+      assert.equal(url, 'https://auth.core.internal/api/member/wallet-funding/personal/intent');
+      assert.deepEqual(JSON.parse(init.body), input);
+      return { ok: true, data: acknowledgement };
+    } });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), acknowledgement);
     globalThis.fetch = async () => assert.fail('unvalued local amount reached transport');
-    await assert.rejects(createPersonalFundingIntent(input), { message: 'wallet_funding_valuation_unavailable' });
     await assert.rejects(createAdministrativeSandboxSession({ ...input, serviceProvider: 'TRANSAK' }), { message: 'wallet_funding_valuation_unavailable' });
-    for (const kind of ['personal', 'administrative']) {
-      const body = { ...input, ...(kind === 'administrative' ? { serviceProvider: 'TRANSAK' } : {}) };
-      const response = await handleWalletFunding(post(body), kind, { env, serviceRequest: async () => assert.fail('unvalued mutation forwarded') });
+    for (const [kind, body] of [
+      ['personal', { ...input, sourceCurrencyCode: 'COP' }],
+      ['personal', { ...input, country: 'US' }],
+      ['personal', { ...input, paymentMethodType: 'CREDIT_DEBIT_CARD' }],
+      ['administrative', { ...input, serviceProvider: 'TRANSAK' }],
+    ]) {
+      if (kind === 'personal') await assert.rejects(createPersonalFundingIntent(body), { message: 'wallet_funding_valuation_unavailable' });
+      const response = await handleWalletFunding(post(body), kind, { env, serviceRequest: async () => assert.fail('unsupported local mutation forwarded') });
       assert.equal(response.status, 503);
       assert.deepEqual(await response.json(), { error: 'wallet_funding_valuation_unavailable' });
     }
-    for (const amount of [49.99, 0, '50', 50.001, 25000.01]) {
+    for (const amount of [19.99, 0, '20', 20.001, 25000.01]) {
       await assert.rejects(createPersonalFundingIntent({ ...input, sourceCurrencyCode: 'USD', amount }), { message: 'invalid_request' });
     }
   } finally { globalThis.fetch = original; }
+});
+
+test('SPEI acknowledgement currency cannot be omitted or changed into dollars by an upstream response', async () => {
+  const original = globalThis.fetch;
+  const acknowledgement = { checkoutReference: requestId, walletKind: 'personal', environment: 'production', provider: 'reown',
+    status: 'initiated', requestedAmount: input.amount, createdAt: '2026-11-10T15:00:00Z',
+    paymentMethodType: 'SPEI', allowedProviders: ['SWAPPED'] };
+  try {
+    for (const sourceCurrencyCode of [undefined, 'USD', 'COP', 'mxn']) {
+      const data = { ...acknowledgement, ...(sourceCurrencyCode === undefined ? {} : { sourceCurrencyCode }) };
+      globalThis.fetch = async () => Response.json(data);
+      await assert.rejects(createPersonalFundingIntent(input), { message: 'funding_unavailable' });
+      assert.equal((await handleWalletFunding(post(input), 'personal', { env,
+        serviceRequest: async () => ({ ok: true, data }) })).status, 502);
+    }
+  } finally { globalThis.fetch = original; }
+});
+
+test('SPEI history and immutable status retain MXN without valuing the request as USD or confirming funds', () => {
+  const record = { checkoutReference: requestId, requestedAmount: 148.66, sourceCurrencyCode: 'MXN', country: 'MX',
+    status: 'initiated', createdAt: '2026-11-10T15:00:00Z', provider: 'reown', paymentMethodType: 'SPEI' };
+  const history = { walletKind: 'personal', environment: 'production', settlement: 'unconfirmed', records: [record] };
+  assert.deepEqual(fundingHistory(history, 'personal'), history);
+  const status = { ...record, walletKind: 'personal', environment: 'production', requestStatus: 'initiated',
+    destination: { address: input.walletAddress, asset: 'USDT', network: 'polygon', chainId: 137 },
+    confirmation: { state: 'unconfirmed', source: 'none', testMode: false } };
+  delete status.status;
+  delete status.createdAt;
+  assert.deepEqual(fundingStatus(status, 'personal'), status);
+  for (const patch of [{ sourceCurrencyCode: 'COP' }, { paymentMethodType: undefined },
+    { paymentMethodType: 'CREDIT_DEBIT_CARD' }, { country: 'US' }, { requestedAmount: 0 }, { requestedAmount: 148.666 }]) {
+    assert.equal(fundingHistory({ ...history, records: [{ ...record, ...patch }] }, 'personal'), null);
+    assert.equal(fundingStatus({ ...status, ...patch }, 'personal'), null);
+  }
+  assert.equal(fundingHistory({ ...history, walletKind: 'administrative', environment: 'sandbox' }, 'administrative'), null);
+  assert.equal(fundingStatus({ ...status, walletKind: 'administrative', environment: 'sandbox', provider: 'meld',
+    requestStatus: 'session_created', confirmation: { ...status.confirmation, testMode: true } }, 'administrative'), null);
+});
+
+test('personal local discovery exposes only SPEI in MXN without borrowing its limits for cards', () => {
+  const local = options('personal');
+  const card = { ...local.routes[0].paymentMethods[0], method: 'CREDIT_DEBIT_CARD' };
+  const candidate = { ...local, paymentMethods: ['SPEI', 'CREDIT_DEBIT_CARD'], routes: [
+    { ...local.routes[0], paymentMethods: [...local.routes[0].paymentMethods, card] }] };
+  assert.deepEqual(personalProductionOptions(candidate), local);
+  const unsupportedCountry = personalProductionOptions({ ...candidate, country: 'US' });
+  assert.deepEqual(unsupportedCountry.paymentMethods, []);
+  assert.deepEqual(unsupportedCountry.routes, []);
 });
 
 test('option BFF canonicalizes query currency and rejects duplicates and crossed responses', async () => {
@@ -143,7 +211,7 @@ test('safe provider authentication and valuation errors pass through without pri
 test('a dollar acknowledgement cannot relabel its requested amount as local fiat', () => {
   const value = { checkoutReference: requestId, walletKind: 'personal', environment: 'production', provider: 'reown',
     status: 'initiated', requestedAmount: 50, createdAt: '2026-11-10T15:00:00Z',
-    paymentMethodType: 'CREDIT_DEBIT_CARD', allowedProviders: ['TOPPER'], sourceCurrencyCode: 'MXN' };
+    paymentMethodType: 'CREDIT_DEBIT_CARD', allowedProviders: ['SWAPPED'], sourceCurrencyCode: 'MXN' };
   assert.equal(fundingAcknowledgement(value, 'personal'), null);
 });
 
@@ -172,7 +240,7 @@ test('personal method filtering preserves valid routes while administrative coun
     minimumUsd: 10, maximumUsd: 1000 });
   const personal = { ...options('personal'), country: 'US', sourceCurrencyCode: 'USD',
     paymentMethods: ['NETELLER', 'CREDIT_DEBIT_CARD', 'SKRILL'], routes: [
-      { serviceProvider: 'TOPPER', paymentMethods: [method('NETELLER')] },
+      { serviceProvider: 'MERCURYO', paymentMethods: [method('NETELLER')] },
       { serviceProvider: 'SWAPPED', paymentMethods: [method('CREDIT_DEBIT_CARD'), method('SKRILL')] },
     ] };
   const parsed = personalProductionOptions(personal);

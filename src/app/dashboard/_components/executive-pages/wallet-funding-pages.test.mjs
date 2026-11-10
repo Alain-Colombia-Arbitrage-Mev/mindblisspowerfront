@@ -6,7 +6,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 import { translateMessage } from '../../../../i18n/translate.mjs';
-import { PERSONAL_FUNDING_COUNTRIES, personalFundingMethod, validFundingAmount, WALLET_GATEWAY_FAILURE_REASONS, FUNDING_UUID, fundingStatus } from '../../../../lib/wallet-funding-contract.mjs';
+import { PERSONAL_FUNDING_COUNTRIES, PERSONAL_FUNDING_MINIMUM_USD, personalFundingMethod, validFundingAmount, WALLET_GATEWAY_FAILURE_REASONS, FUNDING_UUID, fundingStatus } from '../../../../lib/wallet-funding-contract.mjs';
 import { personalFundingFailure } from '../../../../lib/personal-funding-errors.mjs';
 
 const require = createRequire(import.meta.url);
@@ -20,7 +20,7 @@ function load(filename, mocks) {
   const module = { exports: {} };
   new Function('require', 'module', 'exports', code)(id => {
     if (Object.hasOwn(mocks, id)) return mocks[id];
-    if (id === '@/lib/wallet-funding-contract.mjs') return { PERSONAL_FUNDING_COUNTRIES, personalFundingMethod, validFundingAmount, WALLET_GATEWAY_FAILURE_REASONS, FUNDING_UUID, fundingStatus };
+    if (id === '@/lib/wallet-funding-contract.mjs') return { PERSONAL_FUNDING_COUNTRIES, PERSONAL_FUNDING_MINIMUM_USD, personalFundingMethod, validFundingAmount, WALLET_GATEWAY_FAILURE_REASONS, FUNDING_UUID, fundingStatus };
     if (id.endsWith('.module.css')) return styles;
     if (id === 'react/jsx-runtime' || id === 'react') return require(id);
     assert.fail(`Unexpected dependency ${id}`);
@@ -48,7 +48,7 @@ function formHarness(name, api, detectedCountry = 'US') {
   const harness = componentHarness('WalletFundingForm.jsx', name, { 'lucide-react': icons, '@/i18n/LanguageProvider': i18n,
     '@/lib/browser-onramp-region.mjs': { browserOnrampRegion: () => detectedCountry },
     '@/lib/wallet-funding-client.mjs': { fundingRequestId: () => 'd8a4c010-cc33-44da-a297-8b3c6440f491', ...api },
-    '@/lib/wallet-funding-contract.mjs': { PERSONAL_FUNDING_COUNTRIES, personalFundingMethod, validFundingAmount },
+    '@/lib/wallet-funding-contract.mjs': { PERSONAL_FUNDING_COUNTRIES, PERSONAL_FUNDING_MINIMUM_USD, personalFundingMethod, validFundingAmount },
   });
   const render = harness.render;
   return { ...harness, render(props = {}) { return render({ destinationAddress: `0x${'1'.repeat(40)}`, ...props }); } };
@@ -86,7 +86,7 @@ test('a connected Reown address never claims backend verification and check fail
   assert.equal(personalWalletState({ ...account, linkStatus: 'linked', linkedAddress: account.address }), 'verified');
   assert.equal(personalWalletState({ ...account, linkStatus: 'linked', linkedAddress: '' }), 'connected');
   for (const locale of ['es', 'en', 'ar', 'zh']) {
-    for (const code of ['session', 'configuration', 'mismatch', 'rejected', 'connection', 'link_unavailable', 'identity', 'rate_limited', 'method', 'intent', 'cancelled', 'origin', 'provider']) {
+    for (const code of ['session', 'configuration', 'mismatch', 'rejected', 'connection', 'connection_timeout', 'link_unavailable', 'identity', 'rate_limited', 'method', 'intent', 'cancelled', 'origin', 'provider']) {
       const label = personalOnrampError(code, (key, values) => translateMessage(locale, key, values));
       assert.ok(label && !/^(funding|recharge)\./.test(label), `${locale}/${code}`);
     }
@@ -116,7 +116,7 @@ test('personal countries discard canceled responses, respect route limits and su
   assert.deepEqual(find(tree, 'FundingMethodField').props.methods, []);
   calls[1].resolve({ country: 'MX', paymentMethods: ['CREDIT_DEBIT_CARD'], routes: [{ paymentMethods: methods }] });
   await flush(); tree = harness.render(props);
-  assert.deepEqual(find(tree, 'FundingMethodField').props.methods, [], '50 USD cannot use a 75 USD route');
+  assert.deepEqual(find(tree, 'FundingMethodField').props.methods, [], '20 USD cannot use a 75 USD route');
   find(tree, 'FundingAmountField').props.onChange('100');
   harness.render(props); tree = harness.render(props);
   assert.deepEqual(find(tree, 'FundingMethodField').props.methods, ['CREDIT_DEBIT_CARD'], JSON.stringify(harness.state));
@@ -370,7 +370,7 @@ test('all returned production methods remain visible and selectable, including P
     US: ['CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY', 'PAYPAL', 'VENMO'] };
   const submitted = [];
   const harness = formHarness('PersonalFundingForm', { readPersonalFundingOptions: async country => ({ country, paymentMethods: countries[country],
-    routes: [{ serviceProvider: 'TOPPER', paymentMethods: countries[country].map(method => ({ method, minimumUsd: 50, maximumUsd: 1000 })) }] }),
+    routes: [{ serviceProvider: 'SWAPPED', paymentMethods: countries[country].map(method => ({ method, minimumUsd: 20, maximumUsd: 1000 })) }] }),
     readAdministrativeSandboxOptions() { assert.fail('production methods cannot use sandbox'); },
   });
   t.after(() => harness.unmount());
@@ -403,7 +403,7 @@ test('selected method limits reflect overlapping real routes and never invent a 
   const { selectedMethodLimits } = formHarness('PersonalFundingForm', {}).exports;
   const routes = [{ paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', minimumUsd: 10, maximumUsd: 1000 }] },
     { paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', minimumUsd: 100, maximumUsd: 2000 }] }];
-  assert.deepEqual(selectedMethodLimits(routes, 'CREDIT_DEBIT_CARD', 100), { minimumUsd: 50, maximumUsd: 2000 });
+  assert.deepEqual(selectedMethodLimits(routes, 'CREDIT_DEBIT_CARD', 100), { minimumUsd: 20, maximumUsd: 2000 });
   assert.equal(selectedMethodLimits(routes, 'PAYPAL', 100), null);
   assert.equal(selectedMethodLimits(routes, 'CREDIT_DEBIT_CARD', 2500), null);
 });
@@ -430,7 +430,7 @@ test('history-driven status focus uses native focus and scrolling, respects redu
   assert.equal(reads[0].signal.aborted, true);
 });
 
-test('personal MXN discovery cancels USD responses, shows only matching SPEI limits and preserves the unverified USD minimum gate', async t => {
+test('personal MXN discovery cancels USD responses and funds SPEI at its provider minimum without relabelling currencies', async t => {
   const calls = [], submitted = [];
   const harness = formHarness('PersonalFundingForm', {
     readPersonalFundingOptions(country, { signal, sourceCurrencyCode }) { return new Promise(resolve => calls.push({ country, signal, sourceCurrencyCode, resolve })); },
@@ -445,28 +445,39 @@ test('personal MXN discovery cancels USD responses, shows only matching SPEI lim
   harness.render(props); tree = harness.render(props);
   const latest = calls.at(-1);
   assert.equal(latest.sourceCurrencyCode, 'MXN');
-  assert.equal(find(tree, 'FundingAmountField').props.amount, '', 'changing currency must not relabel USD 50 as MXN 50');
+  assert.equal(find(tree, 'FundingAmountField').props.amount, '', 'changing currency must not relabel USD 20 as MXN 20');
   for (const old of calls.slice(0, -1)) {
     assert.equal(old.signal.aborted, true);
     old.resolve({ country: old.country, sourceCurrencyCode: old.sourceCurrencyCode, routes: [{ paymentMethods: [{ method: 'PAYPAL', minimumUsd: 50, maximumUsd: 5000 }] }] });
   }
   latest.resolve({ country: 'MX', sourceCurrencyCode: 'MXN', routes: [{ paymentMethods: [
     { method: 'SPEI', currencyCode: 'MXN', minimumAmount: 150, maximumAmount: 100000 },
+    { method: 'CREDIT_DEBIT_CARD', currencyCode: 'MXN', minimumAmount: 100, maximumAmount: 100000 },
     { method: 'PAYPAL', currencyCode: 'USD', minimumAmount: 50, maximumAmount: 5000 },
   ] }] });
-  await flush(); harness.render(props); tree = harness.render(props);
+  await flush(); harness.render(props); harness.render(props); tree = harness.render(props);
   const method = find(tree, 'FundingMethodField');
   assert.deepEqual(method.props.methods, ['SPEI']);
   assert.deepEqual(method.props.limits, { minimumAmount: 150, maximumAmount: 100000 });
   assert.match(renderToStaticMarkup(method.type(method.props)), /SPEI.*transferencia bancaria/);
-  find(tree, 'FundingAmountField').props.onChange('1200');
+  assert.equal(find(tree, 'FundingAmountField').props.amount, '150.00', 'prefills the current SPEI provider minimum, not a fixed FX conversion');
+  assert.equal(find(tree, 'FundingSubmit').props.disabled, false);
+  find(tree, 'FundingAmountField').props.onChange('149.99');
   harness.render(props); tree = harness.render(props);
   assert.equal(find(tree, 'FundingSubmit').props.disabled, true);
   tree.props.onSubmit({ preventDefault() {} }); await flush();
-  assert.equal(submitted.length, 0, 'a local route cannot fabricate a verified USD reference');
+  assert.equal(submitted.length, 0, 'below-provider minimum cannot initiate checkout');
+  find(tree, 'FundingAmountField').props.onChange('1200');
+  harness.render(props); tree = harness.render(props);
+  assert.equal(find(tree, 'FundingSubmit').props.disabled, false);
+  tree.props.onSubmit({ preventDefault() {} }); await flush();
+  assert.equal(submitted.length, 1);
+  assert.equal(submitted[0].sourceCurrencyCode, 'MXN');
+  assert.equal(submitted[0].paymentMethodType, 'SPEI');
+  assert.equal(submitted[0].amount, 1200);
   find(tree, 'FundingCurrencyField').props.onChange('USD');
   harness.render(props); tree = harness.render(props);
-  assert.equal(find(tree, 'FundingAmountField').props.amount, '50');
+  assert.equal(find(tree, 'FundingAmountField').props.amount, '20');
   assert.deepEqual(find(tree, 'FundingMethodField').props.methods, [], 'old MXN methods disappear before USD lookup completes');
 });
 
@@ -491,4 +502,65 @@ test('personal history and status surfaces cannot mount or request an administra
   t.after(() => { history.unmount(); status.unmount(); });
   assert.equal(history.render({ walletKind: 'administrative', refreshKey: 0 }), null);
   assert.equal(status.render({ walletKind: 'administrative', checkoutReference: statusReference }), null);
+});
+
+test('USD20 uses an eligible route while retaining a higher provider floor and rejects duplicate pending submits', async t => {
+  const submitted = [];
+  let finish;
+  const harness = formHarness('PersonalFundingForm', { readPersonalFundingOptions: async country => ({ country, sourceCurrencyCode: 'USD', routes: [
+    { serviceProvider: 'SWAPPED', paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount: 7.81, maximumAmount: 111530 }] },
+    { serviceProvider: 'MERCURYO', paymentMethods: [{ method: 'APPLE_PAY', currencyCode: 'USD', minimumAmount: 28.04, maximumAmount: 16821.71 }] },
+  ] }) });
+  t.after(() => harness.unmount());
+  const props = { onContinue: input => { submitted.push(input); return new Promise(resolve => { finish = resolve; }); } };
+  harness.render(props); harness.render(props); await flush(); harness.render(props); let tree = harness.render(props);
+  assert.equal(find(tree, 'FundingAmountField').props.amount, '20');
+  assert.deepEqual(find(tree, 'FundingMethodField').props.methods, ['CREDIT_DEBIT_CARD']);
+  assert.equal(find(tree, 'FundingSubmit').props.disabled, false);
+  find(tree, 'FundingAmountField').props.onChange('19.99'); harness.render(props); tree = harness.render(props);
+  assert.equal(find(tree, 'FundingSubmit').props.disabled, true);
+  find(tree, 'FundingAmountField').props.onChange('20'); harness.render(props); tree = harness.render(props);
+  tree.props.onSubmit({ preventDefault() {} }); tree.props.onSubmit({ preventDefault() {} }); await flush();
+  assert.equal(submitted.length, 1);
+  assert.equal(submitted[0].amount, 20);
+  finish(); await flush();
+  find(tree, 'FundingAmountField').props.onChange('28.04'); harness.render(props); tree = harness.render(props);
+  assert.deepEqual(find(tree, 'FundingMethodField').props.methods, ['CREDIT_DEBIT_CARD', 'APPLE_PAY']);
+});
+
+test('canceling a pending connection recovers the page without revoking its backend-verified wallet or opening checkout', t => {
+  function PersonalFundingForm() { return null; }
+  let status = 'connecting', cancelled = 0;
+  const shared = load('WalletFundingUI.jsx', { 'lucide-react': icons, 'next/link': {}, '@/i18n/LanguageProvider': i18n });
+  const harness = componentHarness('PersonalWalletFundingPage.jsx', 'PersonalWalletFunding', {
+    'lucide-react': icons, 'next/dynamic': { default: () => () => null }, '@/i18n/LanguageProvider': i18n,
+    '@/components/reown/ReownContext': { useReownWallet: () => ({ configured: true, linkStatus: 'linked', linkedAddress: personalStatus.destination.address,
+      onrampStatus: status, cancelOnramp() { cancelled++; status = 'idle'; }, startOnramp() { assert.fail('cancel must not initiate checkout'); } }) },
+    '@/lib/personal-funding-errors.mjs': { personalFundingFailure }, './WalletFundingForm': { PersonalFundingForm },
+    './WalletFundingHistory': { default: () => null }, './WalletFundingStatus': { default: () => null }, './WalletFundingUI': shared,
+  });
+  t.after(() => harness.unmount());
+  let tree = harness.render();
+  assert.equal(tree.props.provider, undefined, 'no production environment badge is rendered');
+  assert.equal(find(tree, 'PersonalFundingForm').props.busy, true);
+  const cancel = find(tree, node => node?.type === 'button' && node.props.children === translateMessage('es', 'funding.cancelConnection'));
+  assert.ok(cancel); cancel.props.onClick(); tree = harness.render();
+  assert.equal(cancelled, 1);
+  assert.equal(find(tree, 'PersonalFundingForm').props.busy, false);
+  assert.equal(find(tree, 'PersonalFundingForm').props.disabled, false);
+  assert.equal(find(tree, 'PersonalFundingForm').props.destinationAddress, personalStatus.destination.address);
+});
+
+test('personal MXN request amounts remain pesos in both history and status presentation', async t => {
+  const harness = componentHarness('WalletFundingHistory.jsx', 'default', { 'lucide-react': icons, '@/i18n/LanguageProvider': i18n,
+    '@/lib/wallet-funding-client.mjs': { readWalletFundingHistory: async () => ({ records: [{ checkoutReference: statusReference,
+      requestedAmount: 150, sourceCurrencyCode: 'MXN', status: 'initiated', createdAt: '2026-11-10T21:00:00Z' }] }) },
+  });
+  t.after(() => harness.unmount()); harness.render({ walletKind: 'personal' }); await flush();
+  const history = renderToStaticMarkup(harness.render({ walletKind: 'personal' }));
+  assert.match(history, /MXN/); assert.doesNotMatch(history, /US\$/);
+  const { WalletFundingStatusView } = load('WalletFundingStatus.jsx', statusMocks(() => {}));
+  const view = { walletKind: 'personal', requestedAmount: 150, sourceCurrencyCode: 'MXN', state: 'unconfirmed', checkoutReference: statusReference, destination: personalStatus.destination };
+  const html = renderToStaticMarkup(WalletFundingStatusView({ view }));
+  assert.match(html, /MXN/); assert.doesNotMatch(html, /US\$/);
 });

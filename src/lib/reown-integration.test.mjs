@@ -5,6 +5,7 @@ import vm from 'node:vm';
 import ts from 'typescript';
 import { reownFundingSelection, buildReownProductionOnrampUrl } from './reown-production-onramp.mjs';
 import { personalFundingFailure } from './personal-funding-errors.mjs';
+import { createReownFundingOperation, verifyReownWalletOwnership } from './reown-funding-operation.mjs';
 
 const read = relative => readFileSync(new URL(relative, import.meta.url), "utf8");
 
@@ -23,9 +24,130 @@ function onrampCallback(name, scope) {
   return vm.runInNewContext(`(${callback.getText(source)})`, scope);
 }
 
+const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; };
+const taskTick = () => new Promise(resolve => setTimeout(resolve, 0));
+function fundingRuntime(overrides = {}) {
+  const address = `0x${'1'.repeat(40)}`;
+  const projectId = 'a'.repeat(32);
+  const requestId = 'd8a4c010-cc33-44da-a297-8b3c6440f491';
+  const provider = { name: 'meld', url: `https://meldcrypto.com/?publicKey=test&externalCustomerId=${projectId}` };
+  const events = [], states = [], bindings = [];
+  const ref = () => ({ current: null });
+  const scope = {
+    reownFundingSelection, buildReownProductionOnrampUrl, personalFundingFailure,
+    createReownFundingOperation, verifyReownWalletOwnership, detectPersonalFundingCountry: () => 'US', projectId,
+    onrampErrorCode: personalFundingFailure, isAddress: value => /^0x[0-9a-f]{40}$/i.test(value || ''),
+    sameAddress: (a, b) => typeof a === 'string' && typeof b === 'string' && a.toLowerCase() === b.toLowerCase(),
+    getAddress: value => value, mounted: { current: true }, account: { isConnected: false }, boundAddress: address,
+    currentAddress: '', walletProvider: undefined, binding: { status: 'linked', address },
+    onrampOperation: ref(), linkingOperation: ref(), onrampFlow: ref(), onrampSelection: ref(), onrampIntent: ref(),
+    linking: ref(), connectModalSeen: ref(), appKitState: { open: false },
+    PERSONAL_WALLET_MINIMUM_USD: 20, PERSONAL_WALLET_ASSET: 'USDT', DOMException,
+    setBinding: value => bindings.push(value), setOnrampState: value => states.push(value),
+    setVerificationError() {}, setIsLinking() {}, setFundingRevision: () => events.push('revision'),
+    OnRampController: { state: { providers: [provider], selectedProvider: provider }, setSelectedProvider() {} },
+    fundingRequestId: () => requestId,
+    createPersonalFundingIntent: async body => ({ checkoutReference: body.requestId, requestedAmount: body.amount,
+      sourceCurrencyCode: body.sourceCurrencyCode, paymentMethodType: body.paymentMethodType, allowedProviders: ['SWAPPED'] }),
+    open: async () => {}, close: () => events.push('close SDK modal'),
+    disconnect: () => assert.fail('cancellation must never disconnect a wallet'),
+    window: { open: url => { events.push({ opened: new URL(url) }); return { opener: null }; },
+      location: { assign: () => assert.fail('unexpected navigation fallback') }, dispatchEvent: () => events.push('linked event') },
+    Event: class { constructor(type) { this.type = type; } },
+    ...overrides,
+  };
+  for (const name of ['beginOnrampOperation', 'cancelOnramp', 'openConnect', 'linkWallet', 'runOnramp', 'startOnramp']) {
+    scope[name] = onrampCallback(name, scope);
+  }
+  return { scope, events, states, bindings, address, requestId,
+    input: { requestId, country: 'MX', sourceCurrencyCode: 'USD', amount: 20, paymentMethodType: 'CREDIT_DEBIT_CARD' } };
+}
+
+test('manual cancellation releases a hung SDK connect and its late result cannot begin funding', async () => {
+  const rpc = deferred(), started = deferred();
+  const runtime = fundingRuntime({ boundAddress: '', binding: { status: 'unlinked', address: '' },
+    appKitState: { open: true }, open: () => { started.resolve(); return rpc.promise; },
+    createPersonalFundingIntent: () => assert.fail('cancelled connection created an intent') });
+  const pending = runtime.scope.startOnramp(runtime.input);
+  await started.promise; runtime.scope.cancelOnramp();
+  await assert.rejects(pending, { name: 'AbortError' });
+  rpc.resolve(); await taskTick();
+  assert.equal(runtime.scope.onrampIntent.current, false);
+  assert.equal(runtime.scope.onrampSelection.current, null);
+  assert.equal(runtime.scope.onrampOperation.current, null);
+  assert.equal(runtime.states.at(-1).status, 'idle');
+  assert.equal(runtime.events.some(value => value?.opened), false);
+  assert.deepEqual(runtime.bindings, []);
+});
+
+test('a hung SDK connect times out with a recoverable category rather than leaving the button busy', async () => {
+  const rpc = deferred();
+  const runtime = fundingRuntime({ boundAddress: '', binding: { status: 'unlinked', address: '' },
+    createReownFundingOperation: options => createReownFundingOperation({ ...options, timeoutMs: 15 }),
+    open: () => rpc.promise });
+  await assert.rejects(runtime.scope.startOnramp(runtime.input), { name: 'TimeoutError' });
+  assert.equal(runtime.states.at(-1).status, 'error');
+  assert.equal(runtime.states.at(-1).error, 'connection_timeout');
+  assert.equal(runtime.scope.onrampIntent.current, false);
+  rpc.resolve(); await taskTick(); assert.deepEqual(runtime.bindings, []);
+});
+
+test('a verified bound address bypasses SDK auth and a cancelled late intent never opens checkout', async () => {
+  const intent = deferred(), started = deferred();
+  const runtime = fundingRuntime({ open: () => assert.fail('verified wallet asked to authenticate again'),
+    createPersonalFundingIntent: () => { started.resolve(); return intent.promise; } });
+  const pending = runtime.scope.startOnramp(runtime.input);
+  await started.promise; runtime.scope.cancelOnramp(); await assert.rejects(pending, { name: 'AbortError' });
+  intent.resolve({ checkoutReference: runtime.requestId, requestedAmount: 20, sourceCurrencyCode: 'USD',
+    paymentMethodType: 'CREDIT_DEBIT_CARD', allowedProviders: ['SWAPPED'] });
+  await taskTick(); assert.deepEqual(runtime.events, []); assert.deepEqual(runtime.bindings, []);
+});
+
+test('an old cancelled signature cannot confirm ownership or overwrite a newly completed verification', async () => {
+  const signature = deferred(), started = deferred(); let signerNumber = 0, confirms = 0;
+  const address = `0x${'1'.repeat(40)}`;
+  const runtime = fundingRuntime({ account: { isConnected: true }, currentAddress: address, walletProvider: {}, boundAddress: '',
+    binding: { status: 'unlinked', address: '' },
+    requestWalletLink: async path => {
+      if (path.endsWith('/challenge')) return { address, challengeId: '11111111-1111-4111-8111-111111111111', message: 'Single use ownership proof' };
+      confirms++; return { linked: true, address };
+    },
+    BrowserProvider: class { async getSigner() { const first = ++signerNumber === 1; return {
+      getAddress: async () => address, signMessage: () => { if (first) { started.resolve(); return signature.promise; } return Promise.resolve('new valid signature'); },
+    }; } },
+  });
+  const first = runtime.scope.linkWallet(); await started.promise; runtime.scope.cancelOnramp();
+  await assert.rejects(first, { name: 'AbortError' });
+  await runtime.scope.linkWallet();
+  signature.resolve('old cancelled signature'); await taskTick();
+  assert.equal(confirms, 1); assert.equal(runtime.bindings.length, 1);
+  assert.equal(runtime.bindings[0].address, address);
+});
+
+test('SPEI handoff forwards the actual MXN amount without claiming a USD valuation', async () => {
+  const runtime = fundingRuntime({ open: () => assert.fail('verified wallet asked to authenticate again') });
+  const result = await runtime.scope.startOnramp({ ...runtime.input, sourceCurrencyCode: 'MXN', paymentMethodType: 'SPEI', amount: 150 });
+  assert.equal(result.sourceCurrencyCode, 'MXN'); assert.equal(result.minimumUsd, null);
+  const url = runtime.events.find(value => value?.opened).opened;
+  assert.equal(url.searchParams.get('sourceAmountLocked'), '150');
+  assert.equal(url.searchParams.get('sourceCurrencyCodeLocked'), 'MXN');
+  assert.equal(url.searchParams.get('paymentMethodTypeLocked'), 'SPEI');
+});
+
+test('a changed checkout reference, amount, currency or method cannot open a provider', async () => {
+  for (const change of [{ checkoutReference: '11111111-1111-4111-8111-111111111111' }, { requestedAmount: 100 },
+    { sourceCurrencyCode: 'MXN' }, { paymentMethodType: 'APPLE_PAY' }]) {
+    const runtime = fundingRuntime({ createPersonalFundingIntent: async body => ({ checkoutReference: body.requestId,
+      requestedAmount: body.amount, sourceCurrencyCode: body.sourceCurrencyCode, paymentMethodType: body.paymentMethodType,
+      allowedProviders: ['SWAPPED'], ...change }) });
+    await assert.rejects(runtime.scope.startOnramp(runtime.input), { message: 'wallet_funding_invalid_acknowledgement' });
+    assert.deepEqual(runtime.events, []);
+  }
+});
+
 test('personal start and continuation reject ineligible country, method and currency before wallet effects', async () => {
   const selections = [
-    { input: { country: 'MX', sourceCurrencyCode: 'MXN', amount: 1000, paymentMethodType: 'SPEI' }, code: 'wallet_funding_valuation_unavailable', category: 'valuation' },
+    { input: { country: 'MX', sourceCurrencyCode: 'MXN', amount: 1000, paymentMethodType: 'CREDIT_DEBIT_CARD' }, code: 'wallet_funding_valuation_unavailable', category: 'valuation' },
     { input: { country: 'MX', sourceCurrencyCode: 'COP', amount: 1000, paymentMethodType: 'SPEI' }, code: 'wallet_funding_valuation_unavailable', category: 'valuation' },
     { input: { country: 'CO', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' }, code: 'wallet_funding_invalid_country', category: 'method' },
     { input: { country: 'MX', amount: 100, paymentMethodType: 'SKRILL' }, code: 'wallet_funding_method_unavailable', category: 'method' },
@@ -68,11 +190,13 @@ test('personal dollar continuation explicitly forwards its currency to the inten
   const projectId = 'a'.repeat(32);
   const requestId = 'd8a4c010-cc33-44da-a297-8b3c6440f491';
   const provider = { name: 'meld', url: `https://meldcrypto.com/?publicKey=test&externalCustomerId=${projectId}` };
+  const operation = createReownFundingOperation();
   const callback = onrampCallback('runOnramp', {
     reownFundingSelection, detectPersonalFundingCountry: () => 'US', buildReownProductionOnrampUrl, personalFundingFailure, projectId,
     boundAddress: address, mounted: { current: true }, navigator: { languages: ['en-US'], language: 'en-US' },
-    PERSONAL_WALLET_MINIMUM_USD: 50, PERSONAL_WALLET_ASSET: 'USDT', AbortController,
-    onrampFlow: { current: null }, onrampSelection: { current: null }, onrampAbort: { current: null }, onrampIntent: { current: false },
+    PERSONAL_WALLET_MINIMUM_USD: 20, PERSONAL_WALLET_ASSET: 'USDT', AbortController,
+    onrampFlow: { current: null }, onrampSelection: { current: null }, onrampIntent: { current: false },
+    beginOnrampOperation: () => operation, onrampOperation: { current: operation },
     OnRampController: { state: { providers: [provider], selectedProvider: provider }, setSelectedProvider() { events.push('provider'); } },
     setOnrampState() {}, setFundingRevision() {},
     createPersonalFundingIntent: async body => {
@@ -112,13 +236,12 @@ test("Reown creates EVM wallets, links one signed address and never replaces mem
   assert.match(provider, /const boundReady = Boolean\(boundAddress\)/);
   assert.match(provider, /walletAddress: verifiedAddress/);
   assert.match(provider, /if \(boundReady \|\| connectionReady\) return runOnramp\(selection\)/);
-  assert.match(provider, /await disconnect\(\{ namespace: "eip155" \}\)/);
-  assert.match(provider, /setOnrampState\(\{ status: "error", error: "connection" \}\)/);
+  assert.match(provider, /scope\.wait\(\(\) => disconnect\(\{ namespace: "eip155" \}\)\)/);
+  assert.match(provider, /error: "connection_timeout"/);
   assert.match(provider, /void runOnramp\(\)\.catch/);
-  assert.match(provider, /signMessage\(challenge\.message\)/);
-  assert.match(provider, /\/api\/member\/wallet-link\/challenge/);
-  assert.match(provider, /\/api\/member\/wallet-link\/confirm/);
-  assert.match(provider, /const confirmed = await linkWallet\(\)/);
+  assert.match(provider, /verifyReownWalletOwnership\(scope/);
+  assert.match(provider, /const confirmed = await scope\.wait\(\(\) => linkWallet\(scope\)\)/);
+  assert.match(provider, /cancelOnramp/);
   assert.doesNotMatch(provider, /sendTransaction|privateKey|mnemonic/);
   assert.match(provider, /appKitThemeRef\.current\.setThemeMode/);
   assert.match(provider, /appKitThemeRef\.current\.setThemeVariables/);
@@ -151,7 +274,7 @@ test("personal portal renders only its personal wallet and preserves native memb
  assert.match(personal,/reown\.startOnramp\(\{ walletAddress: reown\.linkedAddress, \.\.\.input \}\)/);
  assert.doesNotMatch(personal,/Administrative|startAdministrative|SandboxFunding/);
  assert.match(policy,/MINDBLISS_ONRAMP_FEE_BPS = 100/);assert.match(policy,/PERSONAL_WALLET_ASSET = "USDT"/);
- assert.match(policy,/PERSONAL_WALLET_MINIMUM_USD = 50/);
+ assert.match(policy,/PERSONAL_WALLET_MINIMUM_USD = 20/);
 });
 
 test("personal funding navigation has one destination and one neutral action label", () => {
