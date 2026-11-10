@@ -38,7 +38,8 @@ const radix = {
 const i18n = { useI18n: () => ({ t: key => copy[key] ?? key }) };
 const link = ({ children, href, ...props }) => React.createElement('a', { href, ...props }, children);
 let onrampCalls = 0;
-const reown = { useReownWallet: () => ({ configured: true, startOnramp: async () => { onrampCalls += 1; } }) };
+let onrampResult = { opened: true };
+const reown = { useReownWallet: () => ({ configured: true, onrampStatus: 'idle', onrampError: false, startOnramp: async () => { onrampCalls += 1; return onrampResult; } }) };
 
 function view(file) {
   return registrationViewHarness(`../../components/panel/overview/${file}`, {
@@ -54,6 +55,7 @@ function button(tree, label) {
 
 test('the first-recharge popup advances through the Pen welcome and opens Reown on-ramp', async () => {
   onrampCalls = 0;
+  onrampResult = { opened: true };
   let closed = 0;
   const harness = view('FirstRechargeDialog.jsx');
   const props = { open: true, initialStep: 'welcome', onOpenChange(value) { if (value === false) closed += 1; } };
@@ -68,6 +70,20 @@ test('the first-recharge popup advances through the Pen welcome and opens Reown 
   await cryptoMethod.props.onClick();
   assert.equal(onrampCalls, 1);
   assert.equal(closed, 1);
+  harness.unmount();
+});
+
+test('wallet setup keeps the Reown bridge mounted until connection can continue to on-ramp', async () => {
+  onrampCalls = 0;
+  onrampResult = { pending: true };
+  let closed = 0;
+  const harness = view('FirstRechargeDialog.jsx');
+  const props = { open: true, initialStep: 'methods', onOpenChange(value) { if (value === false) closed += 1; } };
+  const methods = harness.render(props);
+  const cryptoMethod = find(methods, node => node?.type?.name === 'RechargeMethod' && typeof node?.props?.onClick === 'function');
+  await cryptoMethod.props.onClick();
+  assert.equal(onrampCalls, 1);
+  assert.equal(closed, 0);
   harness.unmount();
 });
 
@@ -132,7 +148,8 @@ test('a confirmed empty wallet opens the welcome popup once per tab and keeps ma
   assert.equal(values.get('mindbliss:first-recharge-popup:v1'), 'seen');
   popup.props.onOpenChange(false);
   tree = harness.render();
-  assert.equal(find(tree, node => node?.type === Popup), undefined);
+  popup = find(tree, node => node?.type === Popup);
+  assert.equal(popup.props.open, false);
   find(tree, node => node?.type === Earnings).props.onRecharge('methods');
   tree = harness.render();
   popup = find(tree, node => node?.type === Popup);

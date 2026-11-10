@@ -27,12 +27,16 @@ export default function FirstRechargeDialog({ open, initialStep = "welcome", onO
     }
   }, [initialStep, open]);
 
+  useEffect(() => {
+    if (open && reown.onrampStatus === "open") onOpenChange?.(false);
+  }, [onOpenChange, open, reown.onrampStatus]);
+
   const close = () => onOpenChange?.(false);
   const openCryptoProvider = async () => {
     setProviderError("");
     try {
-      await reown.startOnramp();
-      close();
+      const result = await reown.startOnramp();
+      if (result && typeof result === "object" && "opened" in result && result.opened === true) close();
     } catch {
       setProviderError(t("recharge.providerUnavailable"));
     }
@@ -77,7 +81,7 @@ export default function FirstRechargeDialog({ open, initialStep = "welcome", onO
                 <RechargeMethod icon={CreditCard} title={t("recharge.buyTitle")} copy={t("recharge.buyCopy")} action={t("recharge.buyAction")} onClick={openCryptoProvider} />
                 <RechargeMethod icon={ArrowDownLeft} title={t("recharge.receiveTitle")} copy={t("recharge.receiveCopy")} action={t("recharge.receiveAction")} href="/dashboard/payments#wallet-steps" onNavigate={close} />
               </div>
-              {providerError ? <p className="mb-recharge-error" role="alert">{providerError}</p> : null}
+              {providerError || reown.onrampError ? <p className="mb-recharge-error" role="alert">{providerError || t("recharge.providerUnavailable")}</p> : null}
               <button type="button" className="mb-recharge-secondary" onClick={close}>{t("recharge.later")}</button>
             </>
           ) : (

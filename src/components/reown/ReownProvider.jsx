@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createAppKit, useAppKit, useAppKitAccount, useAppKitProvider, useAppKitTheme } from "@reown/appkit/react";
+import { createAppKit, useAppKit, useAppKitAccount, useAppKitProvider, useAppKitState, useAppKitTheme } from "@reown/appkit/react";
 import { EthersAdapter } from "@reown/appkit-adapter-ethers";
 import { mainnet } from "@reown/appkit/networks";
 import { BrowserProvider, getAddress } from "ethers";
@@ -19,6 +19,8 @@ const unavailable = Object.freeze({
   linkStatus: "unavailable",
   isLinked: false,
   isLinking: false,
+  onrampStatus: "idle",
+  onrampError: false,
   openConnect: async () => { throw new Error("reown_unavailable"); },
   openOnramp: async () => { throw new Error("reown_unavailable"); },
   startOnramp: async () => { throw new Error("reown_unavailable"); },
@@ -72,6 +74,7 @@ export default function ReownProvider({ children }) {
 
 function ConfiguredReownProvider({ children }) {
   const { open } = useAppKit();
+  const appKitState = useAppKitState();
   const account = useAppKitAccount({ namespace: "eip155" });
   const { walletProvider } = useAppKitProvider("eip155");
   const appKitTheme = useAppKitTheme();
@@ -79,7 +82,11 @@ function ConfiguredReownProvider({ children }) {
   appKitThemeRef.current = appKitTheme;
   const [binding, setBinding] = useState({ status: "loading", address: "" });
   const [isLinking, setIsLinking] = useState(false);
+  const [onrampState, setOnrampState] = useState({ status: "idle", error: false });
   const linking = useRef(null);
+  const onrampIntent = useRef(false);
+  const onrampFlow = useRef(null);
+  const connectModalSeen = useRef(false);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -158,17 +165,62 @@ function ConfiguredReownProvider({ children }) {
     return operation;
   }, [account.isConnected, binding.address, binding.status, currentAddress, walletProvider]);
 
-  const openOnramp = useCallback(() => {
-    if (account.isConnected !== true) throw new Error("wallet_not_connected");
-    if (!isLinked) throw new Error("wallet_not_linked");
-    return open({ view: "OnRampProviders" });
-  }, [account.isConnected, isLinked, open]);
+  const runOnramp = useCallback(() => {
+    if (onrampFlow.current) return onrampFlow.current;
+    const operation = (async () => {
+      if (account.isConnected !== true || !currentAddress || !walletProvider) throw new Error("wallet_not_connected");
+      setOnrampState({ status: "linking", error: false });
+      if (!isLinked) await linkWallet();
+      setOnrampState({ status: "opening", error: false });
+      await open({ view: "OnRampProviders" });
+      onrampIntent.current = false;
+      setOnrampState({ status: "open", error: false });
+      return { opened: true };
+    })().catch(error => {
+      onrampIntent.current = false;
+      setOnrampState({ status: "error", error: true });
+      throw error;
+    }).finally(() => {
+      onrampFlow.current = null;
+    });
+    onrampFlow.current = operation;
+    return operation;
+  }, [account.isConnected, currentAddress, isLinked, linkWallet, open, walletProvider]);
+
+  const openOnramp = useCallback(() => runOnramp(), [runOnramp]);
 
   const startOnramp = useCallback(async () => {
-    if (account.isConnected !== true) return openConnect();
-    if (!isLinked) await linkWallet();
-    return open({ view: "OnRampProviders" });
-  }, [account.isConnected, isLinked, linkWallet, open, openConnect]);
+    setOnrampState({ status: account.isConnected === true ? "linking" : "connecting", error: false });
+    if (account.isConnected === true) return runOnramp();
+    onrampIntent.current = true;
+    connectModalSeen.current = false;
+    try {
+      await openConnect();
+      return { pending: true };
+    } catch (error) {
+      onrampIntent.current = false;
+      setOnrampState({ status: "error", error: true });
+      throw error;
+    }
+  }, [account.isConnected, openConnect, runOnramp]);
+
+  useEffect(() => {
+    if (!onrampIntent.current || account.isConnected !== true || !currentAddress || !walletProvider) return;
+    void runOnramp().catch(() => {});
+  }, [account.isConnected, currentAddress, runOnramp, walletProvider]);
+
+  useEffect(() => {
+    if (!onrampIntent.current || onrampState.status !== "connecting") return;
+    if (appKitState.open) {
+      connectModalSeen.current = true;
+      return;
+    }
+    if (connectModalSeen.current && account.isConnected !== true) {
+      onrampIntent.current = false;
+      connectModalSeen.current = false;
+      setOnrampState({ status: "idle", error: false });
+    }
+  }, [account.isConnected, appKitState.open, onrampState.status]);
   const openAccount = useCallback(
     () => open({ view: account.isConnected ? "Account" : "Connect", namespace: "eip155" }),
     [account.isConnected, open],
@@ -183,13 +235,15 @@ function ConfiguredReownProvider({ children }) {
     linkStatus: binding.status,
     isLinked,
     isLinking,
+    onrampStatus: onrampState.status,
+    onrampError: onrampState.error,
     openConnect,
     openOnramp,
     startOnramp,
     linkWallet,
     openAccount,
   }), [account.isConnected, account.status, binding.address, binding.status, currentAddress, isLinked, isLinking,
-    linkWallet, openAccount, openConnect, openOnramp, startOnramp]);
+    linkWallet, onrampState.error, onrampState.status, openAccount, openConnect, openOnramp, startOnramp]);
 
   return <ReownContext.Provider value={value}>{children}</ReownContext.Provider>;
 }

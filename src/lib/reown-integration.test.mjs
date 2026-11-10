@@ -17,10 +17,12 @@ test("Reown creates EVM wallets, links one signed address and never replaces mem
   assert.match(provider, /onramp: true/);
   assert.match(provider, /allowUnsupportedChain: false/);
   assert.match(provider, /view: "OnRampProviders"/);
+  assert.match(provider, /onrampIntent\.current = true/);
+  assert.match(provider, /void runOnramp\(\)\.catch/);
   assert.match(provider, /signMessage\(challenge\.message\)/);
   assert.match(provider, /\/api\/member\/wallet-link\/challenge/);
   assert.match(provider, /\/api\/member\/wallet-link\/confirm/);
-  assert.match(provider, /if \(!isLinked\) throw new Error\("wallet_not_linked"\)/);
+  assert.match(provider, /if \(!isLinked\) await linkWallet\(\)/);
   assert.doesNotMatch(provider, /sendTransaction|privateKey|mnemonic/);
   assert.match(provider, /appKitThemeRef\.current\.setThemeMode/);
   assert.match(provider, /appKitThemeRef\.current\.setThemeVariables/);
@@ -43,7 +45,7 @@ test("AppKit is scoped to wallet surfaces and does not slow every dashboard rout
   assert.doesNotMatch(shell, /ReownProvider/);
   assert.match(finance, /dynamic\(\(\) => import\("@\/components\/reown\/ReownProvider"\)/);
   assert.match(overview, /dynamic\(\(\) => import\("\.\/ReownRechargeDialog"\)/);
-  assert.match(overview, /rechargeDialog\.open \? <ReownRechargeDialog/);
+  assert.match(overview, /reownLoaded \? <ReownRechargeDialog open=\{rechargeDialog\.open\}/);
 });
 
 test("the public Reown identifier is sourced from environment configuration and never hardcoded in application code", () => {

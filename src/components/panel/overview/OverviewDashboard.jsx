@@ -40,6 +40,7 @@ export default function OverviewDashboard() {
   const [networkStatus, setNetworkStatus] = useState("loading");
   const [errors, setErrors] = useState({ summary: null, network: null });
   const [rechargeDialog, setRechargeDialog] = useState({ open: false, step: "welcome" });
+  const [reownLoaded, setReownLoaded] = useState(false);
   const request = useRef(null);
   const rechargeChecked = useRef(false);
 
@@ -82,6 +83,7 @@ export default function OverviewDashboard() {
     try { seen = sessionStorage.getItem(RECHARGE_SEEN_KEY) === "seen"; } catch { /* storage is optional */ }
     if (!seen) {
       try { sessionStorage.setItem(RECHARGE_SEEN_KEY, "seen"); } catch { /* storage is optional */ }
+      setReownLoaded(true);
       setRechargeDialog({ open: true, step: "welcome" });
     }
   }, [summary?.wallet_balance_usd, summaryStatus]);
@@ -94,6 +96,7 @@ export default function OverviewDashboard() {
 
   const openRecharge = useCallback((step = "welcome") => {
     try { sessionStorage.setItem(RECHARGE_SEEN_KEY, "seen"); } catch { /* storage is optional */ }
+    setReownLoaded(true);
     setRechargeDialog({ open: true, step });
   }, []);
 
@@ -150,7 +153,7 @@ export default function OverviewDashboard() {
       </section> : null}
 
       <p className="mb-overview-footnote">{t("overview.question")}</p>
-      {rechargeDialog.open ? <ReownRechargeDialog open initialStep={rechargeDialog.step} onOpenChange={open => setRechargeDialog(current => ({ ...current, open }))} /> : null}
+      {reownLoaded ? <ReownRechargeDialog open={rechargeDialog.open} initialStep={rechargeDialog.step} onOpenChange={open => setRechargeDialog(current => ({ ...current, open }))} /> : null}
     </div>
   );
 }
