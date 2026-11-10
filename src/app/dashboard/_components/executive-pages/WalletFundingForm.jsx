@@ -99,13 +99,15 @@ export function AdministrativeSandboxFundingForm({ disabled = false, busy = fals
   const [countryCode, setCountryCode] = useState("US");
   const [preferredProvider, setPreferredProvider] = useState("TRANSAK");
   const [method, setMethod] = useState("");
-  const [options, setOptions] = useState({ status: "idle", country: "", providers: [] });
+  const [options, setOptions] = useState({ status: "idle", country: "", providers: [], failedProviders: [] });
   const [revision, setRevision] = useState(0);
   const submitting = useRef(false);
   const current = options.country === countryCode;
   const eligibleProviders = current && options.status === "ready" ? options.providers
     .filter(provider => eligiblePaymentMethods(provider.routes, Number(amount)).length > 0).map(provider => provider.serviceProvider) : [];
   const serviceProvider = eligibleProviders.includes(preferredProvider) ? preferredProvider : eligibleProviders[0] || "";
+  const discoveryStatus = options.status === "ready" && options.failedProviders.length && !eligibleProviders.length ? "error" : options.status;
+  const partialAvailability = current && discoveryStatus === "ready" && options.failedProviders.length > 0;
   const selectedOptions = options.providers.find(provider => provider.serviceProvider === serviceProvider);
   const methods = current && selectedOptions ? eligiblePaymentMethods(selectedOptions.routes, Number(amount)) : [];
   const methodsKey = methods.join(",");
@@ -119,11 +121,16 @@ export function AdministrativeSandboxFundingForm({ disabled = false, busy = fals
   useEffect(() => {
     const controller = new AbortController();
     setMethod("");
-    setOptions({ status: "loading", country: countryCode, providers: [] });
-    Promise.all(["TRANSAK", "BANXA"].map(provider => readAdministrativeSandboxOptions(countryCode, provider, { signal: controller.signal }))).then(providers => {
-      if (!controller.signal.aborted) setOptions({ status: "ready", country: countryCode, providers });
-    }).catch(() => {
-      if (!controller.signal.aborted) { setOptions({ status: "error", country: countryCode, providers: [] }); controller.abort(); }
+    setOptions({ status: "loading", country: countryCode, providers: [], failedProviders: [] });
+    const providerNames = ["TRANSAK", "BANXA"];
+    Promise.allSettled(providerNames.map(provider => readAdministrativeSandboxOptions(countryCode, provider, { signal: controller.signal }))).then(results => {
+      if (controller.signal.aborted) return;
+      const providers = [], failedProviders = [];
+      results.forEach((result, index) => {
+        if (result.status === "fulfilled") providers.push(result.value);
+        else failedProviders.push(providerNames[index]);
+      });
+      setOptions({ status: "ready", country: countryCode, providers, failedProviders });
     });
     return () => controller.abort();
   }, [countryCode, revision]);
@@ -143,7 +150,7 @@ export function AdministrativeSandboxFundingForm({ disabled = false, busy = fals
       <div className={styles.formFields}>
         <FundingCountryField id={id} value={countryCode} onChange={value => changeSelection(setCountryCode, value)} busy={busy} />
         <FundingAmountField id={id} amount={amount} onChange={value => changeSelection(setAmount, value)} busy={busy} />
-        <FundingMethodField id={id} value={methods.includes(method) ? method : ""} methods={methods} status={current ? options.status : "loading"}
+        <FundingMethodField id={id} value={methods.includes(method) ? method : ""} methods={methods} status={current ? discoveryStatus : "loading"} partialAvailability={partialAvailability}
           countrySelected={Boolean(countryCode)} minimumUsd={current ? lowestRouteMinimum(selectedOptions?.routes || options.providers.flatMap(provider => provider.routes)) : null}
           limits={selectedOptions ? selectedMethodLimits(selectedOptions.routes, method, Number(amount)) : null} onChange={value => changeSelection(setMethod, value)} onRetry={() => setRevision(value => value + 1)} busy={busy} />
       </div>
@@ -181,7 +188,7 @@ function FundingCountryField({ id, value, onChange, busy, label = "" }) {
     </select></label>;
 }
 
-function FundingMethodField({ id, value, methods, status, countrySelected, minimumUsd, limits, onChange, onRetry, busy }) {
+function FundingMethodField({ id, value, methods, status, countrySelected, minimumUsd, limits, onChange, onRetry, busy, partialAvailability = false }) {
   const { t, locale } = useI18n();
   const ready = countrySelected && status === "ready";
   const unavailable = countrySelected && (status === "error" || (ready && !methods.length));
@@ -199,6 +206,7 @@ function FundingMethodField({ id, value, methods, status, countrySelected, minim
     <div id={`${id}-methods-state`} role="status" className="mb-onramp-disclosure">
       {unavailable ? <><p>{t(status === "error" ? "funding.methodsLoadFailed" : "funding.methodsForAmountUnavailable")}</p><button className="executive-button" type="button" onClick={onRetry} disabled={busy}><RefreshCw size={14} aria-hidden="true" />{t("walletPage.retry")}</button></>
         : !countrySelected ? t("funding.chooseCountryFirst") : status === "loading" ? t("walletPage.checkingAvailability") : null}
+      {ready && partialAvailability && methods.length ? <><p>{t("funding.methodsPartiallyLoaded")}</p><button className="executive-button" type="button" onClick={onRetry} disabled={busy}><RefreshCw size={14} aria-hidden="true" />{t("walletPage.retry")}</button></> : null}
       {ready && limits ? t("funding.methodRange", { minimum: currency(limits.minimumUsd), maximum: currency(limits.maximumUsd) })
         : ready && !methods.length && minimumUsd !== null ? <p>{t("funding.providerMinimum", { amount: currency(minimumUsd) })}</p> : null}
       {ready && methods.length ? <p>{t("funding.providerFinalReview")}</p> : null}

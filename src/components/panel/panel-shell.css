@@ -1,3 +1,8 @@
+html:has(body > .vp-dashboard-shell),
+body:has(> .vp-dashboard-shell) {
+  overflow: hidden;
+}
+
 .vp-dashboard-shell {
   display: flex;
   height: 100vh;

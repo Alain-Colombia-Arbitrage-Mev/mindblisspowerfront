@@ -1,5 +1,6 @@
 export const fundingMessages = {
   es: { funding: {
+    methodsPartiallyLoaded: "No pudimos consultar todas las opciones. Puedes continuar con las que aparecen o reintentar.",
     changeProvider: "Cambiar", providerLabel: "Proveedor", methodCount: "{count} opciones de pago", methodRange: "Límites: {minimum}–{maximum}.", providerFinalReview: "El proveedor confirma disponibilidad y comisiones antes de pagar.", sandboxNoticeShort: "Esta recarga es una prueba. No se usan fondos reales.",
     statusRequestUnavailable: "Opción no disponible", statusRequestUnavailableCopy: "No se pudo preparar la compra para esta combinación. No se inició una compra desde esta solicitud. Revisa el país, el monto y el método antes de reintentar.",
     statusCheckoutFailed: "No se pudo abrir la recarga", statusCheckoutFailedCopy: "La preparación de esta solicitud falló. No se inició una compra desde ella. Revisa el formulario para intentarlo de nuevo.",
@@ -45,6 +46,7 @@ export const fundingMessages = {
     sandboxUnavailable: "No pudimos abrir una sesión de prueba para este país, monto y proveedor. Prueba otra combinación.",
   } },
   en: { funding: {
+    methodsPartiallyLoaded: "We could not check every option. You can continue with those shown or retry.",
     changeProvider: "Change", providerLabel: "Provider", methodCount: "{count} payment options", methodRange: "Limits: {minimum}–{maximum}.", providerFinalReview: "The provider confirms availability and fees before you pay.", sandboxNoticeShort: "This is a test top-up. No real funds are used.",
     statusRequestUnavailable: "Option unavailable", statusRequestUnavailableCopy: "We could not prepare a purchase for this combination. No purchase started from this request. Review the country, amount and method before retrying.",
     statusCheckoutFailed: "Could not open the top-up", statusCheckoutFailedCopy: "This request could not be prepared. No purchase started from it. Review the form to try again.",
@@ -90,6 +92,7 @@ export const fundingMessages = {
     sandboxUnavailable: "We could not open a test session for this country, amount and provider. Try another combination.",
   } },
   ar: { funding: {
+    methodsPartiallyLoaded: "تعذر التحقق من جميع الخيارات. يمكنك المتابعة بالخيارات المعروضة أو إعادة المحاولة.",
     changeProvider: "تغيير", providerLabel: "المزوّد", methodCount: "{count} خيارات للدفع", methodRange: "الحدود: {minimum}–{maximum}.", providerFinalReview: "يؤكد المزوّد التوافر والرسوم قبل الدفع.", sandboxNoticeShort: "هذا الشحن للاختبار. لا تُستخدم أموال حقيقية.",
     statusRequestUnavailable: "الخيار غير متاح", statusRequestUnavailableCopy: "تعذر إعداد شراء لهذه الخيارات. لم تبدأ عملية شراء من هذا الطلب. راجع البلد والمبلغ وطريقة الدفع قبل إعادة المحاولة.",
     statusCheckoutFailed: "تعذر فتح الشحن", statusCheckoutFailedCopy: "تعذر إعداد هذا الطلب. لم تبدأ عملية شراء منه. راجع النموذج لإعادة المحاولة.",
@@ -135,6 +138,7 @@ export const fundingMessages = {
     sandboxUnavailable: "تعذر فتح جلسة اختبار لهذا البلد والمبلغ والمزوّد. جرّب مجموعة أخرى.",
   } },
   zh: { funding: {
+    methodsPartiallyLoaded: "无法查询所有选项。你可以使用已显示的选项继续，或重试查询。",
     changeProvider: "更改", providerLabel: "服务商", methodCount: "{count} 种支付选项", methodRange: "限额：{minimum}–{maximum}。", providerFinalReview: "支付前，服务商会确认可用性和费用。", sandboxNoticeShort: "此充值为测试，不使用真实资金。",
     statusRequestUnavailable: "选项不可用", statusRequestUnavailableCopy: "无法为当前组合准备购买。此请求未发起购买，请检查国家/地区、金额和支付方式后重试。",
     statusCheckoutFailed: "无法打开充值", statusCheckoutFailedCopy: "此请求准备失败，尚未发起购买。请检查表单后重试。",
