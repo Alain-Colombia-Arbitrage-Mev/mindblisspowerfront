@@ -9,6 +9,7 @@
 .networks legend { margin-bottom: 9px; color: var(--vp-muted); font-size: 13px; font-weight: 700; }
 .networks > small { color: var(--vp-muted); font-size: 12px; line-height: 1.6; }
 .networkChoices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.threeNetworks { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .networkOption { display: grid; gap: 6px; min-width: 0; min-height: 72px; padding: 12px; border: 1px solid var(--vp-border); border-radius: 12px; color: var(--vp-text); background: var(--vp-surface); text-align: start; cursor: pointer; }
 .networkOption > span { color: var(--vp-muted); font-size: 12px; font-weight: 700; }
 .networkOption bdi { overflow-wrap: anywhere; font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
@@ -47,6 +48,17 @@
 .actions > button { min-height: 46px; }
 .actions > .primary { flex: 1 1 200px; }
 .panel button:disabled { cursor: not-allowed; opacity: .55; }
+.activity { margin-top: 20px; min-width: 0; }
+.activitySummary { min-height: 44px; align-content: center; color: var(--vp-text); cursor: pointer; }
+.activity[open] > .activitySummary { margin-bottom: 14px; }
+.activityList { display: grid; gap: 0; min-width: 0; margin: 0; padding: 0; list-style: none; }
+.activityItem { display: grid; gap: 8px; min-width: 0; padding: 14px 0; border-bottom: 1px solid var(--vp-border); color: var(--vp-text); font-size: 13px; }
+.activityItem:first-child { padding-top: 0; }
+.activityMeta { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; color: var(--vp-muted); font-size: 12px; }
+.activityMeta bdi { color: var(--vp-text); font-weight: 700; font-variant-numeric: tabular-nums; }
+.activityHash { min-width: 0; color: var(--vp-link); overflow-wrap: anywhere; }
+.activityHash code { font: 11px var(--font-mono); white-space: normal; }
+.activitySummary:focus-visible, .activityHash:focus-visible { outline: 2px solid var(--vp-accent); outline-offset: 3px; }
 .amountInput input:disabled { cursor: not-allowed; }
 :global([dir="rtl"]) .primary :global(.lucide-arrow-right) { transform: scaleX(-1); }
 @media (max-width: 540px) { .panel { gap: 18px; } .reviewDetails > div { grid-template-columns: minmax(0, 1fr); gap: 5px; } .readonlyAddress { font-size: 12px; } .actions > button { width: 100%; } }

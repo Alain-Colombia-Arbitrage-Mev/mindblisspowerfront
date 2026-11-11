@@ -48,7 +48,7 @@ test('the native session, canonical body, path and trusted IP are HMAC-bound in 
   assert.equal(response.headers.get('set-cookie'), null); assert.deepEqual(await response.json(), ack());
 });
 
-test('reads bind the exact status query to HMAC and recover only safe personal evidence, never membership activation', async () => {
+test('reads sign the backend pathname protocol, forward a strict status query and return only owned personal evidence', async () => {
   const confirmed = ack({ status: 'confirmed', transactionHash: hash, blockHash: `0x${'b'.repeat(64)}`, blockNumber: '80000000', confirmations: 12 });
   for (const action of ['status', 'history']) {
     const expected = action === 'history' ? { walletKind: 'personal', membershipAssignment: 'pending', records: [confirmed] } : confirmed;
@@ -57,7 +57,7 @@ test('reads bind the exact status query to HMAC and recover only safe personal e
       assert.equal(url, `https://auth.core.internal${path}`); assert.equal(init.method, 'GET'); assert.equal(init.body, undefined);
       const sha = value => createHash('sha256').update(value).digest('hex');
       assert.equal(init.headers['x-vp-auth-signature'], createHmac('sha256', env.AUTH_BFF_SHARED_SECRET)
-        .update(['GET', path, init.headers['x-vp-auth-timestamp'], '198.51.100.10', sha(init.headers.cookie), sha('')].join('\n')).digest('hex'));
+        .update(['GET', path.split('?')[0], init.headers['x-vp-auth-timestamp'], '198.51.100.10', sha(init.headers.cookie), sha('')].join('\n')).digest('hex'));
       return { ok: true, data: expected };
     } });
     assert.equal(response.status, 200); assert.deepEqual(await response.json(), expected);

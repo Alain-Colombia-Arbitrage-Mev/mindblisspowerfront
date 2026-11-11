@@ -2,6 +2,18 @@
 
 import { createContext, useContext } from "react";
 
+export const SOLANA_WALLET_UNAVAILABLE = Object.freeze({ namespace: "solana", configured: false, address: "", isConnected: false,
+  linkedAddress: "", linkStatus: "unavailable", linkError: "", isLinked: false, isLinking: false, isRestoring: false,
+  connectionStatus: "disconnected", needsVerification: false,
+  connectWallet: async () => { throw new Error("solana_wallet_unavailable"); },
+  openConnect: async () => { throw new Error("solana_wallet_unavailable"); },
+  linkWallet: async () => { throw new Error("solana_wallet_unavailable"); },
+  refreshLink: async () => { throw new Error("solana_wallet_unavailable"); },
+  getProvider: () => { throw new Error("solana_wallet_unavailable"); },
+  switchNetwork: async () => { throw new Error("solana_wallet_unavailable"); },
+  openAccount: async () => { throw new Error("solana_wallet_unavailable"); },
+});
+
 /** @type {import("react").Context<ReownContextValue>} */
 export const ReownContext = createContext(Object.freeze({
   configured: false,
@@ -15,6 +27,7 @@ export const ReownContext = createContext(Object.freeze({
   isLinking: false,
   isRestoring: false,
   connectionStatus: "disconnected",
+  solana: SOLANA_WALLET_UNAVAILABLE,
   connectWallet: async () => { throw new Error("reown_unavailable"); },
   onrampStatus: "idle",
   onrampError: "",
@@ -48,6 +61,7 @@ export const ReownContext = createContext(Object.freeze({
  * @property {boolean} isLinking
  * @property {boolean} isRestoring
  * @property {string} connectionStatus
+ * @property {SolanaWalletContextValue} solana
  * @property {() => Promise<unknown>} connectWallet
  * @property {string} onrampStatus
  * @property {string} onrampError
@@ -62,6 +76,27 @@ export const ReownContext = createContext(Object.freeze({
  * @property {() => Promise<unknown>} reconnectWallet
  * @property {() => Promise<unknown>} linkWallet
  * @property {() => Promise<unknown>} refreshLink
+ * @property {() => Promise<unknown>} openAccount
+ *
+ * @typedef {Object} SolanaWalletContextValue
+ * @property {string} namespace
+ * @property {boolean} configured
+ * @property {string} address
+ * @property {boolean} isConnected
+ * @property {string} linkedAddress
+ * @property {string} linkStatus
+ * @property {string} linkError
+ * @property {boolean} isLinked
+ * @property {boolean} isLinking
+ * @property {boolean} isRestoring
+ * @property {string} connectionStatus
+ * @property {boolean} needsVerification
+ * @property {() => Promise<unknown>} connectWallet
+ * @property {() => Promise<unknown>} openConnect
+ * @property {() => Promise<unknown>} linkWallet
+ * @property {() => Promise<unknown>} refreshLink
+ * @property {() => any} getProvider
+ * @property {() => Promise<unknown>} switchNetwork
  * @property {() => Promise<unknown>} openAccount
  */
 export function useReownWallet() {

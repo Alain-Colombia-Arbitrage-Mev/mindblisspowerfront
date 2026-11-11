@@ -50,7 +50,10 @@
     "@radix-ui/react-tooltip": "^1.1.8",
     "@reown/appkit": "1.8.24",
     "@reown/appkit-adapter-ethers": "1.8.24",
+    "@reown/appkit-adapter-solana": "1.8.24",
     "@reown/appkit-controllers": "1.8.24",
+    "@solana/spl-token": "0.4.15",
+    "@solana/web3.js": "1.98.4",
     "@stripe/react-stripe-js": "^3.0.0",
     "@stripe/stripe-js": "^5.2.0",
     "@tanstack/react-query": "^5.84.1",
@@ -96,6 +99,8 @@
     "zod": "^4.6.7"
   },
   "overrides": {
+    "bigint-buffer": "npm:@exodus/bigint-buffer@1.1.5-exodus.1",
+    "@solana/web3.js": { "jayson": "5.0.0" },
     "@reown/appkit-wallet": {
       "zod": "4.6.7"
     },

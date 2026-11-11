@@ -9,10 +9,12 @@ import { useCompanyPayment } from "@/hooks/useCompanyPayment";
 import { personalCompanyPaymentPolicy, formatPersonalCompanyPaymentAmount } from "@/lib/personal-company-payment-values.mjs";
 import { companyPaymentView } from "@/lib/company-payment-contract.mjs";
 import { CompanyPaymentForm, CompanyPaymentReview } from "./CompanyPaymentForm";
+import CompanyPaymentActivity from "./CompanyPaymentActivity";
 import styles from "./company-payment.module.css";
 
 const ReownProvider = dynamic(() => import("@/components/reown/ReownProvider"), { ssr: false,
   loading: WalletLoading });
+const PersonalTransferRouter = dynamic(() => import("./PersonalTransferRouter"), { ssr: false, loading: WalletLoading });
 
 function WalletLoading() {
   const { t } = useI18n();
@@ -20,10 +22,10 @@ function WalletLoading() {
 }
 
 export default function CompanyPaymentPage() {
-  return <ReownProvider><PersonalCompanyPayment /></ReownProvider>;
+  return <ReownProvider><PersonalTransferRouter DirectPayment={PersonalCompanyPayment} /></ReownProvider>;
 }
 
-export function PersonalCompanyPayment() {
+export function PersonalCompanyPayment({ onSponsoredPolygon = undefined } = {}) {
   const { t, locale } = useI18n();
   const reown = useReownWallet();
   const flow = useCompanyPayment(reown);
@@ -41,7 +43,7 @@ export function PersonalCompanyPayment() {
     </div>
     {reviewing ? <CompanyPaymentReview payment={payment} onConfirm={() => void flow.confirm()} onBack={() => void flow.abandon()} busy={flow.busy} error={failure} />
       : status ? <CompanyPaymentStatus flow={flow} />
-        : <CompanyPaymentForm showHeading={false} chainId={flow.chainId} chainBalances={flow.chainBalances} onNetworkChange={flow.changeNetwork} balanceAtomic={flow.balanceAtomic} nativeBalanceAtomic={flow.nativeBalanceAtomic} restoring={flow.restoring} needsVerification={flow.needsVerification} amount={flow.amount} onAmountChange={flow.setAmount}
+        : <CompanyPaymentForm showHeading={false} chainId={flow.chainId} chainBalances={flow.chainBalances} onNetworkChange={id => id === 137 && onSponsoredPolygon ? onSponsoredPolygon() : flow.changeNetwork(id)} balanceAtomic={flow.balanceAtomic} nativeBalanceAtomic={flow.nativeBalanceAtomic} restoring={flow.restoring} needsVerification={flow.needsVerification} amount={flow.amount} onAmountChange={flow.setAmount}
           onMax={() => { if (flow.balanceAtomic !== null) flow.setAmount(formatPersonalCompanyPaymentAmount(flow.balanceAtomic)); }}
           onReview={flow.review} onRefresh={flow.refresh} busy={flow.busy} loading={flow.loadingBalance || (flow.verified && flow.historyLoading) || reown.linkStatus === "loading"}
           connected={flow.connected} canRefresh={flow.verified} onConnect={() => void flow.connect()} error={failure} />}
@@ -55,6 +57,7 @@ export function PersonalCompanyPayment() {
         </tbody></table></div>}
       <button className="executive-button" style={{ marginTop: 12 }} type="button" onClick={flow.refresh} disabled={flow.busy || flow.historyLoading}><RefreshCw size={16} aria-hidden="true" />{t("common.update")}</button>
     </details>
+    <CompanyPaymentActivity walletAddress={flow.wallet} />
   </div></section>;
 }
 

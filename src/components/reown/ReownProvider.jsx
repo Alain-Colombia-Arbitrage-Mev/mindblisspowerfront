@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createAppKit, useAppKit, useAppKitAccount, useAppKitProvider, useAppKitState, useAppKitTheme, useAppKitNetwork, useDisconnect } from "@reown/appkit/react";
 import { EthersAdapter } from "@reown/appkit-adapter-ethers";
+import { SolanaAdapter } from "@reown/appkit-adapter-solana/react";
 import { OnRampController } from "@reown/appkit-controllers";
-import { mainnet, polygon } from "@reown/appkit/networks";
+import { mainnet, polygon, solana } from "@reown/appkit/networks";
 import { BrowserProvider, getAddress } from "ethers";
 import { useMemberSession } from "@/lib/member-session-context";
 import { browserOnrampRegion } from "@/lib/browser-onramp-region.mjs";
@@ -15,7 +16,8 @@ import { readWalletBinding, requestWalletLink, walletBindingFailure } from "@/li
 import { personalFundingFailure } from "@/lib/personal-funding-errors.mjs";
 import { createReownFundingOperation, verifyReownWalletOwnership } from "@/lib/reown-funding-operation.mjs";
 import { createReownWalletConnectionRequest, reownWalletConnectionState } from "@/lib/reown-wallet-connection.mjs";
-import { ReownContext, useReownWallet } from "./ReownContext";
+import { useSolanaWalletBinding } from "@/hooks/useSolanaWalletBinding";
+import { ReownContext, SOLANA_WALLET_UNAVAILABLE, useReownWallet } from "./ReownContext";
 
 const projectId = process.env.NEXT_PUBLIC_REOWN_PROJECT_ID?.trim() || "";
 const configured = /^[a-f0-9]{32}$/i.test(projectId);
@@ -39,6 +41,7 @@ const unavailable = Object.freeze({
   isLinking: false,
   isRestoring: false,
   connectionStatus: "disconnected",
+  solana: SOLANA_WALLET_UNAVAILABLE,
   connectWallet: async () => { throw new Error("reown_unavailable"); },
   onrampStatus: "idle",
   onrampError: "configuration",
@@ -58,11 +61,11 @@ const unavailable = Object.freeze({
 
 if (configured) {
   createAppKit({
-    adapters: [new EthersAdapter()],
+    adapters: [new EthersAdapter(), new SolanaAdapter()],
     projectId,
-    networks: [mainnet, polygon],
+    networks: [mainnet, polygon, solana],
     defaultNetwork: mainnet,
-    defaultAccountTypes: { eip155: "eoa" },
+    defaultAccountTypes: { eip155: "eoa", solana: "eoa" },
     metadata: {
       name: "Mindbliss Power",
       description: "Conecta tu wallet personal y recarga fondos de forma segura.",
@@ -78,6 +81,9 @@ if (configured) {
     allowUnsupportedChain: false,
     allWallets: "SHOW",
     features: {
+      // The project's cloud setting must also be OFF. Better Auth and our
+      // owner-bound wallet proof remain the application's authentication gates.
+      reownAuthentication: false,
       email: true,
       socials: ["google", "apple"],
       emailShowWallets: false,
@@ -109,6 +115,10 @@ function ConfiguredReownProvider({ children }) {
   const { disconnect } = useDisconnect();
   const account = useAppKitAccount({ namespace: "eip155" });
   const { walletProvider } = useAppKitProvider("eip155");
+  const solanaAccount = useAppKitAccount({ namespace: "solana" });
+  const { walletProvider: solanaWalletProvider } = useAppKitProvider("solana");
+  const switchSolanaNetwork = useCallback(() => switchAppKitNetwork(solana), [switchAppKitNetwork]);
+  const solanaWallet = useSolanaWalletBinding({ account: solanaAccount, walletProvider: solanaWalletProvider, appKitState, open, switchNetwork: switchSolanaNetwork });
   const appKitTheme = useAppKitTheme();
   const memberSession = useMemberSession();
   const appKitThemeRef = useRef(appKitTheme);
@@ -523,6 +533,7 @@ function ConfiguredReownProvider({ children }) {
 
   const value = useMemo(() => ({
     configured: true,
+    solana: solanaWallet,
     isConnected: account.isConnected === true,
     address: currentAddress,
     status: account.status || "disconnected",
@@ -548,7 +559,7 @@ function ConfiguredReownProvider({ children }) {
     linkWallet,
     refreshLink,
     openAccount,
-  }), [account.isConnected, account.status, binding.address, binding.error, binding.status, currentAddress, isLinked, isLinking, connectionBusy, connectionStatus, connectWallet,
+  }), [solanaWallet, account.isConnected, account.status, binding.address, binding.error, binding.status, currentAddress, isLinked, isLinking, connectionBusy, connectionStatus, connectWallet,
     linkWallet, verificationError, fundingRevision, onrampState.error, onrampState.status,
     cancelOnramp, clearOnrampError, getCompanyPaymentProvider, switchCompanyPaymentNetwork, openAccount, openConnect, openOnramp, reconnectWallet, refreshLink, startOnramp]);
 

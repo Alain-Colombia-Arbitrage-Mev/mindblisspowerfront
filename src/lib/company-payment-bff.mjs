@@ -8,6 +8,7 @@ import { companyPaymentHistory, companyPaymentInput, companyPaymentView } from '
 import { FUNDING_UUID } from './wallet-funding-contract.mjs';
 import { PERSONAL_COMPANY_PAYMENT } from './personal-company-payment-values.mjs';
 import { personalWalletBalance, personalWalletBalances } from './personal-wallet-balance.mjs';
+import { companyPaymentEventInput, companyPaymentEventAck, companyPaymentEventPage, companyPaymentEventQuery } from './company-payment-events.mjs';
 
 const reply = (data, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' } });
 const safeErrors = new Set(['unauthenticated', 'invalid_origin', 'invalid_request', 'company_payment_unavailable', 'company_payment_not_found',
@@ -36,6 +37,47 @@ async function inputBody(request) {
     }
     return JSON.parse(raw + decoder.decode());
   } finally { deadline.dispose(); deadline.signal.removeEventListener('abort', cancel); reader.releaseLock(); }
+}
+
+/** Authenticated journal: browser observations and canonical server evidence stay distinct. */
+export async function handleCompanyPaymentJournal(request, action, { env = runtimeEnvironment(), fetchImpl = coreFetch, serviceRequest = boundedServiceRequest } = {}) {
+  if (!['recordEvent', 'eventHistory', 'activityHistory'].includes(action)) return reply({ error: 'invalid_request' }, 400);
+  if (env.NODE_ENV === 'production' && !['https://app.mindblisspower.com', 'https://mindbliss-portal-rewon.devfidubit.workers.dev'].includes(env.AUTH_PUBLIC_ORIGIN)) return reply({ error: 'not_found' }, 404);
+  const writing = action === 'recordEvent', method = writing ? 'POST' : 'GET';
+  if (request.method !== method) return reply({ error: 'method_not_allowed' }, 405);
+  const cookie = betterAuthCookies(request.headers.get('cookie') || '');
+  if (!cookie.split(';').some(part => /^(?:__Secure-)?better-auth\.session_token=[^;\s,]+$/.test(part.trim()))) return reply({ error: 'unauthenticated' }, 401);
+  if (env.PERSONAL_COMPANY_PAYMENTS_ENABLED !== 'true') return reply({ error: 'company_payment_unconfigured' }, 503);
+  const url = new URL(request.url);
+  let body, parsed;
+  if (writing) {
+    const denied = memberMutationError(request, env);
+    if (denied) return reply({ error: denied.error }, denied.status);
+    if (url.search) return reply({ error: 'invalid_request' }, 400);
+    const length = request.headers.get('content-length');
+    if (length !== null && (!/^\d+$/.test(length) || Number(length) > 2048)) return reply({ error: 'request_too_large' }, 413);
+    try { body = companyPaymentEventInput(await inputBody(request)); }
+    catch (error) { return reply({ error: error?.message === 'request_too_large' ? 'request_too_large' : 'invalid_request' }, error?.message === 'request_too_large' ? 413 : 400); }
+    if (!body) return reply({ error: 'invalid_request' }, 400);
+  } else {
+    parsed = companyPaymentEventQuery(url.search, action === 'eventHistory' ? 'events' : 'activity');
+    if (!parsed) return reply({ error: 'invalid_request' }, 400);
+  }
+  const path = `/api/member/company-payments/${action === 'activityHistory' ? 'activity' : 'events'}${parsed?.query || ''}`;
+  try {
+    const base = betterAuthConfig(env), serialized = body ? JSON.stringify(body) : '';
+    const ip = trustedAuthClientIp(request.headers, env), timestamp = String(Math.floor(Date.now() / 1000));
+    const hash = value => createHash('sha256').update(value).digest('hex');
+    const signature = createHmac('sha256', env.AUTH_BFF_SHARED_SECRET).update([method, path.split('?')[0], timestamp, ip, hash(cookie), hash(serialized)].join('\n')).digest('hex');
+    const result = await serviceRequest(`${base}${path}`, { method, signal: request.signal, body: serialized || undefined,
+      headers: { cookie, origin: writing ? request.headers.get('origin') || '' : env.AUTH_PUBLIC_ORIGIN,
+        ...(writing ? { 'content-type': 'application/json' } : {}), 'x-vp-auth-client-ip': ip,
+        'x-vp-auth-timestamp': timestamp, 'x-vp-auth-signature': signature } }, fetchImpl);
+    if (!result.ok) return reply({ error: safeErrors.has(result.data?.error) ? result.data.error : 'company_payment_unavailable' },
+      [400, 401, 403, 404, 409, 413, 429, 503].includes(result.status) ? result.status : 502);
+    const safe = writing ? companyPaymentEventAck(result.data, body) : companyPaymentEventPage(result.data, parsed);
+    return safe ? reply(safe) : reply({ error: 'company_payment_unavailable' }, 502);
+  } catch { return reply({ error: 'company_payment_unavailable' }, 503); }
 }
 
 /** Native sessions and the private BFF authenticate every read and mutation. */
@@ -70,7 +112,7 @@ export async function handleCompanyPayment(request, action, { env = runtimeEnvir
     const base = betterAuthConfig(env), serialized = body ? JSON.stringify(body) : '';
     const ip = trustedAuthClientIp(request.headers, env), timestamp = String(Math.floor(Date.now() / 1000));
     const hash = value => createHash('sha256').update(value).digest('hex');
-    const signature = createHmac('sha256', env.AUTH_BFF_SHARED_SECRET).update([method, path, timestamp, ip, hash(cookie), hash(serialized)].join('\n')).digest('hex');
+    const signature = createHmac('sha256', env.AUTH_BFF_SHARED_SECRET).update([method, path.split('?')[0], timestamp, ip, hash(cookie), hash(serialized)].join('\n')).digest('hex');
     const result = await serviceRequest(`${base}${path}`, { method, signal: request.signal, body: serialized || undefined,
       headers: { cookie, origin: method === 'GET' ? env.AUTH_PUBLIC_ORIGIN : request.headers.get('origin') || '', ...(body ? { 'content-type': 'application/json' } : {}),
         'x-vp-auth-client-ip': ip, 'x-vp-auth-timestamp': timestamp, 'x-vp-auth-signature': signature } }, fetchImpl);

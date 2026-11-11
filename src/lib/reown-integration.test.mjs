@@ -130,9 +130,9 @@ test('company network switching first verifies the connected bound wallet before
   }
 });
 
-test('Polygon network switching uses its fixed AppKit network and rejects every other chain without an SDK request', async () => {
-  const address = `0x${'1'.repeat(40)}`, polygon = Object.freeze({ id: 137, name: 'Polygon' });
+test('Polygon network switching uses its fixed AppKit network and rejects unsupported chains without an SDK request', async () => {
   const calls = [];
+  const polygon = Object.freeze({ id: 137 });
   const scope = { getCompanyPaymentProvider: () => calls.push('verify'), mainnet: { id: 1 }, polygon,
     switchAppKitNetwork: async network => { assert.equal(network, polygon); calls.push('polygon'); } };
   const callback = onrampCallback('switchCompanyPaymentNetwork', scope);
@@ -141,6 +141,24 @@ test('Polygon network switching uses its fixed AppKit network and rejects every 
     await assert.rejects(callback(chainId), { message: 'personal_company_chain_changed' });
   }
   assert.equal(calls.filter(value => value === 'polygon').length, 1);
+});
+
+test('one AppKit instance configures Ethereum and Solana adapters with explicitly scoped accounts', () => {
+  const text = read('../components/reown/ReownProvider.jsx');
+  const source = ts.createSourceFile('ReownProvider.jsx', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JSX);
+  const calls = [];
+  const visit = node => { if (ts.isCallExpression(node) && node.expression.getText(source) === 'createAppKit') calls.push(node); ts.forEachChild(node, visit); };
+  visit(source); assert.equal(calls.length, 1);
+  const mainnet = Object.freeze({ id: 1 }), polygon = Object.freeze({ id: 137 }), solana = Object.freeze({ id: 'mainnet-solana' });
+  class EthersAdapter {} class SolanaAdapter {}
+  const config = vm.runInNewContext(`(${calls[0].arguments[0].getText(source)})`, {
+    EthersAdapter, SolanaAdapter, mainnet, polygon, solana, projectId: 'a'.repeat(32), initialWalletTheme: 'light', themeVariables: () => ({}),
+  });
+  assert.equal(config.adapters.length, 2); assert.ok(config.adapters[0] instanceof EthersAdapter); assert.ok(config.adapters[1] instanceof SolanaAdapter);
+  assert.equal(config.networks.length, 3); assert.equal(config.networks[0], mainnet); assert.equal(config.networks[1], polygon); assert.equal(config.networks[2], solana);
+  assert.equal(config.defaultNetwork, mainnet); assert.equal(config.defaultAccountTypes.eip155, 'eoa'); assert.equal(config.defaultAccountTypes.solana, 'eoa');
+  assert.match(text, /useAppKitAccount\(\{ namespace: "solana" \}\)/); assert.match(text, /useAppKitProvider\("solana"\)/);
+  assert.match(text, /solana: solanaWallet/);
 });
 
 test('a hung SDK connect times out with a recoverable category rather than leaving the button busy', async () => {
@@ -276,13 +294,13 @@ test('personal dollar continuation explicitly forwards its currency to the inten
   assert.deepEqual(events, ['provider', 'intent', 'open']);
 });
 
-test("Reown creates EVM wallets, links one signed address and never replaces member authorization", () => {
+test("Reown creates separate EVM and Solana wallets while retaining native member authorization", () => {
   const provider = read("../components/reown/ReownProvider.jsx");
   const dashboardGate = read("../app/dashboard/layout.jsx");
   assert.match(provider, /new EthersAdapter\(\)/);
-  assert.match(provider, /networks: \[mainnet, polygon\]/);
+  assert.match(provider, /networks: \[mainnet, polygon, solana\]/);
   assert.match(provider, /defaultNetwork: mainnet/);
-  assert.match(provider, /defaultAccountTypes: \{ eip155: "eoa" \}/);
+  assert.match(provider, /defaultAccountTypes: \{ eip155: "eoa", solana: "eoa" \}/);
   assert.match(provider, /email: true/);
   assert.match(provider, /socials: \["google", "apple"\]/);
   assert.match(provider, /emailShowWallets: false/);
@@ -317,6 +335,7 @@ test("all Reown packages use the same pinned release", () => {
   const pkg = JSON.parse(read("../../package.json"));
   assert.equal(pkg.dependencies["@reown/appkit"], "1.8.24");
   assert.equal(pkg.dependencies["@reown/appkit-adapter-ethers"], "1.8.24");
+  assert.equal(pkg.dependencies["@reown/appkit-adapter-solana"], "1.8.24");
   assert.equal(pkg.dependencies["@reown/appkit-controllers"], "1.8.24");
   assert.equal(pkg.dependencies["@reown/appkit-siwx"], undefined);
 });

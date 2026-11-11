@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { companyPaymentView } from "@/lib/company-payment-contract.mjs";
-import { readCompanyPaymentHistory, writeCompanyPayment } from "@/lib/company-payment-client.mjs";
+import { readCompanyPaymentHistory, recordCompanyPaymentEvent, writeCompanyPayment } from "@/lib/company-payment-client.mjs";
 import { clearCompanyRecovery, readCompanyRecovery, saveCompanyRecovery } from "@/lib/company-payment-recovery.mjs";
 import { createPersonalCompanyPaymentTransfer, readPersonalCompanyPaymentBalance } from "@/lib/personal-company-payment.mjs";
 import { personalCompanyPaymentPolicy, personalCompanyPaymentAmountAtomic, formatPersonalCompanyPaymentAmount } from "@/lib/personal-company-payment-values.mjs";
@@ -29,6 +29,30 @@ export function companyPaymentErrorKey(failure) {
   return `companyPayment.${keys[code] || "networkUnavailable"}`;
 }
 
+/** UUIDv5 is only an idempotency key; it never authorizes or confirms a payment. */
+export async function companyPaymentAuditEventId(input) {
+  const namespace = "6ba7b8119dad11d180b400c04fd430c8".match(/../g).map(byte => Number.parseInt(byte, 16));
+  const name = new TextEncoder().encode(JSON.stringify(["mindbliss/company-payment/events/v1", input.paymentId,
+    input.attemptId || null, input.event, input.transactionHash || null, input.code || null]));
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-1", new Uint8Array([...namespace, ...name]))).slice(0, 16);
+  digest[6] = (digest[6] & 0x0f) | 0x50; digest[8] = (digest[8] & 0x3f) | 0x80;
+  const value = [...digest].map(byte => byte.toString(16).padStart(2, "0")).join("");
+  return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`;
+}
+
+function auditCode(failure, fallback = "unknown") {
+  const code = failure?.message || failure?.errorCode || "";
+  if (code === "personal_company_rejected") return "user_rejected";
+  if (["personal_company_wallet_changed", "personal_company_wallet_unavailable", "wallet_address_mismatch"].includes(code)) return "wallet_changed";
+  if (code === "personal_company_chain_changed") return "network_changed";
+  if (code === "personal_company_recovery_unavailable") return "recovery_unavailable";
+  if (["personal_company_rpc_unavailable", "company_payment_rpc_unavailable", "personal_company_gas_unavailable"].includes(code)) return "rpc_unavailable";
+  return fallback;
+}
+const terminal = value => ["confirmed", "failed"].includes(value?.status);
+const samePayment = (left, right) => ["paymentId", "walletAddress", "chainId", "tokenAddress", "tokenDecimals", "recipientAddress", "amountAtomic"]
+  .every(key => left?.[key] === right?.[key]) && (!left?.transactionHash || !right?.transactionHash || left.transactionHash === right.transactionHash);
+
 /** Signature requests happen only in confirm(), never in an effect or a retry. */
 export function useCompanyPayment(reown) {
   const sessionKey = personalWalletBalanceSessionKey(useMemberSession());
@@ -42,6 +66,7 @@ export function useCompanyPayment(reown) {
   const displayedGeneration = useRef(generation);
   const currentDisplay = displayedGeneration.current === generation;
   const registrations = useRef(new Map());
+  const auditRequests = useRef(new Map());
   const persisted = useRef(false);
   const amountEdited = useRef(false);
   owner.current = wallet;
@@ -57,11 +82,49 @@ export function useCompanyPayment(reown) {
   const [payment, setPayment] = useState(null), [stage, setStage] = useState("form"), [transfer, setTransfer] = useState(null);
   const [busy, setBusy] = useState(false), [errorKey, setErrorKey] = useState(""), [revision, setRevision] = useState(0);
   const [recovery, setRecovery] = useState(null), [manualHash, setManualHash] = useState("");
+  const busySnapshot = useRef(busy), verifyCurrent = useRef(null), polling = useRef({ key: "", deadline: 0 });
+  const terminalNotifications = useRef(new Set());
+  busySnapshot.current = busy;
   const live = useCallback(address => mounted.current && owner.current === address && epoch.current.version === generation, [generation]);
   const select = useCallback((value, nextStage = "status", registered = true) => {
     if (value && personalCompanyPaymentPolicy(value.chainId)) { activeChain.current = value.chainId; setChainId(value.chainId); }
     selected.current = value; persisted.current = registered; setPayment(value); setStage(nextStage);
   }, []);
+  const audit = useCallback((value, event, details = /** @type {any} */ ({})) => {
+    if (!verified || value?.walletAddress !== wallet || epoch.current.version !== generation) return;
+    const input = { paymentId: value.paymentId, event,
+      ...(details.attemptId ? { attemptId: details.attemptId } : {}),
+      ...(details.transactionHash ? { transactionHash: details.transactionHash } : {}),
+      ...(details.code ? { code: details.code } : {}) };
+    const key = `${generation}:${JSON.stringify(input)}`;
+    if (auditRequests.current.has(key)) return;
+    // This journal supplements canonical prepare/submit/receipt records. A log
+    // outage must never queue another signature or interrupt hash recovery.
+    const operation = Promise.resolve().then(async () => {
+      const eventId = await companyPaymentAuditEventId(input);
+      if (epoch.current.version !== generation) return;
+      await recordCompanyPaymentEvent({ ...input, eventId }, { isActive: () => epoch.current.version === generation });
+    }).catch(() => { if (auditRequests.current.get(key) === operation) auditRequests.current.delete(key); });
+    auditRequests.current.set(key, operation);
+    if (auditRequests.current.size > 128) auditRequests.current.delete(auditRequests.current.keys().next().value);
+  }, [verified, wallet, generation]);
+  const finishTerminal = useCallback(value => {
+    if (!terminal(value) || !live(wallet) || value.walletAddress !== wallet || selected.current?.paymentId !== value.paymentId) return;
+    const notification = `${generation}:${value.paymentId}`;
+    if (!terminalNotifications.current.has(notification)) {
+      terminalNotifications.current.add(notification);
+      if (terminalNotifications.current.size > 64) terminalNotifications.current.delete(terminalNotifications.current.values().next().value);
+      try { window.dispatchEvent(new Event("vp:personal-wallet-balance-changed")); } catch { /* receipt state does not depend on browser events */ }
+    }
+    const marker = readCompanyRecovery(window.localStorage, wallet, value.paymentId);
+    if (marker?.transactionHash && marker.transactionHash !== value.transactionHash) {
+      setRecovery(marker); setErrorKey("companyPayment.paymentFailed"); setStage("status"); return;
+    }
+    clearCompanyRecovery(window.localStorage, wallet, value.paymentId);
+    setRecovery(current => current?.paymentId === value.paymentId ? null : current);
+    setTransfer(current => current?.paymentId === value.paymentId ? null : current);
+    setManualHash(""); setErrorKey(""); setStage("status");
+  }, [live, wallet, generation]);
 
   useEffect(() => {
     mounted.current = true;
@@ -85,15 +148,25 @@ export function useCompanyPayment(reown) {
       const result = await readCompanyPaymentHistory({ signal });
       if (!live(wallet) || signal?.aborted) return;
       if (result.records.some(record => record.walletAddress !== wallet)) throw new Error("personal_company_wallet_changed");
+      const current = selected.current;
+      const latest = current && result.records.find(record => record.paymentId === current.paymentId);
+      if (latest && !samePayment(current, latest)) throw new Error("company_payment_transaction_mismatch");
       setHistory({ wallet, loading: false, records: result.records, error: "" });
+      if (latest && (terminal(current) || terminal(latest))) {
+        const accepted = terminal(current) ? current : latest;
+        select(accepted); finishTerminal(accepted);
+        if (!terminal(current)) setRevision(number => number + 1);
+      }
       const pending = result.records.find(record => record.status === "submitted" || (record.status === "prepared" && ((!record.abandonedAt && Date.parse(record.expiresAt) > Date.now()) || readCompanyRecovery(window.localStorage, record.walletAddress, record.paymentId))));
       if (!selected.current && pending) {
-        select(pending); setRecovery(readCompanyRecovery(window.localStorage, pending.walletAddress, pending.paymentId));
+        const marker = readCompanyRecovery(window.localStorage, pending.walletAddress, pending.paymentId);
+        select(pending); setRecovery(marker);
+        if (marker) audit(pending, "recovery_detected", { attemptId: marker.attemptId, transactionHash: marker.transactionHash });
       }
     } catch (failure) {
       if (live(wallet) && !signal?.aborted) setHistory({ wallet, loading: false, records: [], error: companyPaymentErrorKey(failure) });
     }
-  }, [verified, wallet, live, select]);
+  }, [verified, wallet, live, select, audit, finishTerminal]);
 
   useEffect(() => {
     const request = new AbortController();
@@ -145,26 +218,37 @@ export function useCompanyPayment(reown) {
     const safe = companyPaymentView(value);
     if (!safe) throw new Error("company_payment_unavailable");
     const current = selected.current;
-    if (current?.paymentId === safe.paymentId && (current.chainId !== safe.chainId || current.tokenAddress !== safe.tokenAddress)) throw new Error("company_payment_unavailable");
-    if (current && current.paymentId === safe.paymentId && ["confirmed", "failed"].includes(current.status)) return current;
-    if (live(wallet) && (!current || current.paymentId === safe.paymentId)) select(safe, safe.status === "prepared" && !safe.abandonedAt ? "review" : "status");
+    if (current?.paymentId === safe.paymentId && !samePayment(current, safe)) throw new Error("company_payment_unavailable");
+    if (current && current.paymentId === safe.paymentId && terminal(current)) { finishTerminal(current); return current; }
+    if (current?.paymentId === safe.paymentId && current.transactionHash && !safe.transactionHash) return current;
+    if (live(wallet) && (!current || current.paymentId === safe.paymentId)) {
+      select(safe, safe.status === "prepared" && !safe.abandonedAt ? "review" : "status"); finishTerminal(safe);
+    }
     return safe;
-  }, [live, wallet, select]);
+  }, [live, wallet, select, finishTerminal]);
 
   function registerHash(value, hash) {
     const key = `${value.paymentId}:${hash}`;
     if (registrations.current.has(key)) return registrations.current.get(key);
+    const marker = readCompanyRecovery(window.localStorage, value.walletAddress, value.paymentId);
     const operation = (async () => {
       let saved = await writeCompanyPayment("submit", { paymentId: value.paymentId, transactionHash: hash });
       if (saved.walletAddress !== value.walletAddress || saved.amountAtomic !== value.amountAtomic || saved.chainId !== value.chainId || saved.tokenAddress !== value.tokenAddress) throw new Error("company_payment_unavailable");
       const current = selected.current;
-      if (current?.paymentId === saved.paymentId && ["confirmed", "failed"].includes(current.status)) saved = current;
+      if (current?.paymentId === saved.paymentId && terminal(current)) {
+        if (current.transactionHash !== hash) throw new Error("company_payment_transaction_mismatch");
+        saved = current;
+      }
       if (["confirmed", "failed"].includes(saved.status)) clearCompanyRecovery(window.localStorage, saved.walletAddress, saved.paymentId);
       else saveCompanyRecovery(window.localStorage, { version: 1, paymentId: saved.paymentId, walletAddress: saved.walletAddress,
-        chainId: saved.chainId, amountAtomic: saved.amountAtomic, phase: "submitted", transactionHash: hash });
+        chainId: saved.chainId, amountAtomic: saved.amountAtomic, phase: "submitted", transactionHash: hash,
+        ...(marker?.attemptId ? { attemptId: marker.attemptId } : {}) });
       if (live(wallet) && (!current || current.paymentId === saved.paymentId)) { save(saved); setRecovery(readCompanyRecovery(window.localStorage, saved.walletAddress, saved.paymentId)); setErrorKey(""); }
       return saved;
-    })().finally(() => { if (registrations.current.get(key) === operation) registrations.current.delete(key); });
+    })().catch(failure => {
+      audit(value, "registration_failed", { attemptId: marker?.attemptId, transactionHash: hash, code: "registration_unavailable" });
+      throw failure;
+    }).finally(() => { if (registrations.current.get(key) === operation) registrations.current.delete(key); });
     registrations.current.set(key, operation);
     return operation;
   }
@@ -206,9 +290,13 @@ export function useCompanyPayment(reown) {
     const preview = selected.current;
     if (!currentDisplay || !live(wallet) || activeChain.current !== chainId || inflight.current || !connected || !preview || !personalCompanyPaymentPolicy(chainId) || preview.chainId !== chainId || preview.status !== "prepared" || preview.abandonedAt || preview.walletAddress !== wallet || balance.balanceAtomic === null) return;
     const stored = readCompanyRecovery(window.localStorage, wallet, preview.paymentId);
-    if (stored) { setRecovery(stored); setStage("status"); setErrorKey("companyPayment.ambiguousCopy"); return; }
+    if (stored) {
+      if (persisted.current) audit(preview, "recovery_detected", { attemptId: stored.attemptId, transactionHash: stored.transactionHash });
+      setRecovery(stored); setStage("status"); setErrorKey("companyPayment.ambiguousCopy"); return;
+    }
     const operation = {}; inflight.current = operation; setBusy(true); setErrorKey("");
     const request = new AbortController(); controller.current = request;
+    let auditPayment = null, attemptId;
     try {
       // Display reads do not need AppKit. Signing still verifies its live
       // account, network and exact token balance before preparing any payment.
@@ -221,6 +309,7 @@ export function useCompanyPayment(reown) {
       if (prepared.status !== "prepared" || prepared.abandonedAt) { save(prepared); return; }
       save(prepared);
       const marker = { version: 1, paymentId: prepared.paymentId, walletAddress: wallet, chainId: prepared.chainId, amountAtomic: prepared.amountAtomic, phase: "signing", transactionHash: null, attemptId: crypto.randomUUID() };
+      auditPayment = prepared; attemptId = marker.attemptId;
       const sender = createPersonalCompanyPaymentTransfer({ walletProvider: reown.getCompanyPaymentProvider(), walletAddress: wallet, chainId: prepared.chainId,
         onDispatchStart() {
           if (request.signal.aborted || inflight.current !== operation || !live(wallet)) throw new DOMException("Aborted", "AbortError");
@@ -228,6 +317,11 @@ export function useCompanyPayment(reown) {
           saveCompanyRecovery(window.localStorage, marker); if (live(wallet)) setRecovery(marker);
         },
         onStateChange(value) {
+          if (selected.current?.paymentId === prepared.paymentId && terminal(selected.current)) { finishTerminal(selected.current); return; }
+          if (value.phase === "signing") audit(prepared, "wallet_prompt_opened", { attemptId });
+          if (value.phase === "rejected") audit(prepared, "wallet_rejected", { attemptId, code: "user_rejected" });
+          if (value.phase === "ambiguous") audit(prepared, "broadcast_uncertain", { attemptId, code: auditCode(value) });
+          if (value.phase === "reviewing" && !value.transactionMayExist && value.errorCode) audit(prepared, "wallet_failed", { attemptId, code: auditCode(value) });
           if (value.phase === "rejected" || (value.phase === "reviewing" && !value.transactionMayExist && value.errorCode)) {
             const current = readCompanyRecovery(window.localStorage, wallet, prepared.paymentId);
             if (current?.attemptId === marker.attemptId) clearCompanyRecovery(window.localStorage, wallet, prepared.paymentId);
@@ -235,6 +329,11 @@ export function useCompanyPayment(reown) {
           if (live(wallet) && selected.current?.paymentId === prepared.paymentId) { setTransfer(value); setRecovery(readCompanyRecovery(window.localStorage, wallet, prepared.paymentId)); }
         },
         async onBroadcast(value) {
+          audit(prepared, "broadcast_observed", { attemptId, transactionHash: value.transactionHash });
+          if (selected.current?.paymentId === prepared.paymentId && selected.current.walletAddress === wallet && terminal(selected.current)
+            && selected.current.transactionHash === value.transactionHash) {
+            clearCompanyRecovery(window.localStorage, wallet, prepared.paymentId); finishTerminal(selected.current); return;
+          }
           // Persist and register a late hash even if its page was closed. Never
           // repeat the transfer when only backend registration needs a retry.
           const broadcast = { ...marker, phase: "broadcast", transactionHash: value.transactionHash };
@@ -254,9 +353,10 @@ export function useCompanyPayment(reown) {
         if (readCompanyRecovery(window.localStorage, wallet, prepared.paymentId)) throw new Error("personal_company_previous_payment_unresolved");
         return sender.sendPrepared(prepared, { signal: request.signal, reviewedBalanceAtomic: balance.balanceAtomic });
       });
-      if (live(wallet) && outcome?.phase === "ambiguous") { setStage("status"); setErrorKey("companyPayment.ambiguousCopy"); }
-      if (live(wallet) && outcome?.phase === "rejected") setErrorKey("companyPayment.rejected");
+      if (live(wallet) && !terminal(selected.current) && outcome?.phase === "ambiguous") { setStage("status"); setErrorKey("companyPayment.ambiguousCopy"); }
+      if (live(wallet) && !terminal(selected.current) && outcome?.phase === "rejected") setErrorKey("companyPayment.rejected");
     } catch (failure) {
+      if (auditPayment && failure?.name !== "AbortError") audit(auditPayment, "wallet_failed", { attemptId, code: auditCode(failure) });
       if (live(wallet)) { setErrorKey(companyPaymentErrorKey(failure)); if (failure?.message === "company_payment_pending_exists") { select(null, "status", false); void refreshHistory(); } }
     } finally {
       if (inflight.current === operation) { inflight.current = null; if (live(wallet)) setBusy(false); }
@@ -264,27 +364,72 @@ export function useCompanyPayment(reown) {
     }
   }
 
-  async function verifyPayment() {
+  /** @param {{ signal?: AbortSignal }} [options] */
+  async function verifyPayment({ signal } = {}) {
     const value = selected.current;
-    if (!currentDisplay || !live(wallet) || !verified || !value || inflight.current) return;
+    if (!currentDisplay || !live(wallet) || !verified || !value || inflight.current || signal?.aborted) return;
     const operation = {}; inflight.current = operation; setBusy(true); setErrorKey("");
+    const request = new AbortController(); controller.current = request;
+    const abort = () => request.abort(); signal?.addEventListener("abort", abort, { once: true });
+    const marker = readCompanyRecovery(window.localStorage, value.walletAddress, value.paymentId);
+    const hash = value.transactionHash || recovery?.transactionHash || manualHash.trim().toLowerCase();
+    const auditDetails = { attemptId: marker?.attemptId, ...(/^0x[0-9a-f]{64}$/.test(hash) ? { transactionHash: hash } : {}) };
+    if (marker) audit(value, "recovery_detected", auditDetails);
+    audit(value, "verification_requested", auditDetails);
     try {
-      const hash = recovery?.transactionHash || manualHash.trim().toLowerCase();
       let registered = value;
       if (!value.transactionHash) {
         if (!/^0x[0-9a-f]{64}$/.test(hash)) throw new Error("company_payment_transaction_pending");
         registered = await registerHash(value, hash);
       }
-      const result = await writeCompanyPayment("verify", { paymentId: registered.paymentId });
+      if (request.signal.aborted || !live(wallet)) return;
+      const result = await writeCompanyPayment("verify", { paymentId: registered.paymentId }, { signal: request.signal });
       if (result.walletAddress !== value.walletAddress || result.amountAtomic !== value.amountAtomic || result.chainId !== value.chainId || result.tokenAddress !== value.tokenAddress) throw new Error("company_payment_unavailable");
-      if (live(wallet)) {
+      if (live(wallet) && !request.signal.aborted) {
         save(result);
-        if (["confirmed", "failed"].includes(result.status)) { clearCompanyRecovery(window.localStorage, result.walletAddress, result.paymentId); setRecovery(null); setManualHash(""); }
         setRevision(number => number + 1);
       }
-    } catch (failure) { if (live(wallet)) setErrorKey(companyPaymentErrorKey(failure)); }
-    finally { if (inflight.current === operation) { inflight.current = null; if (live(wallet)) setBusy(false); } }
+    } catch (failure) {
+      if (!request.signal.aborted && failure?.name !== "AbortError") {
+        audit(value, "verification_failed", { ...auditDetails, code: auditCode(failure, "verification_unavailable") });
+        if (live(wallet)) setErrorKey(companyPaymentErrorKey(failure));
+      }
+    }
+    finally {
+      signal?.removeEventListener("abort", abort);
+      if (controller.current === request) controller.current = null;
+      if (inflight.current === operation) { inflight.current = null; if (live(wallet)) setBusy(false); }
+    }
   }
+  verifyCurrent.current = verifyPayment;
+
+  useEffect(() => {
+    if (!verified || !live(wallet) || payment?.status !== "submitted" || !payment.transactionHash || typeof document === "undefined") return undefined;
+    const key = `${generation}:${wallet}:${payment.paymentId}`;
+    if (polling.current.key !== key) polling.current = { key, deadline: Date.now() + 15 * 60_000 };
+    let stopped = false, timer, request;
+    const eligible = () => !stopped && live(wallet) && selected.current?.paymentId === payment.paymentId
+      && selected.current.status === "submitted" && Date.now() < polling.current.deadline;
+    const schedule = () => {
+      clearTimeout(timer);
+      if (eligible() && document.visibilityState === "visible") {
+        timer = setTimeout(check, Math.min(12_000, polling.current.deadline - Date.now())); timer?.unref?.();
+      }
+    };
+    const check = async () => {
+      if (!eligible() || document.visibilityState !== "visible") return;
+      if (busySnapshot.current || inflight.current) { schedule(); return; }
+      request = new AbortController();
+      try { await verifyCurrent.current({ signal: request.signal }); }
+      finally { request = null; schedule(); }
+    };
+    const visibility = () => {
+      if (document.visibilityState === "visible") schedule();
+      else { clearTimeout(timer); request?.abort(); }
+    };
+    document.addEventListener("visibilitychange", visibility); schedule();
+    return () => { stopped = true; clearTimeout(timer); request?.abort(); document.removeEventListener("visibilitychange", visibility); };
+  }, [verified, live, wallet, generation, payment?.paymentId, payment?.status, payment?.transactionHash]);
 
   async function connect() {
     if (!currentDisplay || !live(wallet) || !sessionKey || busy || inflight.current || reown.isRestoring) return;
@@ -355,16 +500,19 @@ export function useCompanyPayment(reown) {
       const safe = companyPaymentView(value);
       if (!currentDisplay || !live(wallet) || !verified || !safe || safe.walletAddress !== wallet || inflight.current) return;
       const current = selected.current;
-      if (current?.paymentId === safe.paymentId && (current.chainId !== safe.chainId || current.tokenAddress !== safe.tokenAddress)) {
+      if (current?.paymentId === safe.paymentId && !samePayment(current, safe)) {
         setErrorKey("companyPayment.networkUnavailable"); return;
+      }
+      if (current?.paymentId === safe.paymentId && (terminal(current) || (current.transactionHash && !safe.transactionHash))) {
+        finishTerminal(current); return;
       }
       if (current && current.paymentId !== safe.paymentId && (readCompanyRecovery(window.localStorage, current.walletAddress, current.paymentId)
         || transfer?.transactionMayExist || (persisted.current && (current.status === "submitted" || (current.status === "prepared" && !current.abandonedAt))))) {
         setErrorKey("companyPayment.pendingExists"); setStage("status"); return;
       }
       select(safe); setManualHash("");
-      if (["confirmed", "failed"].includes(safe.status)) clearCompanyRecovery(window.localStorage, safe.walletAddress, safe.paymentId);
-      setRecovery(readCompanyRecovery(window.localStorage, safe.walletAddress, safe.paymentId)); setErrorKey("");
+      if (terminal(safe)) finishTerminal(safe);
+      else { setRecovery(readCompanyRecovery(window.localStorage, safe.walletAddress, safe.paymentId)); setErrorKey(""); }
     },
   };
 }

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { webcrypto } from 'node:crypto';
 import React from 'react';
 import ts from 'typescript';
 import * as contracts from '../lib/company-payment-contract.mjs';
@@ -26,6 +27,7 @@ function clock() {
       for (const [id, timer] of [...timers]) if (timer.at <= now && timers.delete(id)) timer.callback();
     },
     get pending() { return timers.size; },
+    get now() { return now; },
   };
 }
 function lockManager() {
@@ -47,7 +49,7 @@ const confirmed = patch => payment({ status: 'confirmed', transactionHash, block
 
 /** Run the actual hook with persistent React state/effects; every transport and wallet dependency is synthetic. */
 function harness(overrides = {}) {
-  const slots = [], effects = [], calls = [], storage = overrides.storage || new Map();
+  const slots = [], effects = [], calls = [], auditEvents = [], storage = overrides.storage || new Map();
   let cursor = 0, dirty = true, current, sourceWallet = wallet, nextId = 0;
   let sourceSession = { subject: 'owner-A', email: 'member@example.test' };
   const localStorage = { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) };
@@ -76,6 +78,7 @@ function harness(overrides = {}) {
     switchCompanyPaymentNetwork: switchProviderNetwork,
     openConnect: () => assert.fail('unexpected wallet connection'), linkWallet: () => assert.fail('unexpected signature'), ...overrides.reown });
   const client = {
+    async recordCompanyPaymentEvent(input, options) { auditEvents.push({ input, options }); return overrides.audit?.(input, options); },
     async readCompanyPaymentHistory(options) { calls.push({ action: 'history' }); return overrides.history ? overrides.history(options) : { records: [] }; },
     async writeCompanyPayment(action, input, options) {
       calls.push({ action, input, options });
@@ -94,6 +97,7 @@ function harness(overrides = {}) {
         sdk.sends.push({ prepared, config });
         if (overrides.send) return overrides.send(options, prepared, config, sender);
         options.onDispatchStart();
+        options.onStateChange({ paymentId: prepared.paymentId, phase: 'signing', transactionMayExist: true });
         options.onStateChange({ paymentId: prepared.paymentId, phase: 'rejected', transactionMayExist: false });
         return { phase: 'rejected' };
       } };
@@ -119,13 +123,13 @@ function harness(overrides = {}) {
       for (const record of response.balances) sdk.balances.set(`${requestedWallet}:${record.chainId}`, record.balanceAtomic);
       return response;
     } } };
-  new Function('require', 'module', 'exports', 'window', 'document', 'crypto', 'navigator', 'globalThis', 'setTimeout', 'clearTimeout', code)(id => {
+  new Function('require', 'module', 'exports', 'window', 'document', 'crypto', 'navigator', 'globalThis', 'setTimeout', 'clearTimeout', 'Date', code)(id => {
     assert.ok(Object.hasOwn(imports, id), `Unexpected hook dependency ${id}`); return imports[id];
-  }, module, module.exports, browser, documentRef, { randomUUID: () => (++nextId === 1 ? paymentId : otherId) },
-  browserNavigator, { navigator: browserNavigator }, overrides.setTimeout || setTimeout, overrides.clearTimeout || clearTimeout);
+  }, module, module.exports, browser, documentRef, { randomUUID: () => (++nextId === 1 ? paymentId : otherId), subtle: webcrypto.subtle },
+  browserNavigator, { navigator: browserNavigator }, overrides.setTimeout || setTimeout, overrides.clearTimeout || clearTimeout, overrides.Date || Date);
   function render() { cursor = 0; dirty = false; current = module.exports.useCompanyPayment(reown()); }
   return {
-    get flow() { return current; }, calls, sdk, localStorage, browser, documentRef,
+    get flow() { return current; }, calls, auditEvents, sdk, localStorage, browser, documentRef,
     async flush() {
       let quiet = 0;
       for (let turn = 0; turn < 40; turn++) {
@@ -143,6 +147,14 @@ function harness(overrides = {}) {
 }
 async function preview(h, amount = '25.123456') { h.flow.setAmount(amount); await h.flush(); h.flow.review(); await h.flush(); }
 const writes = h => h.calls.filter(call => call.action !== 'history').map(call => call.action);
+async function waitForAudits(h, count) {
+  for (let turn = 0; turn < 40; turn++) {
+    await h.flush();
+    if (h.auditEvents.length >= count) return;
+    await new Promise(resolve => setTimeout(resolve, 5));
+  }
+  assert.fail(`Expected ${count} audit observations, received ${h.auditEvents.length}`);
+}
 
 test('the bound owner sees Ethereum funds without an SDK connection and refresh never initiates a transfer', async t => {
   const h = harness({ reown: { isConnected: false, isLinked: false } }); t.after(() => h.unmount());
@@ -224,6 +236,7 @@ function page(h) {
     if (id === '@/lib/personal-company-payment-values.mjs') return values;
     if (id === '@/lib/company-payment-contract.mjs') return contracts;
     if (id === './CompanyPaymentForm') return { CompanyPaymentForm: 'CompanyPaymentForm', CompanyPaymentReview: 'CompanyPaymentReview' };
+    if (id === './CompanyPaymentActivity') return { default: () => null };
     if (id.endsWith('.module.css')) return { default: new Proxy({}, { get: (_target, name) => name }) };
     assert.fail(`Unexpected payment page dependency ${id}`);
   }, module, module.exports);
@@ -599,4 +612,216 @@ test('Review exposes wrong-chain and RPC failures, and a changed live balance re
   const h=harness({preflightBalance:async()=>({balanceAtomic:'30000000'})});t.after(()=>h.unmount());await h.flush();
   await h.flow.review();await h.flush();assert.equal(h.flow.balanceAtomic,'30000000');assert.equal(h.flow.payment,null);assert.equal(h.flow.errorKey,'companyPayment.balanceChanged');
   await h.flow.review();await h.flush();assert.equal(h.flow.stage,'review');assert.deepEqual(writes(h),[]);assert.equal(h.sdk.sends.length,0);
+});
+
+test('only a prepared transfer reports bounded client observations and rejecting a wallet never confirms payment', async t => {
+  const h = harness(); t.after(() => h.unmount()); await h.flush(); await preview(h);
+  assert.deepEqual(h.auditEvents, []);
+  await h.flow.confirm(); await waitForAudits(h, 2);
+  const events = h.auditEvents.map(({ input }) => input);
+  assert.deepEqual(events.map(value => value.event).sort(), ['wallet_prompt_opened', 'wallet_rejected']);
+  assert.ok(events.every(value => value.paymentId === paymentId && value.attemptId === otherId));
+  assert.ok(events.every(value => /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value.eventId)));
+  assert.ok(events.every(value => Object.keys(value).every(key => ['eventId', 'paymentId', 'attemptId', 'event', 'code'].includes(key))));
+  assert.equal(events.find(value => value.event === 'wallet_rejected').code, 'user_rejected');
+  assert.equal(h.flow.payment.status, 'prepared'); assert.equal(h.flow.payment.transactionHash, null);
+  assert.deepEqual(writes(h), ['prepare']); assert.equal(h.sdk.sends.length, 1);
+});
+
+test('an audit outage cannot block the canonical prepare, wallet result or mandatory hash recovery', async t => {
+  const h = harness({ audit: async () => { throw Error('offline'); },
+    async send(options) {
+      options.onDispatchStart(); options.onStateChange({ phase: 'signing', transactionMayExist: true });
+      options.onStateChange({ phase: 'reviewing', transactionMayExist: false, errorCode: 'private raw provider details' });
+      throw Error('private raw provider details');
+    } });
+  t.after(() => h.unmount()); await h.flush(); await preview(h); await h.flow.confirm(); await waitForAudits(h, 2);
+  assert.deepEqual(writes(h), ['prepare']); assert.equal(h.sdk.sends.length, 1);
+  assert.ok(h.auditEvents.every(({ input }) => !JSON.stringify(input).includes('private raw provider details')));
+  assert.equal(h.auditEvents.find(({ input }) => input.event === 'wallet_failed').input.code, 'unknown');
+  assert.equal(h.flow.busy, false); assert.equal(h.flow.recovery, null);
+});
+
+test('an ambiguous send retains and registers a late hash after unmount while reporting observations without a client confirmation', async () => {
+  let callback;
+  const h = harness({ async send(options) {
+    options.onDispatchStart(); options.onStateChange({ phase: 'signing', transactionMayExist: true });
+    options.onStateChange({ phase: 'ambiguous', transactionMayExist: true, errorCode: 'personal_company_broadcast_ambiguous' });
+    callback = options.onBroadcast; return { phase: 'ambiguous' };
+  } });
+  await h.flush(); await preview(h); await h.flow.confirm(); await waitForAudits(h, 2);
+  assert.equal(h.flow.recovery.phase, 'signing'); h.unmount();
+  await callback({ transactionHash }); await waitForAudits(h, 3);
+  assert.deepEqual(writes(h), ['prepare', 'submit']); assert.equal(h.sdk.sends.length, 1);
+  assert.equal(recovery.readCompanyRecovery(h.localStorage, wallet, paymentId).transactionHash, transactionHash);
+  assert.equal(recovery.readCompanyRecovery(h.localStorage, wallet, paymentId).attemptId, otherId);
+  assert.deepEqual(h.auditEvents.map(({ input }) => input.event).sort(), ['broadcast_observed', 'broadcast_uncertain', 'wallet_prompt_opened']);
+  assert.equal(h.auditEvents.find(({ input }) => input.event === 'broadcast_observed').input.transactionHash, transactionHash);
+});
+
+test('legacy recovery observations are idempotent across reloads, omit unknown attempts and never dispatch another transfer', async () => {
+  const storage = new Map(), marker = { version: 1, paymentId, walletAddress: wallet, chainId: 1,
+    amountAtomic: balanceAtomic, phase: 'broadcast', transactionHash };
+  const a = harness({ storage, history: async () => ({ records: [payment()] }) });
+  recovery.saveCompanyRecovery(a.localStorage, marker);
+  await waitForAudits(a, 1); const event = a.auditEvents[0].input;
+  assert.equal(event.event, 'recovery_detected'); assert.equal('attemptId' in event, false);
+  a.flow.refresh(); await a.flush(); assert.equal(a.auditEvents.length, 1);
+  a.unmount();
+  const b = harness({ storage, history: async () => ({ records: [payment()] }) });
+  try {
+    await waitForAudits(b, 1); assert.deepEqual(b.auditEvents[0].input, event);
+    await b.flow.verifyPayment(); await waitForAudits(b, 2);
+    assert.ok(b.auditEvents.some(({ input }) => input.event === 'verification_requested' && input.transactionHash === transactionHash));
+    assert.equal(b.flow.payment.status, 'confirmed');
+    assert.ok(b.auditEvents.every(({ input }) => !['confirmed', 'submitted', 'failed'].includes(input.event)));
+    assert.equal(b.sdk.sends.length, 0); assert.deepEqual(writes(b), ['submit', 'verify']);
+  } finally { b.unmount(); }
+});
+
+test('an old owner audit scope becomes inactive and late hash observations cannot publish under a new session', async t => {
+  let callback;
+  const h = harness({ async send(options) {
+    options.onDispatchStart(); options.onStateChange({ phase: 'signing', transactionMayExist: true });
+    callback = options.onBroadcast; return { phase: 'ambiguous' };
+  } }); t.after(() => h.unmount());
+  await h.flush(); await preview(h); await h.flow.confirm(); await waitForAudits(h, 1);
+  const scope = h.auditEvents[0].options.isActive; assert.equal(scope(), true);
+  await h.session({ subject: 'owner-B', email: 'member@example.test' }); assert.equal(scope(), false);
+  await callback({ transactionHash }); await h.flush();
+  assert.equal(h.auditEvents.length, 1); assert.equal(h.flow.payment, null); assert.equal(h.flow.recovery, null);
+  assert.equal(h.sdk.sends.length, 1);
+});
+
+test('registration and verification failures remain distinct observations while recovery reuses the known hash without another send', async t => {
+  let submits = 0;
+  const h = harness({
+    async write(action, input) {
+      if (action === 'prepare') return payment({ paymentId: input.requestId });
+      if (action === 'submit') {
+        if (++submits === 1) throw Error('company_payment_rpc_unavailable');
+        return payment({ status: 'submitted', transactionHash });
+      }
+      assert.equal(action, 'verify'); throw Error('provider details that must stay private');
+    },
+    async send(options) {
+      options.onDispatchStart(); options.onStateChange({ phase: 'signing', transactionMayExist: true });
+      await options.onBroadcast({ transactionHash }); return { phase: 'broadcast', transactionHash };
+    },
+  }); t.after(() => h.unmount());
+  await h.flush(); await preview(h); await h.flow.confirm(); await waitForAudits(h, 3);
+  assert.equal(h.auditEvents.find(({ input }) => input.event === 'registration_failed').input.code, 'registration_unavailable');
+  assert.equal(h.flow.recovery.transactionHash, transactionHash);
+  await h.flow.verifyPayment(); await waitForAudits(h, 6);
+  const failed = h.auditEvents.find(({ input }) => input.event === 'verification_failed').input;
+  assert.equal(failed.code, 'verification_unavailable'); assert.equal(failed.transactionHash, transactionHash); assert.equal(failed.attemptId, otherId);
+  assert.ok(h.auditEvents.some(({ input }) => input.event === 'recovery_detected'));
+  assert.ok(h.auditEvents.some(({ input }) => input.event === 'verification_requested'));
+  assert.ok(h.auditEvents.every(({ input }) => !JSON.stringify(input).includes('provider details')));
+  assert.equal(h.sdk.sends.length, 1); assert.deepEqual(writes(h), ['prepare', 'submit', 'submit', 'verify']);
+  assert.equal(h.flow.payment.status, 'submitted'); assert.equal(h.flow.recovery.attemptId, otherId);
+});
+
+test('refresh adopts the exact canonical confirmation, clears only its recovery and refreshes the balance before enabling another payment', async t => {
+  let settled = false, notifications = 0;
+  const h = harness({ history: async () => ({ records: [settled ? confirmed() : payment({ status: 'submitted', transactionHash })] }),
+    balance: async () => ({ balanceAtomic: settled ? '0' : balanceAtomic }) }); t.after(() => h.unmount());
+  h.browser.addEventListener('vp:personal-wallet-balance-changed', () => notifications++);
+  recovery.saveCompanyRecovery(h.localStorage, { version: 1, paymentId, walletAddress: wallet, chainId: 1,
+    amountAtomic: balanceAtomic, phase: 'submitted', transactionHash });
+  await h.flush(); assert.equal(h.flow.payment.status, 'submitted'); assert.ok(h.flow.recovery);
+  h.flow.setManualHash(transactionHash); await h.flush(); settled = true; h.flow.refresh(); await h.flush();
+  assert.equal(h.flow.payment.status, 'confirmed'); assert.equal(h.flow.recovery, null); assert.equal(h.flow.transfer, null);
+  assert.equal(h.flow.manualHash, ''); assert.equal(h.flow.balanceAtomic, '0'); assert.equal(h.flow.errorKey, '');
+  assert.equal(notifications, 1);
+  h.flow.refresh(); await h.flush(); h.flow.selectHistory(confirmed()); await h.flush();
+  assert.equal(notifications, 1, 're-reading an already confirmed payment must not loop shared balance refreshes');
+  assert.equal(recovery.readCompanyRecovery(h.localStorage, wallet, paymentId), null);
+  await h.flow.confirm(); await h.flush(); assert.equal(h.sdk.sends.length, 0); assert.deepEqual(writes(h), []);
+  h.flow.newPayment(); await h.flush(); assert.equal(h.flow.stage, 'form'); assert.equal(h.flow.payment, null);
+});
+
+test('a late ambiguous state and matching broadcast cannot recreate a guard over a canonical payment already received', async t => {
+  let settled = false, callbacks;
+  const h = harness({ history: async () => ({ records: settled ? [confirmed()] : [] }),
+    async send(options) {
+      callbacks = options; options.onDispatchStart();
+      options.onStateChange({ paymentId, phase: 'ambiguous', transactionMayExist: true }); return { phase: 'ambiguous' };
+    } }); t.after(() => h.unmount());
+  await h.flush(); await preview(h); await h.flow.confirm(); await h.flush(); assert.ok(h.flow.recovery);
+  settled = true; h.flow.refresh(); await h.flush(); assert.equal(h.flow.payment.status, 'confirmed');
+  callbacks.onStateChange({ paymentId, phase: 'ambiguous', transactionMayExist: true });
+  await callbacks.onBroadcast({ transactionHash }); await h.flush();
+  assert.equal(h.flow.recovery, null); assert.equal(h.flow.transfer, null); assert.equal(h.flow.errorKey, '');
+  assert.equal(recovery.readCompanyRecovery(h.localStorage, wallet, paymentId), null);
+  assert.deepEqual(writes(h), ['prepare']); assert.equal(h.sdk.sends.length, 1);
+  h.flow.newPayment(); await h.flush(); assert.equal(h.flow.stage, 'form'); assert.equal(h.flow.payment, null);
+});
+
+test('a different recovery hash or changed immutable payment is never silently cleared by a canonical receipt', async () => {
+  const otherHash = `0x${'9'.repeat(64)}`;
+  for (const mismatch of ['hash', 'amount']) {
+    let settled = false;
+    const h = harness({ history: async () => ({ records: settled ? [confirmed(mismatch === 'amount' ? { amountAtomic: '1000000' } : {})] : [payment()] }) });
+    try {
+      recovery.saveCompanyRecovery(h.localStorage, { version: 1, paymentId, walletAddress: wallet, chainId: 1,
+        amountAtomic: balanceAtomic, phase: 'broadcast', transactionHash: mismatch === 'hash' ? otherHash : transactionHash });
+      await h.flush(); settled = true; h.flow.refresh(); await h.flush();
+      assert.ok(h.flow.recovery); assert.ok(recovery.readCompanyRecovery(h.localStorage, wallet, paymentId));
+      assert.equal(h.flow.errorKey, 'companyPayment.paymentFailed');
+      const previous = h.flow.payment; h.flow.newPayment(); await h.flush(); assert.equal(h.flow.payment, previous);
+      assert.deepEqual(writes(h), []); assert.equal(h.sdk.sends.length, 0);
+    } finally { h.unmount(); }
+  }
+});
+
+test('foreground polling verifies only a submitted canonical hash and stops at confirmation without resending', async t => {
+  const timers = clock(); let verifications = 0, settled = false;
+  class PollDate extends Date { static now() { return timers.now; } }
+  const h = harness({ Date: PollDate, setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout,
+    history: async () => ({ records: [settled ? confirmed() : payment({ status: 'submitted', transactionHash })] }),
+    balance: async () => ({ balanceAtomic: settled ? '0' : balanceAtomic }),
+    write: async action => { assert.equal(action, 'verify'); verifications++; settled = true; return confirmed(); } });
+  t.after(() => h.unmount()); await h.flush(); timers.tick(11_999); await h.flush(); assert.equal(verifications, 0);
+  timers.tick(1); await h.flush(); assert.equal(verifications, 1); assert.equal(h.flow.payment.status, 'confirmed');
+  assert.equal(h.flow.balanceAtomic, '0'); assert.equal(h.flow.recovery, null); assert.equal(h.flow.stage, 'status');
+  timers.tick(60_000); await h.flush(); assert.equal(verifications, 1); assert.equal(h.sdk.sends.length, 0);
+  assert.deepEqual(writes(h), ['verify']); h.flow.newPayment(); await h.flush(); assert.equal(h.flow.stage, 'form');
+});
+
+test('polling pauses hidden tabs, aborts an active verification on logout and expires after a fixed fifteen-minute window', async () => {
+  const timers = clock(), pending = deferred(); let verifications = 0;
+  class PollDate extends Date { static now() { return timers.now; } }
+  const h = harness({ Date: PollDate, setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout,
+    history: async () => ({ records: [payment({ status: 'submitted', transactionHash })] }),
+    write: async (action, _input, options) => { assert.equal(action, 'verify'); verifications++;
+      assert.ok(options.signal); return pending.promise; } });
+  try {
+    await h.flush(); h.documentRef.visibilityState = 'hidden'; h.documentRef.dispatchEvent(new Event('visibilitychange'));
+    timers.tick(24_000); await h.flush(); assert.equal(verifications, 0);
+    h.documentRef.visibilityState = 'visible'; h.documentRef.dispatchEvent(new Event('visibilitychange')); timers.tick(12_000); await h.flush();
+    assert.equal(verifications, 1); const signal = h.calls.find(value => value.action === 'verify').options.signal;
+    timers.tick(60_000); await h.flush(); assert.equal(verifications, 1, 'a second verification overlapped the first');
+    await h.session(null); assert.equal(signal.aborted, true);
+    pending.resolve(confirmed()); await h.flush(); assert.equal(h.flow.payment, null); assert.equal(h.flow.balanceAtomic, null);
+  } finally { h.unmount(); }
+  const boundedClock = clock(); let checks = 0;
+  class BoundedDate extends Date { static now() { return boundedClock.now; } }
+  const bounded = harness({ Date: BoundedDate, setTimeout: boundedClock.setTimeout, clearTimeout: boundedClock.clearTimeout,
+    history: async () => ({ records: [payment({ status: 'submitted', transactionHash })] }),
+    write: async () => { checks++; return payment({ status: 'submitted', transactionHash }); } });
+  try {
+    await bounded.flush(); boundedClock.tick(12_000); await bounded.flush(); assert.equal(checks, 1);
+    boundedClock.tick(15 * 60_000); await bounded.flush(); assert.equal(checks, 1);
+    boundedClock.tick(60_000); await bounded.flush(); assert.equal(checks, 1);
+  } finally { bounded.unmount(); }
+});
+
+test('unregistered ambiguous drafts are never automatically verified or signed by the polling timer', async t => {
+  const timers = clock(), h = harness({ setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout,
+    history: async () => ({ records: [payment()] }) }); t.after(() => h.unmount());
+  recovery.saveCompanyRecovery(h.localStorage, { version: 1, paymentId, walletAddress: wallet, chainId: 1,
+    amountAtomic: balanceAtomic, phase: 'signing', transactionHash: null });
+  await h.flush(); timers.tick(15 * 60_000); await h.flush();
+  assert.deepEqual(writes(h), []); assert.equal(h.sdk.sends.length, 0); assert.ok(h.flow.recovery);
 });

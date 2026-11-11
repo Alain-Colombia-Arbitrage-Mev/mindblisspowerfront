@@ -39,6 +39,7 @@ const { CompanyPaymentStatus, PersonalCompanyPayment } = load('CompanyPaymentPag
   '@/components/reown/ReownContext': { useReownWallet: () => reown },
   '@/hooks/useCompanyPayment': { useCompanyPayment: () => activeFlow },
   '@/lib/company-payment-contract.mjs': { companyPaymentView }, './CompanyPaymentForm': forms,
+  './CompanyPaymentActivity': { default: () => null },
 });
 const findAll = (node, predicate) => [...(predicate(node) ? [node] : []), ...React.Children.toArray(node?.props?.children).flatMap(child => findAll(child, predicate))];
 const text = node => typeof node === 'string' ? node : React.Children.toArray(node?.props?.children).map(text).join('');
