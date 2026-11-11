@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useState } from "react";
 import { useReownWallet } from "@/components/reown/ReownContext";
+import PersonalWalletBalances from "@/components/wallet/PersonalWalletBalances";
 import { useI18n } from "@/i18n/LanguageProvider";
 import { personalFundingFailure } from "@/lib/personal-funding-errors.mjs";
 import { FUNDING_UUID } from "@/lib/wallet-funding-contract.mjs";
@@ -100,6 +101,7 @@ export function PersonalWalletFunding() {
         <WalletActionError diagnostic={actionDiagnostic} message={actionError || (reown.onrampStatus === "error" ? personalOnrampError(reown.onrampError, t) : reown.linkError ? personalOnrampError(reown.linkError, t) : "")} />
       </section>
       <aside className={styles.details} aria-label={t("funding.destinationDetails")}>
+        <PersonalWalletBalances expectedAddress={verified ? reown.linkedAddress : ""} />
         <section className={styles.detailCard}>
           <div className={styles.stateHeading}>{verified ? <CheckCircle2 size={19} aria-hidden="true" /> : <ShieldCheck size={19} aria-hidden="true" />}
             <h2>{t(statusLabel)}</h2></div>

@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 
 import Link from "./IntentLink";
 import { useI18n } from "@/i18n/LanguageProvider";
-import { PERSONAL_WALLET_ASSET } from "@/lib/personal-wallet.mjs";
+import PersonalWalletBalances from "@/components/wallet/PersonalWalletBalances";
 import { readWalletBinding } from "@/lib/wallet-binding.mjs";
 
 export default function SidebarWalletCard({ onNavigate }) {
@@ -32,10 +32,10 @@ export default function SidebarWalletCard({ onNavigate }) {
       <div className="vp-sidebar-wallet-heading">
         <span>
           <span className="vp-sidebar-wallet-label">{t("nav.personalWallet")}</span>
-          <strong>— {PERSONAL_WALLET_ASSET}</strong>
         </span>
         <Wallet size={18} aria-hidden="true" />
       </div>
+      <PersonalWalletBalances expectedAddress={status === "linked" ? address : ""} compact showGasNotice={false} />
       <div className="vp-sidebar-wallet-address">
         <code title={address || undefined}>{address ? compactAddress(address) : t(status === "loading" ? "walletPage.checking" : status === "error" ? "walletPage.checkFailed" : "funding.noPersonalAddress")}</code>
         {address ? <button type="button" onClick={copy} aria-label={t("walletPage.copyAddress")}><Copy size={12} aria-hidden="true" /></button> : null}

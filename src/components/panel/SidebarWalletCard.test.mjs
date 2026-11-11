@@ -13,6 +13,7 @@ const source = readFileSync(new URL('./SidebarWalletCard.jsx', import.meta.url),
 const compiled = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
 const address = `0x${'1'.repeat(40)}`, newerAddress = `0x${'2'.repeat(40)}`;
 const Link = ({ children, ...props }) => React.createElement('a', props, children);
+const Balance = () => React.createElement('span', null, '— USDT');
 const text = node => typeof node === 'string' ? node : React.Children.toArray(node?.props?.children).map(text).join('');
 function findAll(node, predicate) {
   if (!React.isValidElement(node)) return [];
@@ -33,7 +34,7 @@ function card({ locale = 'es', boundAddress = address, status = 'linked', readBi
     if (id === 'lucide-react') return new Proxy({}, { get: (_target, name) => props => React.createElement('svg', { ...props, 'data-icon': name }) });
     if (id === './IntentLink') return { default: Link };
     if (id === '@/i18n/LanguageProvider') return { useI18n: () => ({ locale, t: key => translateMessage(locale, key) }) };
-    if (id === '@/lib/personal-wallet.mjs') return { PERSONAL_WALLET_ASSET: 'USDT' };
+    if (id === '@/components/wallet/PersonalWalletBalances') return { default: Balance };
     if (id === '@/lib/wallet-binding.mjs') return { readWalletBinding: options => { reads.push(options); return readBinding(options); } };
     assert.fail(`Sidebar unexpectedly imports a wallet action or provider: ${id}`);
   }, module, module.exports);
@@ -58,6 +59,9 @@ test('all four locales show distinct top-up and transfer links beside one bound 
   for (const locale of Object.keys(expected)) {
     const view = card({ locale });
     const tree = view.render();
+    const balance = findAll(tree, node => node.type === Balance)[0];
+    assert.equal(balance.props.expectedAddress, address);
+    assert.equal(balance.props.compact, true);
     const actions = findAll(tree, node => node.type === Link);
     assert.deepEqual(actions.map(node => node.props.href), ['/dashboard/wallet-personal', '/dashboard/wallet-personal/pay']);
     assert.equal(text(actions[0]), translateMessage(locale, 'nav.addFunds'));
@@ -112,6 +116,7 @@ test('a refreshed binding replaces the common address and an aborted old read ca
   pending[0]({ linked: true, address }); await setImmediate();
   const tree = view.render();
   assert.equal(findAll(tree, node => node.type === 'code')[0].props.title, newerAddress);
+  assert.equal(findAll(tree, node => node.type === Balance)[0].props.expectedAddress, newerAddress);
   assert.equal(findAll(tree, node => node.type === Link).length, 2);
   cleanup(); window.dispatchEvent(new Event('vp:personal-wallet-linked'));
   assert.equal(view.reads.length, 2, 'unmounted sidebar cannot start another lookup');

@@ -1,12 +1,13 @@
 "use client";
 
-import { CreditCard, Info, Loader2, ReceiptText, Wallet } from "lucide-react";
+import { CreditCard, Info, Loader2, ReceiptText } from "lucide-react";
 
 import { useMemberSummary } from "@/hooks/useMemberSummary";
 import { useI18n } from "@/i18n/LanguageProvider";
 import { isRecoverySummary } from "@/lib/member-read.mjs";
 import { formatPaymentDate as fmtMoneyDate, formatPaymentMoney as money } from "@/lib/payment-display.mjs";
 import NOWPaymentsBalances from "@/components/panel/NOWPaymentsBalances";
+import PersonalWalletBalances from "@/components/wallet/PersonalWalletBalances";
 import StripeSalesHistory from "../../packages/StripeSalesHistory";
 import { MetricCard, PageHeader, StatusPill } from "./executive-ui";
 import WalletFundingPanels from "./WalletFundingPanels";
@@ -98,7 +99,7 @@ function FinanceContent({ data }) {
   return (
     <>
       <div className="executive-grid metrics mb-6">
-        <MetricCard label={t("walletPage.balance")} value={money(data.wallet_balance_usd)} detail={t("walletPage.balanceCopy")} icon={Wallet} tone="success" />
+        <PersonalWalletBalances />
         <MetricCard label={t("walletPage.activeMemberships")} value={String(data.active_packages ?? 0)} detail={t("walletPage.activeMembershipsCopy")} icon={CreditCard} tone="info" />
         <MetricCard label={t("walletPage.registeredPayments")} value={String(payments.length)} detail={t("walletPage.registeredPaymentsCopy")} icon={ReceiptText} tone="accent" />
         <MetricCard label={t("walletPage.pendingPayments")} value={String(pendingPayments)} detail={t("walletPage.pendingPaymentsCopy")} icon={Info} tone="muted" />

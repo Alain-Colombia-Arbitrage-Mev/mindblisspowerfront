@@ -6,6 +6,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import ts from "typescript";
 import { translateMessage } from "../i18n/translate.mjs";
+import * as paymentValues from './personal-company-payment-values.mjs';
 
 const require = createRequire(import.meta.url);
 const icon = () => React.createElement("svg", { "aria-hidden": true });
@@ -124,7 +125,9 @@ test("actual summary follows the Pen bento and omits the retired long-form secti
     "next/dynamic": { default: () => marker("ReownRechargeDialog") },
     "@/app/_components/ThemeToggle": { default: marker("ThemeToggle") },
     "@/lib/member-read.mjs": { readMemberParts: () => { throw new Error("Unexpected request"); }, validMemberTree: () => true, validMemberSummary: () => true },
-    "@/lib/payment-display.mjs": { formatPaymentMoney: () => "not-called" },
+    "@/hooks/usePersonalWalletBalance": { usePersonalWalletBalance: () => ({ loading: true, error: '', walletAddress: '', balanceAtomic: null }) },
+    "@/lib/personal-company-payment-values.mjs": paymentValues,
+    "@/components/wallet/PersonalWalletBalances": { default: marker('PersonalWalletBalances') },
   };
   for (const name of ["EarningsCard", "OverviewDiscoveryCard", "PositionSnapshotCard"]) mocks[`./${name}`] = { default: marker(name) };
   const { default: Dashboard } = moduleAt("../components/panel/overview/OverviewDashboard.jsx", mocks);

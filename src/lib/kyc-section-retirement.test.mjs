@@ -24,6 +24,7 @@ function moduleAt(relative, mocks = {}) {
     if (id === "@/lib/member-navigation.mjs") return { matchesRoute };
     if (id === "@/lib/personal-wallet.mjs") return { PERSONAL_WALLET_ASSET: "USDT" };
     if (id === "@/lib/wallet-binding.mjs") return { readWalletBinding: async () => ({ linked: false, address: "" }) };
+    if (["@/components/wallet/PersonalWalletBalance", "@/components/wallet/PersonalWalletBalances"].includes(id)) return { default: () => null };
     if (id === "@/lib/administrative-wallet.mjs") return { readAdministrativeWallet: async () => ({ status: "pending" }) };
     if (id === "@/i18n/LanguageProvider") return { useI18n: () => ({ t: key => ({
       "nav.account": "CUENTA", "nav.summary": "Resumen", "nav.memberships": "Membresías", "nav.wallet": "Billetera",

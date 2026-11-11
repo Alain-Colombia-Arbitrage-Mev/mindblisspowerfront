@@ -7,6 +7,7 @@ import { browserRequestDeadline } from './browser-request-deadline.mjs';
 import { companyPaymentHistory, companyPaymentInput, companyPaymentView } from './company-payment-contract.mjs';
 import { FUNDING_UUID } from './wallet-funding-contract.mjs';
 import { PERSONAL_COMPANY_PAYMENT } from './personal-company-payment-values.mjs';
+import { personalWalletBalance, personalWalletBalances } from './personal-wallet-balance.mjs';
 
 const reply = (data, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' } });
 const safeErrors = new Set(['unauthenticated', 'invalid_origin', 'invalid_request', 'company_payment_unavailable', 'company_payment_not_found',
@@ -39,10 +40,10 @@ async function inputBody(request) {
 
 /** Native sessions and the private BFF authenticate every read and mutation. */
 export async function handleCompanyPayment(request, action, { env = runtimeEnvironment(), fetchImpl = coreFetch, serviceRequest = boundedServiceRequest } = {}) {
-  if (!['prepare', 'submit', 'verify', 'abandon', 'status', 'history'].includes(action)) return reply({ error: 'invalid_request' }, 400);
+  if (!['prepare', 'submit', 'verify', 'abandon', 'status', 'history', 'balance', 'balances'].includes(action)) return reply({ error: 'invalid_request' }, 400);
   const allowed = ['https://app.mindblisspower.com', 'https://mindbliss-portal-rewon.devfidubit.workers.dev'];
   if (env.NODE_ENV === 'production' && !allowed.includes(env.AUTH_PUBLIC_ORIGIN)) return reply({ error: 'not_found' }, 404);
-  const method = ['status', 'history'].includes(action) ? 'GET' : 'POST';
+  const method = ['status', 'history', 'balance', 'balances'].includes(action) ? 'GET' : 'POST';
   if (request.method !== method) return reply({ error: 'method_not_allowed' }, 405);
   const cookie = betterAuthCookies(request.headers.get('cookie') || '');
   if (!cookie.split(';').some(part => /^(?:__Secure-)?better-auth\.session_token=[^;\s,]+$/.test(part.trim()))) return reply({ error: 'unauthenticated' }, 401);
@@ -74,7 +75,8 @@ export async function handleCompanyPayment(request, action, { env = runtimeEnvir
       headers: { cookie, origin: method === 'GET' ? env.AUTH_PUBLIC_ORIGIN : request.headers.get('origin') || '', ...(body ? { 'content-type': 'application/json' } : {}),
         'x-vp-auth-client-ip': ip, 'x-vp-auth-timestamp': timestamp, 'x-vp-auth-signature': signature } }, fetchImpl);
     if (!result.ok) return reply({ error: safeErrors.has(result.data?.error) ? result.data.error : 'company_payment_unavailable' }, [400, 401, 403, 404, 409, 413, 429, 503].includes(result.status) ? result.status : 502);
-    const safe = action === 'history' ? companyPaymentHistory(result.data) : companyPaymentView(result.data);
+    const safe = action === 'balances' ? personalWalletBalances(result.data) : action === 'balance' ? personalWalletBalance(result.data)
+      : action === 'history' ? companyPaymentHistory(result.data) : companyPaymentView(result.data);
     if (!safe || (paymentId && (!('paymentId' in safe) || safe.paymentId !== paymentId))
       || (body && (!('paymentId' in safe) || safe.paymentId !== requestedId))
       || (action === 'prepare' && (!('amountAtomic' in safe) || safe.amountAtomic !== body.amountAtomic

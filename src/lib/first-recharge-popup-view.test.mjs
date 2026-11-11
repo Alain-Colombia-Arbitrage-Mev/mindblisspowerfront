@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import * as paymentValues from './personal-company-payment-values.mjs';
 
 import { registrationViewHarness, findRegistrationNode as find } from '../app/register/registration-view-test-harness.mjs';
 
@@ -109,7 +110,7 @@ test('a confirmed empty wallet opens the welcome popup once per tab and keeps ma
   const values = new Map();
   globalThis.sessionStorage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, String(value)) };
   t.after(() => { if (originalStorage === undefined) delete globalThis.sessionStorage; else globalThis.sessionStorage = originalStorage; });
-  const Earnings = props => React.createElement('wallet-card', props);
+  const Balance = () => React.createElement('output', { 'data-personal-balance': true }, '0 USDT');
   const Popup = props => React.createElement('recharge-popup', props);
   const harness = registrationViewHarness('../../components/panel/overview/OverviewDashboard.jsx', {
     'next/link': { default: link }, 'next/dynamic': { default: () => Popup }, 'lucide-react': icons,
@@ -121,8 +122,9 @@ test('a confirmed empty wallet opens the welcome popup once per tab and keeps ma
         onPart('network', { data: { positioned: false, tree: [] }, error: null });
       },
     },
-    '@/lib/payment-display.mjs': { formatPaymentMoney: value => `$${value}` },
-    './EarningsCard': { default: Earnings },
+    '@/hooks/usePersonalWalletBalance': { usePersonalWalletBalance: () => ({ loading: false, error: '', walletAddress: `0x${'1'.repeat(40)}`, balanceAtomic: '0' }) },
+    '@/lib/personal-company-payment-values.mjs': paymentValues,
+    '@/components/wallet/PersonalWalletBalances': { default: Balance },
     './OverviewDiscoveryCard': { default: () => null }, './PositionSnapshotCard': { default: () => null },
     '@/i18n/LanguageProvider': i18n,
     '@/i18n/LanguageSwitcher': { default: () => null },
@@ -138,10 +140,71 @@ test('a confirmed empty wallet opens the welcome popup once per tab and keeps ma
   tree = harness.render();
   popup = find(tree, node => node?.type === Popup);
   assert.equal(popup.props.open, false);
-  find(tree, node => node?.type === Earnings).props.onRecharge('methods');
+  button(tree, 'Recargar saldo').props.onClick();
   tree = harness.render();
   popup = find(tree, node => node?.type === Popup);
   assert.equal(popup.props.open, true);
   assert.equal(popup.props.initialStep, 'methods');
   harness.unmount();
+});
+
+test('overview never substitutes the internal USD ledger for an unavailable personal balance or opens an empty-wallet popup from it', () => {
+  for (const wallet of [
+    { loading: true, error: '', walletAddress: '', balanceAtomic: null },
+    { loading: false, error: 'company_payment_rpc_unavailable', walletAddress: '', balanceAtomic: null },
+    { loading: false, error: '', walletAddress: `0x${'1'.repeat(40)}`, balanceAtomic: '12000000' },
+  ]) {
+    const Popup = props => React.createElement('recharge-popup', props);
+    const Balance = () => React.createElement('output', { 'data-personal-balance': true }, wallet.balanceAtomic === null ? '— USDT' : '12 USDT');
+    const harness = registrationViewHarness('../../components/panel/overview/OverviewDashboard.jsx', {
+      'next/link': { default: link }, 'next/dynamic': { default: () => Popup }, 'lucide-react': icons,
+      '@/app/_components/ThemeToggle': { default: () => null },
+      '@/lib/member-read.mjs': { validMemberSummary: () => true, validMemberTree: () => true,
+        readMemberParts(_parts, { onPart }) {
+          onPart('summary', { data: { wallet_balance_usd: '987654.32', active_packages: 1 }, error: null });
+          onPart('network', { data: { positioned: false, tree: [] }, error: null });
+        } },
+      '@/hooks/usePersonalWalletBalance': { usePersonalWalletBalance: () => wallet },
+      '@/lib/personal-company-payment-values.mjs': paymentValues,
+      '@/components/wallet/PersonalWalletBalances': { default: Balance },
+      './OverviewDiscoveryCard': { default: () => null }, './PositionSnapshotCard': { default: () => null },
+      '@/i18n/LanguageProvider': i18n, '@/i18n/LanguageSwitcher': { default: () => null },
+    });
+    harness.render(); harness.render(); const tree = harness.render();
+    const html = renderToStaticMarkup(tree);
+    assert.match(html, /data-personal-balance/);
+    assert.doesNotMatch(html, /987654|987,654|120,456|Demo/);
+    assert.equal(find(tree, node => node?.type === Popup), undefined);
+    if (wallet.balanceAtomic === null) assert.match(html, /— USDT/);
+    harness.unmount();
+  }
+});
+
+test('Ethereum zero never opens the empty-wallet popup when Polygon has funds or its balance is unknown', () => {
+  const address = `0x${'1'.repeat(40)}`;
+  const empty = { loading: false, error: '', walletAddress: address, balanceAtomic: '0' };
+  for (const polygon of [
+    { ...empty, balanceAtomic: '28433366' },
+    { ...empty, loading: true, balanceAtomic: null },
+    { ...empty, error: 'company_payment_rpc_unavailable', balanceAtomic: null },
+    { ...empty, walletAddress: `0x${'2'.repeat(40)}` },
+  ]) {
+    const Popup = props => React.createElement('recharge-popup', props), calledNetworks = [];
+    const harness = registrationViewHarness('../../components/panel/overview/OverviewDashboard.jsx', {
+      'next/link': { default: link }, 'next/dynamic': { default: () => Popup }, 'lucide-react': icons,
+      '@/app/_components/ThemeToggle': { default: () => null },
+      '@/lib/member-read.mjs': { validMemberSummary: () => true, validMemberTree: () => true,
+        readMemberParts(_parts, { onPart }) { onPart('summary', { data: { wallet_balance_usd: '0', active_packages: 0 }, error: null });
+          onPart('network', { data: { positioned: false, tree: [] }, error: null }); } },
+      '@/hooks/usePersonalWalletBalance': { usePersonalWalletBalance: (_address, network) => { calledNetworks.push(network); return network === 'polygon' ? polygon : empty; } },
+      '@/lib/personal-company-payment-values.mjs': paymentValues,
+      '@/components/wallet/PersonalWalletBalances': { default: () => null },
+      './OverviewDiscoveryCard': { default: () => null }, './PositionSnapshotCard': { default: () => null },
+      '@/i18n/LanguageProvider': i18n, '@/i18n/LanguageSwitcher': { default: () => null },
+    });
+    harness.render(); harness.render(); const tree = harness.render();
+    assert.deepEqual([...new Set(calledNetworks)], ['ethereum', 'polygon']);
+    assert.equal(find(tree, node => node?.type === Popup), undefined);
+    harness.unmount();
+  }
 });

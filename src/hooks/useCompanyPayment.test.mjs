@@ -7,6 +7,7 @@ import ts from 'typescript';
 import * as contracts from '../lib/company-payment-contract.mjs';
 import * as recovery from '../lib/company-payment-recovery.mjs';
 import * as values from '../lib/personal-company-payment-values.mjs';
+import { personalWalletBalanceSessionKey } from '../lib/personal-wallet-balance-store.mjs';
 
 const require = createRequire(import.meta.url);
 const wallet = `0x${'1'.repeat(40)}`, otherWallet = `0x${'2'.repeat(40)}`, transactionHash = `0x${'3'.repeat(64)}`;
@@ -48,6 +49,7 @@ const confirmed = patch => payment({ status: 'confirmed', transactionHash, block
 function harness(overrides = {}) {
   const slots = [], effects = [], calls = [], storage = overrides.storage || new Map();
   let cursor = 0, dirty = true, current, sourceWallet = wallet, nextId = 0;
+  let sourceSession = { subject: 'owner-A', email: 'member@example.test' };
   const localStorage = { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) };
   const browser = Object.assign(new EventTarget(), { localStorage });
   const documentRef = Object.assign(new EventTarget(), { visibilityState: 'visible' });
@@ -66,7 +68,7 @@ function harness(overrides = {}) {
     useEffect(callback, deps) { const index = cursor++, cell = slots[index] ??= {};
       if (dependenciesChanged(cell.deps, deps)) { cell.deps = deps; effects.push(() => { cell.cleanup?.(); cell.cleanup = callback(); }); } },
   };
-  const sdk = { creations: [], broadcasts: [], sends: [], networkSwitches: [], balanceReads: [] };
+  const sdk = { creations: [], broadcasts: [], sends: [], networkSwitches: [], balanceReads: [], preflightBalanceReads: [] };
   const provider = { request() { assert.fail('a real wallet RPC was attempted'); } };
   const getProvider = () => provider;
   const switchProviderNetwork = async () => { sdk.networkSwitches.push('ethereum'); return overrides.switchNetwork?.(); };
@@ -85,7 +87,7 @@ function harness(overrides = {}) {
     },
   };
   const transfer = {
-    async readPersonalCompanyPaymentBalance(options) { sdk.balanceReads.push(options); return overrides.balance ? overrides.balance(options) : { balanceAtomic }; },
+    async readPersonalCompanyPaymentBalance(options) { sdk.preflightBalanceReads.push(options); return overrides.preflightBalance ? overrides.preflightBalance(options) : { balanceAtomic }; },
     createPersonalCompanyPaymentTransfer(options) {
       sdk.creations.push(options);
       const sender = { markSubmitted: (...args) => sdk.broadcasts.push(args), async sendPrepared(prepared, config) {
@@ -103,7 +105,14 @@ function harness(overrides = {}) {
   const module = { exports: {} };
   const browserNavigator = overrides.navigator || { locks: lockManager() };
   const imports = { react: hooks, '@/lib/company-payment-contract.mjs': contracts, '@/lib/company-payment-client.mjs': client,
-    '@/lib/company-payment-recovery.mjs': recovery, '@/lib/personal-company-payment.mjs': transfer, '@/lib/personal-company-payment-values.mjs': values };
+    '@/lib/company-payment-recovery.mjs': recovery, '@/lib/personal-company-payment.mjs': transfer, '@/lib/personal-company-payment-values.mjs': values,
+    '@/lib/member-session-context': { useMemberSession: () => sourceSession },
+    '@/lib/personal-wallet-balance-store.mjs': { personalWalletBalanceSessionKey },
+    '@/lib/personal-wallet-balance.mjs': { async readPersonalWalletBalance(options) {
+      sdk.balanceReads.push(options); const requestedWallet = sourceWallet;
+      const result = overrides.balance ? await overrides.balance(options) : { balanceAtomic };
+      return { walletAddress: requestedWallet, ...result };
+    } } };
   new Function('require', 'module', 'exports', 'window', 'document', 'crypto', 'navigator', 'globalThis', 'setTimeout', 'clearTimeout', code)(id => {
     assert.ok(Object.hasOwn(imports, id), `Unexpected hook dependency ${id}`); return imports[id];
   }, module, module.exports, browser, documentRef, { randomUUID: () => (++nextId === 1 ? paymentId : otherId) },
@@ -122,11 +131,77 @@ function harness(overrides = {}) {
       assert.fail('Hook state did not settle');
     },
     async wallet(address) { sourceWallet = address; dirty = true; return this.flush(); },
+    async session(next, flush = true) { sourceSession = next; dirty = true; if (!flush) { render(); return current; } return this.flush(); },
     unmount() { for (const cell of slots) cell?.cleanup?.(); },
   };
 }
 async function preview(h, amount = '25.123456') { h.flow.setAmount(amount); await h.flush(); h.flow.review(); await h.flush(); }
 const writes = h => h.calls.filter(call => call.action !== 'history').map(call => call.action);
+
+test('the bound owner sees Ethereum funds without an SDK connection and refresh never initiates a transfer', async t => {
+  const h = harness({ reown: { isConnected: false, isLinked: false } }); t.after(() => h.unmount());
+  await h.flush(); assert.equal(h.flow.balanceAtomic, balanceAtomic); assert.equal(h.flow.connected, false);
+  assert.equal(h.sdk.preflightBalanceReads.length, 0);
+  h.flow.refresh(); await h.flush(); assert.equal(h.sdk.balanceReads.length, 2);
+  h.flow.review(); await h.flow.confirm(); await h.flush();
+  assert.deepEqual(writes(h), []); assert.equal(h.sdk.creations.length, 0); assert.equal(h.sdk.sends.length, 0);
+});
+
+test('a new session hides the old amount, balance, history and selected payment immediately while Reown still has the old address', async t => {
+  const nextBalance = deferred(), nextHistory = deferred(); let balanceReads = 0, historyReads = 0;
+  const h = harness({ balance: async () => ++balanceReads === 1 ? { balanceAtomic } : nextBalance.promise,
+    history: async () => ++historyReads === 1 ? { records: [confirmed()] } : nextHistory.promise });
+  t.after(() => h.unmount()); await h.flush();
+  assert.equal(h.flow.history.length, 1);
+  await preview(h, '5'); h.flow.setManualHash(transactionHash); await h.flush();
+  const oldFlow = h.flow;
+  const changed = await h.session({ subject: 'owner-B', email: 'member@example.test' }, false);
+  assert.equal(changed.amount, ''); assert.equal(changed.balanceAtomic, null); assert.deepEqual(changed.history, []);
+  assert.equal(changed.payment, null); assert.equal(changed.manualHash, ''); assert.equal(changed.recovery, null);
+  assert.equal(changed.connected, false);
+  oldFlow.review(); await oldFlow.confirm(); oldFlow.selectHistory(confirmed());
+  await h.flush(); assert.deepEqual(writes(h), []); assert.equal(h.sdk.preflightBalanceReads.length, 0);
+  assert.equal(h.flow.amount, ''); assert.deepEqual(h.flow.history, []); assert.equal(h.flow.payment, null);
+  nextBalance.resolve({ balanceAtomic: '7000000' }); nextHistory.resolve({ records: [confirmed({ paymentId: otherId, amountAtomic: '7000000' })] });
+  await h.flush(); assert.equal(h.flow.balanceAtomic, '7000000'); assert.equal(h.flow.amount, '7');
+  assert.equal(h.flow.history[0].paymentId, otherId); assert.equal(h.flow.payment, null);
+});
+
+test('a session change aborts an SDK preflight before it can prepare or send under the next session', async t => {
+  const preflight = deferred(), h = harness({ preflightBalance: () => preflight.promise });
+  t.after(() => h.unmount()); await h.flush(); await preview(h);
+  const confirming = h.flow.confirm(); await h.flush();
+  assert.equal(h.flow.busy, true); const oldSignal = h.sdk.preflightBalanceReads[0].signal;
+  await h.session({ subject: 'owner-B', email: 'member@example.test' });
+  assert.equal(oldSignal.aborted, true); assert.equal(h.flow.payment, null); assert.equal(h.flow.busy, false);
+  preflight.resolve({ balanceAtomic }); await confirming; await h.flush();
+  assert.deepEqual(writes(h), []); assert.equal(h.sdk.creations.length, 0); assert.equal(h.sdk.sends.length, 0);
+});
+
+test('late owner reads cannot reappear after switching sessions away and back with the same linked address', async t => {
+  const previousBalance = deferred(), previousHistory = deferred(); let balanceReads = 0, historyReads = 0;
+  const h = harness({ balance: async () => ++balanceReads === 2 ? previousBalance.promise : { balanceAtomic: String(balanceReads * 1000000) },
+    history: async () => ++historyReads === 2 ? previousHistory.promise : { records: [] } });
+  t.after(() => h.unmount()); await h.flush(); h.flow.refresh(); await h.flush();
+  const oldBalanceSignal = h.sdk.balanceReads[1].signal;
+  await h.session({ subject: 'owner-B', email: 'member@example.test' });
+  assert.equal(oldBalanceSignal.aborted, true);
+  await h.session({ subject: 'owner-A', email: 'member@example.test' });
+  assert.equal(h.flow.balanceAtomic, '4000000');
+  previousBalance.resolve({ balanceAtomic: '99000000' }); previousHistory.resolve({ records: [confirmed()] });
+  await h.flush(); assert.equal(h.flow.balanceAtomic, '4000000'); assert.deepEqual(h.flow.history, []);
+  await h.session(null); assert.equal(h.flow.balanceAtomic, null); assert.equal(h.flow.amount, '');
+  assert.deepEqual(h.flow.history, []); assert.equal(h.flow.payment, null);
+  assert.deepEqual(writes(h), []); assert.equal(h.sdk.sends.length, 0);
+});
+
+test('an SDK on another chain cannot hide the read-only funds or create a payment before switching to Ethereum', async t => {
+  const h = harness({ preflightBalance: async () => { throw Error('personal_company_chain_changed'); } }); t.after(() => h.unmount());
+  await h.flush(); assert.equal(h.flow.balanceAtomic, balanceAtomic); assert.equal(h.sdk.preflightBalanceReads.length, 0);
+  await preview(h); await h.flow.confirm(); await h.flush();
+  assert.equal(h.flow.errorKey, 'companyPayment.switchNetwork'); assert.equal(h.flow.balanceAtomic, balanceAtomic);
+  assert.deepEqual(writes(h), []); assert.equal(h.sdk.creations.length, 0);
+});
 
 function page(h) {
   const source = readFileSync(new URL('../app/dashboard/_components/executive-pages/CompanyPaymentPage.jsx', import.meta.url), 'utf8');

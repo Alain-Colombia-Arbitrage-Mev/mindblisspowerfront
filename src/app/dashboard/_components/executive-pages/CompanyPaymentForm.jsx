@@ -8,7 +8,7 @@ import { PERSONAL_COMPANY_PAYMENT, personalCompanyPaymentAtomic, personalCompany
 import styles from "./company-payment.module.css";
 
 export function CompanyPaymentForm({ balanceAtomic = null, amount = "", onAmountChange, onMax, onReview, onRefresh,
-  busy = false, loading = false, connected = false, onConnect, error = "", showHeading = true }) {
+  busy = false, loading = false, connected = false, canRefresh = connected, onConnect, error = "", showHeading = true }) {
   const { t } = useI18n();
   const id = useId();
   const available = personalCompanyPaymentAtomic(balanceAtomic, true);
@@ -23,7 +23,7 @@ export function CompanyPaymentForm({ balanceAtomic = null, amount = "", onAmount
     {showHeading ? <header className={styles.heading}><WalletCards size={22} aria-hidden="true" /><div><h2>{t("companyPayment.title")}</h2><p>{t("companyPayment.subtitle")}</p></div></header> : null}
     <div className={styles.balance} aria-live="polite"><span>{t("companyPayment.availableBalance")}</span>
       <strong>{loading ? t("companyPayment.loadingBalance") : available === null ? "—" : <bdi dir="ltr">{formatPersonalCompanyPaymentAmount(balanceAtomic)} USDT</bdi>}</strong>
-      <button className={styles.refresh} type="button" onClick={onRefresh} disabled={blocked} aria-label={t("companyPayment.refreshBalance")}>
+      <button className={styles.refresh} type="button" onClick={onRefresh} disabled={busy || loading || !canRefresh} aria-label={t("companyPayment.refreshBalance")}>
         <RefreshCw size={17} className={loading ? "animate-spin" : undefined} aria-hidden="true" /></button>
     </div>
     <div className={styles.field}><label htmlFor={`${id}-amount`}>{t("companyPayment.amountLabel")}</label>

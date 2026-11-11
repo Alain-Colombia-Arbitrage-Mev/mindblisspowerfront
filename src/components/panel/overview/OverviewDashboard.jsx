@@ -6,9 +6,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
   ArrowRight,
+  ArrowUpRight,
   CreditCard,
   Headphones,
   LifeBuoy,
+  Plus,
   RefreshCw,
   UserRound,
 } from "lucide-react";
@@ -16,9 +18,10 @@ import {
 import ThemeToggle from "@/app/_components/ThemeToggle";
 import LanguageSwitcher from "@/i18n/LanguageSwitcher";
 import { readMemberParts, validMemberSummary, validMemberTree } from "@/lib/member-read.mjs";
-import { formatPaymentMoney as usd } from "@/lib/payment-display.mjs";
+import { usePersonalWalletBalance } from "@/hooks/usePersonalWalletBalance";
+import { personalCompanyPaymentAtomic } from "@/lib/personal-company-payment-values.mjs";
+import PersonalWalletBalances from "@/components/wallet/PersonalWalletBalances";
 
-import EarningsCard from "./EarningsCard";
 import OverviewDiscoveryCard from "./OverviewDiscoveryCard";
 import PositionSnapshotCard from "./PositionSnapshotCard";
 import { useI18n } from "@/i18n/LanguageProvider";
@@ -33,7 +36,14 @@ const ReownRechargeDialog = dynamic(() => import("./ReownRechargeDialog"), { ssr
 
 export default function OverviewDashboard() {
   const { t } = useI18n();
-  const localWalletPreview = process.env.NODE_ENV === "development";
+  const ethereumWallet = usePersonalWalletBalance('', 'ethereum');
+  const polygonWallet = usePersonalWalletBalance('', 'polygon');
+  const ethereumBalance = personalCompanyPaymentAtomic(ethereumWallet.balanceAtomic, true);
+  const polygonBalance = personalCompanyPaymentAtomic(polygonWallet.balanceAtomic, true);
+  const ethereumReady = !ethereumWallet.loading && !ethereumWallet.error && /^0x[0-9a-f]{40}$/i.test(ethereumWallet.walletAddress || "") && ethereumBalance !== null;
+  const polygonReady = !polygonWallet.loading && !polygonWallet.error && /^0x[0-9a-f]{40}$/i.test(polygonWallet.walletAddress || "") && polygonBalance !== null;
+  const emptyWallet = ethereumReady && polygonReady && ethereumWallet.walletAddress === polygonWallet.walletAddress && ethereumBalance === 0n && polygonBalance === 0n;
+  const fundedWallet = (ethereumReady && ethereumBalance > 0n) || (polygonReady && polygonBalance > 0n);
   const [summary, setSummary] = useState(null);
   const [network, setNetwork] = useState(null);
   const [summaryStatus, setSummaryStatus] = useState("loading");
@@ -77,7 +87,7 @@ export default function OverviewDashboard() {
   }, [load]);
 
   useEffect(() => {
-    if (summaryStatus !== "ready" || Number(summary?.wallet_balance_usd) > 0 || rechargeChecked.current) return;
+    if (!emptyWallet || rechargeChecked.current) return;
     rechargeChecked.current = true;
     let seen = false;
     try { seen = sessionStorage.getItem(RECHARGE_SEEN_KEY) === "seen"; } catch { /* storage is optional */ }
@@ -86,13 +96,13 @@ export default function OverviewDashboard() {
       setReownLoaded(true);
       setRechargeDialog({ open: true, step: "welcome" });
     }
-  }, [summary?.wallet_balance_usd, summaryStatus]);
+  }, [emptyWallet]);
 
   useEffect(() => {
-    if (summaryStatus === "ready" && Number(summary?.wallet_balance_usd) > 0) {
+    if (fundedWallet) {
       setRechargeDialog(current => current.open ? { ...current, open: false } : current);
     }
-  }, [summary?.wallet_balance_usd, summaryStatus]);
+  }, [fundedWallet]);
 
   const openRecharge = useCallback((step = "welcome") => {
     try { sessionStorage.setItem(RECHARGE_SEEN_KEY, "seen"); } catch { /* storage is optional */ }
@@ -122,14 +132,14 @@ export default function OverviewDashboard() {
 
       <div className="mb-overview-primary">
         <div className="mb-overview-main-column">
-          {localWalletPreview ? <EarningsCard total="$120,456.50" ready preview onRecharge={openRecharge} /> : summaryStatus === "loading" ? <LoadingPanel label={t("dashboard.loadingWallet")} /> : summaryStatus === "error" ? <ErrorPanel title={t("dashboard.walletUnavailable")} syncingTitle={t("dashboard.walletSyncing")} error={errors.summary} onRetry={load} /> : (
-            <EarningsCard
-              total={Number(summary?.wallet_balance_usd) > 0 ? usd(summary.wallet_balance_usd) : "—"}
-              ready={Number(summary?.wallet_balance_usd) > 0}
-              historical={summary?.data_source === "verified_stripe_recovery"}
-              onRecharge={openRecharge}
-            />
-          )}
+          <section className="mb-wallet-card">
+            <div className="mb-wallet-heading"><h2>{t("overview.wallet")}</h2><span>USDT</span></div>
+            <PersonalWalletBalances showGasNotice={false} />
+            <div className="mb-wallet-actions">
+              <button className="executive-button primary" type="button" onClick={() => openRecharge("methods")}><Plus size={14} />{t("overview.topUp")}</button>
+              <button className="executive-button" type="button" onClick={() => openRecharge("welcome")}>{t("overview.howItWorks")}<ArrowUpRight size={14} /></button>
+            </div>
+          </section>
           <section className="executive-card mb-membership-summary">
             <div className="mb-membership-header"><h2>{t("overview.myMemberships")}</h2><span>{summaryStatus === "ready" ? t("overview.updated") : t("overview.pending")}</span></div>
             <div className="mb-membership-count"><strong>{summaryStatus === "ready" ? String(summary?.active_packages ?? 0) : "—"}</strong><p>{summary?.active_packages === 1 ? t("overview.oneMembership") : t("overview.memberships")}</p></div>

@@ -1,0 +1,62 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { createPersonalWalletBalanceStore, personalWalletBalanceSessionKey } from './personal-wallet-balance-store.mjs';
+
+const value = (walletAddress = `0x${'1'.repeat(40)}`, balanceAtomic = '10000000', polygon = '7000000') => ({ walletAddress,
+  balances: [{ network: 'ethereum', balanceAtomic, nativeBalanceAtomic: '0', observedAt: '2026-11-11T02:00:00Z' },
+    { network: 'polygon', balanceAtomic: polygon, nativeBalanceAtomic: '0', observedAt: '2026-11-11T02:00:00Z' }] });
+const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; };
+
+test('cache scope distinguishes subjects even when their displayed email is identical', () => {
+  assert.equal(personalWalletBalanceSessionKey(null), '');
+  assert.notEqual(personalWalletBalanceSessionKey({ subject: 'A', email: 'member@example.test' }), personalWalletBalanceSessionKey({ subject: 'B', email: 'member@example.test' }));
+});
+
+test('linking a wallet during an old unlinked read queues one fresh owner lookup', async () => {
+  const pending = deferred(); let calls = 0;
+  const store = createPersonalWalletBalanceStore({ read: async () => {
+    if (++calls === 1) return pending.promise; return value();
+  } });
+  const close = store.subscribe('member', () => {}); const first = store.refresh('member', false);
+  await Promise.resolve(); void store.refresh('member'); void store.refresh('member');
+  pending.resolve(value(undefined, '0')); await first;
+  await new Promise(done => setImmediate(done));
+  assert.equal(calls, 2); assert.equal(store.get('member').balanceAtomic, '10000000'); close();
+});
+
+test('sidebar and wallet coalesce balance reads; refresh shows confirmed zero and errors never masquerade as zero', async () => {
+  const pending = deferred(); let calls = 0, fail = false, current = value();
+  const store = createPersonalWalletBalanceStore({ read: async () => { calls++; if (fail) throw Error('company_payment_rpc_unavailable'); return calls === 1 ? pending.promise : current; } });
+  const closeA = store.subscribe('member-A', () => {}), closeB = store.subscribe('member-A', () => {});
+  const first = store.refresh('member-A', false), second = store.refresh('member-A', false);
+  assert.equal(first, second); assert.equal(store.get('member-A').loading, true);
+  pending.resolve(current); await first; assert.equal(calls, 1); assert.equal(store.get('member-A').balanceAtomic, '10000000');
+  assert.equal(store.get('member-A', 'polygon').balanceAtomic, '7000000');
+  await store.refresh('member-A', false); assert.equal(calls, 1);
+  current = value(undefined, '0'); await store.refresh('member-A'); assert.equal(store.get('member-A').balanceAtomic, '0');
+  fail = true; await store.refresh('member-A'); assert.equal(store.get('member-A').balanceAtomic, null);
+  assert.equal(store.get('member-A').error, 'company_payment_rpc_unavailable');
+  closeA(); closeB(); assert.equal(store.get('member-A').balanceAtomic, null);
+});
+
+test('logout and owner changes cancel old reads and late results cannot populate another session', async () => {
+  const pending = deferred(), signals = []; let call = 0;
+  const store = createPersonalWalletBalanceStore({ read: async ({ signal }) => { signals.push(signal); return ++call === 1 ? pending.promise : value(`0x${'2'.repeat(40)}`, '7000000'); } });
+  const closeA = store.subscribe('member-A', () => {}); const old = store.refresh('member-A');
+  await Promise.resolve(); closeA(); assert.equal(signals[0].aborted, true);
+  const closeB = store.subscribe('member-B', () => {}); await store.refresh('member-B');
+  pending.resolve(value()); await old;
+  assert.equal(store.get('member-A').balanceAtomic, null);
+  assert.equal(store.get('member-B').balanceAtomic, '7000000');
+  assert.equal(store.get('member-B').walletAddress, `0x${'2'.repeat(40)}`); closeB();
+});
+
+test('returning from checkout refreshes visible balances once without wallet signatures', async () => {
+  const browser = new EventTarget(), document = Object.assign(new EventTarget(), { visibilityState: 'visible' }); let calls = 0;
+  const store = createPersonalWalletBalanceStore({ read: async () => { calls++; return value(undefined, String(calls * 1000000)); }, windowTarget: browser, documentTarget: document });
+  const close = store.subscribe('member', () => {}); await store.refresh('member');
+  browser.dispatchEvent(new Event('focus')); browser.dispatchEvent(new Event('pageshow')); document.dispatchEvent(new Event('visibilitychange'));
+  await new Promise(done => setTimeout(done, 300)); assert.equal(calls, 2); assert.equal(store.get('member').balanceAtomic, '2000000');
+  document.visibilityState = 'hidden'; browser.dispatchEvent(new Event('focus'));
+  await new Promise(done => setTimeout(done, 300)); assert.equal(calls, 2); close();
+});

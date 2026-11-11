@@ -6,6 +6,9 @@ import { readCompanyPaymentHistory, writeCompanyPayment } from "@/lib/company-pa
 import { clearCompanyRecovery, readCompanyRecovery, saveCompanyRecovery } from "@/lib/company-payment-recovery.mjs";
 import { createPersonalCompanyPaymentTransfer, readPersonalCompanyPaymentBalance } from "@/lib/personal-company-payment.mjs";
 import { PERSONAL_COMPANY_PAYMENT, personalCompanyPaymentAmountAtomic, formatPersonalCompanyPaymentAmount } from "@/lib/personal-company-payment-values.mjs";
+import { readPersonalWalletBalance } from "@/lib/personal-wallet-balance.mjs";
+import { useMemberSession } from "@/lib/member-session-context";
+import { personalWalletBalanceSessionKey } from "@/lib/personal-wallet-balance-store.mjs";
 
 export function companyPaymentErrorKey(failure) {
   const code = failure?.message || "";
@@ -27,13 +30,16 @@ export function companyPaymentErrorKey(failure) {
 
 /** Signature requests happen only in confirm(), never in an effect or a retry. */
 export function useCompanyPayment(reown) {
+  const sessionKey = personalWalletBalanceSessionKey(useMemberSession());
   const wallet = typeof reown.linkedAddress === "string" ? reown.linkedAddress.toLowerCase() : "";
-  const verified = reown.linkStatus === "linked" && /^0x[0-9a-f]{40}$/.test(wallet);
+  const verified = Boolean(sessionKey) && reown.linkStatus === "linked" && /^0x[0-9a-f]{40}$/.test(wallet);
   const connected = verified && reown.isConnected && reown.isLinked;
   const mounted = useRef(false), owner = useRef(wallet), inflight = useRef(null), controller = useRef(null), selected = useRef(null);
-  const epoch = useRef({ wallet, version: 0 });
-  if (epoch.current.wallet !== wallet) epoch.current = { wallet, version: epoch.current.version + 1 };
+  const epoch = useRef({ wallet, sessionKey, version: 0 });
+  if (epoch.current.wallet !== wallet || epoch.current.sessionKey !== sessionKey) epoch.current = { wallet, sessionKey, version: epoch.current.version + 1 };
   const generation = epoch.current.version;
+  const displayedGeneration = useRef(generation);
+  const currentDisplay = displayedGeneration.current === generation;
   const registrations = useRef(new Map());
   const persisted = useRef(false);
   const amountEdited = useRef(false);
@@ -52,11 +58,14 @@ export function useCompanyPayment(reown) {
     return () => { mounted.current = false; controller.current?.abort(); };
   }, []);
   useEffect(() => {
+    displayedGeneration.current = generation;
     selected.current = null; persisted.current = false; setPayment(null); setRecovery(null); setTransfer(null); setStage("form"); setAmount(""); setManualHash(""); setErrorKey("");
+    setBalance({ wallet, loading: false, balanceAtomic: null, error: "" });
+    setHistory({ wallet, loading: false, records: [], error: "" });
     amountEdited.current = false;
     controller.current?.abort();
     inflight.current = null; setBusy(false);
-  }, [wallet]);
+  }, [wallet, sessionKey, generation]);
 
   const refreshHistory = useCallback(async (signal = undefined) => {
     if (!verified) { setHistory({ wallet, loading: false, records: [], error: "" }); return; }
@@ -64,6 +73,7 @@ export function useCompanyPayment(reown) {
     try {
       const result = await readCompanyPaymentHistory({ signal });
       if (!live(wallet) || signal?.aborted) return;
+      if (result.records.some(record => record.walletAddress !== wallet)) throw new Error("personal_company_wallet_changed");
       setHistory({ wallet, loading: false, records: result.records, error: "" });
       const pending = result.records.find(record => record.status === "submitted" || (record.status === "prepared" && ((!record.abandonedAt && Date.parse(record.expiresAt) > Date.now()) || readCompanyRecovery(window.localStorage, record.walletAddress, record.paymentId))));
       if (!selected.current && pending) {
@@ -81,10 +91,13 @@ export function useCompanyPayment(reown) {
   }, [refreshHistory, revision]);
 
   useEffect(() => {
-    if (!connected) { setBalance({ wallet, loading: false, balanceAtomic: null, error: "" }); return undefined; }
+    if (!verified) { setBalance({ wallet, loading: false, balanceAtomic: null, error: "" }); return undefined; }
     const request = new AbortController();
     setBalance({ wallet, loading: true, balanceAtomic: null, error: "" });
-    Promise.resolve().then(() => readPersonalCompanyPaymentBalance({ walletProvider: reown.getCompanyPaymentProvider(), walletAddress: wallet, signal: request.signal }))
+    Promise.resolve().then(() => readPersonalWalletBalance({ signal: request.signal }).then(value => {
+        if (value.walletAddress !== wallet) throw new Error("personal_company_wallet_changed");
+        return value;
+      }))
       .then(result => { if (live(wallet) && !request.signal.aborted) {
         setBalance({ wallet, loading: false, balanceAtomic: result.balanceAtomic, error: "" });
         if (!amountEdited.current && !selected.current && BigInt(result.balanceAtomic) > 0n) {
@@ -93,10 +106,10 @@ export function useCompanyPayment(reown) {
       } })
       .catch(failure => { if (live(wallet) && !request.signal.aborted) setBalance({ wallet, loading: false, balanceAtomic: null, error: companyPaymentErrorKey(failure) }); });
     return () => request.abort();
-  }, [connected, wallet, reown.getCompanyPaymentProvider, live, revision]);
+  }, [verified, wallet, live, revision]);
 
   useEffect(() => {
-    if (!connected || busy || typeof window === "undefined" || typeof document === "undefined") return undefined;
+    if (!verified || busy || typeof window === "undefined" || typeof document === "undefined") return undefined;
     let timer;
     const returned = () => {
       clearTimeout(timer);
@@ -114,7 +127,7 @@ export function useCompanyPayment(reown) {
       window.removeEventListener("pageshow", returned);
       document.removeEventListener("visibilitychange", returned);
     };
-  }, [connected, wallet, live, busy]);
+  }, [verified, wallet, live, busy]);
 
   const save = useCallback(value => {
     const safe = companyPaymentView(value);
@@ -145,7 +158,7 @@ export function useCompanyPayment(reown) {
 
   function review() {
     const atomic = personalCompanyPaymentAmountAtomic(amount);
-    if (inflight.current || !connected || !atomic || balance.wallet !== wallet || balance.balanceAtomic === null || BigInt(atomic) > BigInt(balance.balanceAtomic)) return;
+    if (!currentDisplay || !live(wallet) || inflight.current || !connected || !atomic || balance.wallet !== wallet || balance.balanceAtomic === null || BigInt(atomic) > BigInt(balance.balanceAtomic)) return;
     if (persisted.current && selected.current && selected.current.status === "prepared"
       && (selected.current.chainId !== PERSONAL_COMPANY_PAYMENT.chainId || selected.current.amountAtomic !== atomic)) { setErrorKey("companyPayment.pendingExists"); setStage("status"); return; }
     setErrorKey("");
@@ -160,12 +173,17 @@ export function useCompanyPayment(reown) {
 
   async function confirm() {
     const preview = selected.current;
-    if (inflight.current || !connected || !preview || preview.chainId !== PERSONAL_COMPANY_PAYMENT.chainId || preview.status !== "prepared" || preview.abandonedAt || preview.walletAddress !== wallet || balance.balanceAtomic === null) return;
+    if (!currentDisplay || !live(wallet) || inflight.current || !connected || !preview || preview.chainId !== PERSONAL_COMPANY_PAYMENT.chainId || preview.status !== "prepared" || preview.abandonedAt || preview.walletAddress !== wallet || balance.balanceAtomic === null) return;
     const stored = readCompanyRecovery(window.localStorage, wallet, preview.paymentId);
     if (stored) { setRecovery(stored); setStage("status"); setErrorKey("companyPayment.ambiguousCopy"); return; }
     const operation = {}; inflight.current = operation; setBusy(true); setErrorKey("");
     const request = new AbortController(); controller.current = request;
     try {
+      // Display reads do not need AppKit. Signing still verifies its live
+      // account, network and exact token balance before preparing any payment.
+      const liveBalance = await readPersonalCompanyPaymentBalance({ walletProvider: reown.getCompanyPaymentProvider(), walletAddress: wallet, signal: request.signal });
+      if (request.signal.aborted || inflight.current !== operation || !live(wallet)) return;
+      if (liveBalance.balanceAtomic !== balance.balanceAtomic) throw new Error("personal_company_balance_changed");
       const prepared = await writeCompanyPayment("prepare", { requestId: preview.paymentId, amountAtomic: preview.amountAtomic }, { signal: request.signal });
       if (request.signal.aborted || inflight.current !== operation || !live(wallet)) return;
       if (prepared.walletAddress !== wallet || prepared.amountAtomic !== preview.amountAtomic) throw new Error("personal_company_wallet_changed");
@@ -217,7 +235,7 @@ export function useCompanyPayment(reown) {
 
   async function verifyPayment() {
     const value = selected.current;
-    if (!value || inflight.current) return;
+    if (!currentDisplay || !live(wallet) || !verified || !value || inflight.current) return;
     const operation = {}; inflight.current = operation; setBusy(true); setErrorKey("");
     try {
       const hash = recovery?.transactionHash || manualHash.trim().toLowerCase();
@@ -238,7 +256,7 @@ export function useCompanyPayment(reown) {
   }
 
   async function connect() {
-    if (busy) return;
+    if (!currentDisplay || !live(wallet) || !sessionKey || busy) return;
     setErrorKey("");
     try {
       if (reown.linkStatus === "error") await reown.refreshLink();
@@ -248,7 +266,7 @@ export function useCompanyPayment(reown) {
     } catch (failure) { if (live(wallet)) setErrorKey(companyPaymentErrorKey(failure)); }
   }
   async function switchNetwork() {
-    if (inflight.current) return;
+    if (!currentDisplay || !live(wallet) || !sessionKey || inflight.current) return;
     const operation = {}; inflight.current = operation; setBusy(true);
     let timer;
     try {
@@ -259,10 +277,10 @@ export function useCompanyPayment(reown) {
     } catch (failure) { if (live(wallet)) setErrorKey(companyPaymentErrorKey(failure)); }
     finally { clearTimeout(timer); if (inflight.current === operation) { inflight.current = null; if (live(wallet)) setBusy(false); } }
   }
-  function edit() { if (!busy) { setErrorKey(""); setStage("form"); } }
+  function edit() { if (currentDisplay && live(wallet) && !busy) { setErrorKey(""); setStage("form"); } }
   async function abandon() {
     const value = selected.current;
-    if (!value || value.status !== "prepared" || inflight.current || manualHash.trim() || readCompanyRecovery(window.localStorage, value.walletAddress, value.paymentId)) return;
+    if (!currentDisplay || !live(wallet) || !verified || !value || value.status !== "prepared" || inflight.current || manualHash.trim() || readCompanyRecovery(window.localStorage, value.walletAddress, value.paymentId)) return;
     if (!persisted.current) { select(null, "form", false); return; }
     const operation = {}; inflight.current = operation; setBusy(true); setErrorKey("");
     try {
@@ -272,13 +290,16 @@ export function useCompanyPayment(reown) {
     } catch (failure) { if (live(wallet)) setErrorKey(companyPaymentErrorKey(failure)); }
     finally { if (inflight.current === operation) { inflight.current = null; if (live(wallet)) setBusy(false); } }
   }
-  function newPayment() { if (!busy && !manualHash.trim() && !recovery && selected.current && (["confirmed", "failed"].includes(selected.current.status) || (selected.current.status === "prepared" && selected.current.abandonedAt))) { select(null, "form", false); setTransfer(null); setRecovery(null); setAmount(""); amountEdited.current = false; setManualHash(""); setRevision(number => number + 1); } }
-  return { wallet, verified, connected, amount, setAmount: value => { amountEdited.current = true; setAmount(value); setErrorKey(""); },
-    balanceAtomic: balance.wallet === wallet ? balance.balanceAtomic : null, loadingBalance: balance.loading,
-    errorKey: errorKey || balance.error || history.error, history: history.wallet === wallet ? history.records : [], historyLoading: history.loading,
-    payment, stage, transfer, recovery, manualHash, setManualHash, busy, review, confirm, connect, switchNetwork, verifyPayment, edit, abandon, newPayment,
-    resume() { if (!busy && selected.current?.chainId === PERSONAL_COMPANY_PAYMENT.chainId && selected.current?.status === "prepared" && !selected.current.abandonedAt && !recovery) setStage("review"); },
+  function newPayment() { if (currentDisplay && live(wallet) && !busy && !manualHash.trim() && !recovery && selected.current && (["confirmed", "failed"].includes(selected.current.status) || (selected.current.status === "prepared" && selected.current.abandonedAt))) { select(null, "form", false); setTransfer(null); setRecovery(null); setAmount(""); amountEdited.current = false; setManualHash(""); setRevision(number => number + 1); } }
+  return { wallet, verified, connected: currentDisplay && connected, amount: currentDisplay ? amount : "", setAmount: value => { if (!currentDisplay || !live(wallet)) return; amountEdited.current = true; setAmount(value); setErrorKey(""); },
+    balanceAtomic: currentDisplay && verified && balance.wallet === wallet ? balance.balanceAtomic : null, loadingBalance: !currentDisplay || balance.loading,
+    errorKey: currentDisplay ? errorKey || balance.error || history.error : "", history: currentDisplay && verified && history.wallet === wallet ? history.records : [], historyLoading: !currentDisplay || history.loading,
+    payment: currentDisplay ? payment : null, stage: currentDisplay ? stage : "form", transfer: currentDisplay ? transfer : null,
+    recovery: currentDisplay ? recovery : null, manualHash: currentDisplay ? manualHash : "", setManualHash: value => { if (currentDisplay && live(wallet)) setManualHash(value); }, busy: currentDisplay && busy,
+    review, confirm, connect, switchNetwork, verifyPayment, edit, abandon, newPayment,
+    resume() { if (currentDisplay && live(wallet) && !busy && selected.current?.chainId === PERSONAL_COMPANY_PAYMENT.chainId && selected.current?.status === "prepared" && !selected.current.abandonedAt && !recovery) setStage("review"); },
     refresh: () => setRevision(number => number + 1), selectHistory(value) {
+      if (!currentDisplay || !live(wallet) || !verified || value.walletAddress !== wallet) return;
       select(value); setManualHash("");
       if (["confirmed", "failed"].includes(value.status)) clearCompanyRecovery(window.localStorage, value.walletAddress, value.paymentId);
       setRecovery(readCompanyRecovery(window.localStorage, value.walletAddress, value.paymentId)); setErrorKey("");

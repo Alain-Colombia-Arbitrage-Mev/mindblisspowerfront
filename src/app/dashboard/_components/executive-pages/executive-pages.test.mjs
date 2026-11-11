@@ -9,6 +9,7 @@ import * as paymentDisplay from '../../../../lib/payment-display.mjs';
 import * as deadline from '../../../../lib/browser-request-deadline.mjs';
 import { translateMessage } from '../../../../i18n/translate.mjs';
 import * as fundingContract from '../../../../lib/wallet-funding-contract.mjs';
+import * as paymentValues from '../../../../lib/personal-company-payment-values.mjs';
 
 const require = createRequire(import.meta.url);
 const pageNames = [
@@ -30,7 +31,8 @@ const emptyComponent = () => null;
 
 // Compile the real split JSX in memory. Effects never run during this server
 // render, and all API-facing dependencies below are synthetic and local.
-function loadPages({ summary = { loading: true, data: null, error: '' }, health = { loading: true }, session = null } = {}) {
+function loadPages({ summary = { loading: true, data: null, error: '' }, health = { loading: true }, session = null, walletBalances = null,
+  walletBalance = { loading: true, error: '', walletAddress: '', balanceAtomic: null, refresh() {} } } = {}) {
   const cache = new Map();
   const mocks = {
     'react': React,
@@ -38,6 +40,8 @@ function loadPages({ summary = { loading: true, data: null, error: '' }, health 
     '@/lib/member-session-context': { useMemberSession: () => session },
     '@/hooks/useMemberSummary': { useMemberSummary: () => ({ state: summary, reload: () => {} }) },
     '@/lib/payment-display.mjs': paymentDisplay,
+    '@/lib/personal-company-payment-values.mjs': paymentValues,
+    '@/hooks/usePersonalWalletBalance': { usePersonalWalletBalance: (_address, network = 'ethereum') => walletBalances?.[network] || walletBalance },
     '@/lib/browser-request-deadline.mjs': deadline,
     '@/lib/member-read.mjs': { isRecoverySummary: data => data?.recovery_mode === true },
     '@/lib/personal-wallet.mjs': {
@@ -74,6 +78,8 @@ function loadPages({ summary = { loading: true, data: null, error: '' }, health 
     '@/components/member/ReferralModule': { default: emptyComponent },
     './CommunityInviteCard': { default: emptyComponent },
     '@/components/panel/NOWPaymentsBalances': { default: emptyComponent },
+    '@/components/wallet/PersonalWalletBalance': { default: props => React.createElement(load(new URL('../../../../components/wallet/PersonalWalletBalance.jsx', import.meta.url)).default, props) },
+    '@/components/wallet/PersonalWalletBalances': { default: props => React.createElement(load(new URL('../../../../components/wallet/PersonalWalletBalances.jsx', import.meta.url)).default, props) },
     '@/components/reown/ReownContext': {
       useReownWallet: () => ({ configured: true, isConnected: false, isLinked: false, startOnramp: async () => {}, openOnramp: async () => {} }),
     },
@@ -194,6 +200,35 @@ test('financial summary offers only the personal wallet without mounting its fun
   assert.match(html, /href="\/dashboard\/wallet-personal"/);
   assert.doesNotMatch(html, /wallet-administrative|Wallet administrativa|MELD/);
   assert.doesNotMatch(html, /<form|Proveedor de prueba|id="personal-wallet"|id="administrative-wallet"/);
+});
+
+test('finance renders only the independent Ethereum USDT read and never falls back to the internal USD ledger', () => {
+  const summary = { loading: false, error: '', data: { wallet_balance_usd: '987654.32', active_packages: 2,
+    payments: [{ purchase_id: 1, created_at: '2026-11-10T12:00:00Z', status: 'paid', total_usd: '25.00' }] } };
+  const walletAddress = `0x${'1'.repeat(40)}`;
+  for (const walletBalance of [
+    { loading: true, error: '', walletAddress, balanceAtomic: null, refresh() {} },
+    { loading: false, error: 'company_payment_rpc_unavailable', walletAddress, balanceAtomic: null, refresh() {} },
+    { loading: false, error: '', walletAddress, balanceAtomic: '0', refresh() {} },
+    { loading: false, error: '', walletAddress, balanceAtomic: '12345678', refresh() {} },
+  ]) {
+    const html = render(loadPages({ summary, walletBalance }).FinanceDashboardPage);
+    assert.doesNotMatch(html, /987654|987,654/);
+    assert.match(html, /USDT/);
+    assert.match(html, /25\.00/); // Membership history retains its own USD price.
+    if (walletBalance.balanceAtomic === null) assert.match(html, /<output[^>]*><bdi[^>]*>— <span>USDT/);
+    else assert.match(html, new RegExp(`<output[^>]*><bdi[^>]*>${walletBalance.balanceAtomic === '0' ? '0' : '12\\.345678'} <span>USDT`));
+  }
+});
+
+test('finance keeps Ethereum and Polygon USDT balances labelled separately without summing them', () => {
+  const walletAddress = `0x${'1'.repeat(40)}`;
+  const base = { loading: false, error: '', walletAddress, nativeBalanceAtomic: '0', refresh() {} };
+  const html = render(loadPages({ summary: { loading: false, error: '', data: { wallet_balance_usd: '987654.32' } },
+    walletBalances: { ethereum: { ...base, balanceAtomic: '10000000' }, polygon: { ...base, balanceAtomic: '28433366' } } }).FinanceDashboardPage);
+  assert.match(html, /data-wallet-network="ethereum"[^]*?10 <span>USDT/);
+  assert.match(html, /data-wallet-network="polygon"[^]*?28\.433366 <span>USDT/);
+  assert.doesNotMatch(html, /38\.433366|987654|987,654/);
 });
 
 test('advisor failure and member support loading still render their existing states after extraction', () => {

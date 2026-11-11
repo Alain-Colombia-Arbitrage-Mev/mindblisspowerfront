@@ -43,7 +43,7 @@ export function PersonalCompanyPayment() {
         : <CompanyPaymentForm showHeading={false} balanceAtomic={flow.balanceAtomic} amount={flow.amount} onAmountChange={flow.setAmount}
           onMax={() => { if (flow.balanceAtomic !== null) flow.setAmount(formatPersonalCompanyPaymentAmount(flow.balanceAtomic)); }}
           onReview={flow.review} onRefresh={flow.refresh} busy={flow.busy} loading={flow.loadingBalance || (flow.verified && flow.historyLoading) || reown.linkStatus === "loading"}
-          connected={flow.connected} onConnect={() => void flow.connect()} error={failure} />}
+          connected={flow.connected} canRefresh={flow.verified} onConnect={() => void flow.connect()} error={failure} />}
     <details className="executive-panel" style={{ marginTop: 20 }}><summary style={{ cursor: "pointer", minHeight: 44, alignContent: "center" }}>{t("companyPayment.historyTitle")}</summary>
       {flow.historyLoading ? <p role="status">{t("common.loading")}</p> : !flow.history.length ? <p className={styles.pending}>{t("companyPayment.emptyHistory")}</p>
         : <div className="executive-table-wrap"><table className="executive-table"><thead><tr><th>{t("financePage.date")}</th><th>USDT</th><th>{t("financePage.status")}</th></tr></thead><tbody>
