@@ -22,7 +22,7 @@ test('company payment translations preserve the full locale and interpolation co
       'ambiguousCopy', 'registerHash', 'hashLabel', 'verify', 'resume', 'statusUnavailable', 'emptyHistory', 'switchNetwork',
       'zeroGas', 'balanceChanged', 'walletMismatch', 'rejected', 'serviceUnavailable', 'paymentFailed', 'networkUnavailable',
       'expired', 'recoveryUnavailable', 'pendingExists', 'connectCopy', 'verifyWallet', 'backWallet', 'newPayment', 'preparedExpired',
-      'abandon', 'abandonedTitle', 'abandonedCopy']) {
+      'abandon', 'abandonedTitle', 'abandonedCopy', 'transferAction']) {
       assert.ok(catalog[key]?.trim(), `${locale}.${key}`);
     }
   }

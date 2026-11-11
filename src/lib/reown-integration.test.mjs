@@ -107,6 +107,29 @@ test('selection changes clear only a previous onramp error and preserve active w
   assert.match(read('../components/reown/ReownProvider.jsx'), /clearOnrampError: \(\) => \{\}/);
 });
 
+test('company network switching first verifies the connected bound wallet and calls only the Polygon AppKit SDK switch', async () => {
+  const address = `0x${'1'.repeat(40)}`, polygon = Object.freeze({ id: 137, name: 'Polygon' });
+  const provider = { request() { assert.fail('network switching used a raw provider request or transaction RPC'); } };
+  const cases = [{}, { account: { isConnected: false } }, { walletProvider: undefined }, { currentAddress: '' }, { boundAddress: '' },
+    { currentAddress: `0x${'2'.repeat(40)}` }];
+  for (const change of cases) {
+    const events = [];
+    const scope = { account: { isConnected: true }, walletProvider: provider, currentAddress: address, boundAddress: address,
+      sameAddress: (left, right) => left.toLowerCase() === right.toLowerCase(), polygon,
+      switchAppKitNetwork: async network => { assert.equal(network, polygon); events.push('polygon SDK switch'); }, ...change };
+    const verifiedProvider = onrampCallback('getCompanyPaymentProvider', scope);
+    scope.getCompanyPaymentProvider = () => { events.push('verify bound wallet'); return verifiedProvider(); };
+    const callback = onrampCallback('switchCompanyPaymentNetwork', scope);
+    if (Object.keys(change).length) {
+      await assert.rejects(callback(), { message: 'personal_company_wallet_unavailable' });
+      assert.deepEqual(events, ['verify bound wallet']);
+    } else {
+      await callback({ id: 1 });
+      assert.deepEqual(events, ['verify bound wallet', 'polygon SDK switch']);
+    }
+  }
+});
+
 test('a hung SDK connect times out with a recoverable category rather than leaving the button busy', async () => {
   const rpc = deferred();
   const runtime = fundingRuntime({ boundAddress: '', binding: { status: 'unlinked', address: '' },
@@ -153,10 +176,10 @@ test('an old cancelled signature cannot confirm ownership or overwrite a newly c
 
 test('SPEI handoff forwards the actual MXN amount without claiming a USD valuation', async () => {
   const runtime = fundingRuntime({ open: () => assert.fail('verified wallet asked to authenticate again') });
-  const result = await runtime.scope.startOnramp({ ...runtime.input, sourceCurrencyCode: 'MXN', paymentMethodType: 'SPEI', amount: 150 });
+  const result = await runtime.scope.startOnramp({ ...runtime.input, sourceCurrencyCode: 'MXN', paymentMethodType: 'SPEI', amount: 931 });
   assert.equal(result.sourceCurrencyCode, 'MXN'); assert.equal(result.minimumUsd, null);
   const url = runtime.events.find(value => value?.opened).opened;
-  assert.equal(url.searchParams.get('sourceAmountLocked'), '150');
+  assert.equal(url.searchParams.get('sourceAmountLocked'), '931');
   assert.equal(url.searchParams.get('sourceCurrencyCodeLocked'), 'MXN');
   assert.equal(url.searchParams.get('paymentMethodTypeLocked'), 'SPEI');
 });

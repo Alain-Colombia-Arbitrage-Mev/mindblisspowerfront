@@ -125,7 +125,7 @@ body:has(> .vp-dashboard-shell) {
 }
 .vp-sidebar-wallet-actions {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 7px;
 }
 
@@ -147,15 +147,21 @@ body:has(> .vp-dashboard-shell) {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  min-height: 40px;
+  gap: 5px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 7px 6px;
   border-radius: 8px;
   background: color-mix(in srgb, var(--vp-text) 6%, transparent);
   color: var(--vp-text);
   font-size: 11px;
   font-weight: 700;
+  line-height: 1.25;
+  text-align: center;
   text-decoration: none;
 }
+.vp-sidebar-wallet-action > svg { flex: 0 0 auto; }
+.vp-sidebar-wallet-action > span { min-width: 0; overflow-wrap: anywhere; }
 .vp-sidebar-wallet-action.primary {
   background: var(--vp-selected);
   color: var(--vp-on-selected);

@@ -31,7 +31,7 @@ export function PersonalCompanyPayment() {
     <div className="executive-page-header"><div><h1 className="executive-title">{t("companyPayment.title")}</h1><p className="executive-subtitle">{t("companyPayment.subtitle")}</p></div></div>
     <div className={styles.actions} style={{ marginBottom: 20 }}>
       <Link className="executive-button" href="/dashboard/wallet-personal">{t("walletPage.addFundsAction")}</Link>
-      {flow.errorKey === "companyPayment.switchNetwork" ? <button type="button" className="executive-button" onClick={() => void flow.switchNetwork()}>{t("companyPayment.switchNetwork")}</button> : null}
+      {flow.errorKey === "companyPayment.switchNetwork" ? <button type="button" className="executive-button" disabled={flow.busy} onClick={() => void flow.switchNetwork()}>{t("companyPayment.switchNetwork")}</button> : null}
     </div>
     {reviewing ? <CompanyPaymentReview payment={payment} onConfirm={() => void flow.confirm()} onBack={() => void flow.abandon()} busy={flow.busy} error={failure} />
       : status ? <CompanyPaymentStatus flow={flow} />

@@ -74,7 +74,8 @@ test('personal discovery retries one transient GET with the exact country and cu
   const calls = [];
   try {
     globalThis.fetch = async (path, init) => { calls.push({ path, init }); return calls.length === 1 ? Response.json({ error: 'wallet_funding_provider_unavailable' }, { status: 503 }) : Response.json(personal); };
-    assert.deepEqual(await readPersonalFundingOptions('MX', { sourceCurrencyCode: 'MXN' }), personal);
+    assert.deepEqual(await readPersonalFundingOptions('MX', { sourceCurrencyCode: 'MXN' }), { ...personal,
+      routes: [{ ...personal.routes[0], paymentMethods: [{ ...personal.routes[0].paymentMethods[0], minimumAmount: 931 }] }] });
     assert.equal(calls.length, 2);
     assert.ok(calls.every(call => call.path.endsWith('country=MX&sourceCurrencyCode=MXN') && call.init.method === 'GET' && call.init.cache === 'no-store'));
     calls.length = 0;

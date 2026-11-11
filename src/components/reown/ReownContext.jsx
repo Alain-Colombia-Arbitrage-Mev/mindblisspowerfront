@@ -22,6 +22,7 @@ export const ReownContext = createContext(Object.freeze({
   cancelOnramp: () => {},
   clearOnrampError: () => {},
   getCompanyPaymentProvider: () => { throw new Error("personal_company_wallet_unavailable"); },
+  switchCompanyPaymentNetwork: async () => { throw new Error("personal_company_wallet_unavailable"); },
   reconnectWallet: async () => { throw new Error("reown_unavailable"); },
   linkWallet: async () => { throw new Error("reown_unavailable"); },
   refreshLink: async () => { throw new Error("reown_unavailable"); },
@@ -51,6 +52,7 @@ export const ReownContext = createContext(Object.freeze({
  * @property {() => void} cancelOnramp
  * @property {() => void} clearOnrampError
  * @property {() => {request: (input: {method: string, params?: unknown[]}) => Promise<unknown>}} getCompanyPaymentProvider
+ * @property {() => Promise<unknown>} switchCompanyPaymentNetwork
  * @property {() => Promise<unknown>} reconnectWallet
  * @property {() => Promise<unknown>} linkWallet
  * @property {() => Promise<unknown>} refreshLink

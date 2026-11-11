@@ -25,6 +25,8 @@ test('personal funding copy distinguishes USD20 from administrative USD50 and lo
     assert.match(funding.personalSpeiMinimum, /SPEI/);
     assert.match(funding.personalSpeiMinimum, /MXN/);
     assert.match(funding.personalSpeiMinimum, /20/);
+    assert.match(funding.personalSpeiMinimum, /931/);
+    assert.match(funding.personalMxnAmountRange, /931.*MXN/);
     assert.match(funding.speiTemporarilyUnavailable, /SPEI/);
     assert.match(funding.speiTemporarilyUnavailable, /MXN/);
     assert.doesNotMatch(funding.speiTemporarilyUnavailable, /USD|20|50/);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createAppKit, useAppKit, useAppKitAccount, useAppKitProvider, useAppKitState, useAppKitTheme, useDisconnect } from "@reown/appkit/react";
+import { createAppKit, useAppKit, useAppKitAccount, useAppKitProvider, useAppKitState, useAppKitTheme, useAppKitNetwork, useDisconnect } from "@reown/appkit/react";
 import { EthersAdapter } from "@reown/appkit-adapter-ethers";
 import { OnRampController } from "@reown/appkit-controllers";
 import { mainnet, polygon } from "@reown/appkit/networks";
@@ -45,6 +45,7 @@ const unavailable = Object.freeze({
   cancelOnramp: () => {},
   clearOnrampError: () => {},
   getCompanyPaymentProvider: () => { throw new Error("personal_company_wallet_unavailable"); },
+  switchCompanyPaymentNetwork: async () => { throw new Error("personal_company_wallet_unavailable"); },
   reconnectWallet: async () => { throw new Error("reown_unavailable"); },
   linkWallet: async () => { throw new Error("reown_unavailable"); },
   refreshLink: async () => { throw new Error("reown_unavailable"); },
@@ -99,6 +100,7 @@ export default function ReownProvider({ children }) {
 function ConfiguredReownProvider({ children }) {
   const { open, close } = useAppKit();
   const appKitState = useAppKitState();
+  const { switchNetwork: switchAppKitNetwork } = useAppKitNetwork();
   const { disconnect } = useDisconnect();
   const account = useAppKitAccount({ namespace: "eip155" });
   const { walletProvider } = useAppKitProvider("eip155");
@@ -478,6 +480,11 @@ function ConfiguredReownProvider({ children }) {
     }
     return walletProvider;
   }, [account.isConnected, walletProvider, currentAddress, boundAddress]);
+  const switchCompanyPaymentNetwork = useCallback(async () => {
+    getCompanyPaymentProvider();
+    // The SDK handles embedded wallets and external EIP-1193 wallets separately.
+    await switchAppKitNetwork(polygon);
+  }, [getCompanyPaymentProvider, switchAppKitNetwork]);
 
   const value = useMemo(() => ({
     configured: true,
@@ -498,13 +505,14 @@ function ConfiguredReownProvider({ children }) {
     cancelOnramp,
     clearOnrampError,
     getCompanyPaymentProvider,
+    switchCompanyPaymentNetwork,
     reconnectWallet,
     linkWallet,
     refreshLink,
     openAccount,
   }), [account.isConnected, account.status, binding.address, binding.error, binding.status, currentAddress, isLinked, isLinking,
     linkWallet, verificationError, fundingRevision, onrampState.error, onrampState.status,
-    cancelOnramp, clearOnrampError, getCompanyPaymentProvider, openAccount, openConnect, openOnramp, reconnectWallet, refreshLink, startOnramp]);
+    cancelOnramp, clearOnrampError, getCompanyPaymentProvider, switchCompanyPaymentNetwork, openAccount, openConnect, openOnramp, reconnectWallet, refreshLink, startOnramp]);
 
   return <ReownContext.Provider value={value}>{children}</ReownContext.Provider>;
 }

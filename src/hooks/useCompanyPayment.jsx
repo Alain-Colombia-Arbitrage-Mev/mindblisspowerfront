@@ -5,7 +5,7 @@ import { companyPaymentView } from "@/lib/company-payment-contract.mjs";
 import { readCompanyPaymentHistory, writeCompanyPayment } from "@/lib/company-payment-client.mjs";
 import { clearCompanyRecovery, readCompanyRecovery, saveCompanyRecovery } from "@/lib/company-payment-recovery.mjs";
 import { createPersonalCompanyPaymentTransfer, readPersonalCompanyPaymentBalance } from "@/lib/personal-company-payment.mjs";
-import { PERSONAL_COMPANY_PAYMENT, personalCompanyPaymentAmountAtomic } from "@/lib/personal-company-payment-values.mjs";
+import { PERSONAL_COMPANY_PAYMENT, personalCompanyPaymentAmountAtomic, formatPersonalCompanyPaymentAmount } from "@/lib/personal-company-payment-values.mjs";
 
 export function companyPaymentErrorKey(failure) {
   const code = failure?.message || "";
@@ -35,6 +35,7 @@ export function useCompanyPayment(reown) {
   const generation = epoch.current.version;
   const registrations = useRef(new Map());
   const persisted = useRef(false);
+  const amountEdited = useRef(false);
   owner.current = wallet;
   const [amount, setAmount] = useState("");
   const [balance, setBalance] = useState({ wallet: "", loading: false, balanceAtomic: null, error: "" });
@@ -51,6 +52,7 @@ export function useCompanyPayment(reown) {
   }, []);
   useEffect(() => {
     selected.current = null; persisted.current = false; setPayment(null); setRecovery(null); setTransfer(null); setStage("form"); setAmount(""); setManualHash(""); setErrorKey("");
+    amountEdited.current = false;
     controller.current?.abort();
     inflight.current = null; setBusy(false);
   }, [wallet]);
@@ -82,7 +84,12 @@ export function useCompanyPayment(reown) {
     const request = new AbortController();
     setBalance({ wallet, loading: true, balanceAtomic: null, error: "" });
     Promise.resolve().then(() => readPersonalCompanyPaymentBalance({ walletProvider: reown.getCompanyPaymentProvider(), walletAddress: wallet, signal: request.signal }))
-      .then(result => { if (live(wallet) && !request.signal.aborted) setBalance({ wallet, loading: false, balanceAtomic: result.balanceAtomic, error: "" }); })
+      .then(result => { if (live(wallet) && !request.signal.aborted) {
+        setBalance({ wallet, loading: false, balanceAtomic: result.balanceAtomic, error: "" });
+        if (!amountEdited.current && !selected.current && BigInt(result.balanceAtomic) > 0n) {
+          setAmount(current => current === "" ? formatPersonalCompanyPaymentAmount(result.balanceAtomic) : current);
+        }
+      } })
       .catch(failure => { if (live(wallet) && !request.signal.aborted) setBalance({ wallet, loading: false, balanceAtomic: null, error: companyPaymentErrorKey(failure) }); });
     return () => request.abort();
   }, [connected, wallet, reown.getCompanyPaymentProvider, live, revision]);
@@ -218,10 +225,16 @@ export function useCompanyPayment(reown) {
     } catch (failure) { if (live(wallet)) setErrorKey(companyPaymentErrorKey(failure)); }
   }
   async function switchNetwork() {
+    if (inflight.current) return;
+    const operation = {}; inflight.current = operation; setBusy(true);
+    let timer;
     try {
-      await reown.getCompanyPaymentProvider().request({ method: "wallet_switchEthereumChain", params: [{ chainId: "0x89" }] });
+      await Promise.race([reown.switchCompanyPaymentNetwork(), new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error("personal_company_rpc_unavailable")), 12_000);
+      })]);
       if (live(wallet)) { setErrorKey(""); setRevision(number => number + 1); }
     } catch (failure) { if (live(wallet)) setErrorKey(companyPaymentErrorKey(failure)); }
+    finally { clearTimeout(timer); if (inflight.current === operation) { inflight.current = null; if (live(wallet)) setBusy(false); } }
   }
   function edit() { if (!busy) { setErrorKey(""); setStage("form"); } }
   async function abandon() {
@@ -236,8 +249,8 @@ export function useCompanyPayment(reown) {
     } catch (failure) { if (live(wallet)) setErrorKey(companyPaymentErrorKey(failure)); }
     finally { if (inflight.current === operation) { inflight.current = null; if (live(wallet)) setBusy(false); } }
   }
-  function newPayment() { if (!busy && !manualHash.trim() && !recovery && selected.current && (["confirmed", "failed"].includes(selected.current.status) || (selected.current.status === "prepared" && selected.current.abandonedAt))) { select(null, "form", false); setTransfer(null); setRecovery(null); setAmount(""); setManualHash(""); setRevision(number => number + 1); } }
-  return { wallet, verified, connected, amount, setAmount: value => { setAmount(value); setErrorKey(""); },
+  function newPayment() { if (!busy && !manualHash.trim() && !recovery && selected.current && (["confirmed", "failed"].includes(selected.current.status) || (selected.current.status === "prepared" && selected.current.abandonedAt))) { select(null, "form", false); setTransfer(null); setRecovery(null); setAmount(""); amountEdited.current = false; setManualHash(""); setRevision(number => number + 1); } }
+  return { wallet, verified, connected, amount, setAmount: value => { amountEdited.current = true; setAmount(value); setErrorKey(""); },
     balanceAtomic: balance.wallet === wallet ? balance.balanceAtomic : null, loadingBalance: balance.loading,
     errorKey: errorKey || balance.error || history.error, history: history.wallet === wallet ? history.records : [], historyLoading: history.loading,
     payment, stage, transfer, recovery, manualHash, setManualHash, busy, review, confirm, connect, switchNetwork, verifyPayment, edit, abandon, newPayment,

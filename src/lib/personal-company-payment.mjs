@@ -34,6 +34,13 @@ function quantity(value) {
   return BigInt(value);
 }
 
+function chainIdentity(value) {
+  // AppKit 1.8.24 W3mFrameProvider.getLastUsedChainId returns a number for EVM.
+  // This compatibility applies only to network identity, never gas or amounts.
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value > 0) return BigInt(value);
+  return quantity(value);
+}
+
 function uintResult(value) {
   if (typeof value !== 'string' || !/^0x[0-9a-f]{64}$/i.test(value)) throw error('personal_company_rpc_unavailable');
   return BigInt(value);
@@ -43,7 +50,7 @@ function walletContext(walletProvider, walletAddress, signal, readTimeoutMs) {
   if (!walletProvider || typeof walletProvider.request !== 'function' || !address(walletAddress)) throw error('personal_company_wallet_unavailable');
   let changed;
   const accountsChanged = accounts => { if (!Array.isArray(accounts) || address(accounts[0]) !== walletAddress) changed = 'personal_company_wallet_changed'; };
-  const chainChanged = chain => { try { if (quantity(chain) !== 137n) changed = 'personal_company_chain_changed'; } catch { changed = 'personal_company_chain_changed'; } };
+  const chainChanged = chain => { try { if (chainIdentity(chain) !== 137n) changed = 'personal_company_chain_changed'; } catch { changed = 'personal_company_chain_changed'; } };
   const assertActive = () => { if (signal?.aborted) throw cancelled(); if (changed) throw error(changed); };
   if (typeof walletProvider.on === 'function' && typeof walletProvider.removeListener === 'function') {
     walletProvider.on('accountsChanged', accountsChanged); walletProvider.on('chainChanged', chainChanged);
@@ -66,7 +73,7 @@ function walletContext(walletProvider, walletAddress, signal, readTimeoutMs) {
   }
   async function verify() {
     const [chain, accounts] = await Promise.all([read('eth_chainId'), read('eth_accounts')]);
-    if (quantity(chain) !== 137n) throw error('personal_company_chain_changed');
+    if (chainIdentity(chain) !== 137n) throw error('personal_company_chain_changed');
     if (!Array.isArray(accounts) || address(accounts[0]) !== walletAddress) throw error('personal_company_wallet_changed');
     assertActive();
   }

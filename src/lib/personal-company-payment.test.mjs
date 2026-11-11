@@ -72,6 +72,27 @@ test('MAX reads the complete token balance without requesting signatures, accoun
   assert.equal(mock.provider.listenerCount('chainChanged'), 0);
 });
 
+test('the installed AppKit embedded provider numeric chain ID is accepted without weakening gas or token quantities', async () => {
+  const mock = fixture({ chain: 137, hooks: { eth_gasPrice: (_request, provider) => { provider.emit('chainChanged', 137); return '0x64'; } } });
+  const result = await readPersonalCompanyPaymentBalance({ walletProvider: mock.provider, walletAddress: sender });
+  assert.equal(result.balanceAtomic, balance);
+  assert.equal(result.chainId, 137);
+  assert.equal((await mock.create().sendPrepared(intent(), { reviewedBalanceAtomic: balance })).phase, 'broadcast');
+  assert.equal(mock.sends().length, 1);
+  const wrong = fixture({ chain: 1 });
+  await assert.rejects(readPersonalCompanyPaymentBalance({ walletProvider: wrong.provider, walletAddress: sender }), { message: 'personal_company_chain_changed' });
+  for (const chain of [null, [137], { chainId: 137 }, 137.5, Number.MAX_SAFE_INTEGER + 1, Infinity, NaN]) {
+    const invalid = fixture({ chain });
+    await assert.rejects(readPersonalCompanyPaymentBalance({ walletProvider: invalid.provider, walletAddress: sender }));
+    assert.equal(invalid.sends().length, 0);
+  }
+  const numericGas = fixture({ chain: 137, hooks: { eth_gasPrice: () => 100 } });
+  await assert.rejects(numericGas.create().sendPrepared(intent(), { reviewedBalanceAtomic: balance }), { message: 'personal_company_rpc_unavailable' });
+  assert.equal(numericGas.sends().length, 0);
+  const numericToken = fixture({ chain: 137, hooks: { eth_call: () => 6 } });
+  await assert.rejects(readPersonalCompanyPaymentBalance({ walletProvider: numericToken.provider, walletAddress: sender }), { message: 'personal_company_rpc_unavailable' });
+});
+
 test('a prepared backend intent cannot change the sender, company, token, chain, precision or expiry', () => {
   for (const patch of [{ walletAddress: other }, { recipientAddress: other }, { tokenAddress: other }, { chainId: 1 },
     { tokenDecimals: 18 }, { amountAtomic: 20 }, { amountAtomic: '01' }, { amountAtomic: '0' }, { status: 'confirmed' },

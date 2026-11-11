@@ -51,10 +51,12 @@ function harness(overrides = {}) {
     useEffect(callback, deps) { const index = cursor++, cell = slots[index] ??= {};
       if (dependenciesChanged(cell.deps, deps)) { cell.deps = deps; effects.push(() => { cell.cleanup?.(); cell.cleanup = callback(); }); } },
   };
-  const sdk = { creations: [], broadcasts: [], sends: [] };
+  const sdk = { creations: [], broadcasts: [], sends: [], networkSwitches: [] };
   const provider = { request() { assert.fail('a real wallet RPC was attempted'); } };
   const getProvider = () => provider;
+  const switchProviderNetwork = async () => { sdk.networkSwitches.push('polygon'); return overrides.switchNetwork?.(); };
   const reown = () => ({ linkedAddress: sourceWallet, linkStatus: 'linked', isConnected: true, isLinked: true, getCompanyPaymentProvider: getProvider,
+    switchCompanyPaymentNetwork: switchProviderNetwork,
     openConnect: () => assert.fail('unexpected wallet connection'), linkWallet: () => assert.fail('unexpected signature') });
   const client = {
     async readCompanyPaymentHistory(options) { calls.push({ action: 'history' }); return overrides.history ? overrides.history(options) : { records: [] }; },
@@ -68,7 +70,7 @@ function harness(overrides = {}) {
     },
   };
   const transfer = {
-    async readPersonalCompanyPaymentBalance() { return { balanceAtomic }; },
+    async readPersonalCompanyPaymentBalance() { return overrides.balance ? overrides.balance() : { balanceAtomic }; },
     createPersonalCompanyPaymentTransfer(options) {
       sdk.creations.push(options);
       const sender = { markSubmitted: (...args) => sdk.broadcasts.push(args), async sendPrepared(prepared, config) {
@@ -87,10 +89,10 @@ function harness(overrides = {}) {
   const browserNavigator = overrides.navigator || { locks: lockManager() };
   const imports = { react: hooks, '@/lib/company-payment-contract.mjs': contracts, '@/lib/company-payment-client.mjs': client,
     '@/lib/company-payment-recovery.mjs': recovery, '@/lib/personal-company-payment.mjs': transfer, '@/lib/personal-company-payment-values.mjs': values };
-  new Function('require', 'module', 'exports', 'window', 'crypto', 'navigator', 'globalThis', code)(id => {
+  new Function('require', 'module', 'exports', 'window', 'crypto', 'navigator', 'globalThis', 'setTimeout', 'clearTimeout', code)(id => {
     assert.ok(Object.hasOwn(imports, id), `Unexpected hook dependency ${id}`); return imports[id];
   }, module, module.exports, { localStorage }, { randomUUID: () => (++nextId === 1 ? paymentId : otherId) },
-  browserNavigator, { navigator: browserNavigator });
+  browserNavigator, { navigator: browserNavigator }, overrides.setTimeout || setTimeout, clearTimeout);
   function render() { cursor = 0; dirty = false; current = module.exports.useCompanyPayment(reown()); }
   return {
     get flow() { return current; }, calls, sdk, localStorage,
@@ -132,6 +134,17 @@ function page(h) {
   return module.exports.PersonalCompanyPayment();
 }
 const find = (node, predicate) => predicate(node) ? node : React.Children.toArray(node?.props?.children).map(child => find(child, predicate)).find(Boolean);
+
+test('the first verified balance prefills the exact maximum without preparing a payment and later refreshes preserve explicit edits', async () => {
+  let available = balanceAtomic;
+  const h = harness({ balance: async () => ({ balanceAtomic: available }) }); await h.flush();
+  assert.equal(h.flow.amount, '25.123456'); assert.deepEqual(writes(h), []); assert.equal(h.sdk.sends.length, 0);
+  h.flow.setAmount('5'); await h.flush(); available = '30000000'; h.flow.refresh(); await h.flush();
+  assert.equal(h.flow.amount, '5'); assert.equal(h.flow.balanceAtomic, available);
+  h.flow.setAmount(''); await h.flush(); h.flow.refresh(); await h.flush(); assert.equal(h.flow.amount, '');
+  h.flow.selectHistory(confirmed()); await h.flush(); h.flow.newPayment(); await h.flush();
+  assert.equal(h.flow.amount, '30'); assert.deepEqual(writes(h), []); assert.equal(h.sdk.sends.length, 0);
+});
 
 test('actual page MAX, preview and editing never prepare or send; explicit confirmation prepares the exact amount before SDK dispatch', async () => {
   const gate = deferred(); let requested;
@@ -257,4 +270,30 @@ test('one origin-wide wallet lock excludes a second tab before either preflight 
   } finally { gate.resolve(); await Promise.allSettled([a, b]); await first.flush(); await second.flush(); }
   const unsupported = harness({ navigator: {} }); await unsupported.flush(); await preview(unsupported); await unsupported.flow.confirm(); await unsupported.flush();
   assert.equal(unsupported.sdk.sends.length, 0); assert.equal(unsupported.flow.errorKey, 'companyPayment.recoveryUnavailable');
+});
+
+test('switching network is explicit SDK-only work, deduplicates clicks and cannot prepare or dispatch a payment', async () => {
+  const pending = deferred(), h = harness({ switchNetwork: () => pending.promise }); await h.flush(); await preview(h);
+  assert.equal(h.sdk.networkSwitches.length, 0);
+  const selected = h.flow.payment.paymentId, first = h.flow.switchNetwork(), duplicate = h.flow.switchNetwork();
+  await h.flush(); assert.equal(h.flow.busy, true); assert.equal(h.sdk.networkSwitches.length, 1);
+  assert.deepEqual(writes(h), []); assert.equal(h.sdk.sends.length, 0);
+  pending.resolve(); await Promise.all([first, duplicate]); await h.flush();
+  assert.equal(h.flow.busy, false); assert.equal(h.flow.payment.paymentId, selected); assert.equal(h.flow.stage, 'review');
+  assert.deepEqual(writes(h), []); assert.equal(h.sdk.sends.length, 0);
+});
+
+test('network switching has a twelve-second deadline and ignores an acknowledgement from an old wallet generation', async () => {
+  const pending = deferred(), h = harness({ switchNetwork: () => pending.promise }); await h.flush();
+  const old = h.flow.switchNetwork(); await h.flush(); await h.wallet(otherWallet); await h.wallet(wallet); await preview(h, '10');
+  const selected = h.flow.payment.paymentId, historyReads = h.calls.filter(call => call.action === 'history').length;
+  pending.resolve(); await old; await h.flush();
+  assert.equal(h.flow.busy, false); assert.equal(h.flow.payment.paymentId, selected); assert.equal(h.flow.stage, 'review');
+  assert.equal(h.calls.filter(call => call.action === 'history').length, historyReads); assert.deepEqual(writes(h), []);
+  const timed = harness({ switchNetwork: () => new Promise(() => {}), setTimeout(callback, milliseconds) {
+    assert.equal(milliseconds, 12_000); return setTimeout(callback, 5);
+  } });
+  await timed.flush(); await timed.flow.switchNetwork(); await timed.flush();
+  assert.equal(timed.flow.busy, false); assert.equal(timed.flow.errorKey, 'companyPayment.networkUnavailable');
+  assert.deepEqual(writes(timed), []); assert.equal(timed.sdk.sends.length, 0);
 });

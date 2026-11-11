@@ -61,11 +61,11 @@ test('SPEI handoff locks the actual MXN amount and method without a fabricated U
   const selection = { countryCode: 'MX', sourceCurrencyCode: 'MXN', paymentMethodType: 'SPEI' };
   assert.deepEqual(reownFundingSelection(selection), { countryCode: 'MX', sourceCurrencyCode: 'MXN' });
   assert.equal(reownFundingCurrency('MXN', selection), 'MXN');
-  const url = new URL(buildReownProductionOnrampUrl({ ...input, ...selection, amount: 148.66, allowedProviders: ['SWAPPED'] }));
+  const url = new URL(buildReownProductionOnrampUrl({ ...input, ...selection, amount: 931, allowedProviders: ['SWAPPED'] }));
   assert.equal(url.searchParams.get('sourceCurrencyCode'), 'MXN');
   assert.equal(url.searchParams.get('sourceCurrencyCodeLocked'), 'MXN');
-  assert.equal(url.searchParams.get('sourceAmount'), '148.66');
-  assert.equal(url.searchParams.get('sourceAmountLocked'), '148.66');
+  assert.equal(url.searchParams.get('sourceAmount'), '931');
+  assert.equal(url.searchParams.get('sourceAmountLocked'), '931');
   assert.equal(url.searchParams.get('paymentMethodType'), 'SPEI');
   assert.equal(url.searchParams.get('paymentMethodTypeLocked'), 'SPEI');
   assert.equal(url.searchParams.get('destinationCurrencyCode'), 'USDT_POLYGON');
@@ -73,7 +73,7 @@ test('SPEI handoff locks the actual MXN amount and method without a fabricated U
   for (const patch of [{ countryCode: 'US' }, { paymentMethodType: 'CREDIT_DEBIT_CARD' }, { sourceCurrencyCode: 'COP' }]) {
     assert.throws(() => buildReownProductionOnrampUrl({ ...input, ...selection, ...patch }), { message: 'wallet_funding_valuation_unavailable' });
   }
-  for (const amount of [0, -1, '148.66', 148.666, Infinity, 1000000000.01]) {
+  for (const amount of [0, -1, 148.66, 930.99, '931', 931.001, Infinity, 1000000000.01]) {
     assert.throws(() => buildReownProductionOnrampUrl({ ...input, ...selection, amount }), { message: 'reown_context_invalid' });
   }
 });

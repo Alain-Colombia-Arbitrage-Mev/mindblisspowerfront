@@ -1,5 +1,6 @@
 export const companyPaymentMessages = {
   es: { companyPayment: {
+    transferAction: "Transferir",
     title: "Pagar a Mindbliss", subtitle: "Envía USDT desde tu wallet personal a la dirección de la empresa.",
     amountLabel: "Importe a enviar", availableBalance: "Saldo disponible en tu wallet personal", max: "Máx.",
     refreshBalance: "Actualizar saldo", loadingBalance: "Consultando saldo…", recipientLabel: "Dirección de Mindbliss",
@@ -47,6 +48,7 @@ export const companyPaymentMessages = {
     busyLabel: "Preparando pago…", invalidReview: "No pudimos validar los datos de este pago. Vuelve al formulario para revisarlos.",
   } },
   en: { companyPayment: {
+    transferAction: "Transfer",
     title: "Pay Mindbliss", subtitle: "Send USDT from your personal wallet to the company address.",
     amountLabel: "Amount to send", availableBalance: "Available in your personal wallet", max: "Max",
     refreshBalance: "Refresh balance", loadingBalance: "Checking balance…", recipientLabel: "Mindbliss address",
@@ -94,6 +96,7 @@ export const companyPaymentMessages = {
     busyLabel: "Preparing payment…", invalidReview: "We could not validate this payment’s details. Return to the form to review them.",
   } },
   ar: { companyPayment: {
+    transferAction: "تحويل",
     title: "الدفع إلى Mindbliss", subtitle: "أرسل USDT من محفظتك الشخصية إلى عنوان الشركة.",
     amountLabel: "المبلغ المراد إرساله", availableBalance: "الرصيد المتاح في محفظتك الشخصية", max: "الحد الأقصى",
     refreshBalance: "تحديث الرصيد", loadingBalance: "جارٍ التحقق من الرصيد…", recipientLabel: "عنوان Mindbliss",
@@ -141,6 +144,7 @@ export const companyPaymentMessages = {
     busyLabel: "جارٍ إعداد الدفع…", invalidReview: "تعذر التحقق من بيانات هذا الدفع. عد إلى النموذج لمراجعتها.",
   } },
   zh: { companyPayment: {
+    transferAction: "转账",
     title: "向 Mindbliss 付款", subtitle: "从你的个人钱包向公司地址发送 USDT。",
     amountLabel: "发送金额", availableBalance: "个人钱包可用余额", max: "全部",
     refreshBalance: "刷新余额", loadingBalance: "正在查询余额…", recipientLabel: "Mindbliss 地址",

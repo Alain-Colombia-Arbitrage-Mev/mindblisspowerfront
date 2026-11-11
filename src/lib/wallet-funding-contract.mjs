@@ -9,6 +9,8 @@ const PROVIDERS = new Set(['TRANSAK', 'BANXA']);
 export const PERSONAL_FUNDING_PROVIDERS = Object.freeze(['SWAPPED', 'MERCURYO']);
 const PERSONAL_PROVIDERS = new Set(PERSONAL_FUNDING_PROVIDERS);
 export const PERSONAL_FUNDING_MINIMUM_USD = PERSONAL_WALLET_MINIMUM_USD;
+// A fixed Mindbliss amount in pesos, not a live USD conversion.
+export const PERSONAL_FUNDING_MINIMUM_MXN = 931;
 export const ADMINISTRATIVE_FUNDING_MINIMUM_USD = 50;
 export const PERSONAL_FUNDING_COUNTRIES = Object.freeze(['US', 'MX']);
 export const PERSONAL_FUNDING_BLOCKED_METHODS = Object.freeze(['NETELLER', 'SKRILL']);
@@ -40,10 +42,10 @@ function validFiatAmount(value) {
     && Math.abs(value * 100 - Math.round(value * 100)) < 0.000001;
 }
 
-/** Local SPEI amounts use provider limits; they are not a USD valuation. */
+/** New SPEI requests use the fixed MXN floor plus provider limits, never a USD valuation. */
 export function validFundingSourceAmount(value, kind = 'personal', sourceCurrencyCode = 'USD') {
   if (sourceCurrencyCode === 'USD') return validFundingAmount(value, kind);
-  return kind === 'personal' && sourceCurrencyCode === 'MXN' && validFiatAmount(value);
+  return kind === 'personal' && sourceCurrencyCode === 'MXN' && validFiatAmount(value) && value >= PERSONAL_FUNDING_MINIMUM_MXN;
 }
 
 export function fundingSourceSupported(value, kind) {
@@ -56,7 +58,9 @@ export function fundingSourceSupported(value, kind) {
 function requestedSource(value, kind, countryRequired = false) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const currency = fundingCurrencyCode(value?.sourceCurrencyCode);
-  if (!currency || !validFundingSourceAmount(value.requestedAmount, kind, currency)) return null;
+  // Historical requests retain their actual original amount after policy changes.
+  const historicalLocal = countryRequired && kind === 'personal' && currency === 'MXN';
+  if (!currency || !(historicalLocal ? validFiatAmount(value.requestedAmount) : validFundingSourceAmount(value.requestedAmount, kind, currency))) return null;
   if (currency !== 'USD' && (value.paymentMethodType !== 'SPEI'
     || (countryRequired && value.country !== 'MX'))) return null;
   if (value.paymentMethodType !== undefined
@@ -71,7 +75,8 @@ export function fundingInput(value, kind) {
   const keys = ['requestId', 'walletAddress', 'country', 'amount', 'paymentMethodType', 'sourceCurrencyCode', ...(kind === 'administrative' ? ['serviceProvider'] : [])];
   if (Object.keys(value).some(key => !keys.includes(key)) || !FUNDING_UUID.test(value.requestId || '')
     || !ADDRESS.test(value.walletAddress || '') || !COUNTRY.test(value.country || '') || !currency
-    || !(currency === 'USD' ? validFundingAmount(value.amount, kind) : validFiatAmount(value.amount))
+    || !((currency === 'USD' || (kind === 'personal' && currency === 'MXN'))
+      ? validFundingSourceAmount(value.amount, kind, currency) : validFiatAmount(value.amount))
     || typeof value.paymentMethodType !== 'string' || !METHOD.test(value.paymentMethodType)) return null;
   if (kind === 'administrative' && !PROVIDERS.has(value.serviceProvider)) return null;
   if (kind === 'personal' && (!personalFundingCountry(value.country) || !personalFundingMethod(value.paymentMethodType))) return null;
@@ -211,7 +216,9 @@ function fundingOptions(value, kind) {
   if (methods.size !== value.paymentMethods.length || value.paymentMethods.some(method => !methods.has(method))) return null;
   const safeRoutes = administrative ? routes : routes.map(route => ({ ...route,
     paymentMethods: route.paymentMethods.filter(method => personalFundingMethod(method.method)
-      && fundingSourceSupported({ sourceCurrencyCode, country: value.country, paymentMethodType: method.method }, 'personal')),
+      && fundingSourceSupported({ sourceCurrencyCode, country: value.country, paymentMethodType: method.method }, 'personal'))
+      .map(method => sourceCurrencyCode === 'MXN' ? { ...method, minimumAmount: Math.max(PERSONAL_FUNDING_MINIMUM_MXN, method.minimumAmount) } : method)
+      .filter(method => method.maximumAmount >= method.minimumAmount),
   })).filter(route => route.paymentMethods.length > 0);
   const safeMethods = new Set(safeRoutes.flatMap(route => route.paymentMethods.map(method => method.method)));
   return { walletKind: kind, environment, provider, country: value.country, sourceCurrencyCode,

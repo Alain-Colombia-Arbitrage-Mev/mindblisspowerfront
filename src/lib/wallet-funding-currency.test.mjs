@@ -14,7 +14,7 @@ const options = kind => ({ walletKind: kind, environment: kind === 'personal' ? 
   provider: kind === 'personal' ? 'reown' : 'meld', country: 'MX', sourceCurrencyCode: 'MXN',
   ...(kind === 'administrative' ? { serviceProvider: 'TRANSAK' } : {}), paymentMethods: ['SPEI'],
   routes: [{ serviceProvider: kind === 'personal' ? 'SWAPPED' : 'TRANSAK', paymentMethods: [
-    { method: 'SPEI', currencyCode: 'MXN', minimumAmount: 150, maximumAmount: 100000 }] }] });
+    { method: 'SPEI', currencyCode: 'MXN', minimumAmount: kind === 'personal' ? 931 : 150, maximumAmount: 100000 }] }] });
 const get = query => new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/wallet-funding/${query}`,
   { headers: { cookie: 'better-auth.session_token=synthetic' } });
 const post = body => new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/wallet-funding/personal/intent`, {

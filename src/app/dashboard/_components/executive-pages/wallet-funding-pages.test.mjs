@@ -6,7 +6,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 import { translateMessage } from '../../../../i18n/translate.mjs';
-import { PERSONAL_FUNDING_COUNTRIES, PERSONAL_FUNDING_MINIMUM_USD, personalFundingMethod, validFundingAmount, WALLET_GATEWAY_FAILURE_REASONS, FUNDING_UUID, fundingStatus } from '../../../../lib/wallet-funding-contract.mjs';
+import { PERSONAL_FUNDING_COUNTRIES, PERSONAL_FUNDING_MINIMUM_USD, PERSONAL_FUNDING_MINIMUM_MXN, personalFundingMethod, validFundingAmount, validFundingSourceAmount, WALLET_GATEWAY_FAILURE_REASONS, FUNDING_UUID, fundingStatus } from '../../../../lib/wallet-funding-contract.mjs';
 import { personalFundingFailure } from '../../../../lib/personal-funding-errors.mjs';
 
 const require = createRequire(import.meta.url);
@@ -20,7 +20,7 @@ function load(filename, mocks) {
   const module = { exports: {} };
   new Function('require', 'module', 'exports', code)(id => {
     if (Object.hasOwn(mocks, id)) return mocks[id];
-    if (id === '@/lib/wallet-funding-contract.mjs') return { PERSONAL_FUNDING_COUNTRIES, PERSONAL_FUNDING_MINIMUM_USD, personalFundingMethod, validFundingAmount, WALLET_GATEWAY_FAILURE_REASONS, FUNDING_UUID, fundingStatus };
+    if (id === '@/lib/wallet-funding-contract.mjs') return { PERSONAL_FUNDING_COUNTRIES, PERSONAL_FUNDING_MINIMUM_USD, PERSONAL_FUNDING_MINIMUM_MXN, personalFundingMethod, validFundingAmount, validFundingSourceAmount, WALLET_GATEWAY_FAILURE_REASONS, FUNDING_UUID, fundingStatus };
     if (id === 'next/link') return { default: ({ href, children, ...props }) => React.createElement('a', { href, ...props }, children) };
     if (id.endsWith('.module.css')) return styles;
     if (id === 'react/jsx-runtime' || id === 'react') return require(id);
@@ -49,7 +49,7 @@ function formHarness(name, api, detectedCountry = 'US') {
   const harness = componentHarness('WalletFundingForm.jsx', name, { 'lucide-react': icons, '@/i18n/LanguageProvider': i18n,
     '@/lib/browser-onramp-region.mjs': { browserOnrampRegion: () => detectedCountry },
     '@/lib/wallet-funding-client.mjs': { fundingRequestId: () => 'd8a4c010-cc33-44da-a297-8b3c6440f491', ...api },
-    '@/lib/wallet-funding-contract.mjs': { PERSONAL_FUNDING_COUNTRIES, PERSONAL_FUNDING_MINIMUM_USD, personalFundingMethod, validFundingAmount },
+    '@/lib/wallet-funding-contract.mjs': { PERSONAL_FUNDING_COUNTRIES, PERSONAL_FUNDING_MINIMUM_USD, PERSONAL_FUNDING_MINIMUM_MXN, personalFundingMethod, validFundingAmount, validFundingSourceAmount },
   });
   const render = harness.render;
   return { ...harness, render(props = {}) { return render({ destinationAddress: `0x${'1'.repeat(40)}`, ...props }); } };
@@ -383,7 +383,7 @@ test('all returned production methods remain visible and selectable, including P
   assert.match(renderToStaticMarkup(view), /5 opciones de pago/);
   assert.doesNotMatch(renderToStaticMarkup(view), /PSE/);
   const group = React.Children.toArray(tree.props.children.props.children)[0];
-  assert.deepEqual(React.Children.toArray(group.props.children).map(node => node.type.name), ['FundingCountryField', 'FundingCurrencyField', 'FundingAmountField', 'FundingMethodField']);
+  assert.deepEqual(React.Children.toArray(group.props.children).map(node => node.type.name), ['FundingCountryField', 'FundingAmountField', 'FundingMethodField']);
   find(tree, 'FundingCountryField').props.onChange('US');
   harness.render(props); await flush(); harness.render(props); tree = harness.render(props);
   field = find(tree, 'FundingMethodField'); view = field.type(field.props);
@@ -431,7 +431,7 @@ test('history-driven status focus uses native focus and scrolling, respects redu
   assert.equal(reads[0].signal.aborted, true);
 });
 
-test('personal MXN discovery cancels USD responses and funds SPEI at its provider minimum without relabelling currencies', async t => {
+test('personal MXN discovery cancels USD responses and enforces the fixed 931 floor above older provider limits', async t => {
   const calls = [], submitted = [];
   const harness = formHarness('PersonalFundingForm', {
     readPersonalFundingOptions(country, { signal, sourceCurrencyCode }) { return new Promise(resolve => calls.push({ country, signal, sourceCurrencyCode, resolve })); },
@@ -446,7 +446,7 @@ test('personal MXN discovery cancels USD responses and funds SPEI at its provide
   harness.render(props); tree = harness.render(props);
   const latest = calls.at(-1);
   assert.equal(latest.sourceCurrencyCode, 'MXN');
-  assert.equal(find(tree, 'FundingAmountField').props.amount, '', 'changing currency must not relabel USD 20 as MXN 20');
+  assert.equal(find(tree, 'FundingAmountField').props.amount, '931', 'changing currency selects its fixed minimum rather than relabelling USD 20');
   for (const old of calls.slice(0, -1)) {
     assert.equal(old.signal.aborted, true);
     old.resolve({ country: old.country, sourceCurrencyCode: old.sourceCurrencyCode, routes: [{ paymentMethods: [{ method: 'PAYPAL', minimumUsd: 50, maximumUsd: 5000 }] }] });
@@ -459,22 +459,22 @@ test('personal MXN discovery cancels USD responses and funds SPEI at its provide
   await flush(); harness.render(props); harness.render(props); tree = harness.render(props);
   const method = find(tree, 'FundingMethodField');
   assert.deepEqual(method.props.methods, ['SPEI']);
-  assert.deepEqual(method.props.limits, { minimumAmount: 150, maximumAmount: 100000 });
+  assert.deepEqual(method.props.limits, { minimumAmount: 931, maximumAmount: 100000 });
   assert.match(renderToStaticMarkup(method.type(method.props)), /SPEI.*transferencia bancaria/);
-  assert.equal(find(tree, 'FundingAmountField').props.amount, '150.00', 'prefills the current SPEI provider minimum, not a fixed FX conversion');
+  assert.equal(find(tree, 'FundingAmountField').props.amount, '931', 'the fixed MXN minimum does not depend on a currency conversion');
   assert.equal(find(tree, 'FundingSubmit').props.disabled, false);
-  find(tree, 'FundingAmountField').props.onChange('149.99');
+  find(tree, 'FundingAmountField').props.onChange('930.99');
   harness.render(props); tree = harness.render(props);
   assert.equal(find(tree, 'FundingSubmit').props.disabled, true);
   tree.props.onSubmit({ preventDefault() {} }); await flush();
-  assert.equal(submitted.length, 0, 'below-provider minimum cannot initiate checkout');
+  assert.equal(submitted.length, 0, 'below the fixed minimum cannot initiate checkout even when the provider accepts less');
   const belowMinimum = find(tree, 'FundingMethodField');
   const feedback = renderToStaticMarkup(belowMinimum.type(belowMinimum.props));
   assert.doesNotMatch(feedback, /Reintentar/, 'a successfully loaded route cannot masquerade as a lookup failure');
   assert.match(feedback, /Usar/);
   const lookups = calls.length;
   belowMinimum.props.onUseMinimum(); harness.render(props); tree = harness.render(props);
-  assert.equal(find(tree, 'FundingAmountField').props.amount, '150.00');
+  assert.equal(find(tree, 'FundingAmountField').props.amount, '931.00');
   assert.equal(calls.length, lookups, 'using the provider minimum edits the amount without replaying discovery');
   find(tree, 'FundingAmountField').props.onChange('1200');
   harness.render(props); tree = harness.render(props);
@@ -490,15 +490,75 @@ test('personal MXN discovery cancels USD responses and funds SPEI at its provide
   assert.deepEqual(find(tree, 'FundingMethodField').props.methods, [], 'old MXN methods disappear before USD lookup completes');
 });
 
-test('personal country choices are only US and Mexico without inventing a residence', async t => {
+test('personal funding defaults to the requested US choice with implicit USD and permits only US or Mexico', async t => {
   const personal = formHarness('PersonalFundingForm', { readPersonalFundingOptions: async country => ({ country, routes: [] }) }, 'CO');
   t.after(() => personal.unmount());
   personal.render(); const personalTree = personal.render();
   const field = find(personalTree, 'FundingCountryField');
-  assert.equal(field.props.value, '', 'unsupported browser detection must request a choice, not invent US residence');
+  assert.equal(field.props.value, 'US', 'the explicit default is not overwritten by browser detection');
+  assert.equal(find(personalTree, 'FundingCurrencyField'), undefined, 'USD does not need a redundant selector in the US');
+  assert.equal(find(personalTree, 'FundingAmountField').props.sourceCurrencyCode, 'USD');
   assert.deepEqual(field.props.countries.map(([code]) => code), ['US', 'MX']);
   const html = renderToStaticMarkup(field.type(field.props));
   assert.doesNotMatch(html, /value="(?:CO|PA|ES|GB|CR|DO|GT|UY)"/);
+});
+
+test('manual country changes cancel prior methods and remember the Mexican currency without relabelling amounts', async t => {
+  const calls = [], edits = [];
+  const harness = formHarness('PersonalFundingForm', { readPersonalFundingOptions(country, { sourceCurrencyCode, signal }) {
+    return new Promise(resolve => calls.push({ country, sourceCurrencyCode, signal, resolve }));
+  } }, 'CO');
+  t.after(() => harness.unmount());
+  const props = { onContinue() {}, onSelectionChange: () => edits.push('edited') };
+  let tree = harness.render(props); tree = harness.render(props);
+  assert.equal(find(tree, 'FundingCountryField').props.value, 'US');
+  assert.equal(find(tree, 'FundingCurrencyField'), undefined);
+  assert.deepEqual([calls[0].country, calls[0].sourceCurrencyCode], ['US', 'USD']);
+  find(tree, 'FundingCountryField').props.onChange('MX');
+  harness.render(props); tree = harness.render(props);
+  assert.equal(calls[0].signal.aborted, true);
+  assert.deepEqual(harness.exports.fundingCurrencyChoices('MX'), ['USD', 'MXN']);
+  find(tree, 'FundingCurrencyField').props.onChange('MXN');
+  harness.render(props); tree = harness.render(props);
+  assert.equal(find(tree, 'FundingAmountField').props.amount, '931');
+  calls.at(-1).resolve({ country: 'MX', sourceCurrencyCode: 'MXN', routes: [{ paymentMethods: [
+    { method: 'SPEI', currencyCode: 'MXN', minimumAmount: 148.66, maximumAmount: 100000 }] }] });
+  await flush(); harness.render(props); tree = harness.render(props);
+  find(tree, 'FundingAmountField').props.onChange('1000');
+  harness.render(props); tree = harness.render(props);
+  assert.equal(find(tree, 'FundingAmountField').props.amount, '1000');
+  find(tree, 'FundingMethodField').props.onRetry();
+  harness.render(props); tree = harness.render(props);
+  assert.equal(find(tree, 'FundingAmountField').props.amount, '1000', 'refreshing methods must not overwrite a typed amount');
+  find(tree, 'FundingCountryField').props.onChange('US');
+  harness.render(props); tree = harness.render(props);
+  assert.equal(find(tree, 'FundingCurrencyField'), undefined);
+  assert.equal(find(tree, 'FundingAmountField').props.amount, '20');
+  assert.equal(find(tree, 'FundingAmountField').props.sourceCurrencyCode, 'USD');
+  assert.deepEqual(find(tree, 'FundingMethodField').props.methods, []);
+  find(tree, 'FundingCountryField').props.onChange('MX');
+  harness.render(props); tree = harness.render(props);
+  assert.equal(find(tree, 'FundingCurrencyField').props.value, 'MXN');
+  assert.equal(find(tree, 'FundingAmountField').props.amount, '931');
+  assert.deepEqual([calls.at(-1).country, calls.at(-1).sourceCurrencyCode], ['MX', 'MXN']);
+  assert.equal(calls.slice(0, -1).every(call => call.signal.aborted), true);
+  assert.equal(edits.length, 5, 'only explicit country, currency and amount changes notify the page');
+});
+
+test('MXN amount validation and higher provider floors remain explicit even when an old route advertises less', async t => {
+  const harness = formHarness('PersonalFundingForm', { readPersonalFundingOptions: async country => ({ country, routes: [] }) });
+  t.after(() => harness.unmount());
+  const tree = harness.render();
+  const amount = find(tree, 'FundingAmountField');
+  const html = renderToStaticMarkup(amount.type({ ...amount.props, amount: '930.99', sourceCurrencyCode: 'MXN' }));
+  assert.match(html, /min="931"/);
+  assert.match(html, /931 MXN/);
+  assert.match(html, /aria-invalid="true"/);
+  const route = (minimumAmount, maximumAmount) => [{ paymentMethods: [{ method: 'SPEI', currencyCode: 'MXN', minimumAmount, maximumAmount }] }];
+  assert.deepEqual(harness.exports.eligiblePaymentMethods(route(148.66, 100000), 930.99, 'MXN'), []);
+  assert.deepEqual(harness.exports.eligiblePaymentMethods(route(148.66, 100000), 931, 'MXN'), ['SPEI']);
+  assert.deepEqual(harness.exports.eligiblePaymentMethods(route(148.66, 930), 931, 'MXN'), []);
+  assert.deepEqual(harness.exports.selectedMethodLimits(route(1200, 100000), 'SPEI', 1200, 'MXN'), { minimumAmount: 1200, maximumAmount: 100000 });
 });
 
 test('personal history and status surfaces cannot mount or request an administrative wallet', t => {
