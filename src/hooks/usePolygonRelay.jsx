@@ -331,7 +331,8 @@ export function usePolygonRelay(reown) {
       const key = await value.scope.wait(() => keyPromise);
       let result = await value.scope.wait(() => readPolygonRelayStatus(current.paymentId, { signal: value.scope.signal })); active(value);
       if (!immutable(current, result)) throw new Error("polygon_relay_invalid_authorization");
-      if (!terminal(result) && proofStates.has(result.status)) {
+      const expiredPreparation = result.status === "prepared" && Date.parse(result.expiresAt) <= Date.now();
+      if (!terminal(result) && (proofStates.has(result.status) || expiredPreparation)) {
         result = await value.scope.wait(() => writePolygonRelay("verify", { paymentId: result.paymentId }, { signal: value.scope.signal })); active(value);
         if (!immutable(current, result)) throw new Error("polygon_relay_invalid_authorization");
       }

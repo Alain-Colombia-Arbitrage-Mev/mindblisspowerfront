@@ -83,6 +83,8 @@ export function SponsoredTransferReview({ flow, network = "polygon" }) {
     {network === "polygon" ? <p className={styles.note}>{t("walletTransfer.authorizationCopy")}</p> : null}
     {flow.errorKey ? <p className={styles.error} role="alert">{t(flow.errorKey)}</p> : null}
     {flow.errorKey === "walletTransfer.networkMismatch" ? <button type="button" className="executive-button" disabled={flow.busy} onClick={() => void flow.switchNetwork()}>{t("companyPayment.polygonSwitchNetwork")}</button> : null}
+    {!flow.connected ? <button type="button" className="executive-button" disabled={flow.busy || flow.restoring}
+      onClick={() => { if (!flow.busy && !flow.restoring) void flow.connect(); }}>{t(flow.restoring ? "companyPayment.restoring" : flow.needsVerification ? "companyPayment.verifyWallet" : "companyPayment.reconnect")}</button> : null}
     <div className={styles.actions}><button className="executive-button" type="button" disabled={flow.busy} onClick={flow.cancelReview}>{t("walletTransfer.closeReview")}</button>
       <button className={`executive-button primary ${styles.primary}`} type="button" disabled={!valid || !flow.connected || flow.busy || !flow.capabilities?.transferEnabled}
         onClick={() => { if (valid && flow.connected && !flow.busy && flow.capabilities?.transferEnabled) void flow.confirm(); }}>
@@ -106,7 +108,9 @@ export function SponsoredTransferStatus({ flow, network = "polygon" }) {
     {flow.errorKey ? <p className={styles.error} role="alert">{t(flow.errorKey)}</p> : null}
     <div className={styles.actions}>
       {!terminal ? <button className="executive-button" type="button" disabled={flow.busy} onClick={() => void flow.verifyPayment()}><RefreshCw size={16} aria-hidden="true" />{t("walletTransfer.verify")}</button> : null}
-      {prepared && !flow.recovery && flow.resume ? <button className="executive-button primary" type="button" disabled={flow.busy} onClick={() => void flow.resume()}>{t("companyPayment.resume")}</button> : null}
+      {prepared && !flow.recovery && flow.resume ? <button className="executive-button primary" type="button" disabled={flow.busy || flow.restoring}
+        onClick={() => { if (!flow.busy && !flow.restoring) { if (flow.connected) void flow.resume(); else void flow.connect(); } }}>
+        {t(flow.restoring ? "companyPayment.restoring" : flow.connected ? "companyPayment.resume" : flow.needsVerification ? "companyPayment.verifyWallet" : "companyPayment.reconnect")}</button> : null}
       {prepared && !flow.recovery && flow.abandon ? <button className="executive-button" type="button" disabled={flow.busy} onClick={() => void flow.abandon()}>{t("companyPayment.abandon")}</button> : null}
       {authorized && flow.submitAuthorized ? <button className="executive-button primary" type="button" disabled={flow.busy || !flow.capabilities?.transferEnabled} onClick={() => void flow.submitAuthorized()}>{t("walletTransfer.continueAuthorized")}</button> : null}
       {terminal ? <button className="executive-button primary" type="button" disabled={flow.busy} onClick={flow.newPayment}>{t("walletTransfer.another")}</button> : null}

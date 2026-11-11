@@ -44,7 +44,7 @@ function flow(patch = {}) {
   return { wallet, amount: '28.433366', balanceAtomic: '28433366', connected: true, verified: true, busy: false, loadingBalance: false,
     capabilities: { transferEnabled: true }, preview: { ...values.LEGACY_POLYGON_COMPANY_PAYMENT, walletAddress: wallet, amountAtomic: '28433366' },
     setAmount: amount => calls.push(['amount', amount]), review: () => calls.push('review'), confirm: () => calls.push('confirm'), cancelReview() {},
-    newPayment: () => calls.push('new'), verifyPayment: () => calls.push('verify'), resume: () => calls.push('resume'), refresh() {}, connect() {}, calls, ...patch };
+    newPayment: () => calls.push('new'), verifyPayment: () => calls.push('verify'), resume: () => calls.push('resume'), refresh() {}, connect: () => calls.push('connect'), calls, ...patch };
 }
 test('Sponsored Polygon form uses only its balance, exact company recipient, Max and no POL purchase instruction', () => {
   for (locale of ['es', 'en', 'ar', 'zh']) {
@@ -100,4 +100,37 @@ test('a stale disconnected review or altered wallet/network/token never enables 
 test('a receipt for another bound wallet is not displayed or given verification actions', () => {
   const state = flow({ wallet: `0x${'9'.repeat(40)}`, payment: payment() });
   assert.equal(SponsoredTransferStatus({ flow: state }), null); assert.deepEqual(state.calls, []);
+});
+
+test('an unsigned preparation reconnects the same wallet before explicitly resuming its review', () => {
+  for (locale of ['es', 'en', 'ar', 'zh']) {
+    const state = flow({ payment: payment(), connected: false });
+    let tree = SponsoredTransferStatus({ flow: state });
+    let action = all(tree, node => node?.type === 'button' && node.props.className?.includes('primary'))[0];
+    assert.ok(renderToStaticMarkup(action).includes(translateMessage(locale, 'companyPayment.reconnect')));
+    action.props.onClick(); assert.deepEqual(state.calls, ['connect']);
+    state.connected = true; tree = SponsoredTransferStatus({ flow: state });
+    action = all(tree, node => node?.type === 'button' && node.props.className?.includes('primary'))[0];
+    action.props.onClick(); assert.deepEqual(state.calls, ['connect', 'resume']);
+    assert.equal(state.calls.includes('confirm'), false);
+  }
+  locale = 'es';
+});
+
+test('a disconnected review offers only explicit reconnect and waits while the wallet is restoring or busy', () => {
+  for (const needsVerification of [false, true]) {
+    const state = flow({ connected: false, needsVerification });
+    let tree = SponsoredTransferReview({ flow: state });
+    const label = translateMessage(locale, needsVerification ? 'companyPayment.verifyWallet' : 'companyPayment.reconnect');
+    let reconnect = all(tree, node => node?.type === 'button' && renderToStaticMarkup(node).includes(label))[0];
+    assert.ok(reconnect); reconnect.props.onClick(); assert.deepEqual(state.calls, ['connect']);
+    for (const patch of [{ restoring: true }, { busy: true }]) {
+      Object.assign(state, { busy: false, restoring: false }, patch); tree = SponsoredTransferReview({ flow: state });
+      reconnect = all(tree, node => node?.type === 'button' && node.props.className === 'executive-button' && node.props.disabled)[0];
+      assert.ok(reconnect); reconnect.props.onClick(); assert.deepEqual(state.calls, ['connect']);
+      const prepared = SponsoredTransferStatus({ flow: { ...state, payment: payment() } });
+      const resume = all(prepared, node => node?.type === 'button' && node.props.className?.includes('primary'))[0];
+      assert.equal(resume.props.disabled, true); resume.props.onClick(); assert.deepEqual(state.calls, ['connect']);
+    }
+  }
 });

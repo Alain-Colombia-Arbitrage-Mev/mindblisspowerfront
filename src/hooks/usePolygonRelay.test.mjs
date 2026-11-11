@@ -545,3 +545,49 @@ test('an obsolete authorized status reply cannot submit after history already co
   assert.equal(h.flow.payment.status, 'confirmed'); assert.equal(h.flow.recovery, null); assert.equal(h.flow.errorKey, '');
   assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0); assert.equal(h.storage.size, 0);
 });
+
+test('reconnecting an unsigned preparation preserves the linked wallet and requires a separate read-only resume', async t => {
+  const prepared = payment();
+  const h = harness({ connected: false, history: async () => ({ payments: [prepared] }) }); t.after(() => h.unmount());
+  await h.flush(); assert.equal(h.flow.stage, 'status'); assert.equal(h.flow.connected, false);
+  await h.flow.connect(); await h.flush();
+  assert.equal(h.calls.filter(call => call.action === 'connect').length, 1);
+  assert.equal(h.calls.filter(call => call.action === 'link').length, 0);
+  assert.equal(h.flow.wallet, wallet); assert.equal(h.flow.preview, null);
+  await h.connection(true); await h.sdkAccount(otherWallet); await h.flow.resume(); await h.flush();
+  assert.equal(h.flow.preview, null, 'a different SDK account cannot resume the bound payment');
+  await h.sdkAccount(wallet); await h.flow.resume(); await h.flush();
+  assert.equal(h.flow.stage, 'review'); assert.equal(h.flow.preview.walletAddress, wallet); assert.equal(h.flow.preview.amountAtomic, prepared.amountAtomic);
+  assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
+});
+
+test('an ambiguous unsigned preparation expires only through server verification after its deadline, never by resigning', async () => {
+  for (const elapsed of [false, true]) {
+    const prepared = payment(); let now = Date.now();
+    class VerificationDate extends Date { static now() { return now; } }
+    const expired = payment({ status: 'expired', failureReason: 'preparation_expired', typedData: null,
+      createdAt: prepared.createdAt, expiresAt: prepared.expiresAt });
+    const h = harness({ Date: VerificationDate, status: async () => prepared,
+      sign: async () => { throw new TypeError('the synthetic wallet response was lost'); },
+      write: async action => {
+        if (action === 'prepare') return prepared;
+        assert.equal(action, 'verify'); assert.equal(elapsed, true); return expired;
+      } });
+    try {
+      await review(h); await h.flow.confirm(); await h.flush();
+      assert.equal(h.flow.payment.status, 'prepared'); assert.equal(h.flow.recovery.phase, 'ambiguous');
+      if (elapsed) now = Date.parse(prepared.expiresAt) + 1;
+      await h.flow.verifyPayment(); await h.flush();
+      assert.deepEqual(writes(h).map(call => call.action), elapsed ? ['prepare', 'verify'] : ['prepare']);
+      assert.equal(h.signatures.length, 1);
+      if (elapsed) {
+        assert.equal(h.flow.payment.status, 'expired'); assert.equal(h.flow.recovery, null); assert.equal(h.storage.size, 0);
+        h.flow.newPayment(); await h.flush(); assert.equal(h.flow.stage, 'form');
+      } else {
+        assert.equal(h.flow.payment.status, 'prepared'); assert.equal(h.flow.recovery.phase, 'ambiguous');
+        await h.flow.confirm(); await h.flush(); assert.equal(h.signatures.length, 1);
+      }
+      assert.equal(writes(h).some(call => ['authorize', 'submit'].includes(call.action)), false);
+    } finally { h.unmount(); }
+  }
+});
