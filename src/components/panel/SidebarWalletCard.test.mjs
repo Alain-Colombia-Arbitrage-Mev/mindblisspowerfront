@@ -54,8 +54,8 @@ function browser(t) {
   return copied;
 }
 
-test('all four locales show distinct top-up and transfer links beside one bound personal-wallet address', () => {
-  const expected = { es: 'Transferir', en: 'Transfer', ar: 'تحويل', zh: '转账' };
+test('all four locales show distinct top-up and pay links beside one bound personal-wallet address', () => {
+  const expected = { es: 'Pagar', en: 'Pay', ar: 'دفع', zh: '付款' };
   for (const locale of Object.keys(expected)) {
     const view = card({ locale });
     const tree = view.render();

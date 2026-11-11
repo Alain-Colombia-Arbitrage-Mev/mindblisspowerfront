@@ -6,7 +6,7 @@ const PAGES = [
   ["/dashboard/packages", "Membresías", "Mi cuenta"],
   ["/dashboard/payments", "Billetera", "Mi cuenta"],
   ["/dashboard/wallet-personal/requests", "Solicitudes de recarga", "Mi cuenta"],
-  ["/dashboard/wallet-personal/pay", "Transferir", "Mi cuenta"],
+  ["/dashboard/wallet-personal/pay", "Pagar", "Mi cuenta"],
   ["/dashboard/wallet-personal", "Wallet personal", "Mi cuenta"],
   ["/dashboard/withdrawals", "Billetera", "Mi cuenta"],
   ["/dashboard/coupons", "Cupones", "Mi cuenta"],
