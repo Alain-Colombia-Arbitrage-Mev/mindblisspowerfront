@@ -386,15 +386,19 @@ test("personal funding navigation has one destination and one neutral action lab
  assert.match(messages,/buyCrypto: "Recargar fondos"/);assert.match(messages,/amountLabel: "Monto a recargar"/);
 });
 
-test("AppKit is scoped to personal wallet surfaces and does not slow every dashboard route", () => {
+test("AppKit loads lazily once and its dashboard provider persists across personal-wallet route changes", () => {
  const shell=read("../app/dashboard/_components/DashboardShell.jsx");
  const finance=read("../app/dashboard/_components/executive-pages/FinanceDashboardPage.jsx");
  const funding=read("../app/dashboard/_components/executive-pages/WalletFundingPanels.jsx");
  const personal=read("../app/dashboard/_components/executive-pages/PersonalWalletFundingPage.jsx");
+ const payments=read("../app/dashboard/_components/executive-pages/CompanyPaymentPage.jsx");
+ const persistent=read("../components/reown/DashboardWalletProvider.jsx");
  const overview=read("../components/panel/overview/OverviewDashboard.jsx");
  assert.doesNotMatch(shell,/ReownProvider/);assert.doesNotMatch(finance,/ReownProvider/);
- assert.match(personal,/dynamic\(\(\) => import\("@\/components\/reown\/ReownProvider"\)/);
- assert.match(personal,/<ReownProvider><PersonalWalletFunding \/><\/ReownProvider>/);
+ assert.match(shell,/DashboardWalletProvider/);
+ assert.match(persistent,/dynamic\(\(\) => import\("\.\/ReownProvider"\)/);
+ assert.doesNotMatch(personal,/ReownProvider/);assert.doesNotMatch(payments,/ReownProvider/);
+ assert.match(personal,/<PersonalWalletFunding \/>/);
  assert.doesNotMatch(funding,/ReownProvider|useReownWallet/);
  assert.doesNotMatch(read("../components/reown/ReownProvider.jsx"),/startAdministrativeOnramp|administrativeOnrampState/);
  assert.match(overview,/dynamic\(\(\) => import\("\.\/ReownRechargeDialog"\)/);

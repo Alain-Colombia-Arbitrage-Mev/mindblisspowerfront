@@ -284,7 +284,8 @@ function ConfiguredReownProvider({ children }) {
     if (connectionSnapshot.current.status === "connected") return Promise.resolve({ connected: true });
     if (connectionRequest.current) return connectionRequest.current.promise;
     setConnectionBusy(true);
-    const request = createReownWalletConnectionRequest({ open: () => open({ view: "Connect", namespace: "eip155" }),
+    const request = createReownWalletConnectionRequest({ initialState: connectionSnapshot.current,
+      open: () => open({ view: "Connect", namespace: "eip155" }),
       onSettled() { if (connectionRequest.current === request) connectionRequest.current = null; if (mounted.current) setConnectionBusy(false); } });
     connectionRequest.current = request;
     return request.promise;
@@ -541,7 +542,7 @@ function ConfiguredReownProvider({ children }) {
     linkError: verificationError || binding.error,
     isLinked,
     isLinking,
-    isRestoring: connectionBusy || connectionStatus === "restoring",
+    isRestoring: connectionBusy || connectionStatus === "restoring" || binding.status === "loading",
     connectionStatus,
     connectWallet,
     onrampStatus: onrampState.status,

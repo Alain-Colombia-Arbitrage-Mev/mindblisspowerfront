@@ -11,7 +11,7 @@ import { beginVerifiedReferralSync } from '@/lib/referral-sync.mjs';
 import { browserRequestDeadline } from '@/lib/browser-request-deadline.mjs';
 import ContactPhoneField from './ContactPhoneField';
 import { initialContactPhone, registrationContactValues } from './contact-phone-model.mjs';
-import { REGISTRATION_RESEND_SECONDS, consumeRegistrationPrefill, registrationEmail, registrationErrors, registrationFailure, registrationHints, registrationLoginUrl, registrationUrl, registrationRetrySeconds, registrationAcknowledged, registrationPendingDelivery, registrationTimeoutMs } from './registration-model.mjs';
+import { REGISTRATION_RESEND_SECONDS, consumeRegistrationPrefill, registrationEmail, registrationErrors, registrationCodeFailure, registrationFailure, registrationHints, registrationLoginUrl, registrationUrl, registrationRetrySeconds, registrationAcknowledged, registrationPendingDelivery, registrationTimeoutMs } from './registration-model.mjs';
 
 const initialForm = { fullName: '', email: '', acceptsPrivacy: false,
   contactPhone: initialContactPhone(), contactWhatsapp: initialContactPhone(), whatsappSameAsPhone: false };
@@ -69,6 +69,10 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
   useEffect(() => {
     if (errors.form) feedback.current?.focus();
   }, [errors.form]);
+
+  useEffect(() => {
+    if (errors.code && !isLoading) codeInput.current?.focus();
+  }, [errors.code, isLoading]);
 
   function update(field, value) {
     setForm(current => ({ ...current, [field]: value }));
@@ -185,7 +189,6 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
     setNotice('');
     if (!/^\d{6}$/.test(code)) {
       setErrors({ code: 'Ingresa los 6 dígitos del correo, sin espacios.' });
-      codeInput.current?.focus();
       return;
     }
     submitting.current = true;
@@ -196,7 +199,11 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
       if (!currentRequest(operation)) return;
       if (!response.ok || !registrationAcknowledged('confirm', payload)) {
         if (response.status === 429) cooldown.start(registrationRetrySeconds(response, payload));
-        setErrors({ form: registrationFailure(response.ok ? 502 : response.status, 'confirm', payload?.code) });
+        const status = response.ok ? 502 : response.status;
+        const message = registrationFailure(status, 'confirm', payload?.code);
+        if (registrationCodeFailure(status, payload?.code)) {
+          setErrors({ code: message });
+        } else setErrors({ form: message });
         return;
       }
       setCode('');

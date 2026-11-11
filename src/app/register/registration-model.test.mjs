@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { registrationEmail, registrationErrors, registrationHints, registrationRetrySeconds, registrationFailure, registrationLoginUrl, registrationAcknowledged, registrationUrl, registrationPendingDelivery, registrationRequired, registrationRedirect, consumeRegistrationPrefill, registrationTimeoutMs } from './registration-model.mjs';
+import { registrationEmail, registrationErrors, registrationHints, registrationRetrySeconds, registrationCodeFailure, registrationFailure, registrationLoginUrl, registrationAcknowledged, registrationUrl, registrationPendingDelivery, registrationRequired, registrationRedirect, consumeRegistrationPrefill, registrationTimeoutMs } from './registration-model.mjs';
 
 const valid = { fullName: 'Persona Prueba', email: ' test@example.test ', acceptsPrivacy: true };
 
@@ -88,6 +88,26 @@ test('an unverified registration code gives purpose-specific help without reveal
   assert.match(message, /espera a que termine el contador y solicítalo manualmente/);
   assert.match(message, /No compartas el código/);
   assert.doesNotMatch(message, /INTERNAL_PROVIDER_DETAIL|Ya existe|No existe|te quedan|restantes|5 solicitudes|10 (?:intentos|validaciones)|24 horas/i);
+});
+
+test('known registration OTP failures distinguish expiry, exhausted attempts and a possibly consumed code without automatic resend', () => {
+  for (const status of [400, 403, 422]) {
+    assert.match(registrationFailure(status, 'confirm', 'INVALID_OTP'), /no es válido o ya se utilizó/);
+    assert.match(registrationFailure(status, 'confirm', 'INVALID_OTP'), /si ya verificaste tu cuenta/);
+    assert.match(registrationFailure(status, 'confirm', 'OTP_EXPIRED'), /Este código venció/);
+    assert.match(registrationFailure(status, 'confirm', 'TOO_MANY_ATTEMPTS'), /agotó sus 3 intentos/);
+    for (const code of ['OTP_EXPIRED', 'TOO_MANY_ATTEMPTS']) {
+      assert.match(registrationCodeFailure(status, code), /termine el contador.*manualmente/);
+    }
+  }
+  for (const code of ['INVALID_OTP', 'OTP_EXPIRED', 'TOO_MANY_ATTEMPTS', 'PRIVATE_DIAGNOSTIC', '__proto__', null]) {
+    for (const status of [200, 429, 500, 503]) assert.equal(registrationCodeFailure(status, code), '');
+    assert.match(registrationFailure(503, 'confirm', code), /No pudimos confirmar el resultado/);
+    assert.match(registrationFailure(429, 'confirm', code), /límite temporal/);
+  }
+  assert.equal(registrationCodeFailure(400, 'PRIVATE_DIAGNOSTIC'), '');
+  assert.match(registrationFailure(400, 'confirm', 'PRIVATE_DIAGNOSTIC'), /No pudimos verificar el código/);
+  assert.doesNotMatch(registrationFailure(400, 'confirm', 'PRIVATE_DIAGNOSTIC'), /PRIVATE_DIAGNOSTIC/);
 });
 
 test('registration links and failures never imply network onboarding or expose provider details', () => {

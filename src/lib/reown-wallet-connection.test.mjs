@@ -39,6 +39,37 @@ test('canceling before opening suppresses the late modal and late SDK events can
   assert.equal(opened, 0); assert.equal(settled, 1);
 });
 
+test('an unlocked wallet restored by the SDK completes connection without opening a second authentication modal', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let opened = 0;
+  const request = createReownWalletConnectionRequest({ initialState: { status: 'restoring', modalOpen: false }, open: () => opened++ });
+  await Promise.resolve();
+  assert.equal(opened, 0);
+  request.update({ status: 'restoring', modalOpen: false });
+  t.mock.timers.tick(14_000); await Promise.resolve(); assert.equal(opened, 0);
+  request.update({ status: 'connected', modalOpen: false });
+  assert.deepEqual(await request.promise, { connected: true });
+  t.mock.timers.tick(90_000); await Promise.resolve(); assert.equal(opened, 0);
+  t.mock.timers.reset();
+});
+
+test('restoration failure opens the explicit connection flow once, while its deadline and cancellation stay bounded', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let opened = 0;
+  const request = createReownWalletConnectionRequest({ initialState: { status: 'restoring' }, open: () => opened++ });
+  request.update({ status: 'disconnected', modalOpen: false });
+  request.update({ status: 'disconnected', modalOpen: false });
+  await Promise.resolve(); assert.equal(opened, 1);
+  const rejected = assert.rejects(request.promise, { name: 'AbortError' }); request.cancel(); await rejected;
+  const timed = createReownWalletConnectionRequest({ initialState: { status: 'restoring' }, open: () => opened++ });
+  t.mock.timers.tick(15_000); await Promise.resolve(); assert.equal(opened, 2);
+  const cancelled = assert.rejects(timed.promise, { name: 'AbortError' }); timed.cancel(); await cancelled;
+  const stopped = createReownWalletConnectionRequest({ initialState: { status: 'restoring' }, open: () => opened++ });
+  const aborted = assert.rejects(stopped.promise, { name: 'AbortError' }); stopped.cancel(); await aborted;
+  t.mock.timers.tick(90_000); await Promise.resolve(); assert.equal(opened, 2);
+  t.mock.timers.reset();
+});
+
 test('a closed modal releases the reconnect state without claiming authentication or changing the bound account', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const request = createReownWalletConnectionRequest({ open: async () => {} });

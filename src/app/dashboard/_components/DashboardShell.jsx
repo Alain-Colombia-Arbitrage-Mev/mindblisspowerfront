@@ -7,6 +7,7 @@ import PanelHeader from "@/components/panel/PanelHeader";
 import PanelSidebar from "@/components/panel/PanelSidebar";
 import NavigationDrawer from "@/components/panel/NavigationDrawer";
 import SupportWidget from "@/components/panel/SupportWidget";
+import DashboardWalletProvider from "@/components/reown/DashboardWalletProvider";
 import { memberPageKeysFor } from "@/lib/member-navigation.mjs";
 import { MemberSessionContext } from "@/lib/member-session-context";
 import { browserReferralChoice, chooseBrowserReferral, pendingVerifiedReferral, readVerifiedReferral, retryVerifiedReferral } from '@/lib/referral-sync.mjs';
@@ -170,7 +171,9 @@ export default function DashboardShell({ authMode: _authMode, children }) {
                     : referralChoice ? t("dashboard.saveReferral") : referralPending ? t("dashboard.retrySaveReferral") : t("dashboard.retryReferralCheck")}
                 </button>
               </div> : null}
-              {children}
+              <DashboardWalletProvider>
+                {children}
+              </DashboardWalletProvider>
             </div>
           </main>
         </div>

@@ -357,6 +357,44 @@ test('resumed registration preserves its local sponsor without claiming another 
   harness.unmount();
 });
 
+test('known OTP rejections focus the code field without navigating, resending or changing the server cooldown', async t => {
+  const destinations = browser(t), paths = [];
+  let status, code, focus = 0, starts = 0;
+  t.mock.method(globalThis, 'fetch', async path => { paths.push(path); return Response.json({ code }, { status }); });
+  for (const failure of [[400, 'INVALID_OTP'], [400, 'OTP_EXPIRED'], [403, 'TOO_MANY_ATTEMPTS']]) {
+    [status, code] = failure;
+    const cooldown = { active: true, label: 'Reenviar en 4:00', start() { starts++; } };
+    const harness = view(cooldown), resume = { initialSearch: 'email=member%40example.test&resume=1' };
+    let tree = harness.render(resume);
+    const field = find(tree, node => node?.props?.id === 'code');
+    field.props.inputRef.current = { focus() { focus++; } };
+    field.props.onChange({ target: { value: '001234' } });
+    await submit(harness.render(resume));
+    tree = harness.render(resume);
+    assert.equal(find(tree, node => node?.props?.id === 'code').props.error, model.registrationCodeFailure(status, code));
+    assert.equal(find(tree, node => node?.props?.children === cooldown.label).props.disabled, true);
+    assert.doesNotMatch(renderToStaticMarkup(tree), /No pudimos verificar el código|Correo verificado correctamente/);
+    assert.equal(destinations.length, 0);
+    harness.unmount();
+  }
+  assert.equal(focus, 3); assert.equal(starts, 0);
+  assert.deepEqual(paths, Array(3).fill('/api/auth/register/confirm'));
+});
+
+test('an unavailable verification result never turns a misleading OTP code into a field rejection', async t => {
+  const destinations = browser(t), paths = [];
+  t.mock.method(globalThis, 'fetch', async path => { paths.push(path); return Response.json({ code: 'INVALID_OTP' }, { status: 503 }); });
+  const harness = view(), resume = { initialSearch: 'email=member%40example.test&resume=1' };
+  const tree = harness.render(resume);
+  find(tree, node => node?.props?.id === 'code').props.onChange({ target: { value: '001234' } });
+  await submit(harness.render(resume));
+  const result = harness.render(resume);
+  assert.equal(find(result, node => node?.props?.id === 'code').props.error, undefined);
+  assert.match(renderToStaticMarkup(result), /No pudimos confirmar el resultado/);
+  assert.deepEqual(destinations, []); assert.deepEqual(paths, ['/api/auth/register/confirm']);
+  harness.unmount();
+});
+
 test('the confirmation helper explains the latest registration code purpose, lifetime, three-attempt limit and manual cooldown', () => {
   const harness = view(), tree = harness.render({ initialSearch: 'email=member%40example.test&resume=1' });
   const code = find(tree, node => node?.props?.id === 'code'), html = renderToStaticMarkup(tree);

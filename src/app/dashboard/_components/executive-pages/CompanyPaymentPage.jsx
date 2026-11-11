@@ -12,8 +12,6 @@ import { CompanyPaymentForm, CompanyPaymentReview } from "./CompanyPaymentForm";
 import CompanyPaymentActivity from "./CompanyPaymentActivity";
 import styles from "./company-payment.module.css";
 
-const ReownProvider = dynamic(() => import("@/components/reown/ReownProvider"), { ssr: false,
-  loading: WalletLoading });
 const PersonalTransferRouter = dynamic(() => import("./PersonalTransferRouter"), { ssr: false, loading: WalletLoading });
 
 function WalletLoading() {
@@ -22,7 +20,7 @@ function WalletLoading() {
 }
 
 export default function CompanyPaymentPage() {
-  return <ReownProvider><PersonalTransferRouter DirectPayment={PersonalCompanyPayment} /></ReownProvider>;
+  return <PersonalTransferRouter DirectPayment={PersonalCompanyPayment} />;
 }
 
 export function PersonalCompanyPayment({ onSponsoredPolygon = undefined, historyOnly = false } = {}) {

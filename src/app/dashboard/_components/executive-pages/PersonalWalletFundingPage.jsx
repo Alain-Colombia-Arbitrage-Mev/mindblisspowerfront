@@ -1,7 +1,6 @@
 "use client";
 
 import { CheckCircle2, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
-import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useState } from "react";
 import { useReownWallet } from "@/components/reown/ReownContext";
@@ -14,18 +13,8 @@ import WalletFundingStatus from "./WalletFundingStatus";
 import { WalletActionError, WalletAddress, WalletFundingScreen, walletFailureDiagnostic } from "./WalletFundingUI";
 import styles from "./wallet-funding.module.css";
 
-const ReownProvider = dynamic(() => import("@/components/reown/ReownProvider"), {
-  ssr: false,
-  loading: WalletLoading,
-});
-
-function WalletLoading() {
-  const { t } = useI18n();
-  return <div className="executive-panel" role="status"><Loader2 className="animate-spin" aria-hidden="true" /><span className="sr-only">{t("walletPage.checking")}</span></div>;
-}
-
 export default function PersonalWalletFundingPage() {
-  return <ReownProvider><PersonalWalletFunding /></ReownProvider>;
+  return <PersonalWalletFunding />;
 }
 
 export function personalWalletState(reown) {
