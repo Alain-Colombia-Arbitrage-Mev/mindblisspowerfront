@@ -4,6 +4,33 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
+function assertPersonalWalletSidebar(html) {
+  const wallets = [...html.matchAll(/<section\b[^>]*class="vp-sidebar-wallet"[^>]*>([\s\S]*?)<div\b[^>]*class="vp-sidebar-wallet-address"/g)];
+  assert.ok(wallets.length > 0, 'the authenticated shell renders its personal wallet sidebar');
+  for (const [, wallet] of wallets) {
+    assert.equal(/>Wallet personal<\/span>/.test(wallet), true, 'the sidebar identifies the personal wallet');
+    assert.deepEqual([...wallet.matchAll(/\bdata-wallet-network="([^"]+)"/g)].map(match => match[1]), ['polygon'],
+      'only the active Polygon balance is rendered in the wallet sidebar');
+    assert.equal(/Polygon · ERC-20/.test(wallet), true, 'the sidebar labels its Polygon network');
+    const outputs = [...wallet.matchAll(/<output\b[^>]*>([\s\S]*?)<\/output>/g)];
+    assert.equal(outputs.length, 1, 'the sidebar has one authoritative balance output');
+    assert.equal(outputs[0][1].replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim(), '— USDT',
+      'SSR displays an unknown balance until the authenticated browser read, never an invented zero or amount');
+    const state = wallet.match(/\bdata-wallet-balance="([^"]+)"/)?.[1];
+    assert.ok(['loading', 'unlinked', 'unavailable'].includes(state), 'SSR does not claim an unverified ready balance');
+  }
+  const navigation = [...html.matchAll(/<nav\b[^>]*class="vp-sidebar-nav"[^>]*>([\s\S]*?)<\/nav>/g)];
+  assert.ok(navigation.length > 0, 'the shell retains member navigation');
+  for (const [, menu] of navigation) {
+    const links = [...menu.matchAll(/\bhref="([^"]+)"/g)].map(match => match[1]);
+    for (const href of ['/dashboard', '/dashboard/payments', '/dashboard/wallet-personal/requests', '/dashboard/wallet-personal/pay']) {
+      assert.ok(links.includes(href), `the sidebar retains ${href}`);
+    }
+    assert.equal(links.some(href => /^\/dashboard\/(?:packages|wallet-administrative)(?:[/?#]|$)/.test(href)), false,
+      'hidden memberships and the separate administrative wallet are absent from personal navigation');
+  }
+}
+
 // Run only inside the isolated build image, with --network none and tmpfs state.
 const worker = spawn(process.execPath, ['node_modules/wrangler/bin/wrangler.js', 'dev', 'cloudflare-smoke-worker.mjs',
   '--env', 'staging', '--local', '--port', '8787', '--ip', '127.0.0.1', '--persist-to', '/tmp/portal-worker-state', '--log-level', 'error'], {
@@ -113,7 +140,7 @@ try {
     probes++;
   }
   const cases = [
-    ['/health', {}, 200], ['/login', {}, 200], ['/api/member/tree', {}, 401],
+    ['/health', {}, 200], ['/login', {}, 200], ['/__social_enabled/login', {}, 200], ['/api/member/tree', {}, 401],
     ['/__overview_fixture/dashboard', {}, 307],
     ['/__overview_fixture/dashboard/packages', {}, 307],
     ['/__overview_fixture/dashboard/kyc', {}, 307],
@@ -132,8 +159,8 @@ try {
       assert.match(body, /aria-label="Método de inicio de sesión"/);
       assert.match(body, />Código<\/button>/);
       assert.match(body, />Contraseña<\/button>/);
-      assert.match(body, /Continuar con Google/);
-      assert.match(body, /Continuar con Apple/);
+      assert.equal(/Continuar con Google|Continuar con Apple|class="auth-social-login"/.test(body), false,
+        'the default login keeps web social sign-in disabled');
       assert.match(body, /Crear cuenta/);
       assert.match(body, /solicita un código con tu correo original/);
       assert.match(body, /si tu vinculación requiere revisión, debe aprobarse antes de entrar/);
@@ -143,6 +170,11 @@ try {
       assert.doesNotMatch(body, /fonts\.googleapis|fonts\.gstatic|chatwoot|soporte\.mindbliss/i);
       assert.match(body, /rel="preload"[^>]*href="\/fonts\/manrope-latin-wght\.woff2"/);
       assert.match(response.headers.get('cache-control'), /no-store/);
+    }
+    if (path === '/__social_enabled/login') {
+      assert.equal(/Continuar con Google/.test(body), true, 'the explicitly enabled synthetic fixture renders Google sign-in');
+      assert.equal(/Continuar con Apple/.test(body), true, 'the explicitly enabled synthetic fixture renders Apple sign-in');
+      assert.equal(/class="auth-social-login"/.test(body), true, 'enabled social controls render in the compiled login');
     }
     if (path === '/account/security') assert.equal(response.headers.get('location'), '/login');
     probes++;
@@ -341,7 +373,7 @@ try {
       assert.match(html, /id="member-main"/);
       assert.match(html, />Tu espacio Mindbliss</);
       assert.match(html, />Mis membresías</);
-      assert.match(html, />Wallet personal<\/span><strong>— (?:<!-- -->)?USDT</);
+      assertPersonalWalletSidebar(html);
       assert.doesNotMatch(html, /MBP-LOGIN-(?:SERVICE|VERIFY)/);
     } else {
       assert.doesNotMatch(html, /class="vp-dashboard-shell"|id="member-main"|>Tu espacio Mindbliss</,
@@ -413,25 +445,48 @@ try {
     const html = await overview.text();
     assert.match(html, />Tu espacio Mindbliss</);
     assert.match(html, />Mis membresías</);
-    assert.match(html, />Wallet personal<\/span><strong>— (?:<!-- -->)?USDT</);
+    assertPersonalWalletSidebar(html);
     assert.doesNotMatch(html, /href="\/dashboard\/kyc"|Verificación de identidad/);
     assert.doesNotMatch(html, /Plan Fixture|999999|11001|postgres:\/\/synthetic/);
     assert.match(overview.headers.get('cache-control'), /no-store/);
     probes++;
   }
+  // The old membership bookmark now mounts the personal transfer page. Its
+  // client-only wallet restores after SSR; a legacy merchant flag must not
+  // resurrect pricing cards, select an onramp or create a hosted invoice.
+  const beforeTransferPages = await (await fetch('http://127.0.0.1:8787/__synthetic_metrics')).json();
   for (const enabled of [false, true]) {
-    const pricing = await fetch(`http://127.0.0.1:8787/__overview_fixture/dashboard/packages${enabled ? '-enabled' : ''}`, {
+    const transfer = await fetch(`http://127.0.0.1:8787/__overview_fixture/dashboard/packages${enabled ? '-enabled' : ''}`, {
       headers: sessionHeaders, redirect: 'manual', signal: AbortSignal.timeout(12000),
     });
-    assert.equal(pricing.status, 200);
-    const html = await pricing.text();
-    for (const amount of ['$100.00 USD', '$1.00 USD', '$99.00 USD']) assert.ok(html.includes(amount), `included NOWPayments quote ${amount}`);
-    assert.doesNotMatch(html, /\$101\.00 USD|Stripe \(suspendido\)|postgres:\/\/synthetic/);
-    assert.match(html, enabled ? /Continuar al pago/ : /Pagos no disponibles/);
-    if (!enabled) assert.doesNotMatch(html, /Continuar al pago/);
-    assert.match(pricing.headers.get('cache-control'), /no-store/);
+    assert.equal(transfer.status, 200, 'authenticated membership bookmarks open the current personal transfer surface');
+    const html = await transfer.text();
+    assert.equal(/class="vp-dashboard-shell"/.test(html), true, 'transfer SSR retains the authenticated shell');
+    assertPersonalWalletSidebar(html);
+    const main = html.match(/<main\b[^>]*id="member-main"[^>]*>([\s\S]*?)<\/main>/)?.[1];
+    assert.ok(main, 'the transfer bookmark has its own private main content');
+    // Next streams this client-only fallback in a hidden Suspense segment
+    // after the initial main. Check rendered text across the complete response,
+    // excluding Flight scripts, without assuming its physical stream location.
+    const renderedText = value => value.replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+    const statusCount = (html.match(/role="status"/g) || []).length;
+    const walletLoading = renderedText(html).includes('Comprobando tu wallet');
+    assert.equal(statusCount > 0 && walletLoading, true,
+      `client-only transfer SSR waits for the personal wallet; ${JSON.stringify({ statusCount, walletLoading, mainText: renderedText(main).slice(0, 200) })}`);
+    for (const amount of ['$100.00 USD', '$1.00 USD', '$99.00 USD', '$101.00 USD']) {
+      assert.equal(html.includes(amount), false, `retired membership quote is absent: ${amount}`);
+    }
+    assert.equal(/Continuar al pago|Pagos no disponibles|Stripe \(suspendido\)|Plan Fixture|999999|11001|postgres:\/\/synthetic/.test(html), false,
+      'transfer SSR exposes neither the retired purchase CTA nor fixture catalogue/private configuration');
+    assert.equal(transfer.headers.get('cache-control'), 'private, no-store');
+    assert.equal(transfer.headers.get('cdn-cache-control'), 'no-store');
+    assert.equal(transfer.headers.get('cloudflare-cdn-cache-control'), 'no-store');
+    assert.equal(transfer.headers.get('set-cookie'), null, 'reading the transfer page does not alter the member session');
     probes++;
   }
+  const afterTransferPages = await (await fetch('http://127.0.0.1:8787/__synthetic_metrics')).json();
+  assert.equal(afterTransferPages.nowpaymentsCheckoutCalls, beforeTransferPages.nowpaymentsCheckoutCalls,
+    'SSR transfer bookmarks never create a NOWPayments checkout, regardless of the old membership flag');
   const retiredKyc = await fetch('http://127.0.0.1:8787/__overview_fixture/dashboard/kyc', {
     headers: sessionHeaders, redirect: 'manual', signal: AbortSignal.timeout(12000),
   });
