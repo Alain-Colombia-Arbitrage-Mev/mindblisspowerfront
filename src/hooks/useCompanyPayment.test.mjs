@@ -68,7 +68,7 @@ function harness(overrides = {}) {
     useEffect(callback, deps) { const index = cursor++, cell = slots[index] ??= {};
       if (dependenciesChanged(cell.deps, deps)) { cell.deps = deps; effects.push(() => { cell.cleanup?.(); cell.cleanup = callback(); }); } },
   };
-  const sdk = { creations: [], broadcasts: [], sends: [], networkSwitches: [], balanceReads: [], preflightBalanceReads: [] };
+  const sdk = { creations: [], broadcasts: [], sends: [], networkSwitches: [], balanceReads: [], preflightBalanceReads: [], balances: new Map() };
   const provider = { request() { assert.fail('a real wallet RPC was attempted'); } };
   const getProvider = () => provider;
   const switchProviderNetwork = async chainId => { sdk.networkSwitches.push(chainId === 137 ? 'polygon' : 'ethereum'); return overrides.switchNetwork?.(chainId); };
@@ -87,7 +87,7 @@ function harness(overrides = {}) {
     },
   };
   const transfer = {
-    async readPersonalCompanyPaymentBalance(options) { sdk.preflightBalanceReads.push(options); return overrides.preflightBalance ? overrides.preflightBalance(options) : { balanceAtomic: options.chainId === 137 ? '7000000' : balanceAtomic }; },
+    async readPersonalCompanyPaymentBalance(options) { sdk.preflightBalanceReads.push(options); return overrides.preflightBalance ? overrides.preflightBalance(options) : { balanceAtomic: sdk.balances.get(`${options.walletAddress}:${options.chainId}`) ?? (options.chainId === 137 ? '7000000' : balanceAtomic) }; },
     createPersonalCompanyPaymentTransfer(options) {
       sdk.creations.push(options);
       const sender = { markSubmitted: (...args) => sdk.broadcasts.push(args), async sendPrepared(prepared, config) {
@@ -112,10 +112,12 @@ function harness(overrides = {}) {
       sdk.balanceReads.push(options); const requestedWallet = sourceWallet;
       if (overrides.balances) return overrides.balances(options);
       const result = overrides.balance ? await overrides.balance(options) : { balanceAtomic };
-      return { walletAddress: requestedWallet, ...result, balances: [
+      const response = { walletAddress: requestedWallet, ...result, balances: [
         { walletAddress: requestedWallet, chainId: 1, ...result },
         { walletAddress: requestedWallet, chainId: 137, balanceAtomic: '7000000' },
       ] };
+      for (const record of response.balances) sdk.balances.set(`${requestedWallet}:${record.chainId}`, record.balanceAtomic);
+      return response;
     } } };
   new Function('require', 'module', 'exports', 'window', 'document', 'crypto', 'navigator', 'globalThis', 'setTimeout', 'clearTimeout', code)(id => {
     assert.ok(Object.hasOwn(imports, id), `Unexpected hook dependency ${id}`); return imports[id];
@@ -164,7 +166,7 @@ test('a new session hides the old amount, balance, history and selected payment 
   assert.equal(changed.payment, null); assert.equal(changed.manualHash, ''); assert.equal(changed.recovery, null);
   assert.equal(changed.connected, false);
   oldFlow.review(); await oldFlow.confirm(); oldFlow.selectHistory(confirmed());
-  await h.flush(); assert.deepEqual(writes(h), []); assert.equal(h.sdk.preflightBalanceReads.length, 0);
+  await h.flush(); assert.deepEqual(writes(h), []); assert.equal(h.sdk.preflightBalanceReads.length, 1);
   assert.equal(h.flow.amount, ''); assert.deepEqual(h.flow.history, []); assert.equal(h.flow.payment, null);
   nextBalance.resolve({ balanceAtomic: '7000000' }); nextHistory.resolve({ records: [confirmed({ paymentId: otherId, amountAtomic: '7000000' })] });
   await h.flush(); assert.equal(h.flow.balanceAtomic, '7000000'); assert.equal(h.flow.amount, '7');
@@ -482,7 +484,7 @@ test('selecting Ethereum or Polygon only changes the local amount and unsigned p
   assert.equal(h.flow.payment, null); assert.equal(h.flow.stage, 'form');
   oldFlow.review(); await oldFlow.confirm(); await h.flush();
   assert.equal(h.flow.payment, null); assert.deepEqual(writes(h), []);
-  assert.equal(h.sdk.preflightBalanceReads.length, 0); assert.equal(h.sdk.creations.length, 0); assert.equal(h.sdk.networkSwitches.length, 0);
+  assert.equal(h.sdk.preflightBalanceReads.length, 1); assert.equal(h.sdk.creations.length, 0); assert.equal(h.sdk.networkSwitches.length, 0);
   h.flow.changeNetwork(42161); h.flow.changeNetwork('137'); h.flow.changeNetwork(); await h.flush(); assert.equal(h.flow.chainId, 137);
   await preview(h, '7'); assert.notEqual(h.flow.payment.paymentId, oldId);
   assert.equal(h.flow.payment.chainId, 137); assert.equal(h.flow.payment.tokenAddress, values.personalCompanyPaymentPolicy(137).tokenAddress);
@@ -560,4 +562,41 @@ test('automatic restoration and an old session cannot open another connection or
   await h.session({ subject: 'owner-B', email: 'member@example.test' });
   pending.reject(new Error('wallet_connection_timeout')); await operation; await h.flush();
   assert.equal(h.flow.busy, false); assert.equal(h.flow.errorKey, ''); assert.deepEqual(writes(h), []);
+});
+
+test('an SDK-connected unlinked wallet offers explicit verification and never links or transfers from an effect', async t => {
+  let links = 0;
+  const reownState = { linkedAddress: '', linkStatus: 'unlinked', isConnected: true, isLinked: false,
+    connectWallet: () => assert.fail('a connected wallet was asked to authenticate again'),
+    linkWallet: async () => { links++; Object.assign(reownState,{linkedAddress:wallet,linkStatus:'linked',isLinked:true}); return {linked:true,address:wallet}; } };
+  const h = harness({reown:reownState}); t.after(()=>h.unmount()); await h.flush();
+  assert.equal(h.flow.needsVerification,true); assert.equal(h.flow.connected,false); assert.equal(links,0);
+  assert.deepEqual(writes(h),[]); assert.equal(h.sdk.sends.length,0);
+  const form = find(page(h), node => node?.type==='CompanyPaymentForm'); assert.equal(form.props.needsVerification,true);
+  await h.flow.connect(); await h.flush();
+  assert.equal(links,1); assert.equal(h.flow.wallet,wallet); assert.equal(h.flow.verified,true); assert.equal(h.flow.connected,true); assert.equal(h.flow.needsVerification,false);
+  assert.deepEqual(writes(h),[]); assert.equal(h.sdk.preflightBalanceReads.length,0); assert.equal(h.sdk.sends.length,0);
+});
+
+test('Review performs one bounded read-only live wallet preflight and cannot prepare, sign or send a payment', async t => {
+  const pending=deferred(); const h=harness({preflightBalance:()=>pending.promise});t.after(()=>h.unmount());await h.flush();
+  h.flow.changeNetwork(137); await h.flush(); h.flow.setAmount('7'); await h.flush();
+  const first=h.flow.review(), duplicate=h.flow.review();await h.flush();
+  assert.equal(h.flow.busy,true);assert.equal(h.flow.payment,null);assert.equal(h.sdk.preflightBalanceReads.length,1);
+  const options=h.sdk.preflightBalanceReads[0];assert.equal(options.chainId,137);assert.equal(options.walletAddress,wallet);assert.equal(options.readTimeoutMs,10000);assert.ok(options.signal instanceof AbortSignal);
+  assert.deepEqual(writes(h),[]);assert.equal(h.sdk.creations.length,0);assert.equal(h.sdk.sends.length,0);
+  pending.resolve({balanceAtomic:'7000000'});await Promise.all([first,duplicate]);await h.flush();
+  assert.equal(h.flow.stage,'review');assert.equal(h.flow.payment.chainId,137);assert.equal(h.flow.busy,false);
+  assert.deepEqual(writes(h),[]);assert.equal(h.sdk.creations.length,0);assert.equal(h.sdk.sends.length,0);
+});
+
+test('Review exposes wrong-chain and RPC failures, and a changed live balance requires another explicit review', async t => {
+  for(const [message,key] of [['personal_company_chain_changed','companyPayment.switchNetwork'],['personal_company_rpc_unavailable','companyPayment.networkUnavailable']]) {
+    const h=harness({preflightBalance:async()=>{throw Error(message);}});t.after(()=>h.unmount());await h.flush();
+    await h.flow.review();await h.flush();assert.equal(h.flow.payment,null);assert.equal(h.flow.stage,'form');assert.equal(h.flow.errorKey,key);
+    assert.deepEqual(writes(h),[]);assert.equal(h.sdk.sends.length,0);
+  }
+  const h=harness({preflightBalance:async()=>({balanceAtomic:'30000000'})});t.after(()=>h.unmount());await h.flush();
+  await h.flow.review();await h.flush();assert.equal(h.flow.balanceAtomic,'30000000');assert.equal(h.flow.payment,null);assert.equal(h.flow.errorKey,'companyPayment.balanceChanged');
+  await h.flow.review();await h.flush();assert.equal(h.flow.stage,'review');assert.deepEqual(writes(h),[]);assert.equal(h.sdk.sends.length,0);
 });

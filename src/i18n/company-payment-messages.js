@@ -1,5 +1,6 @@
 export const companyPaymentMessages = {
   es: { companyPayment: {
+    verifyWalletCopy: "Tu billetera ya está conectada. Firma una verificación única para vincular esta dirección a tu cuenta. Esta verificación no envía fondos.",
     reconnect: "Restablecer conexión",
     reconnectCopy: "Tu dirección y saldo siguen vinculados. Restablece la sesión de tu billetera para autorizar el envío.",
     restoring: "Restaurando conexión…",
@@ -63,6 +64,7 @@ export const companyPaymentMessages = {
     legacyPreparedCopy: "Este borrador conserva su red original. Revisa el importe y los datos antes de confirmarlo en tu billetera.",
   } },
   en: { companyPayment: {
+    verifyWalletCopy: "Your wallet is already connected. Sign a one-time verification to link this address to your account. This verification does not send funds.",
     reconnect: "Restore wallet connection",
     reconnectCopy: "Your address and balance remain linked. Restore your wallet session to authorize the transfer.",
     restoring: "Restoring connection…",
@@ -126,6 +128,7 @@ export const companyPaymentMessages = {
     legacyPreparedCopy: "This draft keeps its original network. Review the amount and details before confirming it in your wallet.",
   } },
   ar: { companyPayment: {
+    verifyWalletCopy: "محفظتك متصلة بالفعل. وقّع تحققًا لمرة واحدة لربط هذا العنوان بحسابك. لا يرسل هذا التحقق أموالًا.",
     reconnect: "استعادة اتصال المحفظة",
     reconnectCopy: "لا يزال عنوانك ورصيدك مرتبطين. استعد جلسة محفظتك لتفويض التحويل.",
     restoring: "جارٍ استعادة الاتصال…",
@@ -189,6 +192,7 @@ export const companyPaymentMessages = {
     legacyPreparedCopy: "تحتفظ هذه المسودة بشبكتها الأصلية. راجع المبلغ والبيانات قبل تأكيدها في محفظتك.",
   } },
   zh: { companyPayment: {
+    verifyWalletCopy: "钱包已连接。请签署一次性验证，将此地址关联到你的账户。此验证不会发送资金。",
     reconnect: "恢复钱包连接",
     reconnectCopy: "你的地址和余额仍已关联。请恢复钱包会话以授权转账。",
     restoring: "正在恢复连接…",

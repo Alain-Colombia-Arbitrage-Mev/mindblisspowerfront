@@ -169,20 +169,37 @@ export function useCompanyPayment(reown) {
     return operation;
   }
 
-  function review() {
+  async function review() {
     const policy = personalCompanyPaymentPolicy(chainId);
     const atomic = personalCompanyPaymentAmountAtomic(amount);
     if (!currentDisplay || !live(wallet) || activeChain.current !== chainId || !policy || inflight.current || !connected || !atomic || balance.wallet !== wallet || balance.balanceAtomic === null || BigInt(atomic) > BigInt(balance.balanceAtomic)) return;
     if (persisted.current && selected.current && selected.current.status === "prepared"
       && (selected.current.chainId !== chainId || selected.current.amountAtomic !== atomic)) { setErrorKey("companyPayment.pendingExists"); setStage("status"); return; }
-    setErrorKey("");
-    // The preview is local and editable. Persist the exact intent on Confirm,
-    // before opening the wallet. A preview never claims server registration.
-    const value = persisted.current ? selected.current : { paymentId: crypto.randomUUID(), walletKind: "personal", walletAddress: wallet,
-      ...policy, amountAtomic: atomic, status: "prepared", createdAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(), transactionHash: null, blockNumber: null, blockHash: null,
-      confirmations: 0, requiredConfirmations: 12, failureReason: null, abandonedAt: null, membershipAssignment: "pending" };
-    select(value, "review", persisted.current);
+    const operation = {}; inflight.current = operation; setBusy(true); setErrorKey("");
+    const request = new AbortController(); controller.current = request;
+    const previous = selected.current;
+    try {
+      // Reviewing proves that the live SDK can read this exact account/network.
+      // It never prepares a backend payment, requests a signature or sends funds.
+      const result = await readPersonalCompanyPaymentBalance({ walletProvider: reown.getCompanyPaymentProvider(), walletAddress: wallet,
+        chainId, signal: request.signal, readTimeoutMs: 10_000 });
+      if (request.signal.aborted || inflight.current !== operation || !live(wallet) || activeChain.current !== chainId || selected.current !== previous) return;
+      if (result.balanceAtomic !== balance.balanceAtomic) {
+        setBalance(current => current.wallet !== wallet ? current : { ...current, records: current.records.map(record => record.chainId === chainId
+          ? { ...record, balanceAtomic: result.balanceAtomic, error: undefined } : record) });
+        throw new Error("personal_company_balance_changed");
+      }
+      // The preview is local and editable. Persist only after explicit Confirm.
+      const value = persisted.current ? selected.current : { paymentId: crypto.randomUUID(), walletKind: "personal", walletAddress: wallet,
+        ...policy, amountAtomic: atomic, status: "prepared", createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(), transactionHash: null, blockNumber: null, blockHash: null,
+        confirmations: 0, requiredConfirmations: 12, failureReason: null, abandonedAt: null, membershipAssignment: "pending" };
+      select(value, "review", persisted.current);
+    } catch (failure) { if (live(wallet)) setErrorKey(companyPaymentErrorKey(failure)); }
+    finally {
+      if (inflight.current === operation) { inflight.current = null; if (live(wallet)) setBusy(false); }
+      if (controller.current === request) controller.current = null;
+    }
   }
 
   async function confirm() {
@@ -325,7 +342,8 @@ export function useCompanyPayment(reown) {
     const entry = currentDisplay && verified && balances.wallet === wallet ? balances.records.find(record => record.chainId === id) : null;
     return { chainId: id, balanceAtomic: entry?.balanceAtomic ?? null, error: entry?.error || balances.error,
       loading: !currentDisplay || balances.loading };
-  }), connected: currentDisplay && connected, restoring: currentDisplay && reown.isRestoring === true, amount: currentDisplay ? amount : "", setAmount: value => { if (!currentDisplay || !live(wallet)) return; amountEdited.current = true; setAmount(value); setErrorKey(""); },
+  }), connected: currentDisplay && connected, needsVerification: currentDisplay && Boolean(sessionKey) && reown.isConnected === true && reown.linkStatus === "unlinked" && reown.isLinked !== true,
+    restoring: currentDisplay && reown.isRestoring === true, amount: currentDisplay ? amount : "", setAmount: value => { if (!currentDisplay || !live(wallet)) return; amountEdited.current = true; setAmount(value); setErrorKey(""); },
     balanceAtomic: currentDisplay && verified && balance.wallet === wallet ? balance.balanceAtomic : null, loadingBalance: !currentDisplay || balance.loading,
     nativeBalanceAtomic: currentDisplay && verified && balance.wallet === wallet && !balance.loading && !balance.error ? selectedBalance?.nativeBalanceAtomic ?? null : null,
     errorKey: currentDisplay ? errorKey || balance.error || history.error : "", history: currentDisplay && verified && history.wallet === wallet ? history.records : [], historyLoading: !currentDisplay || history.loading,

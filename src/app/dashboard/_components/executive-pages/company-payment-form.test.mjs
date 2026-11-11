@@ -185,3 +185,18 @@ test('connection restoration preserves MAX and displays a precise gas notice for
     assert.equal(button(waiting,translateMessage('es','companyPayment.max')).props.disabled,false);
   }
 });
+
+test('connected but unlinked wallets show Verify wallet in every locale, and verification never submits the payment form', () => {
+  for(locale of ['es','en','ar','zh']) {
+    let verifies=0, reviews=0;
+    const tree=CompanyPaymentForm(properties({connected:false,canRefresh:false,needsVerification:true,onConnect:()=>verifies++,onReview:()=>reviews++}));
+    const verify=button(tree,translateMessage(locale,'companyPayment.verifyWallet'));
+    assert.ok(verify); assert.equal(verify.props.type,'button'); assert.equal(verify.props.disabled,false);
+    assert.equal(button(tree,translateMessage(locale,'companyPayment.connect')),undefined);
+    assert.ok(renderToStaticMarkup(tree).includes(translateMessage(locale,'companyPayment.verifyWalletCopy')));
+    verify.props.onClick(); tree.props.onSubmit({preventDefault(){}}); assert.equal(verifies,1); assert.equal(reviews,0);
+    const waiting=CompanyPaymentForm(properties({connected:false,canRefresh:false,needsVerification:true,busy:true}));
+    assert.equal(button(waiting,translateMessage(locale,'funding.verifyingWallet')).props.disabled,true);
+  }
+  locale='es';
+});

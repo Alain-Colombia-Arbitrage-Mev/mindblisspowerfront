@@ -41,7 +41,7 @@ export function PersonalCompanyPayment() {
     </div>
     {reviewing ? <CompanyPaymentReview payment={payment} onConfirm={() => void flow.confirm()} onBack={() => void flow.abandon()} busy={flow.busy} error={failure} />
       : status ? <CompanyPaymentStatus flow={flow} />
-        : <CompanyPaymentForm showHeading={false} chainId={flow.chainId} chainBalances={flow.chainBalances} onNetworkChange={flow.changeNetwork} balanceAtomic={flow.balanceAtomic} nativeBalanceAtomic={flow.nativeBalanceAtomic} restoring={flow.restoring} amount={flow.amount} onAmountChange={flow.setAmount}
+        : <CompanyPaymentForm showHeading={false} chainId={flow.chainId} chainBalances={flow.chainBalances} onNetworkChange={flow.changeNetwork} balanceAtomic={flow.balanceAtomic} nativeBalanceAtomic={flow.nativeBalanceAtomic} restoring={flow.restoring} needsVerification={flow.needsVerification} amount={flow.amount} onAmountChange={flow.setAmount}
           onMax={() => { if (flow.balanceAtomic !== null) flow.setAmount(formatPersonalCompanyPaymentAmount(flow.balanceAtomic)); }}
           onReview={flow.review} onRefresh={flow.refresh} busy={flow.busy} loading={flow.loadingBalance || (flow.verified && flow.historyLoading) || reown.linkStatus === "loading"}
           connected={flow.connected} canRefresh={flow.verified} onConnect={() => void flow.connect()} error={failure} />}

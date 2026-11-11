@@ -9,7 +9,7 @@ import styles from "./company-payment.module.css";
 
 export function CompanyPaymentForm({ balanceAtomic = null, amount = "", onAmountChange, onMax, onReview, onRefresh,
   busy = false, loading = false, connected = false, canRefresh = connected, onConnect, error = "", showHeading = true,
-  chainId = 1, chainBalances = [], onNetworkChange = () => {}, nativeBalanceAtomic = null, restoring = false }) {
+  chainId = 1, chainBalances = [], onNetworkChange = () => {}, nativeBalanceAtomic = null, restoring = false, needsVerification = false }) {
   const { t } = useI18n();
   const id = useId();
   const available = personalCompanyPaymentAtomic(balanceAtomic, true);
@@ -47,9 +47,9 @@ export function CompanyPaymentForm({ balanceAtomic = null, amount = "", onAmount
     {error ? <p className={styles.error} role="alert">{error}</p> : null}
     {connected ? <button className={`executive-button primary ${styles.primary}`} type="submit" disabled={!canReview}>
       {busy ? <Loader2 size={17} className="animate-spin" aria-hidden="true" /> : <ArrowRight size={17} aria-hidden="true" />}{t(busy ? "companyPayment.busyLabel" : "companyPayment.review")}
-    </button> : <><p className={styles.note} role={restoring ? "status" : undefined}>{t(restoring ? "companyPayment.restoringCopy" : canRefresh ? "companyPayment.reconnectCopy" : "companyPayment.connectCopy")}</p>
+    </button> : <><p className={styles.note} role={restoring ? "status" : undefined}>{t(restoring ? "companyPayment.restoringCopy" : needsVerification ? "companyPayment.verifyWalletCopy" : canRefresh ? "companyPayment.reconnectCopy" : "companyPayment.connectCopy")}</p>
       <button className={`executive-button primary ${styles.primary}`} type="button" disabled={busy || loading || restoring} onClick={onConnect}>
-        {restoring || busy ? <Loader2 className="animate-spin" size={17} aria-hidden="true" /> : <WalletCards size={17} aria-hidden="true" />}{t(restoring || busy ? "companyPayment.restoring" : canRefresh ? "companyPayment.reconnect" : "companyPayment.connect")}
+        {restoring || busy ? <Loader2 className="animate-spin" size={17} aria-hidden="true" /> : <WalletCards size={17} aria-hidden="true" />}{t(restoring ? "companyPayment.restoring" : busy ? needsVerification ? "funding.verifyingWallet" : "companyPayment.restoring" : needsVerification ? "companyPayment.verifyWallet" : canRefresh ? "companyPayment.reconnect" : "companyPayment.connect")}
       </button></>}
   </form>;
 }
