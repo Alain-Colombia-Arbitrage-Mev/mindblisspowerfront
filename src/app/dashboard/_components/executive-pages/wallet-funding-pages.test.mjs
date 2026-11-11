@@ -21,6 +21,7 @@ function load(filename, mocks) {
   new Function('require', 'module', 'exports', code)(id => {
     if (Object.hasOwn(mocks, id)) return mocks[id];
     if (id === '@/lib/wallet-funding-contract.mjs') return { PERSONAL_FUNDING_COUNTRIES, PERSONAL_FUNDING_MINIMUM_USD, personalFundingMethod, validFundingAmount, WALLET_GATEWAY_FAILURE_REASONS, FUNDING_UUID, fundingStatus };
+    if (id === 'next/link') return { default: ({ href, children, ...props }) => React.createElement('a', { href, ...props }, children) };
     if (id.endsWith('.module.css')) return styles;
     if (id === 'react/jsx-runtime' || id === 'react') return require(id);
     assert.fail(`Unexpected dependency ${id}`);

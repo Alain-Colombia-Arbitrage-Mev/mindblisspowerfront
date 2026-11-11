@@ -1,0 +1,84 @@
+import { createHash, createHmac } from 'node:crypto';
+import { betterAuthConfig, betterAuthCookies, trustedAuthClientIp } from './better-auth-bridge.mjs';
+import { coreFetch, runtimeEnvironment } from './cloudflare-runtime.mjs';
+import { memberMutationError } from './member-mutation-policy.mjs';
+import { boundedServiceRequest } from './private-service-request.mjs';
+import { browserRequestDeadline } from './browser-request-deadline.mjs';
+import { companyPaymentHistory, companyPaymentInput, companyPaymentView } from './company-payment-contract.mjs';
+import { FUNDING_UUID } from './wallet-funding-contract.mjs';
+
+const reply = (data, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' } });
+const safeErrors = new Set(['unauthenticated', 'invalid_origin', 'invalid_request', 'company_payment_unavailable', 'company_payment_not_found',
+  'company_payment_unconfigured', 'company_payment_wallet_not_linked', 'company_payment_insufficient_balance', 'company_payment_pending',
+  'company_payment_request_already_used', 'company_payment_transaction_pending', 'company_payment_transaction_mismatch', 'company_payment_rate_limited',
+  'company_payment_forbidden', 'company_payment_hash_reused', 'company_payment_pending_exists', 'company_payment_rpc_unavailable',
+  'company_payment_invalid_transition', 'company_payment_confirmation_conflict']);
+
+async function inputBody(request) {
+  const reader = request.body?.getReader();
+  if (!reader) throw new Error('invalid_request');
+  const deadline = browserRequestDeadline(request.signal, 8000);
+  const cancel = () => { try { void reader.cancel().catch(() => {}); } catch { /* bounded cleanup */ } };
+  deadline.signal.addEventListener('abort', cancel, { once: true });
+  let size = 0, raw = '';
+  const decoder = new TextDecoder('utf-8', { fatal: true });
+  try {
+    if (deadline.signal.aborted) throw new Error('invalid_request');
+    for (;;) {
+      const next = await reader.read();
+      if (deadline.signal.aborted) throw new Error('invalid_request');
+      if (next.done) break;
+      size += next.value.byteLength;
+      if (size > 2048) { cancel(); throw new Error('request_too_large'); }
+      raw += decoder.decode(next.value, { stream: true });
+    }
+    return JSON.parse(raw + decoder.decode());
+  } finally { deadline.dispose(); deadline.signal.removeEventListener('abort', cancel); reader.releaseLock(); }
+}
+
+/** Native sessions and the private BFF authenticate every read and mutation. */
+export async function handleCompanyPayment(request, action, { env = runtimeEnvironment(), fetchImpl = coreFetch, serviceRequest = boundedServiceRequest } = {}) {
+  if (!['prepare', 'submit', 'verify', 'abandon', 'status', 'history'].includes(action)) return reply({ error: 'invalid_request' }, 400);
+  const allowed = ['https://app.mindblisspower.com', 'https://mindbliss-portal-rewon.devfidubit.workers.dev'];
+  if (env.NODE_ENV === 'production' && !allowed.includes(env.AUTH_PUBLIC_ORIGIN)) return reply({ error: 'not_found' }, 404);
+  const method = ['status', 'history'].includes(action) ? 'GET' : 'POST';
+  if (request.method !== method) return reply({ error: 'method_not_allowed' }, 405);
+  const cookie = betterAuthCookies(request.headers.get('cookie') || '');
+  if (!cookie.split(';').some(part => /^(?:__Secure-)?better-auth\.session_token=[^;\s,]+$/.test(part.trim()))) return reply({ error: 'unauthenticated' }, 401);
+  if (env.PERSONAL_COMPANY_PAYMENTS_ENABLED !== 'true') return reply({ error: 'company_payment_unconfigured' }, 503);
+  const url = new URL(request.url);
+  let body, paymentId;
+  if (method === 'POST') {
+    const denied = memberMutationError(request, env);
+    if (denied) return reply({ error: denied.error }, denied.status);
+    if (url.search) return reply({ error: 'invalid_request' }, 400);
+    const length = request.headers.get('content-length');
+    if (length !== null && (!/^\d+$/.test(length) || Number(length) > 2048)) return reply({ error: 'request_too_large' }, 413);
+    try { body = companyPaymentInput(await inputBody(request), action); }
+    catch (error) { return reply({ error: error?.message === 'request_too_large' ? 'request_too_large' : 'invalid_request' }, error?.message === 'request_too_large' ? 413 : 400); }
+    if (!body) return reply({ error: 'invalid_request' }, 400);
+  } else if (action === 'status') {
+    paymentId = url.searchParams.get('paymentId');
+    if (!FUNDING_UUID.test(paymentId || '') || url.search !== `?paymentId=${paymentId}`) return reply({ error: 'invalid_request' }, 400);
+  } else if (url.search) return reply({ error: 'invalid_request' }, 400);
+  const path = `/api/member/company-payments/${action}${paymentId ? `?paymentId=${paymentId}` : ''}`;
+  const requestedId = body ? ('requestId' in body ? body.requestId : body.paymentId) : undefined;
+  const requestedHash = body && 'transactionHash' in body ? body.transactionHash : undefined;
+  try {
+    const base = betterAuthConfig(env), serialized = body ? JSON.stringify(body) : '';
+    const ip = trustedAuthClientIp(request.headers, env), timestamp = String(Math.floor(Date.now() / 1000));
+    const hash = value => createHash('sha256').update(value).digest('hex');
+    const signature = createHmac('sha256', env.AUTH_BFF_SHARED_SECRET).update([method, path, timestamp, ip, hash(cookie), hash(serialized)].join('\n')).digest('hex');
+    const result = await serviceRequest(`${base}${path}`, { method, signal: request.signal, body: serialized || undefined,
+      headers: { cookie, origin: method === 'GET' ? env.AUTH_PUBLIC_ORIGIN : request.headers.get('origin') || '', ...(body ? { 'content-type': 'application/json' } : {}),
+        'x-vp-auth-client-ip': ip, 'x-vp-auth-timestamp': timestamp, 'x-vp-auth-signature': signature } }, fetchImpl);
+    if (!result.ok) return reply({ error: safeErrors.has(result.data?.error) ? result.data.error : 'company_payment_unavailable' }, [400, 401, 403, 404, 409, 413, 429, 503].includes(result.status) ? result.status : 502);
+    const safe = action === 'history' ? companyPaymentHistory(result.data) : companyPaymentView(result.data);
+    if (!safe || (paymentId && (!('paymentId' in safe) || safe.paymentId !== paymentId))
+      || (body && (!('paymentId' in safe) || safe.paymentId !== requestedId))
+      || (action === 'prepare' && (!('amountAtomic' in safe) || safe.amountAtomic !== body.amountAtomic))
+      || (action === 'submit' && (!('transactionHash' in safe) || safe.transactionHash !== requestedHash))) return reply({ error: 'company_payment_unavailable' }, 502);
+    if (action === 'abandon' && (!('status' in safe) || safe.status !== 'prepared' || !('abandonedAt' in safe) || safe.abandonedAt === null)) return reply({ error: 'company_payment_unavailable' }, 502);
+    return reply(safe);
+  } catch { return reply({ error: 'company_payment_unavailable' }, 503); }
+}

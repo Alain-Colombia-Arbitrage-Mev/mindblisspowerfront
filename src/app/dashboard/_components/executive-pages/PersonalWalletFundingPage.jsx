@@ -2,6 +2,7 @@
 
 import { CheckCircle2, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useCallback, useState } from "react";
 import { useReownWallet } from "@/components/reown/ReownContext";
 import { useI18n } from "@/i18n/LanguageProvider";
@@ -85,6 +86,7 @@ export function PersonalWalletFunding() {
     connected: "walletPage.connectedPending", verifying: "funding.verifyingWallet", verified: "funding.walletVerified", disconnected: "funding.connectWallet" }[state];
 
   return <WalletFundingScreen title={t("walletPage.personalTitle")} subtitle={t("walletPage.personalCopy")}>
+    <Link href="/dashboard/wallet-personal/pay" className="executive-button">{t("companyPayment.title")}</Link>
     <div className={`${styles.flowLayout}${!verified ? ` ${styles.setupRequired}` : ""}`} id="personal-wallet">
       <section className={`executive-panel ${styles.formPanel}`} aria-label={t("walletPage.addFundsAction")}>
         <PersonalFundingForm disabled={!verified} busy={busy} onContinue={openProvider} onSelectionChange={clearSelectedStatus} destinationAddress={verified ? reown.linkedAddress : ""} />

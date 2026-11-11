@@ -5,7 +5,6 @@ import { createRequire } from "node:module";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import ts from "typescript";
-import { membershipPriceQuote } from "./membership-price-quote.mjs";
 import { translateMessage } from "../i18n/translate.mjs";
 
 const require = createRequire(import.meta.url);
@@ -30,7 +29,7 @@ function overviewPlans(getCatalog) {
   return moduleAt("../components/panel/overview/OverviewPlans.jsx", { "@/lib/catalog": { getPackageCatalog: getCatalog } });
 }
 
-test("overview renders all catalog plans once on the server, keeping exact USD prices and safe plan links", async () => {
+test("overview renders catalogue reference prices once and links to payment without promising plan selection", async () => {
   let calls = 0;
   const packages = Array.from({ length: 13 }, (_, index) => plan(index + 1, `${(index + 1) * 100}.01`, `  Plan ${index + 1}  `));
   const { default: Plans } = overviewPlans(async () => { calls++; return { packages, ranks: [{ secret: "not-for-summary" }] }; });
@@ -39,15 +38,16 @@ test("overview renders all catalog plans once on the server, keeping exact USD p
   assert.equal(calls, 1);
   assert.match(html, /Planes de membresía/);
   assert.equal((html.match(/<article/g) || []).length, 13);
+  assert.equal((html.match(/href="\/dashboard\/packages"/g) || []).length, 13);
   for (let index = 0; index < packages.length; index++) {
-    assert.ok(html.includes(`href="/dashboard/packages?plan=${index + 1}#plan-${index + 1}"`));
-    assert.ok(html.includes(`<span>Comprar plan</span><span class="sr-only"> ${packages[index].name.trim()}</span>`));
+    assert.ok(html.includes(`<span>${translateMessage("es", "companyPayment.title")}</span>`));
     assert.ok(html.includes(`>${packages[index].name.trim()}</h3>`));
     assert.ok(html.includes(`$${((index + 1) * 100).toLocaleString("en-US")}.01 USD`));
   }
-  assert.doesNotMatch(html, /private-legacy-type|not-for-summary|\bPV\b|ROI|Recomendado|Ver plan|Activar/);
+  assert.doesNotMatch(html, /private-legacy-type|not-for-summary|\bPV\b|ROI|Recomendado|Ver plan|Comprar plan|Activar|\?plan=|#plan-/);
   const section = element.props.children;
-  assert.equal(section.props.children[0].props.children[2].props.prefetch, false);
+  const cards = React.Children.toArray(section.props.children);
+  assert.ok(cards.every(card => React.Children.toArray(card.props.children).at(-1).props.prefetch === false));
 });
 
 test("overview USD rendering preserves cents and large decimal strings without float rounding", async () => {
@@ -62,7 +62,8 @@ test("overview escapes catalog names, ignores unneeded fields and never accepts 
   const { default: Plans } = overviewPlans(async () => ({ packages: [{ ...plan(17, "3500.35", "  <script>unsafe</script>  "), href: "https://outside.invalid", token: "not-visible", email: "private@example.test" }] }));
   const html = render(await Plans());
   assert.match(html, /&lt;script&gt;unsafe&lt;\/script&gt;/);
-  assert.match(html, /href="\/dashboard\/packages\?plan=17#plan-17"/);
+  assert.match(html, /href="\/dashboard\/packages"/);
+  assert.doesNotMatch(html, /\?plan=|#plan-/);
   assert.doesNotMatch(html, /<script>|outside\.invalid|not-visible|private@example/);
 });
 
@@ -138,32 +139,30 @@ test("actual summary follows the Pen bento and omits the retired long-form secti
   assert.doesNotMatch(html, /plans-slot|RecentSignupsCard|TopRanksCard|NOWPaymentsBalances|Centro de soporte/);
 });
 
-test("the existing memberships page exposes matching plan anchors without changing checkout controls", async () => {
-  const children = ({ children: content }) => content;
-  const gateProps = [];
-  const { default: Packages } = moduleAt("../app/dashboard/packages/page.jsx", {
-    "@/lib/catalog": { getCatalog: async () => ({ packages: [plan(7)], ranks: [] }) },
-    "@/lib/cloudflare-runtime.mjs": { runtimeEnvironment: () => ({}) },
-    "@/lib/checkout-policy.mjs": { stripeCheckoutEnabled: () => false, nowpaymentsMembershipsEnabled: () => false },
-    "@/lib/membership-price-quote.mjs": { membershipPriceQuote },
-    "./ActivatePackageButton": { default: props => React.createElement("button", { "data-stripe": props.stripeEnabled, "data-nowpayments": props.nowpaymentsEnabled }, "Existing checkout") },
-    "./PaymentResultModal": { default: () => null },
-    "./PaywallGate": { default: props => { gateProps.push(props); return props.children; } }, "@/hooks/useMemberSummary": { MemberSummaryProvider: children },
+test("the memberships entry mounts one personal company-payment flow and preserves independent provider-return verification", () => {
+  const Company = marker("Personal company payment");
+  const ReturnModal = marker("Independent provider return");
+  const Provider = ({ children }) => children;
+  const { default: Packages, dynamic } = moduleAt("../app/dashboard/packages/page.jsx", {
+    "../_components/executive-pages/CompanyPaymentPage": { default: Company },
+    "./PaymentResultModal": { default: ReturnModal },
+    "@/hooks/useMemberSummary": { MemberSummaryProvider: Provider },
   });
-  const html = render(await Packages());
-  assert.match(html, /id="plan-7"/);
-  assert.match(html, /scroll-mt-24/);
-  assert.match(html, /data-stripe="false"/);
-  assert.match(html, /data-nowpayments="false"/);
-  assert.equal(gateProps.at(-1).initialShowPlans, true, 'an active membership cannot hide other available purchases by default');
-  for (const value of ["7", "999", "007", "-7", "7/../../outside", ["7", "7"], true, "", undefined]) {
-    const page = await Packages({ searchParams: Promise.resolve({ plan: value, paid: "1", activated: "true" }) });
-    const html = render(page);
-    assert.equal(gateProps.at(-1).initialShowPlans, true);
-    assert.equal(html.includes('data-selected-plan="true"'), value === "7", 'only a validated catalog selector highlights an existing plan');
-    assert.match(html, /data-stripe="false"/);
-    assert.match(html, /data-nowpayments="false"/);
-  }
+  const element = Packages();
+  assert.equal(dynamic, "force-dynamic");
+  assert.equal(element.type, Provider);
+  assert.equal(element.props.fresh, true);
+  const children = React.Children.toArray(element.props.children);
+  assert.equal(children.length, 2);
+  assert.equal(children[0].type, React.Suspense);
+  assert.equal(children[0].props.fallback, null);
+  assert.equal(children[0].props.children.type, ReturnModal);
+  assert.equal(children[1].type, Company);
+  assert.deepEqual(children[1].props, {});
+  const html = render(element);
+  assert.equal((html.match(/data-test="Personal company payment"/g) || []).length, 1);
+  assert.equal((html.match(/data-test="Independent provider return"/g) || []).length, 1);
+  assert.doesNotMatch(html, /data-selected-plan|id="plan-|Existing checkout|Activar/);
 });
 
 test("the real active-membership gate reveals a validated selected card while its toggle stays functional", () => {
@@ -199,57 +198,43 @@ test("the real active-membership gate reveals a validated selected card while it
   assert.doesNotMatch(html, /Tu membresía está activa/);
 });
 
-function membershipsWithQuotes(packages, checkoutProps) {
-  const children = ({ children: content }) => content;
+function companyMembershipEntry({ Company = marker("Personal company payment"), ReturnModal = marker("Independent provider return"), catalog = async () => assert.fail("removed catalogue queried") } = {}) {
   return moduleAt("../app/dashboard/packages/page.jsx", {
-    "@/lib/catalog": { getCatalog: async () => ({ packages, ranks: [] }) },
-    "@/lib/cloudflare-runtime.mjs": { runtimeEnvironment: () => ({}) },
-    "@/lib/checkout-policy.mjs": { stripeCheckoutEnabled: () => false, nowpaymentsMembershipsEnabled: () => false },
-    "@/lib/membership-price-quote.mjs": { membershipPriceQuote },
-    "./ActivatePackageButton": { default: props => { checkoutProps.push(props); return React.createElement("button", {}, "Existing checkout"); } },
-    "./PaymentResultModal": { default: () => null },
-    "./PaywallGate": { default: children }, "@/hooks/useMemberSummary": { MemberSummaryProvider: children },
+    "../_components/executive-pages/CompanyPaymentPage": { default: Company },
+    "./PaymentResultModal": { default: ReturnModal },
+    "@/hooks/useMemberSummary": { MemberSummaryProvider: ({ children }) => children },
+    "@/lib/catalog": { getCatalog: catalog, getPackageCatalog: catalog },
+    "@/lib/membership-price-quote.mjs": { membershipPriceQuote: () => assert.fail("removed quote calculated") },
+    "./ActivatePackageButton": { default: () => assert.fail("removed checkout mounted") },
+    "./PaywallGate": { default: () => assert.fail("removed catalogue paywall mounted") },
   }).default;
 }
 
-test("memberships disclose the included one percent cost and unchanged payable total before checkout", async () => {
-  const checkoutProps = [];
-  const Packages = membershipsWithQuotes([plan(1, "100.00"), plan(2, "250.00"), plan(3, "100000.00"), plan(4, "0.50")], checkoutProps);
-  const html = render(await Packages());
-  const cards = html.match(/<article\b[\s\S]*?<\/article>/g);
-  assert.equal(cards.length, 4);
-  for (const [index, fee, commissionBase, total] of [
-    [0, "$1.00 USD", "$99.00 USD", "$100.00 USD"],
-    [1, "$2.50 USD", "$247.50 USD", "$250.00 USD"],
-    [2, "$1,000.00 USD", "$99,000.00 USD", "$100,000.00 USD"],
-    [3, "$0.005 USD", "$0.495 USD", "$0.50 USD"],
-  ]) {
-    const card = cards[index];
-    assert.ok(card.includes(`<dt>Precio del plan</dt><dd class="font-semibold">${total}</dd>`));
-    assert.ok(card.includes(`<dt>Comisión de procesamiento (1%, incluida)</dt><dd class="font-semibold">${fee}</dd>`));
-    assert.ok(card.includes(`<dt>Base para cálculo de comisiones (99%)</dt><dd class="font-semibold">${commissionBase}</dd>`));
-    assert.ok(card.includes(`<dt>Total a pagar</dt><dd>${total}</dd>`));
-    assert.match(card, /La comisión está incluida; no se suma al precio\./);
-    assert.ok(card.indexOf("Total a pagar") < card.indexOf("Existing checkout"));
-    assert.doesNotMatch(card, /recargo|activación \(1%\)|\$101\.00|\$252\.50|\$101,000\.00/);
-  }
-  assert.equal(checkoutProps.length, 4);
-  for (const props of checkoutProps) {
-    assert.deepEqual(Object.keys(props).sort(), ["featured", "nowpaymentsEnabled", "packageId", "stripeEnabled"]);
-    assert.equal(props.stripeEnabled, false);
-    assert.equal(props.nowpaymentsEnabled, false);
+test("legacy plan, amount and paid URL selectors cannot preselect, price or activate the company-payment flow", () => {
+  const companyProps = [], returnProps = [];
+  const Packages = companyMembershipEntry({
+    Company: props => { companyProps.push(props); return React.createElement("p", {}, "Personal company payment"); },
+    ReturnModal: props => { returnProps.push(props); return React.createElement("p", {}, "Independent provider return"); },
+  });
+  for (const value of ["7", "999", "007", "-7", "7/../../outside", ["7", "7"], true, "", undefined]) {
+    const html = render(Packages({ searchParams: Promise.resolve({ plan: value, paid: "1", activated: "true", amount: "0", commission: "1" }) }));
+    assert.match(html, /Personal company payment/);
+    assert.match(html, /Independent provider return/);
+    assert.deepEqual(companyProps.at(-1), {});
+    assert.deepEqual(returnProps.at(-1), {});
+    assert.doesNotMatch(html, /data-selected-plan|id="plan-|Total a pagar|Precio del plan|Comisión|Activar|\$0/);
   }
 });
 
-test("invalid membership prices never render a payable zero or checkout control", async () => {
+test("unavailable or malformed catalogue prices are never fetched or turned into checkout cards on the company-payment entry", () => {
+  let catalogCalls = 0;
   for (const amount of [undefined, null, "", "0.00", "1.001", "1e3", "90071992547409.92", "<script>invalid</script>"]) {
-    const checkoutProps = [];
-    const Packages = membershipsWithQuotes([{ ...plan(7), amount_usd: amount }], checkoutProps);
-    const html = render(await Packages());
-    assert.match(html, /Precio no disponible/);
-    assert.match(html, /No se pudo confirmar el precio de este plan/);
-    assert.match(html, /No se puede iniciar un cobro/);
-    assert.doesNotMatch(html, /Existing checkout|Total a pagar|\$0\.00|NaN|Infinity|<script>/);
-    assert.equal(checkoutProps.length, 0);
+    const Packages = companyMembershipEntry({ catalog: async () => { catalogCalls++; return { packages: [{ ...plan(7), amount_usd: amount }], ranks: [] }; } });
+    const html = render(Packages());
+    assert.match(html, /Personal company payment/);
+    assert.doesNotMatch(html, /<article|Existing checkout|Total a pagar|Precio del plan|\$0\.00|NaN|Infinity|<script>/);
   }
+  assert.equal(catalogCalls, 0);
+  const source = readFileSync(new URL("../app/dashboard/packages/page.jsx", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /getCatalog|getPackageCatalog|membershipPriceQuote|ActivatePackageButton|PaywallGate|selectedPackage|plan-/);
 });

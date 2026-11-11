@@ -44,6 +44,7 @@ const unavailable = Object.freeze({
   startOnramp: async () => { throw new Error("reown_unavailable"); },
   cancelOnramp: () => {},
   clearOnrampError: () => {},
+  getCompanyPaymentProvider: () => { throw new Error("personal_company_wallet_unavailable"); },
   reconnectWallet: async () => { throw new Error("reown_unavailable"); },
   linkWallet: async () => { throw new Error("reown_unavailable"); },
   refreshLink: async () => { throw new Error("reown_unavailable"); },
@@ -471,6 +472,13 @@ function ConfiguredReownProvider({ children }) {
     [account.isConnected, open],
   );
 
+  const getCompanyPaymentProvider = useCallback(() => {
+    if (account.isConnected !== true || !walletProvider || !currentAddress || !boundAddress || !sameAddress(currentAddress, boundAddress)) {
+      throw new Error("personal_company_wallet_unavailable");
+    }
+    return walletProvider;
+  }, [account.isConnected, walletProvider, currentAddress, boundAddress]);
+
   const value = useMemo(() => ({
     configured: true,
     isConnected: account.isConnected === true,
@@ -489,13 +497,14 @@ function ConfiguredReownProvider({ children }) {
     startOnramp,
     cancelOnramp,
     clearOnrampError,
+    getCompanyPaymentProvider,
     reconnectWallet,
     linkWallet,
     refreshLink,
     openAccount,
   }), [account.isConnected, account.status, binding.address, binding.error, binding.status, currentAddress, isLinked, isLinking,
     linkWallet, verificationError, fundingRevision, onrampState.error, onrampState.status,
-    cancelOnramp, clearOnrampError, openAccount, openConnect, openOnramp, reconnectWallet, refreshLink, startOnramp]);
+    cancelOnramp, clearOnrampError, getCompanyPaymentProvider, openAccount, openConnect, openOnramp, reconnectWallet, refreshLink, startOnramp]);
 
   return <ReownContext.Provider value={value}>{children}</ReownContext.Provider>;
 }

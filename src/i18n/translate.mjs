@@ -2,6 +2,7 @@ import { dashboardMessages } from "./dashboard-messages.js";
 import { messages, SUPPORTED_LOCALES } from "./messages.js";
 import { portalMessages } from "./portal-messages.js";
 import { fundingMessages } from "./funding-messages.js";
+import { companyPaymentMessages } from "./company-payment-messages.js";
 
 export function normalizeLocale(value) {
   const candidate = String(value || "").toLowerCase().split(/[-_]/)[0];
@@ -16,10 +17,12 @@ function valueAt(dictionary, key) {
 
 export function translateMessage(locale, key, variables = undefined) {
   const activeLocale = normalizeLocale(locale);
-  let value = valueAt(fundingMessages[activeLocale], key)
+  let value = valueAt(companyPaymentMessages[activeLocale], key)
+    ?? valueAt(fundingMessages[activeLocale], key)
     ?? valueAt(portalMessages[activeLocale], key)
     ?? valueAt(dashboardMessages[activeLocale], key)
     ?? valueAt(messages[activeLocale], key)
+    ?? valueAt(companyPaymentMessages.es, key)
     ?? valueAt(fundingMessages.es, key)
     ?? valueAt(portalMessages.es, key)
     ?? valueAt(dashboardMessages.es, key)

@@ -1,0 +1,160 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import test from 'node:test';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import ts from 'typescript';
+import * as values from '../../../../lib/personal-company-payment-values.mjs';
+import { companyPaymentView } from '../../../../lib/company-payment-contract.mjs';
+import { translateMessage } from '../../../../i18n/translate.mjs';
+
+const require = createRequire(import.meta.url);
+const icons = new Proxy({}, { get: () => () => null });
+const styles = { default: new Proxy({}, { get: (_target, name) => name }) };
+let locale = 'es';
+let activeFlow;
+const reown = { linkStatus: 'linked' };
+const i18n = { useI18n: () => ({ locale, t: (key, variables) => translateMessage(locale, key, variables) }) };
+
+function load(filename, mocks) {
+  const source = readFileSync(new URL(filename, import.meta.url), 'utf8');
+  const code = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
+  const module = { exports: {} };
+  new Function('require', 'module', 'exports', code)(id => {
+    if (Object.hasOwn(mocks, id)) return mocks[id];
+    if (id === 'react' || id === 'react/jsx-runtime') return require(id);
+    if (id === 'lucide-react') return icons;
+    if (id === '@/i18n/LanguageProvider') return i18n;
+    if (id === '@/lib/personal-company-payment-values.mjs') return values;
+    if (id.endsWith('.module.css')) return styles;
+    assert.fail(`Presentation unexpectedly imports ${id}`);
+  }, module, module.exports);
+  return module.exports;
+}
+const forms = load('CompanyPaymentForm.jsx', {});
+const { CompanyPaymentStatus, PersonalCompanyPayment } = load('CompanyPaymentPage.jsx', {
+  'next/dynamic': { default: () => ({ children }) => React.createElement(React.Fragment, null, children) },
+  'next/link': { default: ({ href, children, ...props }) => React.createElement('a', { href, ...props }, children) },
+  '@/components/reown/ReownContext': { useReownWallet: () => reown },
+  '@/hooks/useCompanyPayment': { useCompanyPayment: () => activeFlow },
+  '@/lib/company-payment-contract.mjs': { companyPaymentView }, './CompanyPaymentForm': forms,
+});
+const findAll = (node, predicate) => [...(predicate(node) ? [node] : []), ...React.Children.toArray(node?.props?.children).flatMap(child => findAll(child, predicate))];
+const text = node => typeof node === 'string' ? node : React.Children.toArray(node?.props?.children).map(text).join('');
+const labels = tree => findAll(tree, node => node?.type === 'button').map(node => text(node));
+const button = (tree, key) => findAll(tree, node => node?.type === 'button' && text(node) === translateMessage(locale, `companyPayment.${key}`))[0];
+const t = key => translateMessage(locale, `companyPayment.${key}`);
+const hash = `0x${'a'.repeat(64)}`;
+const blockHash = `0x${'b'.repeat(64)}`;
+function payment(status = 'prepared', patch = {}) {
+  const created = Date.now() - 1000;
+  return { paymentId: 'd8a4c010-cc33-44da-a297-8b3c6440f491', walletKind: 'personal', walletAddress: `0x${'1'.repeat(40)}`,
+    ...values.PERSONAL_COMPANY_PAYMENT, amountAtomic: '25123456', status, createdAt: new Date(created).toISOString(),
+    expiresAt: new Date(created + 15 * 60000).toISOString(), abandonedAt: null,
+    transactionHash: status === 'prepared' ? null : hash,
+    blockHash: status === 'confirmed' ? blockHash : null, blockNumber: status === 'confirmed' ? '70000000' : null,
+    confirmations: status === 'confirmed' ? 12 : 0, requiredConfirmations: 12,
+    failureReason: status === 'failed' ? 'transaction_reverted' : null, membershipAssignment: 'pending', ...patch };
+}
+function flow(value, patch = {}) {
+  const calls = [];
+  const method = name => () => calls.push(name);
+  return { connected: true, verified: true, busy: false, payment: value, stage: 'status', transfer: null, recovery: null,
+    manualHash: '', errorKey: '', history: [], historyLoading: false, balanceAtomic: '100000000', amount: '25.123456', loadingBalance: false,
+    confirm: method('confirm'), resume: method('resume'), newPayment: method('newPayment'), abandon: method('abandon'),
+    verifyPayment: method('verifyPayment'), review: method('review'), refresh: method('refresh'), connect: method('connect'),
+    switchNetwork: method('switchNetwork'), setManualHash: method('setManualHash'), setAmount: method('setAmount'), selectHistory: method('selectHistory'),
+    calls, ...patch };
+}
+
+test('a submitted transaction remains pending even when its former preparation was abandoned', () => {
+  const record = payment('submitted', { abandonedAt: new Date().toISOString(), confirmations: 5 });
+  assert.ok(companyPaymentView(record));
+  const state = flow(record);
+  const tree = CompanyPaymentStatus({ flow: state });
+  const html = renderToStaticMarkup(tree);
+  assert.equal(tree.props['aria-label'], t('submittedTitle'));
+  assert.ok(html.includes(t('pendingCopy')));
+  assert.ok(!html.includes(t('abandonedTitle')));
+  assert.ok(!html.includes(t('confirmedTitle')));
+  assert.deepEqual(labels(tree), [t('verify')]);
+  button(tree, 'verify').props.onClick();
+  assert.deepEqual(state.calls, ['verifyPayment']);
+});
+
+test('invalid confirmation proofs never display payment received in either the status or the page', () => {
+  for (const patch of [{ transactionHash: null }, { blockHash: null }, { blockNumber: null }, { confirmations: 11 },
+    { requiredConfirmations: 1 }, { failureReason: 'transaction_mismatch' }, { membershipAssignment: 'active' },
+    { recipientAddress: `0x${'2'.repeat(40)}` }, { tokenAddress: `0x${'2'.repeat(40)}` }, { walletKind: 'administrative' }]) {
+    activeFlow = flow(payment('confirmed', patch));
+    assert.equal(CompanyPaymentStatus({ flow: activeFlow }), null);
+    const html = renderToStaticMarkup(PersonalCompanyPayment());
+    assert.ok(!html.includes(t('confirmedTitle')), JSON.stringify(patch));
+    assert.ok(!html.includes(t('confirmedCopy')), JSON.stringify(patch));
+    assert.deepEqual(activeFlow.calls, []);
+  }
+});
+
+test('a signing operation or persisted recovery marker replaces review with recovery controls and offers no resend action', () => {
+  for (const patch of [
+    { busy: true, transfer: { paymentId: payment().paymentId, phase: 'signing', transactionMayExist: true } },
+    { recovery: { paymentId: payment().paymentId, phase: 'signing', transactionHash: null } },
+  ]) {
+    activeFlow = flow(payment(), { stage: 'review', ...patch });
+    const page = PersonalCompanyPayment();
+    assert.equal(findAll(page, node => node?.type === forms.CompanyPaymentReview).length, 0);
+    assert.equal(findAll(page, node => node?.type === forms.CompanyPaymentForm).length, 0);
+    assert.equal(findAll(page, node => node?.type === CompanyPaymentStatus).length, 1);
+    const tree = CompanyPaymentStatus({ flow: activeFlow });
+    assert.equal(tree.props['aria-label'], t('ambiguousTitle'));
+    assert.equal(button(tree, 'resume'), undefined);
+    assert.equal(button(tree, 'confirmInWallet'), undefined);
+    assert.equal(button(tree, 'newPayment'), undefined);
+    assert.equal(button(tree, 'registerHash').props.disabled, true);
+    assert.deepEqual(activeFlow.calls, []);
+  }
+});
+
+test('an abandoned recovery with a known hash only enables registration and keeps a new payment disabled', () => {
+  const record = payment('prepared', { abandonedAt: new Date().toISOString() });
+  const state = flow(record, { recovery: { paymentId: record.paymentId, phase: 'broadcast', transactionHash: hash } });
+  const tree = CompanyPaymentStatus({ flow: state });
+  assert.equal(tree.props['aria-label'], t('ambiguousTitle'));
+  assert.equal(button(tree, 'resume'), undefined);
+  assert.equal(button(tree, 'confirmInWallet'), undefined);
+  assert.equal(button(tree, 'newPayment').props.disabled, true);
+  assert.equal(button(tree, 'registerHash').props.disabled, false);
+  button(tree, 'registerHash').props.onClick();
+  assert.deepEqual(state.calls, ['verifyPayment']);
+});
+
+test('verified receipt copy leaves membership allocation pending, including transfers registered after abandonment', () => {
+  for (locale of ['es', 'en', 'ar', 'zh']) {
+    for (const abandonedAt of [null, new Date().toISOString()]) {
+      const state = flow(payment('confirmed', { abandonedAt }));
+      const tree = CompanyPaymentStatus({ flow: state });
+      const html = renderToStaticMarkup(tree);
+      assert.equal(tree.props['aria-label'], t('confirmedTitle'));
+      assert.ok(html.includes(t('confirmedCopy')));
+      assert.ok(html.includes(t('allocationPending')));
+      assert.ok(html.includes('25.123456 USDT'));
+      assert.ok(html.includes(values.PERSONAL_COMPANY_PAYMENT.recipientAddress));
+      assert.equal(button(tree, 'confirmInWallet'), undefined);
+      assert.equal(button(tree, 'resume'), undefined);
+      assert.deepEqual(state.calls, []);
+    }
+  }
+  locale = 'es';
+});
+
+test('recovery hashes are presented only as external explorer links without changing payment state', () => {
+  const state = flow(payment('submitted'));
+  const tree = CompanyPaymentStatus({ flow: state });
+  const link = findAll(tree, node => node?.type === 'a')[0];
+  assert.equal(link.props.href, `https://polygonscan.com/tx/${hash}`);
+  assert.equal(link.props.target, '_blank');
+  assert.equal(link.props.rel, 'noreferrer noopener');
+  assert.deepEqual(state.calls, []);
+  assert.equal(state.payment.status, 'submitted');
+});
