@@ -19,7 +19,7 @@ test('rewon is an isolated production Worker with only the exact app custom doma
   assert.equal(rewon.vars.ADMINISTRATIVE_ONRAMP_ENVIRONMENT, undefined);
   assert.equal(config.env.production.vars.ADMINISTRATIVE_ONRAMP_ENVIRONMENT, undefined);
   assert.equal(config.env.staging.vars.ADMINISTRATIVE_ONRAMP_ENVIRONMENT, undefined);
-  assert.equal(config.env.production.vars.AUTH_SOCIAL_PROVIDERS, undefined);
+  assert.equal(config.env.production.vars.AUTH_SOCIAL_PROVIDERS, '');
   assert.equal(config.env.staging.vars.AUTH_SOCIAL_PROVIDERS, undefined);
   assert.equal(rewon.vars.AUTH_ALTERNATE_ORIGIN, 'https://mindbliss-portal-rewon.devfidubit.workers.dev');
   assert.equal(config.env.production.vars.AUTH_ALTERNATE_ORIGIN, undefined);
@@ -27,6 +27,11 @@ test('rewon is an isolated production Worker with only the exact app custom doma
   assert.deepEqual(config.env.production.routes, [{ pattern: 'mindblisspower.com', custom_domain: true }]);
   assert.deepEqual(config.env.staging.routes, []);
   assert.equal(config.env.production.vars.AUTH_PUBLIC_ORIGIN, 'https://mindblisspower.com');
+  for (const key of ['PERSONAL_COMPANY_PAYMENTS_ENABLED', 'PERSONAL_POLYGON_RELAY_ENABLED']) {
+    assert.equal(config.env.production.vars[key], 'true'); assert.equal(rewon.vars[key], 'true');
+  }
+  assert.equal(config.env.production.vars.PERSONAL_SOLANA_ENABLED, undefined);
+  assert.equal(config.env.production.vars.SOLANA_PAYMENT_BROADCAST_ENABLED, undefined);
   assert.equal(config.env.staging.vars.CLOUDFLARE_DEPLOYMENT_READY, 'false');
 });
 

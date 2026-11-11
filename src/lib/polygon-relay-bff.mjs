@@ -6,6 +6,7 @@ import { boundedServiceRequest } from './private-service-request.mjs';
 import { browserRequestDeadline } from './browser-request-deadline.mjs';
 import { FUNDING_UUID } from './wallet-funding-contract.mjs';
 import { polygonRelayInput, polygonRelayView, polygonRelayHistory, polygonRelayCapabilities } from './polygon-relay-contract.mjs';
+import { isPersonalPortalOrigin } from './personal-portal-origin.mjs';
 const reply = (value, status = 200) => Response.json(value, { status, headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' } });
 const safeErrors = new Set(['unauthenticated', 'invalid_origin', 'invalid_request', 'polygon_relay_unavailable', 'polygon_relay_unconfigured',
   'polygon_relay_wallet_not_linked', 'polygon_relay_forbidden', 'polygon_relay_rate_limited', 'polygon_relay_budget_exceeded', 'polygon_relay_pending_exists',
@@ -43,7 +44,7 @@ async function body(request) {
 /** This is a fixed transfer service, never a public Pimlico JSON-RPC proxy. */
 export async function handlePolygonRelay(request, action, { env = runtimeEnvironment(), fetchImpl = coreFetch, serviceRequest = boundedServiceRequest } = {}) {
   if (!['capabilities', 'prepare', 'authorize', 'submit', 'verify', 'abandon', 'status', 'history'].includes(action)) return reply({ error: 'invalid_request' }, 400);
-  if (env.NODE_ENV === 'production' && !['https://app.mindblisspower.com', 'https://mindbliss-portal-rewon.devfidubit.workers.dev'].includes(env.AUTH_PUBLIC_ORIGIN)) return reply({ error: 'not_found' }, 404);
+  if (env.NODE_ENV === 'production' && !isPersonalPortalOrigin(env.AUTH_PUBLIC_ORIGIN)) return reply({ error: 'not_found' }, 404);
   const method = ['capabilities', 'status', 'history'].includes(action) ? 'GET' : 'POST';
   if (request.method !== method) return reply({ error: 'method_not_allowed' }, 405);
   const cookie = betterAuthCookies(request.headers.get('cookie') || '');

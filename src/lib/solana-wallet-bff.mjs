@@ -4,6 +4,7 @@ import { coreFetch, runtimeEnvironment } from './cloudflare-runtime.mjs';
 import { memberMutationError } from './member-mutation-policy.mjs';
 import { boundedServiceRequest } from './private-service-request.mjs';
 import { browserRequestDeadline } from './browser-request-deadline.mjs';
+import { isPersonalPortalOrigin } from './personal-portal-origin.mjs';
 import { SOLANA_UUID, solanaWalletLinkInput, solanaWalletLinkView, solanaPaymentInput, solanaPaymentView, solanaPaymentHistory, solanaBalanceView, solanaCapabilitiesView } from './solana-wallet-contract.mjs';
 
 const reply = (value, status = 200) => Response.json(value, { status, headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' } });
@@ -45,7 +46,7 @@ async function boundedBody(request) {
 export async function handlePersonalSolana(request, group, action, { env = runtimeEnvironment(), fetchImpl = coreFetch, serviceRequest = boundedServiceRequest } = {}) {
   const link = group === 'link';
   if (!['link', 'payments'].includes(group) || !(link ? ['status', 'challenge', 'confirm'] : ['capabilities', 'balance', 'prepare', 'submit', 'verify', 'status', 'history']).includes(action)) return reply({ error: 'invalid_request' }, 400);
-  if (env.NODE_ENV === 'production' && !['https://app.mindblisspower.com', 'https://mindbliss-portal-rewon.devfidubit.workers.dev'].includes(env.AUTH_PUBLIC_ORIGIN)) return reply({ error: 'not_found' }, 404);
+  if (env.NODE_ENV === 'production' && !isPersonalPortalOrigin(env.AUTH_PUBLIC_ORIGIN)) return reply({ error: 'not_found' }, 404);
   const method = (link ? action === 'status' : ['capabilities', 'balance', 'status', 'history'].includes(action)) ? 'GET' : 'POST';
   if (request.method !== method) return reply({ error: 'method_not_allowed' }, 405);
   const cookie = betterAuthCookies(request.headers.get('cookie') || '');

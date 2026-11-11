@@ -9,6 +9,7 @@ import { FUNDING_UUID } from './wallet-funding-contract.mjs';
 import { PERSONAL_COMPANY_PAYMENT } from './personal-company-payment-values.mjs';
 import { personalWalletBalance, personalWalletBalances } from './personal-wallet-balance.mjs';
 import { companyPaymentEventInput, companyPaymentEventAck, companyPaymentEventPage, companyPaymentEventQuery } from './company-payment-events.mjs';
+import { isPersonalPortalOrigin } from './personal-portal-origin.mjs';
 
 const reply = (data, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' } });
 const safeErrors = new Set(['unauthenticated', 'invalid_origin', 'invalid_request', 'company_payment_unavailable', 'company_payment_not_found',
@@ -42,7 +43,7 @@ async function inputBody(request) {
 /** Authenticated journal: browser observations and canonical server evidence stay distinct. */
 export async function handleCompanyPaymentJournal(request, action, { env = runtimeEnvironment(), fetchImpl = coreFetch, serviceRequest = boundedServiceRequest } = {}) {
   if (!['recordEvent', 'eventHistory', 'activityHistory'].includes(action)) return reply({ error: 'invalid_request' }, 400);
-  if (env.NODE_ENV === 'production' && !['https://app.mindblisspower.com', 'https://mindbliss-portal-rewon.devfidubit.workers.dev'].includes(env.AUTH_PUBLIC_ORIGIN)) return reply({ error: 'not_found' }, 404);
+  if (env.NODE_ENV === 'production' && !isPersonalPortalOrigin(env.AUTH_PUBLIC_ORIGIN)) return reply({ error: 'not_found' }, 404);
   const writing = action === 'recordEvent', method = writing ? 'POST' : 'GET';
   if (request.method !== method) return reply({ error: 'method_not_allowed' }, 405);
   const cookie = betterAuthCookies(request.headers.get('cookie') || '');
@@ -83,8 +84,7 @@ export async function handleCompanyPaymentJournal(request, action, { env = runti
 /** Native sessions and the private BFF authenticate every read and mutation. */
 export async function handleCompanyPayment(request, action, { env = runtimeEnvironment(), fetchImpl = coreFetch, serviceRequest = boundedServiceRequest } = {}) {
   if (!['prepare', 'submit', 'verify', 'abandon', 'status', 'history', 'balance', 'balances'].includes(action)) return reply({ error: 'invalid_request' }, 400);
-  const allowed = ['https://app.mindblisspower.com', 'https://mindbliss-portal-rewon.devfidubit.workers.dev'];
-  if (env.NODE_ENV === 'production' && !allowed.includes(env.AUTH_PUBLIC_ORIGIN)) return reply({ error: 'not_found' }, 404);
+  if (env.NODE_ENV === 'production' && !isPersonalPortalOrigin(env.AUTH_PUBLIC_ORIGIN)) return reply({ error: 'not_found' }, 404);
   const method = ['status', 'history', 'balance', 'balances'].includes(action) ? 'GET' : 'POST';
   if (request.method !== method) return reply({ error: 'method_not_allowed' }, 405);
   const cookie = betterAuthCookies(request.headers.get('cookie') || '');

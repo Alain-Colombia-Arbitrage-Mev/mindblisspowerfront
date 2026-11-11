@@ -6,6 +6,7 @@ import ts from 'typescript';
 import { reownFundingSelection, buildReownProductionOnrampUrl } from './reown-production-onramp.mjs';
 import { personalFundingFailure } from './personal-funding-errors.mjs';
 import { createReownFundingOperation, verifyReownWalletOwnership } from './reown-funding-operation.mjs';
+import { personalWalletMetadata } from './personal-portal-origin.mjs';
 
 const read = relative => readFileSync(new URL(relative, import.meta.url), "utf8");
 
@@ -153,10 +154,18 @@ test('one AppKit instance configures Ethereum and Solana adapters with explicitl
   class EthersAdapter {} class SolanaAdapter {}
   const config = vm.runInNewContext(`(${calls[0].arguments[0].getText(source)})`, {
     EthersAdapter, SolanaAdapter, mainnet, polygon, solana, projectId: 'a'.repeat(32), initialWalletTheme: 'light', themeVariables: () => ({}),
+    walletMetadata: personalWalletMetadata('https://app.mindblisspower.com'),
   });
   assert.equal(config.adapters.length, 2); assert.ok(config.adapters[0] instanceof EthersAdapter); assert.ok(config.adapters[1] instanceof SolanaAdapter);
   assert.equal(config.networks.length, 3); assert.equal(config.networks[0], mainnet); assert.equal(config.networks[1], polygon); assert.equal(config.networks[2], solana);
   assert.equal(config.defaultNetwork, mainnet); assert.equal(config.defaultAccountTypes.eip155, 'eoa'); assert.equal(config.defaultAccountTypes.solana, 'eoa');
+  const rootMetadata = personalWalletMetadata('https://mindblisspower.com');
+  const rootConfig = vm.runInNewContext(`(${calls[0].arguments[0].getText(source)})`, {
+    EthersAdapter, SolanaAdapter, mainnet, polygon, solana, projectId: 'a'.repeat(32), initialWalletTheme: 'light', themeVariables: () => ({}),
+    walletMetadata: rootMetadata,
+  });
+  assert.equal(rootConfig.metadata, rootMetadata); assert.equal(rootConfig.metadata.url, 'https://mindblisspower.com');
+  assert.equal(config.metadata.url, 'https://app.mindblisspower.com');
   assert.match(text, /useAppKitAccount\(\{ namespace: "solana" \}\)/); assert.match(text, /useAppKitProvider\("solana"\)/);
   assert.match(text, /solana: solanaWallet/);
 });

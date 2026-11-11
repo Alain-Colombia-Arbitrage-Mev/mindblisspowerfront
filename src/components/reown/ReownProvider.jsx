@@ -14,13 +14,15 @@ import { createPersonalFundingIntent, fundingRequestId } from "@/lib/wallet-fund
 import { PERSONAL_WALLET_ASSET, PERSONAL_WALLET_MINIMUM_USD } from "@/lib/personal-wallet.mjs";
 import { readWalletBinding, requestWalletLink, walletBindingFailure } from "@/lib/wallet-binding.mjs";
 import { personalFundingFailure } from "@/lib/personal-funding-errors.mjs";
+import { personalWalletMetadata } from "@/lib/personal-portal-origin.mjs";
 import { createReownFundingOperation, verifyReownWalletOwnership } from "@/lib/reown-funding-operation.mjs";
 import { createReownWalletConnectionRequest, reownWalletConnectionState } from "@/lib/reown-wallet-connection.mjs";
 import { useSolanaWalletBinding } from "@/hooks/useSolanaWalletBinding";
 import { ReownContext, SOLANA_WALLET_UNAVAILABLE, useReownWallet } from "./ReownContext";
 
 const projectId = process.env.NEXT_PUBLIC_REOWN_PROJECT_ID?.trim() || "";
-const configured = /^[a-f0-9]{32}$/i.test(projectId);
+const walletMetadata = personalWalletMetadata(typeof window === "undefined" ? "https://app.mindblisspower.com" : window.location.origin);
+const configured = /^[a-f0-9]{32}$/i.test(projectId) && Boolean(walletMetadata);
 const initialWalletTheme = typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
 
 function detectPersonalFundingCountry() {
@@ -59,19 +61,14 @@ const unavailable = Object.freeze({
   openAccount: async () => { throw new Error("reown_unavailable"); },
 });
 
-if (configured) {
+if (configured && walletMetadata) {
   createAppKit({
     adapters: [new EthersAdapter(), new SolanaAdapter()],
     projectId,
     networks: [mainnet, polygon, solana],
     defaultNetwork: mainnet,
     defaultAccountTypes: { eip155: "eoa", solana: "eoa" },
-    metadata: {
-      name: "Mindbliss Power",
-      description: "Conecta tu wallet personal y recarga fondos de forma segura.",
-      url: "https://app.mindblisspower.com",
-      icons: ["https://app.mindblisspower.com/mindbliss/mindbliss-favicon.png"],
-    },
+    metadata: walletMetadata,
     enableEIP6963: true,
     enableInjected: true,
     enableReconnect: true,

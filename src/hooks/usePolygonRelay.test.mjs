@@ -138,6 +138,69 @@ test('Polygon MAX is independent from Ethereum, a local review never prepares or
   h.flow.cancelReview(); await h.flush(); assert.equal(h.flow.stage, 'form'); assert.equal(h.flow.preview, null);
 });
 
+test('returning to the tab refreshes the Polygon balance and unedited maximum without touching Ethereum or opening a payment', async t => {
+  let latest = balanceAtomic;
+  const h = harness({ balance: async () => ({ walletAddress: wallet, balances: [
+    { chainId: 1, balanceAtomic: '999000000', nativeBalanceAtomic: '0' }, { chainId: 137, balanceAtomic: latest, nativeBalanceAtomic: '0' },
+  ] }) }); t.after(() => h.unmount()); await h.flush();
+  assert.equal(h.flow.amount, '28.433366');
+  latest = '27433366'; h.documentRef.visibilityState = 'hidden';
+  h.browser.dispatchEvent(new Event('vp:personal-wallet-balance-changed')); await h.flush();
+  assert.equal(h.flow.balanceAtomic, balanceAtomic);
+  h.documentRef.visibilityState = 'visible'; h.documentRef.dispatchEvent(new Event('visibilitychange')); await h.flush();
+  assert.equal(h.flow.balanceAtomic, '27433366'); assert.equal(h.flow.amount, '27.433366');
+  assert.equal(h.flow.stage, 'form'); assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
+});
+
+test('focus and balance events preserve edited amounts and the exact review while exposing a fresh maximum', async t => {
+  let latest = balanceAtomic;
+  const h = harness({ balance: async () => ({ walletAddress: wallet, balances: [{ chainId: 137, balanceAtomic: latest, nativeBalanceAtomic: '0' }] }) });
+  t.after(() => h.unmount()); await h.flush(); h.flow.setAmount('1'); await h.flush();
+  await h.flow.review(); await h.flush(); const preview = h.flow.preview;
+  latest = '27433366'; h.browser.dispatchEvent(new Event('focus')); await h.flush();
+  assert.equal(h.flow.balanceAtomic, latest); assert.equal(h.flow.amount, '1'); assert.equal(h.flow.preview, preview); assert.equal(h.flow.stage, 'review');
+  await h.flow.cancelReview(); await h.flush(); h.flow.setAmount('28.433366'); await h.flush();
+  latest = '26433366'; h.browser.dispatchEvent(new Event('vp:personal-wallet-balance-changed')); await h.flush();
+  assert.equal(h.flow.balanceAtomic, latest); assert.equal(h.flow.amount, '28.433366', 'an edited amount must not silently shrink');
+  // The same explicit Max action as the form uses the current Polygon snapshot.
+  h.flow.setAmount(amounts.formatPersonalCompanyPaymentAmount(h.flow.balanceAtomic)); await h.flush();
+  assert.equal(h.flow.amount, '26.433366'); assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
+});
+
+test('a fresh balance discovered during Review updates the displayed maximum and requires explicit review again', async t => {
+  let latest = balanceAtomic;
+  const h = harness({ balance: async () => ({ walletAddress: wallet, balances: [{ chainId: 137, balanceAtomic: latest, nativeBalanceAtomic: '0' }] }) });
+  t.after(() => h.unmount()); await h.flush(); latest = '27433366';
+  await h.flow.review(); await h.flush();
+  assert.equal(h.flow.balanceAtomic, latest); assert.equal(h.flow.amount, '27.433366'); assert.equal(h.flow.preview, null);
+  await h.flow.review(); await h.flush(); assert.equal(h.flow.preview.amountAtomic, latest);
+  assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
+});
+
+test('a confirmed payment refreshes its balance before another maximum can be prepared', async t => {
+  let latest = balanceAtomic;
+  const h = harness({ history: async () => ({ payments: [submitted()] }), status: async () => submitted(),
+    balance: async () => ({ walletAddress: wallet, balances: [{ chainId: 137, balanceAtomic: latest, nativeBalanceAtomic: '0' }] }),
+    write: async action => { assert.equal(action, 'verify'); latest = '27433366'; return confirmed(); } });
+  t.after(() => h.unmount()); await h.flush(); await h.flow.verifyPayment(); await h.flush();
+  assert.equal(h.flow.payment.status, 'confirmed'); assert.equal(h.flow.balanceAtomic, '27433366');
+  h.flow.newPayment(); await h.flush(); assert.equal(h.flow.amount, '27.433366');
+  assert.deepEqual(writes(h).map(value => value.action), ['verify']); assert.equal(h.signatures.length, 0);
+});
+
+test('a late focus balance reply cannot overwrite the next owner snapshot', async t => {
+  const pending = deferred(); let reads = 0;
+  const h = harness({ balance: async () => {
+    reads++; if (reads === 2) return pending.promise;
+    return { walletAddress: wallet, balances: [{ chainId: 137, balanceAtomic: reads === 1 ? balanceAtomic : '5000000', nativeBalanceAtomic: '0' }] };
+  } }); t.after(() => h.unmount()); await h.flush(); h.browser.dispatchEvent(new Event('focus')); await h.flush();
+  await h.session({ subject: 'owner-B', email: 'second@example.test' });
+  assert.equal(h.flow.balanceAtomic, '5000000'); assert.equal(h.flow.amount, '5');
+  pending.resolve({ walletAddress: wallet, balances: [{ chainId: 137, balanceAtomic: '999000000', nativeBalanceAtomic: '0' }] }); await h.flush();
+  assert.equal(h.flow.balanceAtomic, '5000000'); assert.equal(h.flow.amount, '5');
+  assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
+});
+
 test('cancelling a rejected unsigned preparation waits for the exact abandon acknowledgement before unlocking editing', async t => {
   const ack = deferred(); let latest = payment(), notifications = 0;
   const h = harness({ status: async () => latest, history: async () => ({ payments: [latest] }),
