@@ -66,10 +66,15 @@ function upstreamError(upstream, payload, pendingEmail = '') {
   return reply({ error: 'No se pudo completar la solicitud. Revisa los datos o solicita un código nuevo cuando termine la espera.', code: code || 'REGISTRATION_FAILED' }, upstream.status);
 }
 
-async function confirmedRegistrationSession(upstream, data, email, request, origin, transport, env) {
-  if (upstream.status !== 200 || data.status !== true) throw new Error('invalid_verification_response');
+function verifiedRegistrationIdentity(upstream, data, email) {
+  if (upstream.status !== 200 || !/^application\/json(?:\s*;|$)/i.test(upstream.headers.get('content-type') || '')
+      || data.status !== true) throw new Error('invalid_verification_response');
   const verified = authSuccess('sign-in/email-otp', data).user;
   if (emailValue(verified.email) !== email) throw new Error('invalid_verification_owner');
+  return verified;
+}
+
+async function confirmedRegistrationSession(upstream, data, verified, email, request, origin, transport, env) {
   const issued = upstream.headers.getSetCookie();
   if (issued.length > 8) throw new Error('invalid_verification_cookies');
   const cookies = issued.map(value => browserAuthCookie(value, env.NODE_ENV === 'production')).filter(Boolean);
@@ -146,7 +151,20 @@ export async function handleRegistration(request, action = 'register', dependenc
       if (data.success !== true) throw new Error('invalid_resend_response');
       return reply({ ok: true, mode: 'better-auth', resendAfter: 300 });
     }
-    const cookies = await confirmedRegistrationSession(upstream, data, email, request, origin, transport, env);
+    // Native email proof is consumed before its new session is checked. A
+    // failed handoff must not tell the mailbox owner to reuse that code. This
+    // narrowly typed state is not authentication: no cookie or token escapes
+    // until the same strict canonical session proof below has succeeded.
+    const verified = verifiedRegistrationIdentity(upstream, data, email);
+    let cookies;
+    try {
+      cookies = await confirmedRegistrationSession(upstream, data, verified, email, request, origin, transport, env);
+    } catch {
+      return reply({
+        error: 'Tu correo ya está verificado, pero no pudimos completar el acceso. No vuelvas a usar este código; puedes iniciar sesión con un código de acceso.',
+        code: 'REGISTRATION_SESSION_UNAVAILABLE', emailVerified: true, needsLogin: true,
+      }, 503);
+    }
     const response = reply({ ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: false, sessionEstablished: true });
     for (const cookie of cookies) response.headers.append('set-cookie', cookie);
     return response;

@@ -133,7 +133,10 @@ test('no send or malformed verification acknowledgement can establish a session,
     } });
     assert.equal(response.status, 503); assert.equal(calls, 1);
     assert.equal(response.headers.get('set-cookie'), null);
-    assert.doesNotMatch(await response.text(), /private-|synthetic|sessionEstablished|userConfirmed/);
+    const payload = await response.json();
+    assert.equal(payload.code, 'REGISTRATION_UNAVAILABLE');
+    assert.equal(payload.emailVerified, undefined); assert.equal(payload.needsLogin, undefined);
+    assert.doesNotMatch(JSON.stringify(payload), /private-|synthetic|sessionEstablished|userConfirmed/);
   }
   for (const status of [201, 202]) {
     let calls = 0;
@@ -141,6 +144,60 @@ test('no send or malformed verification acknowledgement can establish a session,
       calls++; return verifiedResponse(undefined, undefined, status);
     } });
     assert.equal(response.status, 503); assert.equal(calls, 1); assert.equal(response.headers.get('set-cookie'), null);
+    const payload = await response.json(); assert.equal(payload.code, 'REGISTRATION_UNAVAILABLE');
+    assert.equal(payload.emailVerified, undefined);
+  }
+});
+
+test('validated native verification with an unavailable session handoff reports only non-authenticated email completion without retrying its consumed OTP', async () => {
+  const failures = [
+    { cookie: [], canonical: undefined, calls: 1 },
+    { cookie: undefined, canonical: () => new Response('private-upstream-failure', { status: 503 }), calls: 2 },
+    { cookie: undefined, canonical: () => Response.json(canonical({ user: { ...user, id: 'other-owner' } })), calls: 2 },
+    { cookie: undefined, canonical: () => { throw new Error('private-transport-failure'); }, calls: 2 },
+  ];
+  for (const failure of failures) {
+    const paths = [];
+    const response = await handleRegistration(request({ email, code: '001234' }), 'confirm', { env,
+      fetchImpl: async url => {
+        paths.push(new URL(url).pathname);
+        return url.endsWith('/get-session') ? failure.canonical() : verifiedResponse(undefined, failure.cookie);
+      },
+    });
+    assert.equal(response.status, 503);
+    assert.equal(response.headers.get('cache-control'), 'private, no-store');
+    assert.equal(response.headers.get('set-cookie'), null); assert.equal(response.headers.get('set-auth-jwt'), null);
+    const payload = await response.json();
+    assert.deepEqual(Object.keys(payload).sort(), ['code', 'emailVerified', 'error', 'needsLogin']);
+    assert.equal(payload.code, 'REGISTRATION_SESSION_UNAVAILABLE');
+    assert.equal(payload.emailVerified, true); assert.equal(payload.needsLogin, true);
+    assert.match(payload.error, /No vuelvas a usar este código/);
+    assert.doesNotMatch(JSON.stringify(payload), /private-|synthetic|other-owner|token|sessionEstablished|userConfirmed/);
+    assert.equal(paths.length, failure.calls);
+    assert.deepEqual(paths.filter(path => path.endsWith('/verify-email')), ['/api/auth/email-otp/verify-email']);
+    assert.equal(paths.some(path => /send-verification|sign-in|sign-out/.test(path)), false);
+  }
+});
+
+test('native errors, malformed acknowledgements and transport failure before verification cannot claim a verified email or relay credentials', async () => {
+  for (const result of [
+    new Response(JSON.stringify({ status: true, token, user }), { headers: { 'content-type': 'text/plain' } }),
+    verifiedResponse({ status: true, token, user: { ...user, email: 'other@example.test' } }),
+    verifiedResponse({ status: true, token: '', user }),
+    Response.json({ code: 'INVALID_OTP', status: true, token, user, emailVerified: true, needsLogin: true }, { status: 400 }),
+    Response.json({ code: 'REGISTRATION_SESSION_UNAVAILABLE', status: true, token, user, emailVerified: true, needsLogin: true }, { status: 503 }),
+    undefined,
+  ]) {
+    let calls = 0;
+    const response = await handleRegistration(request({ email, code: '001234' }), 'confirm', { env,
+      fetchImpl: async () => { calls++; if (!result) throw new Error('private-transport-before-verification'); return result; },
+    });
+    assert.ok([400, 503].includes(response.status)); assert.equal(calls, 1);
+    assert.equal(response.headers.get('set-cookie'), null);
+    const payload = await response.json();
+    assert.equal(payload.emailVerified, undefined); assert.equal(payload.needsLogin, undefined);
+    assert.notEqual(payload.code, 'REGISTRATION_SESSION_UNAVAILABLE');
+    assert.doesNotMatch(JSON.stringify(payload), /private-|synthetic|other@example|token|sessionEstablished|userConfirmed/);
   }
 });
 

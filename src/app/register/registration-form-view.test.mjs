@@ -8,6 +8,8 @@ import * as emailOtp from '../../lib/email-otp-client.mjs';
 import * as referral from '../../lib/referral-attribution.js';
 import * as access from '../login/better-auth-login.mjs';
 import * as walletSetupHandoff from '../../lib/wallet-setup-handoff.mjs';
+import * as sessionRecovery from '../../lib/registration-session-recovery.mjs';
+import { handleRegistration } from '../../lib/registration-auth.mjs';
 import { registrationViewHarness, findRegistrationNode as find, registrationFieldStub, registrationButtonStub } from './registration-view-test-harness.mjs';
 
 const contactView = ({ id, label, value }) => React.createElement('div', null, label, React.createElement('input', { id, value: value.national, readOnly: true }));
@@ -15,6 +17,7 @@ const valid = { fullName: 'Synthetic Member', email: 'member@example.test', acce
 function view(cooldown = { active: false, label: '', start() {} }, attribution = { bindReferralCodeToEmail() {} }, onCooldown = () => {}, sync = () => Promise.resolve({ ok: true })) {
   return registrationViewHarness('./BetterAuthRegisterForm.jsx', {
     '@/lib/referral-sync.mjs': { beginVerifiedReferralSync: sync },
+    '@/lib/registration-session-recovery.mjs': sessionRecovery,
     'next/link': { default: ({ children, ...props }) => React.createElement('a', props, children) },
     'lucide-react': { ArrowLeft: () => null, CheckCircle2: () => null, Mail: () => null, UserPlus: () => null },
     '../_components/AuthShell': { default: ({ children }) => React.createElement('main', null, children) },
@@ -41,6 +44,8 @@ function enterValid(harness, values = valid) {
 const submit = tree => find(tree, node => node?.type === 'form').props.onSubmit({ preventDefault() {} });
 const signupAck = () => Response.json({ ok: true, mode: 'better-auth', email: valid.email, userConfirmed: false, requiresConfirmation: true, resendAfter: 300 });
 const confirmationAck = () => Response.json({ ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: false, sessionEstablished: true });
+const currentSessionAck = (changes = {}) => Response.json({ authenticated: true, mode: 'better-auth', email: valid.email, subject: 'synthetic-user', ...changes });
+const unavailableSessionAck = () => Response.json({ error: 'Verified but access unavailable', code: 'REGISTRATION_SESSION_UNAVAILABLE', emailVerified: true, needsLogin: true }, { status: 503 });
 function browser(t) {
   const previous = globalThis.window, destinations = [];
   const values = new Map();
@@ -260,21 +265,21 @@ test('passwordless registration hands off once after fresh native session proof 
   assert.match(renderToStaticMarkup(tree), /el código de registro no sirve para ese proceso/);
 });
 
-test('registration confirmation without the exact fresh-session acknowledgement never navigates or consults a session summary', async t => {
+test('a misleading confirmation acknowledgement cannot claim fresh verification or recover an anonymous session', async t => {
   const destinations = browser(t);
   for (const payload of [{ ok: true }, { ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: true, sessionEstablished: false },
     { ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: false },
     { ok: true, mode: 'better-auth', userConfirmed: false, needsLogin: false, sessionEstablished: true },
     { ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: false, sessionEstablished: true, role: 'admin' }]) {
     const paths = [];
-    t.mock.method(globalThis, 'fetch', async path => { paths.push(path); return Response.json(payload); });
+    t.mock.method(globalThis, 'fetch', async path => { paths.push(path); return path === '/api/auth/session?view=access' ? currentSessionAck({ authenticated: false }) : Response.json(payload); });
     const harness = view(), resume = { initialSearch: 'email=' + encodeURIComponent(valid.email) + '&resume=1' };
     const tree = harness.render(resume);
     find(tree, node => node?.props?.id === 'code').props.onChange({ target: { value: '001234' } });
     await submit(harness.render(resume));
     assert.doesNotMatch(renderToStaticMarkup(harness.render(resume)), /Correo verificado correctamente|Continuar al panel/);
     assert.deepEqual(destinations, []);
-    assert.deepEqual(paths, ['/api/auth/register/confirm']);
+    assert.deepEqual(paths, ['/api/auth/register/confirm', '/api/auth/session?view=access']);
     harness.unmount();
   }
 });
@@ -294,8 +299,211 @@ test('confirmation503 is unconfirmed and offers explicit login without a canonic
   assert.doesNotMatch(renderToStaticMarkup(tree), /Correo verificado correctamente|Continuar al panel/);
   const login = new URL(find(tree, node => node?.props?.children === 'Entrar de forma segura').props.href, 'https://example.test');
   assert.equal(login.pathname, '/login'); assert.equal(login.searchParams.get('mode'), 'code');
-  assert.deepEqual(paths, ['/api/auth/register/confirm']);
+  assert.deepEqual(paths, ['/api/auth/register/confirm', '/api/auth/session?view=access']);
   harness.unmount();
+});
+
+test('a lost real BFF success body recovers its current same-owner session without replaying the consumed OTP', async t => {
+  const destinations = browser(t), paths = [], native = [];
+  const env = { AUTH_PROVIDER: 'better-auth', NODE_ENV: 'production', AUTH_PUBLIC_ORIGIN: 'https://portal.example.test',
+    BETTER_AUTH_BACKEND_URL: 'https://auth.example.test', AUTH_BFF_SHARED_SECRET: 'synthetic-proxy-signature-secret-longer-than-32' };
+  const user = { id: 'synthetic-user', email: valid.email, emailVerified: true }, token = 'synthetic-native-session';
+  let consumed = false, browserHasNativeCookie = false;
+  const backend = async url => {
+    native.push(new URL(url).pathname);
+    if (url.endsWith('/get-session')) return Response.json({ session: { id: 'synthetic-session-id', userId: user.id,
+      token, expiresAt: new Date(Date.now() + 3600000).toISOString() }, user });
+    if (consumed) return Response.json({ code: 'INVALID_OTP' }, { status: 400 });
+    consumed = true;
+    return Response.json({ status: true, token, user }, { headers: {
+      'set-cookie': '__Secure-better-auth.session_token=synthetic-native.signature; Secure; HttpOnly; Max-Age=604800',
+    } });
+  };
+  t.mock.method(globalThis, 'fetch', async (path, options) => {
+    paths.push(path);
+    if (path === '/api/auth/session?view=access') {
+      assert.equal(browserHasNativeCookie, true); assert.equal(options.method, 'GET'); assert.equal(options.body, undefined);
+      return currentSessionAck();
+    }
+    assert.equal(path, '/api/auth/register/confirm');
+    const request = new Request(env.AUTH_PUBLIC_ORIGIN + path, { method: 'POST', body: options.body,
+      headers: { origin: env.AUTH_PUBLIC_ORIGIN, 'cf-connecting-ip': '192.0.2.10', 'content-type': 'application/json' } });
+    const response = await handleRegistration(request, 'confirm', { env, fetchImpl: backend });
+    assert.equal(response.status, 200); browserHasNativeCookie = response.headers.getSetCookie().length > 0;
+    response.json = async () => { throw new TypeError('synthetic_lost_response_body'); };
+    return response;
+  });
+  const harness = view(), resume = { initialSearch: 'email=member%40example.test&resume=1' };
+  const tree = harness.render(resume);
+  find(tree, node => node?.props?.id === 'code').props.onChange({ target: { value: '001234' } });
+  await submit(harness.render(resume));
+  const html = renderToStaticMarkup(harness.render(resume));
+  assert.equal(consumed, true); assert.match(html, /Tu cuenta ya estaba verificada/);
+  assert.match(html, /Recuperamos tu sesión activa sin volver a usar el código ni enviar otro correo/);
+  assert.doesNotMatch(html, /Correo verificado correctamente|El código no es válido|Solicitar otro código/);
+  assert.deepEqual(paths, ['/api/auth/register/confirm', '/api/auth/session?view=access']);
+  assert.deepEqual(native, ['/api/auth/email-otp/verify-email', '/api/auth/get-session']);
+  assert.deepEqual(destinations, ['/dashboard']);
+  assert.equal(walletSetupHandoff.consumeWalletSetupAfterAuth({ subject: user.id, email: valid.email }, window)?.email, valid.email);
+  harness.unmount();
+});
+
+test('a real native verification without a proved browser session retires registration and offers access without authentication claims', async t => {
+  const destinations = browser(t), paths = [], native = [];
+  const env = { AUTH_PROVIDER: 'better-auth', NODE_ENV: 'production', AUTH_PUBLIC_ORIGIN: 'https://portal.example.test',
+    BETTER_AUTH_BACKEND_URL: 'https://auth.example.test', AUTH_BFF_SHARED_SECRET: 'synthetic-proxy-signature-secret-longer-than-32' };
+  const user = { id: 'synthetic-user', email: valid.email, emailVerified: true };
+  t.mock.method(globalThis, 'fetch', async (path, options) => {
+    paths.push(path);
+    if (path === '/api/auth/session?view=access') return currentSessionAck({ authenticated: false });
+    const request = new Request(env.AUTH_PUBLIC_ORIGIN + path, { method: 'POST', body: options.body,
+      headers: { origin: env.AUTH_PUBLIC_ORIGIN, 'cf-connecting-ip': '192.0.2.10', 'content-type': 'application/json' } });
+    return handleRegistration(request, 'confirm', { env, fetchImpl: async url => {
+      native.push(new URL(url).pathname);
+      if (url.endsWith('/get-session')) return Response.json({ error: 'synthetic_unavailable' }, { status: 503 });
+      return Response.json({ status: true, token: 'synthetic-native-session', user }, { headers: {
+        'set-cookie': '__Secure-better-auth.session_token=synthetic-native.signature; Secure; HttpOnly; Max-Age=604800',
+      } });
+    } });
+  });
+  const harness = view(), resume = { initialSearch: 'email=member%40example.test&resume=1' };
+  const tree = harness.render(resume);
+  find(tree, node => node?.props?.id === 'code').props.onChange({ target: { value: '001234' } });
+  await submit(harness.render(resume));
+  const result = harness.render(resume), html = renderToStaticMarkup(result);
+  assert.match(html, /Tu correo ya está verificado|Acceso pendiente/);
+  assert.match(html, /falta completar el acceso|Solicita un código de acceso/);
+  assert.doesNotMatch(html, /Correo verificado correctamente|Continuar al panel|Verificar correo|Solicitar otro código|Recuperamos tu sesión/);
+  assert.equal(find(result, node => node?.type === 'form'), undefined);
+  const login = new URL(find(result, node => node?.props?.children === 'Entrar de forma segura').props.href, 'https://example.test');
+  assert.equal(login.pathname, '/login'); assert.equal(login.searchParams.get('email'), valid.email);
+  assert.equal(login.searchParams.get('mode'), 'code'); assert.deepEqual(destinations, []);
+  assert.equal(walletSetupHandoff.consumeWalletSetupAfterAuth({ subject: user.id, email: valid.email }, window), null);
+  for (let render = 0; render < 20; render++) harness.render(resume);
+  assert.deepEqual(paths, ['/api/auth/register/confirm', '/api/auth/session?view=access']);
+  assert.deepEqual(native, ['/api/auth/email-otp/verify-email', '/api/auth/get-session']);
+  harness.unmount();
+});
+
+test('a possibly consumed OTP or transport failure can recover only the current same-owner session with distinct copy', async t => {
+  const destinations = browser(t);
+  for (const failure of ['INVALID_OTP', 'transport', 'typed-without-session']) {
+    const paths = [];
+    t.mock.method(globalThis, 'fetch', async path => {
+      paths.push(path);
+      if (path === '/api/auth/session?view=access') return currentSessionAck();
+      if (failure === 'transport') throw new TypeError('synthetic_response_lost');
+      return failure === 'typed-without-session' ? unavailableSessionAck() : Response.json({ code: failure }, { status: 400 });
+    });
+    const harness = view(), resume = { initialSearch: 'email=member%40example.test&resume=1' };
+    const tree = harness.render(resume);
+    find(tree, node => node?.props?.id === 'code').props.onChange({ target: { value: '001234' } });
+    await submit(harness.render(resume));
+    const html = renderToStaticMarkup(harness.render(resume));
+    assert.match(html, /Sesión recuperada|Recuperamos tu sesión activa/);
+    assert.doesNotMatch(html, /Correo verificado correctamente|El código no es válido|Acceso pendiente/);
+    assert.deepEqual(paths, ['/api/auth/register/confirm', '/api/auth/session?view=access']);
+    harness.unmount();
+  }
+  assert.deepEqual(destinations, ['/dashboard', '/dashboard', '/dashboard']);
+});
+
+test('another account or denied current session cannot recover a consumed registration code or create a wallet activation hint', async t => {
+  const destinations = browser(t);
+  for (const result of [() => currentSessionAck({ email: 'another@example.test' }), () => currentSessionAck({ authenticated: false }),
+    () => currentSessionAck({ mode: 'cognito' }), () => Response.json({ authenticated: false, error: 'account_access_restricted' }, { status: 403 }),
+    () => Response.json({ authenticated: true, email: valid.email })]) {
+    const paths = [];
+    t.mock.method(globalThis, 'fetch', async path => { paths.push(path); return path === '/api/auth/session?view=access' ? result() : Response.json({ code: 'INVALID_OTP' }, { status: 400 }); });
+    const harness = view(), resume = { initialSearch: 'email=member%40example.test&resume=1' };
+    const tree = harness.render(resume);
+    find(tree, node => node?.props?.id === 'code').props.onChange({ target: { value: '001234' } });
+    await submit(harness.render(resume));
+    assert.match(renderToStaticMarkup(harness.render(resume)), /El código no es válido o ya se utilizó/);
+    assert.equal(walletSetupHandoff.consumeWalletSetupAfterAuth({ subject: 'synthetic-user', email: valid.email }, window), null);
+    assert.deepEqual(paths, ['/api/auth/register/confirm', '/api/auth/session?view=access']);
+    harness.unmount();
+  }
+  assert.deepEqual(destinations, []);
+});
+
+test('throttling, expired codes and exhausted attempts never start an independent session read', async t => {
+  const destinations = browser(t);
+  for (const [status, code] of [[429, 'INVALID_OTP'], [400, 'OTP_EXPIRED'], [403, 'TOO_MANY_ATTEMPTS'], [409, 'ACCOUNT_EXISTS']]) {
+    const paths = [];
+    t.mock.method(globalThis, 'fetch', async path => {
+      paths.push(path); assert.equal(path, '/api/auth/register/confirm'); return Response.json({ code }, { status });
+    });
+    const harness = view(), resume = { initialSearch: 'email=member%40example.test&resume=1' };
+    const tree = harness.render(resume);
+    find(tree, node => node?.props?.id === 'code').props.onChange({ target: { value: '001234' } });
+    await submit(harness.render(resume));
+    assert.deepEqual(paths, ['/api/auth/register/confirm']); harness.unmount();
+  }
+  assert.deepEqual(destinations, []);
+});
+
+test('duplicate confirmations share one bounded recovery read and cannot replay after recovered navigation', async t => {
+  const destinations = browser(t), paths = []; let release, started;
+  const begun = new Promise(resolve => { started = resolve; });
+  t.mock.method(globalThis, 'fetch', async path => {
+    paths.push(path);
+    if (path === '/api/auth/register/confirm') return Response.json({ code: 'INVALID_OTP' }, { status: 400 });
+    assert.equal(path, '/api/auth/session?view=access'); started(); return new Promise(resolve => { release = resolve; });
+  });
+  const harness = view(), resume = { initialSearch: 'email=member%40example.test&resume=1' };
+  const tree = harness.render(resume);
+  find(tree, node => node?.props?.id === 'code').props.onChange({ target: { value: '001234' } });
+  const handler = find(harness.render(resume), node => node?.type === 'form').props.onSubmit;
+  const pending = handler({ preventDefault() {} }); await begun;
+  for (let click = 0; click < 10; click++) await handler({ preventDefault() {} });
+  assert.deepEqual(paths, ['/api/auth/register/confirm', '/api/auth/session?view=access']);
+  release(currentSessionAck()); await pending; harness.render(resume);
+  await handler({ preventDefault() {} }); assert.deepEqual(destinations, ['/dashboard']);
+  assert.deepEqual(paths, ['/api/auth/register/confirm', '/api/auth/session?view=access']); harness.unmount();
+});
+
+test('leaving during session recovery cancels a non-cooperative read and ignores its later valid account', async t => {
+  const destinations = browser(t), paths = []; let release, started, requestSignal;
+  const begun = new Promise(resolve => { started = resolve; });
+  t.mock.method(globalThis, 'fetch', async (path, options) => {
+    paths.push(path);
+    if (path === '/api/auth/register/confirm') return Response.json({ code: 'INVALID_OTP' }, { status: 400 });
+    requestSignal = options.signal; started(); return new Promise(resolve => { release = resolve; });
+  });
+  const harness = view(), resume = { initialSearch: 'email=member%40example.test&resume=1' };
+  const tree = harness.render(resume);
+  find(tree, node => node?.props?.id === 'code').props.onChange({ target: { value: '001234' } });
+  const pending = submit(harness.render(resume)); await begun;
+  harness.unmount(); const previous = JSON.stringify(harness.state);
+  assert.equal(requestSignal.aborted, true); await pending;
+  release(currentSessionAck()); await Promise.resolve(); await Promise.resolve();
+  assert.deepEqual(destinations, []); assert.equal(JSON.stringify(harness.state), previous);
+  assert.equal(walletSetupHandoff.consumeWalletSetupAfterAuth({ subject: 'synthetic-user', email: valid.email }, window), null);
+  assert.deepEqual(paths, ['/api/auth/register/confirm', '/api/auth/session?view=access']);
+});
+
+test('a stale email handler cannot use a previous owner recovery read to navigate or leave submission locked', async t => {
+  const destinations = browser(t), paths = []; let release, started;
+  const begun = new Promise(resolve => { started = resolve; });
+  t.mock.method(globalThis, 'fetch', async path => {
+    paths.push(path);
+    if (path === '/api/auth/register') return signupAck();
+    if (path === '/api/auth/register/confirm') return Response.json({ code: 'INVALID_OTP' }, { status: 400 });
+    started(); return new Promise(resolve => { release = resolve; });
+  });
+  const harness = view();
+  let tree = enterValid(harness);
+  const staleEmailHandler = find(tree, node => node?.props?.id === 'email').props.onChange;
+  await submit(tree); tree = harness.render(props);
+  find(tree, node => node?.props?.id === 'code').props.onChange({ target: { value: '001234' } });
+  const pending = submit(harness.render(props)); await begun;
+  staleEmailHandler({ target: { value: 'another@example.test' } }); harness.render(props);
+  release(currentSessionAck()); await pending; tree = harness.render(props);
+  assert.deepEqual(destinations, []); assert.equal(find(tree, node => node?.type === 'form').props.onSubmit instanceof Function, true);
+  assert.equal(find(tree, node => node?.props?.id === 'code').props.disabled, false);
+  assert.equal(walletSetupHandoff.consumeWalletSetupAfterAuth({ subject: 'synthetic-user', email: valid.email }, window), null);
+  assert.deepEqual(paths, ['/api/auth/register', '/api/auth/register/confirm', '/api/auth/session?view=access']); harness.unmount();
 });
 
 test('leaving while registration confirmation POST is pending aborts and ignores late native-session proof without another code', async t => {
@@ -383,7 +591,7 @@ test('known OTP rejections focus the code field without navigating, resending or
     harness.unmount();
   }
   assert.equal(focus, 3); assert.equal(starts, 0);
-  assert.deepEqual(paths, Array(3).fill('/api/auth/register/confirm'));
+  assert.deepEqual(paths, ['/api/auth/register/confirm', '/api/auth/session?view=access', '/api/auth/register/confirm', '/api/auth/register/confirm']);
 });
 
 test('an unavailable verification result never turns a misleading OTP code into a field rejection', async t => {
@@ -396,7 +604,7 @@ test('an unavailable verification result never turns a misleading OTP code into 
   const result = harness.render(resume);
   assert.equal(find(result, node => node?.props?.id === 'code').props.error, undefined);
   assert.match(renderToStaticMarkup(result), /No pudimos confirmar el resultado/);
-  assert.deepEqual(destinations, []); assert.deepEqual(paths, ['/api/auth/register/confirm']);
+  assert.deepEqual(destinations, []); assert.deepEqual(paths, ['/api/auth/register/confirm', '/api/auth/session?view=access']);
   harness.unmount();
 });
 
@@ -447,7 +655,8 @@ test('registration cannot show verified success from URL hints, send success, an
     tree = harness.render(resume);
     assert.doesNotMatch(renderToStaticMarkup(tree), /Correo verificado correctamente|El correo está verificado/);
     assert.equal(walletSetupHandoff.consumeWalletSetupAfterAuth({ subject: 'synthetic-user', email: valid.email }, window), null);
-    assert.deepEqual(paths, ['/api/auth/register/confirm']);
+    assert.deepEqual(paths, sessionRecovery.registrationSessionRecoveryEligible(status, payload.code)
+      ? ['/api/auth/register/confirm', '/api/auth/session?view=access'] : ['/api/auth/register/confirm']);
   }
 });
 
