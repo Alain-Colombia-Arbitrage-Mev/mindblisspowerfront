@@ -94,6 +94,27 @@ export function useCompanyPayment(reown) {
     return () => request.abort();
   }, [connected, wallet, reown.getCompanyPaymentProvider, live, revision]);
 
+  useEffect(() => {
+    if (!connected || busy || typeof window === "undefined" || typeof document === "undefined") return undefined;
+    let timer;
+    const returned = () => {
+      clearTimeout(timer);
+      if (document.visibilityState !== "visible" || inflight.current || !live(wallet)) return;
+      timer = setTimeout(() => {
+        if (document.visibilityState === "visible" && !inflight.current && live(wallet)) setRevision(number => number + 1);
+      }, 250);
+    };
+    window.addEventListener("focus", returned);
+    window.addEventListener("pageshow", returned);
+    document.addEventListener("visibilitychange", returned);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("focus", returned);
+      window.removeEventListener("pageshow", returned);
+      document.removeEventListener("visibilitychange", returned);
+    };
+  }, [connected, wallet, live, busy]);
+
   const save = useCallback(value => {
     const safe = companyPaymentView(value);
     if (!safe) throw new Error("company_payment_unavailable");

@@ -111,7 +111,7 @@ test('administrative methods use only the selected sandbox country and provider,
 test('personal options authenticate and reject crossed countries, sandbox methods and unknown limits', async () => {
   const options = { walletKind: 'personal', environment: 'production', provider: 'reown', country: 'US', sourceCurrencyCode: 'USD',
     paymentMethods: ['CREDIT_DEBIT_CARD'], routes: [{ serviceProvider: 'SWAPPED', paymentMethods: [
-      { method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount: 10, maximumAmount: 10000, minimumUsd: 10, maximumUsd: 10000 }] }] };
+      { method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount: 100, maximumAmount: 10000, minimumUsd: 100, maximumUsd: 10000 }] }] };
   const get = new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/wallet-funding/personal/options?country=US`,
     { headers: { cookie: 'better-auth.session_token=synthetic' } });
   const response = await handleWalletFunding(get, 'personal-options', { env, serviceRequest: async (url, init) => {

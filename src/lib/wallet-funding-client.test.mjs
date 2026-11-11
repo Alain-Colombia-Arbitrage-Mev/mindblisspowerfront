@@ -30,7 +30,7 @@ test('personal country methods reject sandbox payloads and do not fall back to a
   const paths = [];
   try {
     globalThis.fetch = async path => { paths.push(path); return Response.json(personal); };
-    assert.deepEqual(await readPersonalFundingOptions('US'), personal);
+    assert.deepEqual(await readPersonalFundingOptions('US'), { ...personal, routes: [{ ...personal.routes[0], paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount: 100, maximumAmount: 15000, minimumUsd: 100, maximumUsd: 15000 }] }] });
     assert.deepEqual(paths, ['/api/member/wallet-funding/personal/options?country=US&sourceCurrencyCode=USD']);
     globalThis.fetch = async () => Response.json(options);
     await assert.rejects(readPersonalFundingOptions('US'), { message: 'funding_unavailable' });
@@ -42,10 +42,10 @@ test('personal country methods reject sandbox payloads and do not fall back to a
 test('a personal intent cannot silently change the requested payment method', async () => {
   const original = globalThis.fetch;
   const input = { requestId: 'd8a4c010-cc33-44da-a297-8b3c6440f491', walletAddress: `0x${'1'.repeat(40)}`,
-    country: 'US', amount: 50, paymentMethodType: 'CREDIT_DEBIT_CARD' };
+    country: 'US', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' };
   try {
     globalThis.fetch = async () => Response.json({ checkoutReference: input.requestId, walletKind: 'personal',
-      environment: 'production', provider: 'reown', status: 'initiated', requestedAmount: 50,
+      environment: 'production', provider: 'reown', status: 'initiated', requestedAmount: 100,
       createdAt: '2026-11-10T15:00:00Z', paymentMethodType: 'APPLE_PAY', allowedProviders: ['SWAPPED'] });
     await assert.rejects(createPersonalFundingIntent(input), { message: 'funding_unavailable' });
   } finally { globalThis.fetch = original; }
@@ -80,7 +80,7 @@ test('personal discovery retries one transient GET with the exact country and cu
     assert.ok(calls.every(call => call.path.endsWith('country=MX&sourceCurrencyCode=MXN') && call.init.method === 'GET' && call.init.cache === 'no-store'));
     calls.length = 0;
     globalThis.fetch = async (path, init) => { calls.push({ path, init }); return Response.json({ error: 'wallet_funding_provider_unavailable' }, { status: 503 }); };
-    await assert.rejects(createPersonalFundingIntent({ requestId: 'd8a4c010-cc33-44da-a297-8b3c6440f491', walletAddress: `0x${'1'.repeat(40)}`, country: 'US', amount: 20, paymentMethodType: 'CREDIT_DEBIT_CARD' }));
+    await assert.rejects(createPersonalFundingIntent({ requestId: 'd8a4c010-cc33-44da-a297-8b3c6440f491', walletAddress: `0x${'1'.repeat(40)}`, country: 'US', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' }));
     assert.equal(calls.length, 1);
     assert.equal(calls[0].init.method, 'POST');
   } finally { globalThis.fetch = original; }

@@ -42,7 +42,7 @@ function fundingRuntime(overrides = {}) {
     currentAddress: '', walletProvider: undefined, binding: { status: 'linked', address },
     onrampOperation: ref(), linkingOperation: ref(), onrampFlow: ref(), onrampSelection: ref(), onrampIntent: ref(),
     linking: ref(), connectModalSeen: ref(), appKitState: { open: false },
-    PERSONAL_WALLET_MINIMUM_USD: 20, PERSONAL_WALLET_ASSET: 'USDT', DOMException,
+    PERSONAL_WALLET_MINIMUM_USD: 100, PERSONAL_WALLET_ASSET: 'USDT', DOMException,
     setBinding: value => bindings.push(value), setOnrampState: value => states.push(value),
     setVerificationError() {}, setIsLinking() {}, setFundingRevision: () => events.push('revision'),
     OnRampController: { state: { providers: [provider], selectedProvider: provider }, setSelectedProvider() {} },
@@ -60,7 +60,7 @@ function fundingRuntime(overrides = {}) {
     scope[name] = onrampCallback(name, scope);
   }
   return { scope, events, states, bindings, address, requestId,
-    input: { requestId, country: 'MX', sourceCurrencyCode: 'USD', amount: 20, paymentMethodType: 'CREDIT_DEBIT_CARD' } };
+    input: { requestId, country: 'MX', sourceCurrencyCode: 'USD', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' } };
 }
 
 test('manual cancellation releases a hung SDK connect and its late result cannot begin funding', async () => {
@@ -148,7 +148,7 @@ test('a verified bound address bypasses SDK auth and a cancelled late intent nev
     createPersonalFundingIntent: () => { started.resolve(); return intent.promise; } });
   const pending = runtime.scope.startOnramp(runtime.input);
   await started.promise; runtime.scope.cancelOnramp(); await assert.rejects(pending, { name: 'AbortError' });
-  intent.resolve({ checkoutReference: runtime.requestId, requestedAmount: 20, sourceCurrencyCode: 'USD',
+  intent.resolve({ checkoutReference: runtime.requestId, requestedAmount: 100, sourceCurrencyCode: 'USD',
     paymentMethodType: 'CREDIT_DEBIT_CARD', allowedProviders: ['SWAPPED'] });
   await taskTick(); assert.deepEqual(runtime.events, []); assert.deepEqual(runtime.bindings, []);
 });
@@ -185,7 +185,7 @@ test('SPEI handoff forwards the actual MXN amount without claiming a USD valuati
 });
 
 test('a changed checkout reference, amount, currency or method cannot open a provider', async () => {
-  for (const change of [{ checkoutReference: '11111111-1111-4111-8111-111111111111' }, { requestedAmount: 100 },
+  for (const change of [{ checkoutReference: '11111111-1111-4111-8111-111111111111' }, { requestedAmount: 101 },
     { sourceCurrencyCode: 'MXN' }, { paymentMethodType: 'APPLE_PAY' }]) {
     const runtime = fundingRuntime({ createPersonalFundingIntent: async body => ({ checkoutReference: body.requestId,
       requestedAmount: body.amount, sourceCurrencyCode: body.sourceCurrencyCode, paymentMethodType: body.paymentMethodType,
@@ -244,7 +244,7 @@ test('personal dollar continuation explicitly forwards its currency to the inten
   const callback = onrampCallback('runOnramp', {
     reownFundingSelection, detectPersonalFundingCountry: () => 'US', buildReownProductionOnrampUrl, personalFundingFailure, projectId,
     boundAddress: address, mounted: { current: true }, navigator: { languages: ['en-US'], language: 'en-US' },
-    PERSONAL_WALLET_MINIMUM_USD: 20, PERSONAL_WALLET_ASSET: 'USDT', AbortController,
+    PERSONAL_WALLET_MINIMUM_USD: 100, PERSONAL_WALLET_ASSET: 'USDT', AbortController,
     onrampFlow: { current: null }, onrampSelection: { current: null }, onrampIntent: { current: false },
     beginOnrampOperation: () => operation, onrampOperation: { current: operation },
     OnRampController: { state: { providers: [provider], selectedProvider: provider }, setSelectedProvider() { events.push('provider'); } },
@@ -324,7 +324,7 @@ test("personal portal renders only its personal wallet and preserves native memb
  assert.match(personal,/reown\.startOnramp\(\{ walletAddress: reown\.linkedAddress, \.\.\.input \}\)/);
  assert.doesNotMatch(personal,/Administrative|startAdministrative|SandboxFunding/);
  assert.match(policy,/MINDBLISS_ONRAMP_FEE_BPS = 100/);assert.match(policy,/PERSONAL_WALLET_ASSET = "USDT"/);
- assert.match(policy,/PERSONAL_WALLET_MINIMUM_USD = 20/);
+ assert.match(policy,/PERSONAL_WALLET_MINIMUM_USD = 100/);
 });
 
 test("personal funding navigation has one destination and one neutral action label", () => {

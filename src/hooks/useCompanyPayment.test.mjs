@@ -14,6 +14,19 @@ const paymentId = '11111111-1111-4111-8111-111111111111', otherId = '22222222-22
 const balanceAtomic = '25123456';
 const createdAt = new Date(Date.now() - 1000).toISOString(), expiresAt = new Date(Date.now() + 600_000).toISOString();
 const deferred = () => { let resolve, reject; const promise = new Promise((done, fail) => { resolve = done; reject = fail; }); return { promise, resolve, reject }; };
+function clock() {
+  let now = 0, next = 0;
+  const timers = new Map();
+  return {
+    setTimeout(callback, milliseconds) { const id = ++next; timers.set(id, { callback, at: now + milliseconds }); return id; },
+    clearTimeout(id) { timers.delete(id); },
+    tick(milliseconds) {
+      now += milliseconds;
+      for (const [id, timer] of [...timers]) if (timer.at <= now && timers.delete(id)) timer.callback();
+    },
+    get pending() { return timers.size; },
+  };
+}
 function lockManager() {
   const held = new Set(), calls = [];
   return { calls, async request(name, options, callback) {
@@ -36,6 +49,8 @@ function harness(overrides = {}) {
   const slots = [], effects = [], calls = [], storage = overrides.storage || new Map();
   let cursor = 0, dirty = true, current, sourceWallet = wallet, nextId = 0;
   const localStorage = { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) };
+  const browser = Object.assign(new EventTarget(), { localStorage });
+  const documentRef = Object.assign(new EventTarget(), { visibilityState: 'visible' });
   const dependenciesChanged = (before, after) => !before || !after || before.length !== after.length || before.some((value, index) => !Object.is(value, after[index]));
   const hooks = {
     useRef(initial) { const index = cursor++; return slots[index] ??= { current: initial }; },
@@ -51,13 +66,13 @@ function harness(overrides = {}) {
     useEffect(callback, deps) { const index = cursor++, cell = slots[index] ??= {};
       if (dependenciesChanged(cell.deps, deps)) { cell.deps = deps; effects.push(() => { cell.cleanup?.(); cell.cleanup = callback(); }); } },
   };
-  const sdk = { creations: [], broadcasts: [], sends: [], networkSwitches: [] };
+  const sdk = { creations: [], broadcasts: [], sends: [], networkSwitches: [], balanceReads: [] };
   const provider = { request() { assert.fail('a real wallet RPC was attempted'); } };
   const getProvider = () => provider;
   const switchProviderNetwork = async () => { sdk.networkSwitches.push('polygon'); return overrides.switchNetwork?.(); };
   const reown = () => ({ linkedAddress: sourceWallet, linkStatus: 'linked', isConnected: true, isLinked: true, getCompanyPaymentProvider: getProvider,
     switchCompanyPaymentNetwork: switchProviderNetwork,
-    openConnect: () => assert.fail('unexpected wallet connection'), linkWallet: () => assert.fail('unexpected signature') });
+    openConnect: () => assert.fail('unexpected wallet connection'), linkWallet: () => assert.fail('unexpected signature'), ...overrides.reown });
   const client = {
     async readCompanyPaymentHistory(options) { calls.push({ action: 'history' }); return overrides.history ? overrides.history(options) : { records: [] }; },
     async writeCompanyPayment(action, input, options) {
@@ -70,7 +85,7 @@ function harness(overrides = {}) {
     },
   };
   const transfer = {
-    async readPersonalCompanyPaymentBalance() { return overrides.balance ? overrides.balance() : { balanceAtomic }; },
+    async readPersonalCompanyPaymentBalance(options) { sdk.balanceReads.push(options); return overrides.balance ? overrides.balance(options) : { balanceAtomic }; },
     createPersonalCompanyPaymentTransfer(options) {
       sdk.creations.push(options);
       const sender = { markSubmitted: (...args) => sdk.broadcasts.push(args), async sendPrepared(prepared, config) {
@@ -89,13 +104,13 @@ function harness(overrides = {}) {
   const browserNavigator = overrides.navigator || { locks: lockManager() };
   const imports = { react: hooks, '@/lib/company-payment-contract.mjs': contracts, '@/lib/company-payment-client.mjs': client,
     '@/lib/company-payment-recovery.mjs': recovery, '@/lib/personal-company-payment.mjs': transfer, '@/lib/personal-company-payment-values.mjs': values };
-  new Function('require', 'module', 'exports', 'window', 'crypto', 'navigator', 'globalThis', 'setTimeout', 'clearTimeout', code)(id => {
+  new Function('require', 'module', 'exports', 'window', 'document', 'crypto', 'navigator', 'globalThis', 'setTimeout', 'clearTimeout', code)(id => {
     assert.ok(Object.hasOwn(imports, id), `Unexpected hook dependency ${id}`); return imports[id];
-  }, module, module.exports, { localStorage }, { randomUUID: () => (++nextId === 1 ? paymentId : otherId) },
-  browserNavigator, { navigator: browserNavigator }, overrides.setTimeout || setTimeout, clearTimeout);
+  }, module, module.exports, browser, documentRef, { randomUUID: () => (++nextId === 1 ? paymentId : otherId) },
+  browserNavigator, { navigator: browserNavigator }, overrides.setTimeout || setTimeout, overrides.clearTimeout || clearTimeout);
   function render() { cursor = 0; dirty = false; current = module.exports.useCompanyPayment(reown()); }
   return {
-    get flow() { return current; }, calls, sdk, localStorage,
+    get flow() { return current; }, calls, sdk, localStorage, browser, documentRef,
     async flush() {
       let quiet = 0;
       for (let turn = 0; turn < 40; turn++) {
@@ -144,6 +159,85 @@ test('the first verified balance prefills the exact maximum without preparing a 
   h.flow.setAmount(''); await h.flush(); h.flow.refresh(); await h.flush(); assert.equal(h.flow.amount, '');
   h.flow.selectHistory(confirmed()); await h.flush(); h.flow.newPayment(); await h.flush();
   assert.equal(h.flow.amount, '30'); assert.deepEqual(writes(h), []); assert.equal(h.sdk.sends.length, 0);
+});
+
+test('returning from funding coalesces visible browser events into read-only balance and history refreshes', async t => {
+  const timers = clock(); let available = '0';
+  const h = harness({ ...timers, balance: async () => ({ balanceAtomic: available }) }); t.after(() => h.unmount());
+  await h.flush(); assert.equal(h.flow.amount, ''); assert.equal(h.flow.balanceAtomic, '0');
+  available = balanceAtomic;
+  h.browser.dispatchEvent(new Event('focus'));
+  h.documentRef.dispatchEvent(new Event('visibilitychange'));
+  h.browser.dispatchEvent(new Event('pageshow'));
+  assert.equal(timers.pending, 1);
+  timers.tick(249); await h.flush(); assert.equal(h.sdk.balanceReads.length, 1);
+  timers.tick(1); await h.flush();
+  assert.equal(h.sdk.balanceReads.length, 2); assert.equal(h.calls.filter(call => call.action === 'history').length, 2);
+  assert.equal(h.flow.balanceAtomic, balanceAtomic); assert.equal(h.flow.amount, '25.123456');
+  h.flow.setAmount('5'); await h.flush(); available = '30000000';
+  h.browser.dispatchEvent(new Event('focus')); timers.tick(250); await h.flush();
+  assert.equal(h.flow.balanceAtomic, '30000000'); assert.equal(h.flow.amount, '5', 'return refresh overwrote the edited amount');
+  find(page(h), node => node?.type === 'CompanyPaymentForm').props.onMax(); await h.flush();
+  assert.equal(h.flow.amount, '30', 'MAX did not use the refreshed real balance');
+  assert.deepEqual(writes(h), []); assert.equal(h.sdk.creations.length, 0); assert.equal(h.sdk.sends.length, 0);
+});
+
+test('hidden tabs and unlinked wallets do not refresh, and hiding cancels a queued return refresh', async t => {
+  const timers = clock(), h = harness({ ...timers }); t.after(() => h.unmount()); await h.flush();
+  h.browser.dispatchEvent(new Event('focus')); assert.equal(timers.pending, 1);
+  h.documentRef.visibilityState = 'hidden'; h.documentRef.dispatchEvent(new Event('visibilitychange'));
+  h.browser.dispatchEvent(new Event('focus')); h.browser.dispatchEvent(new Event('pageshow'));
+  assert.equal(timers.pending, 0); timers.tick(250); await h.flush(); assert.equal(h.sdk.balanceReads.length, 1);
+  const unlinked = harness({ ...timers, reown: { linkStatus: 'unlinked', isLinked: false } }); t.after(() => unlinked.unmount()); await unlinked.flush();
+  unlinked.browser.dispatchEvent(new Event('focus')); unlinked.documentRef.dispatchEvent(new Event('visibilitychange'));
+  unlinked.browser.dispatchEvent(new Event('pageshow')); timers.tick(250); await unlinked.flush();
+  assert.equal(unlinked.sdk.balanceReads.length, 0); assert.deepEqual(unlinked.calls, []);
+  assert.deepEqual(writes(h), []); assert.equal(h.sdk.sends.length + unlinked.sdk.sends.length, 0);
+});
+
+test('busy wallet operations drop return events and cancel pending refreshes without queuing work after completion', async t => {
+  const timers = clock(), gate = deferred(), h = harness({ ...timers, switchNetwork: () => gate.promise });
+  t.after(() => h.unmount()); await h.flush();
+  h.browser.dispatchEvent(new Event('focus')); assert.equal(timers.pending, 1);
+  const switching = h.flow.switchNetwork(); await h.flush(); assert.equal(h.flow.busy, true);
+  // Only the explicit SDK switch deadline remains; the 250 ms return timer was removed.
+  assert.equal(timers.pending, 1);
+  h.browser.dispatchEvent(new Event('focus')); h.documentRef.dispatchEvent(new Event('visibilitychange')); h.browser.dispatchEvent(new Event('pageshow'));
+  timers.tick(250); await h.flush(); assert.equal(h.sdk.balanceReads.length, 1);
+  gate.resolve(); await switching; await h.flush();
+  const reads = h.sdk.balanceReads.length;
+  timers.tick(250); await h.flush(); assert.equal(h.sdk.balanceReads.length, reads, 'a busy return event was deferred until after the wallet operation');
+  assert.equal(timers.pending, 0); assert.deepEqual(writes(h), []); assert.equal(h.sdk.sends.length, 0);
+});
+
+test('wallet changes and unmount cancel queued refreshes and cannot publish a late balance from the previous wallet', async t => {
+  const timers = clock(), pending = deferred(); let reads = 0;
+  const h = harness({ ...timers, balance: async () => ++reads === 2 ? pending.promise : { balanceAtomic: reads === 1 ? balanceAtomic : '10000000' } });
+  t.after(() => h.unmount()); await h.flush();
+  h.browser.dispatchEvent(new Event('focus')); timers.tick(250); await h.flush();
+  const oldRead = h.sdk.balanceReads[1]; assert.equal(oldRead.signal.aborted, false);
+  await h.wallet(otherWallet); assert.equal(oldRead.signal.aborted, true); assert.equal(h.flow.balanceAtomic, '10000000');
+  pending.resolve({ balanceAtomic: '99000000' }); await h.flush();
+  assert.equal(h.flow.balanceAtomic, '10000000'); assert.equal(h.flow.amount, '10');
+  h.browser.dispatchEvent(new Event('focus')); assert.equal(timers.pending, 1);
+  await h.wallet(wallet); assert.equal(timers.pending, 0);
+  const currentReads = h.sdk.balanceReads.length; timers.tick(250); await h.flush(); assert.equal(h.sdk.balanceReads.length, currentReads);
+  h.browser.dispatchEvent(new Event('pageshow')); assert.equal(timers.pending, 1);
+  h.unmount(); assert.equal(timers.pending, 0);
+  h.browser.dispatchEvent(new Event('focus')); timers.tick(250); assert.equal(h.sdk.balanceReads.length, currentReads);
+  assert.deepEqual(writes(h), []); assert.equal(h.sdk.sends.length, 0);
+});
+
+test('a verified terminal receipt refreshes the on-chain balance and history without another transfer', async t => {
+  let available = balanceAtomic;
+  const h = harness({ balance: async () => ({ balanceAtomic: available }), write: async action => {
+    assert.equal(action, 'verify'); available = '0'; return confirmed();
+  } }); t.after(() => h.unmount()); await h.flush();
+  h.flow.selectHistory(payment({ status: 'submitted', transactionHash })); await h.flush();
+  await h.flow.verifyPayment(); await h.flush();
+  assert.equal(h.flow.payment.status, 'confirmed'); assert.equal(h.flow.balanceAtomic, '0');
+  assert.equal(h.sdk.balanceReads.length, 2); assert.equal(h.calls.filter(call => call.action === 'history').length, 2);
+  assert.deepEqual(writes(h), ['verify']); assert.equal(h.sdk.sends.length, 0);
 });
 
 test('actual page MAX, preview and editing never prepare or send; explicit confirmation prepares the exact amount before SDK dispatch', async () => {

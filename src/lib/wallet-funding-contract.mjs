@@ -1,4 +1,4 @@
-import { PERSONAL_WALLET_MINIMUM_USD } from './personal-wallet.mjs';
+import { PERSONAL_WALLET_MINIMUM_USD, PERSONAL_WALLET_MAXIMUM_USD } from './personal-wallet.mjs';
 
 export const FUNDING_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ADDRESS = /^0x[0-9a-f]{40}$/i;
@@ -9,6 +9,7 @@ const PROVIDERS = new Set(['TRANSAK', 'BANXA']);
 export const PERSONAL_FUNDING_PROVIDERS = Object.freeze(['SWAPPED', 'MERCURYO']);
 const PERSONAL_PROVIDERS = new Set(PERSONAL_FUNDING_PROVIDERS);
 export const PERSONAL_FUNDING_MINIMUM_USD = PERSONAL_WALLET_MINIMUM_USD;
+export const PERSONAL_FUNDING_MAXIMUM_USD = PERSONAL_WALLET_MAXIMUM_USD;
 // A fixed Mindbliss amount in pesos, not a live USD conversion.
 export const PERSONAL_FUNDING_MINIMUM_MXN = 931;
 export const ADMINISTRATIVE_FUNDING_MINIMUM_USD = 50;
@@ -20,7 +21,8 @@ export const WALLET_GATEWAY_FAILURE_REASONS = Object.freeze(['gateway_route_miss
 
 export function validFundingAmount(value, kind = 'personal') {
   const minimum = kind === 'personal' ? PERSONAL_FUNDING_MINIMUM_USD : kind === 'administrative' ? ADMINISTRATIVE_FUNDING_MINIMUM_USD : null;
-  return minimum !== null && typeof value === 'number' && Number.isFinite(value) && value >= minimum && value <= 25_000
+  const maximum = kind === 'personal' ? PERSONAL_FUNDING_MAXIMUM_USD : 25_000;
+  return minimum !== null && typeof value === 'number' && Number.isFinite(value) && value >= minimum && value <= maximum
     && Math.abs(value * 100 - Math.round(value * 100)) < 0.000001;
 }
 
@@ -59,8 +61,10 @@ function requestedSource(value, kind, countryRequired = false) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const currency = fundingCurrencyCode(value?.sourceCurrencyCode);
   // Historical requests retain their actual original amount after policy changes.
-  const historicalLocal = countryRequired && kind === 'personal' && currency === 'MXN';
-  if (!currency || !(historicalLocal ? validFiatAmount(value.requestedAmount) : validFundingSourceAmount(value.requestedAmount, kind, currency))) return null;
+  const historicalPersonal = countryRequired && kind === 'personal' && ['USD', 'MXN'].includes(currency);
+  const historicalAmount = validFiatAmount(value.requestedAmount)
+    && (currency !== 'USD' || (value.requestedAmount >= 20 && value.requestedAmount <= 25_000));
+  if (!currency || !(historicalPersonal ? historicalAmount : validFundingSourceAmount(value.requestedAmount, kind, currency))) return null;
   if (currency !== 'USD' && (value.paymentMethodType !== 'SPEI'
     || (countryRequired && value.country !== 'MX'))) return null;
   if (value.paymentMethodType !== undefined
@@ -217,7 +221,12 @@ function fundingOptions(value, kind) {
   const safeRoutes = administrative ? routes : routes.map(route => ({ ...route,
     paymentMethods: route.paymentMethods.filter(method => personalFundingMethod(method.method)
       && fundingSourceSupported({ sourceCurrencyCode, country: value.country, paymentMethodType: method.method }, 'personal'))
-      .map(method => sourceCurrencyCode === 'MXN' ? { ...method, minimumAmount: Math.max(PERSONAL_FUNDING_MINIMUM_MXN, method.minimumAmount) } : method)
+      .map(method => {
+        const minimumAmount = Math.max(sourceCurrencyCode === 'MXN' ? PERSONAL_FUNDING_MINIMUM_MXN : PERSONAL_FUNDING_MINIMUM_USD, method.minimumAmount);
+        const maximumAmount = Math.min(sourceCurrencyCode === 'USD' ? PERSONAL_FUNDING_MAXIMUM_USD : 1_000_000_000, method.maximumAmount);
+        return { ...method, minimumAmount, maximumAmount,
+          ...(sourceCurrencyCode === 'USD' ? { minimumUsd: minimumAmount, maximumUsd: maximumAmount } : {}) };
+      })
       .filter(method => method.maximumAmount >= method.minimumAmount),
   })).filter(route => route.paymentMethods.length > 0);
   const safeMethods = new Set(safeRoutes.flatMap(route => route.paymentMethods.map(method => method.method)));

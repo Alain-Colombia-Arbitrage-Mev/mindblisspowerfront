@@ -16,15 +16,15 @@ test('all funding locales expose the same keys and interpolation values', () => 
   }
 });
 
-test('personal funding copy distinguishes USD20 from administrative USD50 and local SPEI amounts', () => {
+test('personal funding copy distinguishes USD100 from administrative USD50 and local SPEI amounts', () => {
   for (const locale of SUPPORTED_LOCALES) {
     const funding = fundingMessages[locale].funding;
-    assert.match(funding.personalFormCopy, /20/);
-    assert.match(funding.personalAmountRange, /20/);
-    assert.match(funding.personalLocalMinimumPending, /20/);
+    assert.match(funding.personalFormCopy, /100/);
+    assert.match(funding.personalAmountRange, /100.*15[.,]000/);
+    assert.match(funding.personalLocalMinimumPending, /100/);
     assert.match(funding.personalSpeiMinimum, /SPEI/);
     assert.match(funding.personalSpeiMinimum, /MXN/);
-    assert.match(funding.personalSpeiMinimum, /20/);
+    assert.match(funding.personalSpeiMinimum, /100/);
     assert.match(funding.personalSpeiMinimum, /931/);
     assert.match(funding.personalMxnAmountRange, /931.*MXN/);
     assert.match(funding.speiTemporarilyUnavailable, /SPEI/);
@@ -35,8 +35,8 @@ test('personal funding copy distinguishes USD20 from administrative USD50 and lo
     assert.match(funding.localMinimumPending, /50/);
     assert.equal(funding.personalEnvironment, 'Reown');
     assert.match(messages[locale].walletPage.administrativeProviderCopy, /50/);
-    assert.match(messages[locale].walletPage.minimumTopUpCopy, /20/);
-    assert.match(messages[locale].overview.plansFrom, /20/);
+    assert.match(messages[locale].walletPage.minimumTopUpCopy, /100/);
+    assert.match(messages[locale].overview.plansFrom, /30/);
     assert.doesNotMatch(messages[locale].walletPage.simpleProviderNote, /Topper/);
     assert.match(messages[locale].walletPage.simpleProviderNote, /Swapped/);
     assert.match(messages[locale].walletPage.simpleProviderNote, /Mercuryo/);

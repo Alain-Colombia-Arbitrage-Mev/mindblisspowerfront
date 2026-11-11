@@ -51,7 +51,7 @@ test('legacy dollar discovery upgrades explicitly to USD and rejects conflicting
   const parsed = personalProductionOptions(legacy);
   assert.equal(parsed.sourceCurrencyCode, 'USD');
   assert.deepEqual(parsed.routes[0].paymentMethods[0], { method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD',
-    minimumAmount: 20, maximumAmount: 10000, minimumUsd: 20, maximumUsd: 10000 });
+    minimumAmount: 100, maximumAmount: 10000, minimumUsd: 100, maximumUsd: 10000 });
   const method = { ...parsed.routes[0].paymentMethods[0], minimumUsd: 10 };
   assert.equal(personalProductionOptions({ ...parsed, routes: [{ serviceProvider: 'MERCURYO', paymentMethods: [method] }] }), null);
 });
@@ -245,7 +245,7 @@ test('personal method filtering preserves valid routes while administrative coun
     ] };
   const parsed = personalProductionOptions(personal);
   assert.deepEqual(parsed.paymentMethods, ['CREDIT_DEBIT_CARD']);
-  assert.deepEqual(parsed.routes, [{ serviceProvider: 'SWAPPED', paymentMethods: [method('CREDIT_DEBIT_CARD')] }]);
+  assert.deepEqual(parsed.routes, [{ serviceProvider: 'SWAPPED', paymentMethods: [{ ...method('CREDIT_DEBIT_CARD'), minimumAmount: 100, minimumUsd: 100 }] }]);
   assert.equal(personalProductionOptions({ ...personal, country: 'CO' }), null);
   const admin = { ...options('administrative'), country: 'CO', sourceCurrencyCode: 'USD', serviceProvider: 'BANXA',
     paymentMethods: ['NETELLER', 'SKRILL'], routes: [{ serviceProvider: 'BANXA', paymentMethods: [method('NETELLER'), method('SKRILL')] }] };

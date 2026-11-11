@@ -25,7 +25,8 @@ test('new personal requests and acknowledgements use fixed 931 MXN while USD and
   assert.equal(validFundingSourceAmount(931, 'personal', 'MXN'), true);
   assert.ok(fundingInput(input(931), 'personal'));
   assert.equal(fundingAcknowledgement(ack(931), 'personal').requestedAmount, 931);
-  assert.equal(validFundingAmount(20), true);
+  assert.equal(validFundingAmount(20), false);
+  assert.equal(validFundingAmount(100), true);
   assert.equal(validFundingAmount(19.99), false);
   assert.equal(validFundingAmount(49.99, 'administrative'), false);
   assert.equal(validFundingAmount(50, 'administrative'), true);

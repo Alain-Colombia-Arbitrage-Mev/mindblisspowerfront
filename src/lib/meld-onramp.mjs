@@ -1,6 +1,7 @@
 import {
   PERSONAL_WALLET_MELD_ASSET,
   PERSONAL_WALLET_MINIMUM_USD,
+  PERSONAL_WALLET_MAXIMUM_USD,
 } from "./personal-wallet.mjs";
 import {
   ADMINISTRATIVE_WALLET_MELD_ASSET,
@@ -22,7 +23,7 @@ export function buildMeldOnrampUrl({ providerUrl, address, projectId, checkoutRe
   if (!ADDRESS.test(address || "") || !PROJECT_ID.test(projectId || "") || !CUSTOMER_REFERENCE.test(checkoutReference || "")) throw new Error("meld_context_invalid");
   return buildOnrampUrl({ providerUrl, address, externalCustomerId: checkoutReference, countryCode, locale,
     asset: PERSONAL_WALLET_MELD_ASSET, amount, paymentMethodType, serviceProvider,
-    minimumUsd: PERSONAL_WALLET_MINIMUM_USD });
+    minimumUsd: PERSONAL_WALLET_MINIMUM_USD, maximumUsd: PERSONAL_WALLET_MAXIMUM_USD });
 }
 
 export function buildAdministrativeMeldOnrampUrl({ providerUrl, address, checkoutReference, countryCode = "", locale = "",
@@ -30,11 +31,11 @@ export function buildAdministrativeMeldOnrampUrl({ providerUrl, address, checkou
   if (!ADDRESS.test(address || "") || !CUSTOMER_REFERENCE.test(checkoutReference || "")) throw new Error("meld_context_invalid");
   return buildOnrampUrl({ providerUrl, address, externalCustomerId: checkoutReference, countryCode, locale,
     asset: ADMINISTRATIVE_WALLET_MELD_ASSET, amount, paymentMethodType, serviceProvider,
-    minimumUsd: ADMINISTRATIVE_WALLET_MINIMUM_USD });
+    minimumUsd: ADMINISTRATIVE_WALLET_MINIMUM_USD, maximumUsd: 25_000 });
 }
 
 function buildOnrampUrl({ providerUrl, address, externalCustomerId, countryCode, locale, asset, amount,
-  paymentMethodType, serviceProvider, minimumUsd }) {
+  paymentMethodType, serviceProvider, minimumUsd, maximumUsd }) {
   const url = new URL(providerUrl || "");
   if (url.origin !== "https://meldcrypto.com" || url.pathname !== "/" || url.username || url.password || url.hash) {
     throw new Error("meld_provider_invalid");
@@ -44,7 +45,7 @@ function buildOnrampUrl({ providerUrl, address, externalCustomerId, countryCode,
   url.searchParams.set("destinationCurrencyCode", asset);
   url.searchParams.set("sourceCurrencyCode", "USD");
   const normalizedAmount = Number(amount);
-  if (!Number.isFinite(normalizedAmount) || normalizedAmount < minimumUsd || normalizedAmount > 25_000) throw new Error("meld_context_invalid");
+  if (!Number.isFinite(normalizedAmount) || normalizedAmount < minimumUsd || normalizedAmount > maximumUsd) throw new Error("meld_context_invalid");
   if (paymentMethodType && !PAYMENT_METHOD.test(paymentMethodType)) throw new Error("meld_context_invalid");
   if (!PROVIDER.test(serviceProvider || "") || !ALLOWED_PROVIDERS.has(serviceProvider)) throw new Error("meld_context_invalid");
   url.searchParams.set("sourceAmount", String(normalizedAmount));

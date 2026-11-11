@@ -4,7 +4,7 @@ import { CreditCard, Landmark, Loader2, RefreshCw, ShieldCheck, Smartphone, Wall
 import { useEffect, useId, useRef, useState } from "react";
 import { useI18n } from "@/i18n/LanguageProvider";
 import { fundingRequestId, readPersonalFundingOptions } from "@/lib/wallet-funding-client.mjs";
-import { PERSONAL_FUNDING_COUNTRIES, PERSONAL_FUNDING_MINIMUM_USD, PERSONAL_FUNDING_MINIMUM_MXN, personalFundingMethod, validFundingSourceAmount } from "@/lib/wallet-funding-contract.mjs";
+import { PERSONAL_FUNDING_COUNTRIES, PERSONAL_FUNDING_MINIMUM_USD, PERSONAL_FUNDING_MAXIMUM_USD, PERSONAL_FUNDING_MINIMUM_MXN, personalFundingMethod, validFundingSourceAmount } from "@/lib/wallet-funding-contract.mjs";
 import styles from "./wallet-funding.module.css";
 
 const EMPTY_OPTIONS = { status: "idle", country: "", sourceCurrencyCode: "USD", paymentMethods: [], routes: [] };
@@ -19,10 +19,12 @@ export function eligiblePaymentMethods(routes, amount, sourceCurrencyCode = "USD
 
 function routeLimits(item, sourceCurrencyCode) {
   if ((item.currencyCode || "USD") !== sourceCurrencyCode) return null;
-  const providerMinimum = item.minimumAmount ?? item.minimumUsd, maximumAmount = item.maximumAmount ?? item.maximumUsd;
+  const providerMinimum = item.minimumAmount ?? item.minimumUsd;
+  const providerMaximum = item.maximumAmount ?? item.maximumUsd;
+  const maximumAmount = Math.min(sourceCurrencyCode === "USD" ? PERSONAL_FUNDING_MAXIMUM_USD : 1_000_000_000, providerMaximum);
   const floor = sourceCurrencyCode === "MXN" ? PERSONAL_FUNDING_MINIMUM_MXN : PERSONAL_FUNDING_MINIMUM_USD;
   const minimumAmount = Math.max(floor, providerMinimum);
-  return Number.isFinite(providerMinimum) && providerMinimum >= 0 && Number.isFinite(maximumAmount) && maximumAmount >= minimumAmount
+  return Number.isFinite(providerMinimum) && providerMinimum >= 0 && Number.isFinite(providerMaximum) && Number.isFinite(maximumAmount) && maximumAmount >= minimumAmount
     ? { minimumAmount, maximumAmount } : null;
 }
 
@@ -39,7 +41,7 @@ export function selectedMethodLimits(routes, method, amount, sourceCurrencyCode 
     .filter(item => item && (!(amount > 0) || (amount >= item.minimumAmount && amount <= item.maximumAmount)));
   if (!matches.length) return null;
   const minimumAmount = Math.max(sourceCurrencyCode === "USD" ? PERSONAL_FUNDING_MINIMUM_USD : 0, Math.min(...matches.map(item => item.minimumAmount)));
-  const maximumAmount = Math.min(sourceCurrencyCode === "USD" ? 25000 : 1_000_000_000, Math.max(...matches.map(item => item.maximumAmount)));
+  const maximumAmount = Math.min(sourceCurrencyCode === "USD" ? PERSONAL_FUNDING_MAXIMUM_USD : 1_000_000_000, Math.max(...matches.map(item => item.maximumAmount)));
   return sourceCurrencyCode === "USD" ? { minimumUsd: minimumAmount, maximumUsd: maximumAmount } : { minimumAmount, maximumAmount };
 }
 
@@ -127,13 +129,30 @@ function FundingAmountField({ id, amount, sourceCurrencyCode = "USD", onChange, 
   const { t, locale } = useI18n();
   const usd = sourceCurrencyCode === "USD";
   const invalid = amount !== "" && !validFundingSourceAmount(Number(amount), "personal", sourceCurrencyCode);
+  const currency = value => new Intl.NumberFormat(locale, { style: "currency", currency: "USD" }).format(value);
+  const sliderAmount = Number.isFinite(Number(amount)) ? Math.min(PERSONAL_FUNDING_MAXIMUM_USD, Math.max(PERSONAL_FUNDING_MINIMUM_USD, Number(amount))) : PERSONAL_FUNDING_MINIMUM_USD;
+  const useSliderAmount = value => onChange(String(Math.min(PERSONAL_FUNDING_MAXIMUM_USD, Math.max(PERSONAL_FUNDING_MINIMUM_USD, Math.round(value * 100) / 100))));
+  function sliderKeyDown(event) {
+    const next = { ArrowRight: sliderAmount + 100, ArrowUp: sliderAmount + 100, ArrowLeft: sliderAmount - 100, ArrowDown: sliderAmount - 100,
+      PageUp: sliderAmount + 1000, PageDown: sliderAmount - 1000, Home: PERSONAL_FUNDING_MINIMUM_USD, End: PERSONAL_FUNDING_MAXIMUM_USD }[event.key];
+    if (next === undefined) return;
+    event.preventDefault();
+    useSliderAmount(next);
+  }
   return <fieldset className={`mb-onramp-amount-fieldset ${styles.amountField}`} disabled={busy}>
     <legend>{t("onramp.amountLabel")}</legend>
-    {usd ? <div className="mb-onramp-quick-amounts">{[PERSONAL_FUNDING_MINIMUM_USD, 50, 100, 250].map(value => <button type="button" key={value}
+    {usd ? <div className={`mb-onramp-quick-amounts ${styles.quickAmounts}`}>{[PERSONAL_FUNDING_MINIMUM_USD, 500, 1000, 2000, 5000, 10000, PERSONAL_FUNDING_MAXIMUM_USD].map(value => <button type="button" key={value}
       className={Number(amount) === value ? "active" : ""} aria-pressed={Number(amount) === value} onClick={() => onChange(String(value))}>
       {new Intl.NumberFormat(locale, { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value)}</button>)}</div> : null}
-    <label className="mb-onramp-amount-input" htmlFor={`${id}-amount`}><span>{sourceCurrencyCode}</span><input id={`${id}-amount`} type="number" min={String(usd ? PERSONAL_FUNDING_MINIMUM_USD : PERSONAL_FUNDING_MINIMUM_MXN)} max={usd ? "25000" : "1000000000"} step="0.01" inputMode="decimal"
-      value={amount} onChange={event => onChange(event.target.value)} aria-label={t("onramp.amountLabel")} aria-invalid={invalid || undefined} aria-describedby={invalid ? `${id}-amount-hint` : undefined} required /></label>
+    <label className="mb-onramp-amount-input" htmlFor={`${id}-amount`}><span>{sourceCurrencyCode}</span><input id={`${id}-amount`} name="amount" autoComplete="off" type="number" min={String(usd ? PERSONAL_FUNDING_MINIMUM_USD : PERSONAL_FUNDING_MINIMUM_MXN)} max={usd ? String(PERSONAL_FUNDING_MAXIMUM_USD) : "1000000000"} step="0.01" inputMode="decimal"
+      value={amount} onChange={event => onChange(event.target.value)} aria-label={t("onramp.amountLabel")} aria-invalid={invalid || undefined} aria-describedby={[usd ? `${id}-usd-limits` : "", invalid ? `${id}-amount-hint` : ""].filter(Boolean).join(" ") || undefined} required /></label>
+    {usd ? <div className={styles.amountSliderGroup}>
+      <label className="sr-only" htmlFor={`${id}-amount-slider`}>{t("funding.amountSlider")}</label>
+      <input className={styles.amountSlider} id={`${id}-amount-slider`} name="amountSlider" type="range" dir="ltr" min={PERSONAL_FUNDING_MINIMUM_USD} max={PERSONAL_FUNDING_MAXIMUM_USD} step="any" value={sliderAmount}
+        onChange={event => useSliderAmount(Math.round(Number(event.target.value) / 100) * 100)} onKeyDown={sliderKeyDown} aria-valuetext={currency(sliderAmount)} aria-describedby={`${id}-usd-limits`} />
+      <div className={styles.sliderLimits} dir="ltr" aria-hidden="true"><span>{currency(PERSONAL_FUNDING_MINIMUM_USD)}</span><span>{currency(PERSONAL_FUNDING_MAXIMUM_USD)}</span></div>
+      <small id={`${id}-usd-limits`} className="mb-onramp-disclosure">{t("funding.personalAmountLimits", { minimum: currency(PERSONAL_FUNDING_MINIMUM_USD), maximum: currency(PERSONAL_FUNDING_MAXIMUM_USD) })}</small>
+    </div> : null}
     {invalid ? <small id={`${id}-amount-hint`} role="alert" className="mb-onramp-disclosure">{t(usd ? "funding.personalAmountRange" : "funding.personalMxnAmountRange")}</small> : null}
   </fieldset>;
 }
