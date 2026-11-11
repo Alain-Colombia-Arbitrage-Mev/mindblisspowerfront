@@ -102,17 +102,17 @@ test('all locales distinguish spendable USDT from the ETH needed for the network
   locale = 'es';
 });
 
-test('one address displays ten Ethereum USDT and seven Polygon USDT in independent rows without an aggregate', () => {
+test('the current wallet shows only Polygon while retaining the Ethereum balance component for historical reads', () => {
   stateByNetwork = { ethereum: fixture(), polygon: fixture({ balanceAtomic: '7000000' }) };
   const group = Balances({ expectedAddress: address });
   const children = React.Children.toArray(group.props.children);
-  assert.deepEqual(children.filter(child => child.type === Balance).map(child => [child.props.network, child.props.expectedAddress]), [['ethereum', address], ['polygon', address]]);
+  assert.deepEqual(children.filter(child => child.type === Balance).map(child => [child.props.network, child.props.expectedAddress]), [['polygon', address]]);
   const html = renderToStaticMarkup(group).replaceAll('<span>', '').replaceAll('</span>', '');
-  assert.ok(html.includes('10 USDT'));
+  assert.ok(!html.includes('10 USDT'));
   assert.ok(html.includes('7 USDT'));
-  assert.match(html, /data-wallet-network="ethereum"/);
+  assert.doesNotMatch(html, /data-wallet-network="ethereum"/);
   assert.match(html, /data-wallet-network="polygon"/);
-  assert.match(html, /Ethereum · ERC-20/);
+  assert.doesNotMatch(html, /Ethereum · ERC-20/);
   assert.ok(html.includes(translateMessage('es', 'funding.personalBalancePolygonNetwork')));
   assert.ok(!html.includes('17 USDT'));
   assert.ok(!html.includes('10 ETH'));
@@ -126,7 +126,7 @@ test('an unavailable Ethereum read never hides Polygon funds, and each chain ret
     polygon: fixture({ balanceAtomic: '7000000', refresh: () => refreshed.push('polygon') }) };
   let group = Balances({ expectedAddress: address, compact: true });
   let html = renderToStaticMarkup(group);
-  assert.match(html, /data-wallet-balance="unavailable" data-wallet-network="ethereum"/);
+  assert.doesNotMatch(html, /data-wallet-network="ethereum"/);
   assert.match(html, /data-wallet-balance="ready" data-wallet-network="polygon"/);
   assert.match(html, /7 <span>USDT/);
   assert.doesNotMatch(html, /10 <span>USDT|0 <span>USDT/);
@@ -136,8 +136,8 @@ test('an unavailable Ethereum read never hides Polygon funds, and each chain ret
   stateByNetwork.ethereum = fixture({ balanceAtomic: '0' });
   stateByNetwork.polygon = fixture({ balanceAtomic: null, loading: true });
   group = Balances({ expectedAddress: address }); html = renderToStaticMarkup(group);
-  assert.match(html, /data-wallet-balance="ready" data-wallet-network="ethereum"/);
-  assert.match(html, /0 <span>USDT/);
+  assert.doesNotMatch(html, /data-wallet-network="ethereum"/);
+  assert.doesNotMatch(html, /0 <span>USDT/);
   assert.match(html, /data-wallet-balance="loading" data-wallet-network="polygon"/);
   stateByNetwork = null;
 });

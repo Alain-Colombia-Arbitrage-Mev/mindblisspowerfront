@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, BadgeDollarSign, WalletCards } from "lucide-react";
+import { ArrowRight, History, WalletCards } from "lucide-react";
 import { useI18n } from "@/i18n/LanguageProvider";
 
 export default function OverviewDiscoveryCard() {
@@ -18,11 +18,11 @@ export default function OverviewDiscoveryCard() {
       </section>
 
       <section className="executive-card mb-plans-discovery-card">
-        <div className="mb-plans-discovery-title"><BadgeDollarSign size={18} aria-hidden="true" /><span>{t("overview.exploreMemberships")}</span></div>
-        <h2>{t("overview.plansFrom")}</h2>
-        <p>{t("overview.compareCopy")}</p>
-        <Link className="executive-button" href="/dashboard/packages">
-          {t("overview.compare")} <ArrowRight size={14} />
+        <div className="mb-plans-discovery-title"><History size={18} aria-hidden="true" /><span>{t("nav.wallet")}</span></div>
+        <h2>{t("funding.history")}</h2>
+        <p>{t("funding.personalHistoryCopy")}</p>
+        <Link className="executive-button" href="/dashboard/wallet-personal/requests">
+          {t("funding.viewStatus")} <ArrowRight size={14} />
         </Link>
       </section>
     </div>

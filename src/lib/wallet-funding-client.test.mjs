@@ -25,6 +25,7 @@ test('administrative methods never borrow personal provider options or invent an
 test('personal country methods reject sandbox payloads and do not fall back to administrative discovery', async () => {
   const original = globalThis.fetch;
   const personal = { walletKind: 'personal', environment: 'production', provider: 'reown', country: 'US', sourceCurrencyCode: 'USD',
+    destinationCurrencyCode: 'USDT_POLYGON', network: 'polygon', chainId: 137,
     paymentMethods: ['CREDIT_DEBIT_CARD'], routes: [{ serviceProvider: 'SWAPPED',
       paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount: 10, maximumAmount: 25000, minimumUsd: 10, maximumUsd: 25000 }] }] };
   const paths = [];
@@ -46,6 +47,7 @@ test('a personal intent cannot silently change the requested payment method', as
   try {
     globalThis.fetch = async () => Response.json({ checkoutReference: input.requestId, walletKind: 'personal',
       environment: 'production', provider: 'reown', status: 'initiated', requestedAmount: 100,
+      destinationCurrencyCode: 'USDT_POLYGON', destination: { address: input.walletAddress, asset: 'USDT', network: 'polygon', chainId: 137 },
       createdAt: '2026-11-10T15:00:00Z', paymentMethodType: 'APPLE_PAY', allowedProviders: ['SWAPPED'] });
     await assert.rejects(createPersonalFundingIntent(input), { message: 'funding_unavailable' });
   } finally { globalThis.fetch = original; }
@@ -70,6 +72,7 @@ test('a canceled old country/provider request cannot publish late methods into t
 test('personal discovery retries one transient GET with the exact country and currency, never a payment write', async () => {
   const original = globalThis.fetch;
   const personal = { walletKind: 'personal', environment: 'production', provider: 'reown', country: 'MX', sourceCurrencyCode: 'MXN',
+    destinationCurrencyCode: 'USDT_POLYGON', network: 'polygon', chainId: 137,
     paymentMethods: ['SPEI'], routes: [{ serviceProvider: 'SWAPPED', paymentMethods: [{ method: 'SPEI', currencyCode: 'MXN', minimumAmount: 148.66, maximumAmount: 212370.61 }] }] };
   const calls = [];
   try {

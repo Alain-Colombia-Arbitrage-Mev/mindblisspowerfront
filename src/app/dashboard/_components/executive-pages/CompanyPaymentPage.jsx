@@ -25,29 +25,29 @@ export default function CompanyPaymentPage() {
   return <ReownProvider><PersonalTransferRouter DirectPayment={PersonalCompanyPayment} /></ReownProvider>;
 }
 
-export function PersonalCompanyPayment({ onSponsoredPolygon = undefined } = {}) {
+export function PersonalCompanyPayment({ onSponsoredPolygon = undefined, historyOnly = false } = {}) {
   const { t, locale } = useI18n();
   const reown = useReownWallet();
   const flow = useCompanyPayment(reown);
   const payment = flow.payment;
   const guarded = Boolean(payment && (flow.recovery?.paymentId === payment.paymentId || (flow.transfer?.paymentId === payment.paymentId && flow.transfer.transactionMayExist)));
-  const reviewing = payment?.status === "prepared" && Boolean(personalCompanyPaymentPolicy(payment.chainId)) && !payment.abandonedAt && flow.stage === "review" && !guarded && flow.connected;
-  const status = payment && !reviewing && flow.stage !== "form";
+  const reviewing = !historyOnly && payment?.status === "prepared" && Boolean(personalCompanyPaymentPolicy(payment.chainId)) && !payment.abandonedAt && flow.stage === "review" && !guarded && flow.connected;
+  const status = payment && !reviewing && (historyOnly || flow.stage !== "form");
   const failureKey = flow.chainId === 137 && flow.errorKey === "companyPayment.networkUnavailable" ? "companyPayment.legacyNetworkUnavailable" : flow.errorKey;
   const failure = failureKey ? t(failureKey) : "";
-  return <section className="executive-page"><div className="executive-container" style={{ maxWidth: 840 }}>
-    <div className="executive-page-header"><div><h1 className="executive-title">{t("companyPayment.title")}</h1><p className="executive-subtitle">{t("companyPayment.subtitle")}</p></div></div>
+  return <section className={historyOnly ? "" : "executive-page"}><div className={historyOnly ? "" : "executive-container"} style={{ maxWidth: 840 }}>
+    {!historyOnly ? <><div className="executive-page-header"><div><h1 className="executive-title">{t("companyPayment.title")}</h1><p className="executive-subtitle">{t("companyPayment.subtitle")}</p></div></div>
     <div className={styles.actions} style={{ marginBottom: 20 }}>
       <Link className="executive-button" href="/dashboard/wallet-personal">{t("walletPage.addFundsAction")}</Link>
       {flow.errorKey === "companyPayment.switchNetwork" ? <button type="button" className="executive-button" disabled={flow.busy} onClick={() => void flow.switchNetwork()}>{t(flow.chainId === 137 ? "companyPayment.polygonSwitchNetwork" : "companyPayment.switchNetwork")}</button> : null}
-    </div>
+    </div></> : null}
     {reviewing ? <CompanyPaymentReview payment={payment} onConfirm={() => void flow.confirm()} onBack={() => void flow.abandon()} busy={flow.busy} error={failure} />
-      : status ? <CompanyPaymentStatus flow={flow} />
-        : <CompanyPaymentForm showHeading={false} chainId={flow.chainId} chainBalances={flow.chainBalances} onNetworkChange={id => id === 137 && onSponsoredPolygon ? onSponsoredPolygon() : flow.changeNetwork(id)} balanceAtomic={flow.balanceAtomic} nativeBalanceAtomic={flow.nativeBalanceAtomic} restoring={flow.restoring} needsVerification={flow.needsVerification} amount={flow.amount} onAmountChange={flow.setAmount}
+      : status ? <CompanyPaymentStatus flow={flow} readOnly={historyOnly} />
+        : historyOnly ? null : <CompanyPaymentForm showHeading={false} chainId={flow.chainId} chainBalances={flow.chainBalances} onNetworkChange={id => id === 137 && onSponsoredPolygon ? onSponsoredPolygon() : flow.changeNetwork(id)} balanceAtomic={flow.balanceAtomic} nativeBalanceAtomic={flow.nativeBalanceAtomic} restoring={flow.restoring} needsVerification={flow.needsVerification} amount={flow.amount} onAmountChange={flow.setAmount}
           onMax={() => { if (flow.balanceAtomic !== null) flow.setAmount(formatPersonalCompanyPaymentAmount(flow.balanceAtomic)); }}
           onReview={flow.review} onRefresh={flow.refresh} busy={flow.busy} loading={flow.loadingBalance || (flow.verified && flow.historyLoading) || reown.linkStatus === "loading"}
           connected={flow.connected} canRefresh={flow.verified} onConnect={() => void flow.connect()} error={failure} />}
-    <details className="executive-panel" style={{ marginTop: 20 }}><summary style={{ cursor: "pointer", minHeight: 44, alignContent: "center" }}>{t("companyPayment.historyTitle")}</summary>
+    <details className="executive-panel" style={{ marginTop: 20 }}><summary style={{ cursor: "pointer", minHeight: 44, alignContent: "center" }}>{t(historyOnly ? "companyPayment.legacyHistoryTitle" : "companyPayment.historyTitle")}</summary>
       {flow.historyLoading ? <p role="status">{t("common.loading")}</p> : !flow.history.length ? <p className={styles.pending}>{t("companyPayment.emptyHistory")}</p>
         : <div className="executive-table-wrap"><table className="executive-table"><thead><tr><th>{t("financePage.date")}</th><th>{t("companyPayment.networkLabel")}</th><th>USDT</th><th>{t("financePage.status")}</th></tr></thead><tbody>
           {flow.history.map(record => <tr key={record.paymentId}><td>{new Intl.DateTimeFormat(locale, { dateStyle: "short" }).format(new Date(record.createdAt))}</td>
@@ -61,7 +61,7 @@ export function PersonalCompanyPayment({ onSponsoredPolygon = undefined } = {}) 
   </div></section>;
 }
 
-export function CompanyPaymentStatus({ flow }) {
+export function CompanyPaymentStatus({ flow, readOnly = false }) {
   const { t } = useI18n();
   const value = companyPaymentView(flow.payment);
   if (!value) return null;
@@ -84,13 +84,13 @@ export function CompanyPaymentStatus({ flow }) {
       onChange={event => flow.setManualHash(event.target.value)} maxLength={66} dir="ltr" autoComplete="off" disabled={flow.busy || Boolean(flow.recovery?.transactionHash)} /></label> : null}
     <div className={styles.actions}>
       {draft && !ambiguous && !value.abandonedAt ? <>
-        {!expired ? <button className="executive-button primary" type="button" onClick={() => flow.connected ? flow.resume() : void flow.connect()} disabled={flow.busy || flow.restoring}>{t(flow.restoring ? "companyPayment.restoring" : flow.connected ? "companyPayment.resume" : "companyPayment.reconnect")}</button> : null}
+        {!readOnly && !expired ? <button className="executive-button primary" type="button" onClick={() => flow.connected ? flow.resume() : void flow.connect()} disabled={flow.busy || flow.restoring}>{t(flow.restoring ? "companyPayment.restoring" : flow.connected ? "companyPayment.resume" : "companyPayment.reconnect")}</button> : null}
         <button className="executive-button" type="button" onClick={() => void flow.abandon()} disabled={flow.busy}>{t("companyPayment.abandon")}</button>
       </> : null}
       {!draft || ambiguous || value.abandonedAt ? <button className="executive-button primary" type="button" onClick={() => void flow.verifyPayment()} disabled={flow.busy || (draft && !/^0x[0-9a-f]{64}$/i.test(flow.recovery?.transactionHash || flow.manualHash))}>
         {flow.busy ? <Loader2 className="animate-spin" size={16} aria-hidden="true" /> : <RefreshCw size={16} aria-hidden="true" />}{t(draft ? "companyPayment.registerHash" : legacy ? "companyPayment.legacyVerify" : "companyPayment.verify")}
       </button> : null}
-      {confirmed || failed || (draft && value.abandonedAt) ? <button className="executive-button" type="button" onClick={flow.newPayment} disabled={flow.busy || Boolean(flow.manualHash.trim() || flow.recovery)}>{t("companyPayment.newPayment")}</button> : null}
+      {!readOnly && (confirmed || failed || (draft && value.abandonedAt)) ? <button className="executive-button" type="button" onClick={flow.newPayment} disabled={flow.busy || Boolean(flow.manualHash.trim() || flow.recovery)}>{t("companyPayment.newPayment")}</button> : null}
     </div>
   </section>;
 }

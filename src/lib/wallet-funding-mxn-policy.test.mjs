@@ -10,8 +10,10 @@ const address = `0x${'1'.repeat(40)}`;
 const createdAt = '2026-11-10T15:00:00Z';
 const input = amount => ({ requestId: reference, walletAddress: address, country: 'MX', sourceCurrencyCode: 'MXN', amount, paymentMethodType: 'SPEI' });
 const ack = amount => ({ checkoutReference: reference, walletKind: 'personal', environment: 'production', provider: 'reown',
+  destinationCurrencyCode: 'USDT_POLYGON', destination: { address, asset: 'USDT', network: 'polygon', chainId: 137 },
   status: 'initiated', requestedAmount: amount, sourceCurrencyCode: 'MXN', paymentMethodType: 'SPEI', allowedProviders: ['SWAPPED'], createdAt });
 const options = (minimumAmount, maximumAmount = 100000) => ({ walletKind: 'personal', environment: 'production', provider: 'reown',
+  destinationCurrencyCode: 'USDT_POLYGON', network: 'polygon', chainId: 137,
   country: 'MX', sourceCurrencyCode: 'MXN', paymentMethods: ['SPEI'], routes: [{ serviceProvider: 'SWAPPED', paymentMethods: [
     { method: 'SPEI', currencyCode: 'MXN', minimumAmount, maximumAmount }] }] });
 

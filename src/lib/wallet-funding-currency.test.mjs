@@ -12,7 +12,7 @@ const input = { requestId, walletAddress: `0x${'1'.repeat(40)}`, country: 'MX', 
   sourceCurrencyCode: 'MXN', paymentMethodType: 'SPEI' };
 const options = kind => ({ walletKind: kind, environment: kind === 'personal' ? 'production' : 'sandbox',
   provider: kind === 'personal' ? 'reown' : 'meld', country: 'MX', sourceCurrencyCode: 'MXN',
-  ...(kind === 'administrative' ? { serviceProvider: 'TRANSAK' } : {}), paymentMethods: ['SPEI'],
+  ...(kind === 'administrative' ? { serviceProvider: 'TRANSAK' } : { destinationCurrencyCode: 'USDT_POLYGON', network: 'polygon', chainId: 137 }), paymentMethods: ['SPEI'],
   routes: [{ serviceProvider: kind === 'personal' ? 'SWAPPED' : 'TRANSAK', paymentMethods: [
     { method: 'SPEI', currencyCode: 'MXN', minimumAmount: kind === 'personal' ? 931 : 150, maximumAmount: 100000 }] }] });
 const get = query => new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/wallet-funding/${query}`,
@@ -46,6 +46,7 @@ test('local methods retain their provider currency and never reinterpret USD lim
 
 test('legacy dollar discovery upgrades explicitly to USD and rejects conflicting new limits', () => {
   const legacy = { walletKind: 'personal', environment: 'production', provider: 'reown', country: 'US',
+    destinationCurrencyCode: 'USDT_POLYGON', network: 'polygon', chainId: 137,
     paymentMethods: ['CREDIT_DEBIT_CARD'], routes: [{ serviceProvider: 'MERCURYO', paymentMethods: [
       { method: 'CREDIT_DEBIT_CARD', minimumUsd: 20, maximumUsd: 10000 }] }] };
   const parsed = personalProductionOptions(legacy);
@@ -91,6 +92,7 @@ test('a superseded currency read cannot publish a late successful response', asy
 test('SPEI records its actual MXN amount while other local mutations remain unavailable', async () => {
   const original = globalThis.fetch;
   const acknowledgement = { checkoutReference: requestId, walletKind: 'personal', environment: 'production', provider: 'reown',
+    destinationCurrencyCode: 'USDT_POLYGON', destination: { address: input.walletAddress, asset: 'USDT', network: 'polygon', chainId: 137 },
     status: 'initiated', requestedAmount: input.amount, sourceCurrencyCode: 'MXN', createdAt: '2026-11-10T15:00:00Z',
     paymentMethodType: 'SPEI', allowedProviders: ['SWAPPED'] };
   try {
@@ -129,6 +131,7 @@ test('SPEI records its actual MXN amount while other local mutations remain unav
 test('SPEI acknowledgement currency cannot be omitted or changed into dollars by an upstream response', async () => {
   const original = globalThis.fetch;
   const acknowledgement = { checkoutReference: requestId, walletKind: 'personal', environment: 'production', provider: 'reown',
+    destinationCurrencyCode: 'USDT_POLYGON', destination: { address: input.walletAddress, asset: 'USDT', network: 'polygon', chainId: 137 },
     status: 'initiated', requestedAmount: input.amount, createdAt: '2026-11-10T15:00:00Z',
     paymentMethodType: 'SPEI', allowedProviders: ['SWAPPED'] };
   try {

@@ -49,7 +49,8 @@ function fundingRuntime(overrides = {}) {
     OnRampController: { state: { providers: [provider], selectedProvider: provider }, setSelectedProvider() {} },
     fundingRequestId: () => requestId,
     createPersonalFundingIntent: async body => ({ checkoutReference: body.requestId, requestedAmount: body.amount,
-      sourceCurrencyCode: body.sourceCurrencyCode, paymentMethodType: body.paymentMethodType, allowedProviders: ['SWAPPED'] }),
+      sourceCurrencyCode: body.sourceCurrencyCode, paymentMethodType: body.paymentMethodType, allowedProviders: ['SWAPPED'],
+      destinationCurrencyCode: 'USDT_POLYGON', destination: { address: body.walletAddress, asset: 'USDT', network: 'polygon', chainId: 137 } }),
     open: async () => {}, close: () => events.push('close SDK modal'),
     disconnect: () => assert.fail('cancellation must never disconnect a wallet'),
     window: { open: url => { events.push({ opened: new URL(url) }); return { opener: null }; },
@@ -158,7 +159,7 @@ test('one AppKit instance configures Ethereum and Solana adapters with explicitl
   });
   assert.equal(config.adapters.length, 2); assert.ok(config.adapters[0] instanceof EthersAdapter); assert.ok(config.adapters[1] instanceof SolanaAdapter);
   assert.equal(config.networks.length, 3); assert.equal(config.networks[0], mainnet); assert.equal(config.networks[1], polygon); assert.equal(config.networks[2], solana);
-  assert.equal(config.defaultNetwork, mainnet); assert.equal(config.defaultAccountTypes.eip155, 'eoa'); assert.equal(config.defaultAccountTypes.solana, 'eoa');
+  assert.equal(config.defaultNetwork, polygon); assert.equal(config.defaultAccountTypes.eip155, 'eoa'); assert.equal(config.defaultAccountTypes.solana, 'eoa');
   const rootMetadata = personalWalletMetadata('https://mindblisspower.com');
   const rootConfig = vm.runInNewContext(`(${calls[0].arguments[0].getText(source)})`, {
     EthersAdapter, SolanaAdapter, mainnet, polygon, solana, projectId: 'a'.repeat(32), initialWalletTheme: 'light', themeVariables: () => ({}),
@@ -226,9 +227,12 @@ test('SPEI handoff forwards the actual MXN amount without claiming a USD valuati
 
 test('a changed checkout reference, amount, currency or method cannot open a provider', async () => {
   for (const change of [{ checkoutReference: '11111111-1111-4111-8111-111111111111' }, { requestedAmount: 101 },
-    { sourceCurrencyCode: 'MXN' }, { paymentMethodType: 'APPLE_PAY' }]) {
+    { sourceCurrencyCode: 'MXN' }, { paymentMethodType: 'APPLE_PAY' }, { destinationCurrencyCode: 'USDT' },
+    { destination: { address: `0x${'2'.repeat(40)}`, asset: 'USDT', network: 'polygon', chainId: 137 } },
+    { destination: { address: `0x${'1'.repeat(40)}`, asset: 'USDT', network: 'ethereum', chainId: 1 } }]) {
     const runtime = fundingRuntime({ createPersonalFundingIntent: async body => ({ checkoutReference: body.requestId,
       requestedAmount: body.amount, sourceCurrencyCode: body.sourceCurrencyCode, paymentMethodType: body.paymentMethodType,
+      destinationCurrencyCode: 'USDT_POLYGON', destination: { address: body.walletAddress, asset: 'USDT', network: 'polygon', chainId: 137 },
       allowedProviders: ['SWAPPED'], ...change }) });
     await assert.rejects(runtime.scope.startOnramp(runtime.input), { message: 'wallet_funding_invalid_acknowledgement' });
     assert.deepEqual(runtime.events, []);
@@ -283,6 +287,7 @@ test('personal dollar continuation explicitly forwards its currency to the inten
   const operation = createReownFundingOperation();
   const callback = onrampCallback('runOnramp', {
     reownFundingSelection, detectPersonalFundingCountry: () => 'US', buildReownProductionOnrampUrl, personalFundingFailure, projectId,
+    sameAddress: (left, right) => typeof left === 'string' && typeof right === 'string' && left.toLowerCase() === right.toLowerCase(),
     boundAddress: address, mounted: { current: true }, navigator: { languages: ['en-US'], language: 'en-US' },
     PERSONAL_WALLET_MINIMUM_USD: 30, PERSONAL_WALLET_ASSET: 'USDT', AbortController,
     onrampFlow: { current: null }, onrampSelection: { current: null }, onrampIntent: { current: false },
@@ -292,7 +297,8 @@ test('personal dollar continuation explicitly forwards its currency to the inten
     createPersonalFundingIntent: async body => {
       events.push('intent'); assert.equal(body.sourceCurrencyCode, 'USD'); assert.equal(body.amount, 100);
       assert.equal(body.country, 'MX'); assert.equal(body.walletAddress, address);
-      return { checkoutReference: requestId, requestedAmount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD', allowedProviders: ['SWAPPED'] };
+      return { checkoutReference: requestId, requestedAmount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD', allowedProviders: ['SWAPPED'],
+        destinationCurrencyCode: 'USDT_POLYGON', destination: { address: body.walletAddress, asset: 'USDT', network: 'polygon', chainId: 137 } };
     },
     window: { open(url) { events.push('open'); const parsed = new URL(url);
       assert.equal(parsed.searchParams.get('sourceCurrencyCodeLocked'), 'USD');
@@ -308,7 +314,7 @@ test("Reown creates separate EVM and Solana wallets while retaining native membe
   const dashboardGate = read("../app/dashboard/layout.jsx");
   assert.match(provider, /new EthersAdapter\(\)/);
   assert.match(provider, /networks: \[mainnet, polygon, solana\]/);
-  assert.match(provider, /defaultNetwork: mainnet/);
+  assert.match(provider, /defaultNetwork: polygon/);
   assert.match(provider, /defaultAccountTypes: \{ eip155: "eoa", solana: "eoa" \}/);
   assert.match(provider, /email: true/);
   assert.match(provider, /socials: \["google", "apple"\]/);

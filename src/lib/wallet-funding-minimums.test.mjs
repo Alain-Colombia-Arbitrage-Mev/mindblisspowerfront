@@ -13,7 +13,8 @@ const input = (kind, amount) => ({ requestId: reference, walletAddress: address,
   ...(kind === 'administrative' ? { serviceProvider: 'TRANSAK' } : {}) });
 const ack = (kind, amount) => ({ ...identity(kind), checkoutReference: reference, requestedAmount: amount, createdAt,
   status: kind === 'personal' ? 'initiated' : 'session_created', ...(kind === 'personal'
-    ? { paymentMethodType: 'CREDIT_DEBIT_CARD', allowedProviders: ['SWAPPED'] }
+    ? { paymentMethodType: 'CREDIT_DEBIT_CARD', allowedProviders: ['SWAPPED'], destinationCurrencyCode: 'USDT_POLYGON',
+      destination: { address, asset: 'USDT', network: 'polygon', chainId: 137 } }
     : { checkoutUrl: 'https://sb.meldcrypto.com/?token=synthetic' }) });
 
 test('personal USD requests use 30 to 15000 while administrative requests retain 50 to 25000 and exact cents', () => {
@@ -66,6 +67,7 @@ test('Swapped and Mercuryo keep independent route limits instead of sharing the 
   const route = (serviceProvider, minimumAmount) => ({ serviceProvider, paymentMethods: [
     { method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount, maximumAmount: 10000, minimumUsd: minimumAmount, maximumUsd: 10000 }] });
   const discovery = { ...identity('personal'), country: 'MX', sourceCurrencyCode: 'USD', paymentMethods: ['CREDIT_DEBIT_CARD'],
+    destinationCurrencyCode: 'USDT_POLYGON', network: 'polygon', chainId: 137,
     routes: [route('SWAPPED', 7.81), route('MERCURYO', 128.04)] };
   const parsed = personalProductionOptions(discovery);
   assert.deepEqual(parsed.routes, [route('SWAPPED', 30), route('MERCURYO', 128.04)]);

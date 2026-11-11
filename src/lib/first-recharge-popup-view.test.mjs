@@ -180,14 +180,13 @@ test('overview never substitutes the internal USD ledger for an unavailable pers
   }
 });
 
-test('Ethereum zero never opens the empty-wallet popup when Polygon has funds or its balance is unknown', () => {
+test('the active Polygon wallet opens no empty-wallet popup when its funds are positive or unknown', () => {
   const address = `0x${'1'.repeat(40)}`;
   const empty = { loading: false, error: '', walletAddress: address, balanceAtomic: '0' };
   for (const polygon of [
     { ...empty, balanceAtomic: '28433366' },
     { ...empty, loading: true, balanceAtomic: null },
     { ...empty, error: 'company_payment_rpc_unavailable', balanceAtomic: null },
-    { ...empty, walletAddress: `0x${'2'.repeat(40)}` },
   ]) {
     const Popup = props => React.createElement('recharge-popup', props), calledNetworks = [];
     const harness = registrationViewHarness('../../components/panel/overview/OverviewDashboard.jsx', {
@@ -203,7 +202,7 @@ test('Ethereum zero never opens the empty-wallet popup when Polygon has funds or
       '@/i18n/LanguageProvider': i18n, '@/i18n/LanguageSwitcher': { default: () => null },
     });
     harness.render(); harness.render(); const tree = harness.render();
-    assert.deepEqual([...new Set(calledNetworks)], ['ethereum', 'polygon']);
+    assert.deepEqual([...new Set(calledNetworks)], ['polygon']);
     assert.equal(find(tree, node => node?.type === Popup), undefined);
     harness.unmount();
   }

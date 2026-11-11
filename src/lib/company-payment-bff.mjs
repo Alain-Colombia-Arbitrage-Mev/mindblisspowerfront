@@ -16,7 +16,7 @@ const safeErrors = new Set(['unauthenticated', 'invalid_origin', 'invalid_reques
   'company_payment_unconfigured', 'company_payment_wallet_not_linked', 'company_payment_insufficient_balance', 'company_payment_pending',
   'company_payment_request_already_used', 'company_payment_transaction_pending', 'company_payment_transaction_mismatch', 'company_payment_rate_limited',
   'company_payment_forbidden', 'company_payment_hash_reused', 'company_payment_pending_exists', 'company_payment_rpc_unavailable',
-  'company_payment_invalid_transition', 'company_payment_confirmation_conflict', 'company_payment_network_retired']);
+  'company_payment_invalid_transition', 'company_payment_confirmation_conflict', 'company_payment_network_retired', 'company_payment_network_changed']);
 
 async function inputBody(request) {
   const reader = request.body?.getReader();

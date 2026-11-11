@@ -1,4 +1,4 @@
-import { administrativeSandboxOptions, personalProductionOptions, fundingAcknowledgement, fundingHistory, fundingInput, fundingStatus, fundingCurrencyCode, fundingSourceSupported, FUNDING_UUID } from './wallet-funding-contract.mjs';
+import { administrativeSandboxOptions, personalProductionOptions, fundingAcknowledgement, fundingHistory, fundingInput, fundingStatus, fundingCurrencyCode, fundingSourceSupported, FUNDING_UUID, PERSONAL_FUNDING_DESTINATION } from './wallet-funding-contract.mjs';
 import { browserRequestDeadline } from './browser-request-deadline.mjs';
 
 export function fundingRequestId() { return crypto.randomUUID(); }
@@ -29,7 +29,7 @@ export async function readAdministrativeSandboxOptions(country, serviceProvider,
 /** Production discovery uses Reown's merchant configuration, never administrative MELD credentials. */
 /** @param {string} country @param {{signal?: AbortSignal, sourceCurrencyCode?: string}} [options] */
 export async function readPersonalFundingOptions(country, { signal, sourceCurrencyCode = 'USD' } = {}) {
-  if (!personalProductionOptions({ walletKind: 'personal', environment: 'production', provider: 'reown', country, sourceCurrencyCode, paymentMethods: [], routes: [] })) {
+  if (!personalProductionOptions({ walletKind: 'personal', environment: 'production', provider: 'reown', country, sourceCurrencyCode, paymentMethods: [], routes: [], ...PERSONAL_FUNDING_DESTINATION })) {
     throw new Error('invalid_request');
   }
   const deadline = browserRequestDeadline(signal, 25_000);
@@ -93,7 +93,8 @@ async function createFunding(input, kind, path, { signal } = {}) {
   const data = fundingAcknowledgement(await request(path, { method: 'POST', signal, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }), kind);
   if (!data || data.requestedAmount !== body.amount || data.checkoutReference !== body.requestId
     || fundingCurrencyCode(data.sourceCurrencyCode) !== fundingCurrencyCode(body.sourceCurrencyCode)
-    || (kind === 'personal' && (!('paymentMethodType' in data) || data.paymentMethodType !== body.paymentMethodType))) throw new Error('funding_unavailable');
+    || (kind === 'personal' && (!('paymentMethodType' in data) || data.paymentMethodType !== body.paymentMethodType
+      || !('destination' in data) || data.destination.address.toLowerCase() !== body.walletAddress.toLowerCase()))) throw new Error('funding_unavailable');
   return data;
 }
 

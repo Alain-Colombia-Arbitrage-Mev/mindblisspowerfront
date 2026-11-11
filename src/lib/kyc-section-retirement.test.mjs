@@ -44,15 +44,15 @@ function moduleAt(relative, mocks = {}) {
   return module.exports;
 }
 
-test("actual member sidebar removes identity verification while preserving account, plans, network and support navigation", () => {
+test("actual member sidebar hides identity verification and new memberships while preserving wallet, network and support navigation", () => {
   const { default: Sidebar } = moduleAt("../components/panel/PanelSidebar.jsx");
   const html = renderToStaticMarkup(React.createElement(Sidebar, {
     pathname: "/dashboard/referrals",
     member: { name: "Test Member", email: "member@example.test" },
   }));
-  assert.doesNotMatch(html, /\/dashboard\/kyc|Verificación de identidad|KYC|Identidad verificada/);
+  assert.doesNotMatch(html, /\/dashboard\/kyc|Verificación de identidad|KYC|Identidad verificada|\/dashboard\/packages/);
   assert.doesNotMatch(html, /wallet-administrative|administrativeWallet|Wallet administrativa|wallet\.mindblisspower\.com/);
-  for (const href of ["/dashboard", "/dashboard/referrals", "/dashboard/support", "/dashboard/packages",
+  for (const href of ["/dashboard", "/dashboard/referrals", "/dashboard/support", "/dashboard/wallet-personal/requests",
     "/dashboard/payments", "/dashboard/profile", "/dashboard/rank", "/dashboard/network"]) {
     assert.ok(html.includes(`href="${href}"`), `missing retained destination ${href}`);
   }

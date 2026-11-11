@@ -36,14 +36,11 @@ const ReownRechargeDialog = dynamic(() => import("./ReownRechargeDialog"), { ssr
 
 export default function OverviewDashboard() {
   const { t } = useI18n();
-  const ethereumWallet = usePersonalWalletBalance('', 'ethereum');
   const polygonWallet = usePersonalWalletBalance('', 'polygon');
-  const ethereumBalance = personalCompanyPaymentAtomic(ethereumWallet.balanceAtomic, true);
   const polygonBalance = personalCompanyPaymentAtomic(polygonWallet.balanceAtomic, true);
-  const ethereumReady = !ethereumWallet.loading && !ethereumWallet.error && /^0x[0-9a-f]{40}$/i.test(ethereumWallet.walletAddress || "") && ethereumBalance !== null;
   const polygonReady = !polygonWallet.loading && !polygonWallet.error && /^0x[0-9a-f]{40}$/i.test(polygonWallet.walletAddress || "") && polygonBalance !== null;
-  const emptyWallet = ethereumReady && polygonReady && ethereumWallet.walletAddress === polygonWallet.walletAddress && ethereumBalance === 0n && polygonBalance === 0n;
-  const fundedWallet = (ethereumReady && ethereumBalance > 0n) || (polygonReady && polygonBalance > 0n);
+  const emptyWallet = polygonReady && polygonBalance === 0n;
+  const fundedWallet = polygonReady && polygonBalance > 0n;
   const [summary, setSummary] = useState(null);
   const [network, setNetwork] = useState(null);
   const [summaryStatus, setSummaryStatus] = useState("loading");
@@ -143,7 +140,6 @@ export default function OverviewDashboard() {
           <section className="executive-card mb-membership-summary">
             <div className="mb-membership-header"><h2>{t("overview.myMemberships")}</h2><span>{summaryStatus === "ready" ? t("overview.updated") : t("overview.pending")}</span></div>
             <div className="mb-membership-count"><strong>{summaryStatus === "ready" ? String(summary?.active_packages ?? 0) : "—"}</strong><p>{summary?.active_packages === 1 ? t("overview.oneMembership") : t("overview.memberships")}</p></div>
-            <Link className="executive-button" href="/dashboard/packages">{t("overview.reviewMembership")} <ArrowRight size={14} /></Link>
           </section>
         </div>
         <OverviewDiscoveryCard />

@@ -16,6 +16,7 @@ const env = { NODE_ENV: 'production', AUTH_PROVIDER: 'better-auth', AUTH_BFF_SHA
 const input = (amount, patch = {}) => ({ requestId: reference, walletAddress: address, country: 'US', sourceCurrencyCode: 'USD',
   amount, paymentMethodType: 'CREDIT_DEBIT_CARD', ...patch });
 const ack = (amount, patch = {}) => ({ checkoutReference: reference, walletKind: 'personal', environment: 'production', provider: 'reown',
+  destinationCurrencyCode: 'USDT_POLYGON', destination: { address, asset: 'USDT', network: 'polygon', chainId: 137 },
   status: 'initiated', requestedAmount: amount, sourceCurrencyCode: 'USD', paymentMethodType: 'CREDIT_DEBIT_CARD',
   allowedProviders: ['SWAPPED'], createdAt, ...patch });
 const status = (amount, patch = {}) => ({ ...ack(amount), country: 'US', requestStatus: 'initiated',
@@ -24,6 +25,7 @@ const status = (amount, patch = {}) => ({ ...ack(amount), country: 'US', request
 const route = (serviceProvider, minimumAmount, maximumAmount, method = 'CREDIT_DEBIT_CARD') => ({ serviceProvider, paymentMethods: [
   { method, currencyCode: 'USD', minimumAmount, maximumAmount, minimumUsd: minimumAmount, maximumUsd: maximumAmount }] });
 const discovery = routes => ({ walletKind: 'personal', environment: 'production', provider: 'reown', country: 'US', sourceCurrencyCode: 'USD',
+  destinationCurrencyCode: 'USDT_POLYGON', network: 'polygon', chainId: 137,
   paymentMethods: [...new Set(routes.flatMap(route => route.paymentMethods.map(method => method.method)))], routes });
 
 test('new personal USD requests, acknowledgements and locked Reown handoff agree on 30 to 15000 without a testing exception', async () => {

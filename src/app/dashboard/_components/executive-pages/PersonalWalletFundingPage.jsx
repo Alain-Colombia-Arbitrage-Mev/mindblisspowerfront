@@ -10,7 +10,6 @@ import { useI18n } from "@/i18n/LanguageProvider";
 import { personalFundingFailure } from "@/lib/personal-funding-errors.mjs";
 import { FUNDING_UUID } from "@/lib/wallet-funding-contract.mjs";
 import { PersonalFundingForm } from "./WalletFundingForm";
-import WalletFundingHistory from "./WalletFundingHistory";
 import WalletFundingStatus from "./WalletFundingStatus";
 import { WalletActionError, WalletAddress, WalletFundingScreen, walletFailureDiagnostic } from "./WalletFundingUI";
 import styles from "./wallet-funding.module.css";
@@ -79,8 +78,6 @@ export function PersonalWalletFunding() {
     return result;
   }
 
-  function selectStatus(reference) { setSelectedReference(reference); setStatusFocusKey(value => value + 1); }
-
   function cancelConnection() {
     reown.cancelOnramp();
     setActionBusy(false);
@@ -92,7 +89,10 @@ export function PersonalWalletFunding() {
     connected: "walletPage.connectedPending", verifying: "funding.verifyingWallet", verified: "funding.walletVerified", disconnected: "funding.connectWallet" }[state];
 
   return <WalletFundingScreen title={t("walletPage.personalTitle")} subtitle={t("walletPage.personalCopy")}>
-    <Link href="/dashboard/wallet-personal/pay" className="executive-button">{t("companyPayment.title")}</Link>
+    <div className="flex flex-wrap gap-3">
+      <Link href="/dashboard/wallet-personal/pay" className="executive-button">{t("companyPayment.title")}</Link>
+      <Link href="/dashboard/wallet-personal/requests" className="executive-button">{t("funding.history")}</Link>
+    </div>
     <div className={`${styles.flowLayout}${!verified ? ` ${styles.setupRequired}` : ""}`} id="personal-wallet">
       <section className={`executive-panel ${styles.formPanel}`} aria-label={t("walletPage.addFundsAction")}>
         <PersonalFundingForm disabled={!verified} busy={busy} onContinue={openProvider} onSelectionChange={clearSelectedStatus} destinationAddress={verified ? reown.linkedAddress : ""} />
@@ -118,7 +118,6 @@ export function PersonalWalletFunding() {
       </aside>
     </div>
     {selectedReference ? <WalletFundingStatus walletKind="personal" checkoutReference={selectedReference} focusKey={statusFocusKey} /> : null}
-    <section className="executive-panel"><WalletFundingHistory walletKind="personal" refreshKey={reown.fundingRevision} onSelectRequest={selectStatus} /></section>
   </WalletFundingScreen>;
 }
 
@@ -127,6 +126,6 @@ export function personalOnrampError(code, t) {
     rejected: "recharge.providerRejected", connection: "recharge.providerConnection", link_unavailable: "funding.personalLinkFailed",
     unavailable: "funding.personalLinkFailed", identity: "funding.identityUnavailable", rate_limited: "funding.rateLimited",
     method: "funding.methodUnavailable", intent: "funding.requestRegistrationFailed", cancelled: "funding.requestCancelled", origin: "funding.sessionOriginFailed",
-    provider: "funding.checkoutUnavailable", valuation: "funding.speiTemporarilyUnavailable", connection_timeout: "funding.connectionTimeout" };
+    provider: "funding.checkoutUnavailable", valuation: "funding.speiTemporarilyUnavailable", connection_timeout: "funding.connectionTimeout", network_changed: "funding.networkChanged" };
   return t(keys[code] || "funding.checkoutUnavailable");
 }

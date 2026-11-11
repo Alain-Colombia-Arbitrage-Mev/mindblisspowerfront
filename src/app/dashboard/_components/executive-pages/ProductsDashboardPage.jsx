@@ -9,7 +9,6 @@ products: {
     eyebrow: "Productos",
     title: "Productos",
     subtitle: "Catalogo operativo de productos y servicios disponibles para miembros de Mindbliss Power.",
-    action: { label: "Ver membresías", href: "/dashboard/packages", icon: Package },
     metrics: [
       { label: "Productos", value: "3", detail: "categorias", icon: ShoppingBag, tone: "accent" },
       { label: "Activos", value: "1", detail: "disponible", icon: CheckCircle2, tone: "success" },

@@ -212,7 +212,7 @@ function FundingSubmit({ disabled, busy }) {
 export function FundingDestination({ address }) {
   const { t } = useI18n();
   const id = useId();
-  return <div className={styles.destinationReview}><label htmlFor={`${id}-destination`}>{t("funding.reviewDestination")}<small>USDT · Ethereum</small></label>
+  return <div className={styles.destinationReview}><label htmlFor={`${id}-destination`}>{t("funding.reviewDestination")}<small>USDT · Polygon</small></label>
     <input id={`${id}-destination`} type="text" readOnly value={address} dir="ltr" title={address || undefined}
       aria-describedby={`${id}-destination-help`} placeholder={t("funding.destinationReviewEmpty")} />
     <small id={`${id}-destination-help`} className={address ? "sr-only" : undefined}>{address ? t("funding.destinationReviewCopy") : t("funding.destinationReviewEmpty")}</small>

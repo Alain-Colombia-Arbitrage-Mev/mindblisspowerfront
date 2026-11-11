@@ -3,7 +3,7 @@ import { betterAuthConfig, betterAuthCookies, trustedAuthClientIp } from './bett
 import { coreFetch, runtimeEnvironment } from './cloudflare-runtime.mjs';
 import { memberMutationError } from './member-mutation-policy.mjs';
 import { boundedServiceRequest } from './private-service-request.mjs';
-import { administrativeSandboxOptions, personalProductionOptions, fundingAcknowledgement, fundingHistory, fundingInput, fundingStatus, fundingCurrencyCode, fundingSourceSupported, FUNDING_UUID } from './wallet-funding-contract.mjs';
+import { administrativeSandboxOptions, personalProductionOptions, fundingAcknowledgement, fundingHistory, fundingInput, fundingStatus, fundingCurrencyCode, fundingSourceSupported, FUNDING_UUID, PERSONAL_FUNDING_DESTINATION } from './wallet-funding-contract.mjs';
 import { browserRequestDeadline } from './browser-request-deadline.mjs';
 
 const reply = (body, status = 200) => Response.json(body, { status, headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' } });
@@ -63,7 +63,7 @@ export async function handleWalletFunding(request, action, {
     const url = new URL(request.url);
     const country = url.searchParams.get('country');
     const sourceCurrencyCode = url.searchParams.has('sourceCurrencyCode') ? url.searchParams.get('sourceCurrencyCode') : 'USD';
-    optionsContext = personalProductionOptions({ walletKind: 'personal', environment: 'production', provider: 'reown', country, sourceCurrencyCode, paymentMethods: [], routes: [] });
+    optionsContext = personalProductionOptions({ walletKind: 'personal', environment: 'production', provider: 'reown', country, sourceCurrencyCode, paymentMethods: [], routes: [], ...PERSONAL_FUNDING_DESTINATION });
     if (!optionsContext || [...url.searchParams.keys()].some(key => !['country', 'sourceCurrencyCode'].includes(key))
       || url.searchParams.getAll('country').length !== 1 || url.searchParams.getAll('sourceCurrencyCode').length > 1) return reply({ error: 'invalid_request' }, 400);
     path = `/api/member/wallet-funding/personal/options?country=${country}${sourceCurrencyCode === 'USD' ? '' : `&sourceCurrencyCode=${sourceCurrencyCode}`}`;
@@ -118,7 +118,7 @@ export async function handleWalletFunding(request, action, {
       const safeErrors = new Set(['invalid_request', 'unauthenticated', 'invalid_origin', 'wallet_not_linked', 'wallet_not_assigned',
         'wallet_funding_forbidden', 'wallet_funding_rate_limited', 'wallet_funding_request_already_used',
         'wallet_funding_unconfigured', 'wallet_funding_provider_unavailable', 'wallet_funding_unavailable',
-        'wallet_funding_provider_authentication_unavailable', 'wallet_funding_valuation_unavailable',
+        'wallet_funding_provider_authentication_unavailable', 'wallet_funding_valuation_unavailable', 'wallet_funding_network_changed',
         'wallet_funding_method_unavailable', 'wallet_funding_amount_out_of_range', 'wallet_funding_amount_unavailable']);
       diagnostic(action, 'upstream_response', result.status, safeErrors.has(result.data?.error) ? result.data.error : 'unclassified');
       return reply({ error: safeErrors.has(result.data?.error) ? result.data.error : 'funding_unavailable',
@@ -134,10 +134,12 @@ export async function handleWalletFunding(request, action, {
     if (body && (!('requestedAmount' in safe) || !('checkoutReference' in safe) || safe.requestedAmount !== body.amount
       || fundingCurrencyCode(safe.sourceCurrencyCode) !== fundingCurrencyCode(body.sourceCurrencyCode)
       || safe.checkoutReference !== body.requestId || (kind === 'personal' && (!('paymentMethodType' in safe)
-        || safe.paymentMethodType !== body.paymentMethodType)))) return reply({ error: 'funding_unavailable' }, 502);
+        || safe.paymentMethodType !== body.paymentMethodType || !('destination' in safe)
+        || safe.destination.address.toLowerCase() !== body.walletAddress.toLowerCase())))) return reply({ error: 'funding_unavailable' }, 502);
     if (optionsContext && (!('country' in safe) || safe.country !== optionsContext.country
       || !('sourceCurrencyCode' in safe) || safe.sourceCurrencyCode !== optionsContext.sourceCurrencyCode
-      || (action === 'options' && (!('serviceProvider' in safe) || safe.serviceProvider !== optionsContext.serviceProvider)))) return reply({ error: 'funding_unavailable' }, 502);
+      || (action === 'options' && (!('serviceProvider' in safe) || !('serviceProvider' in optionsContext)
+        || safe.serviceProvider !== optionsContext.serviceProvider)))) return reply({ error: 'funding_unavailable' }, 502);
     return reply(safe);
   } catch (error) {
     const code = ['service_request_cancelled', 'private_api_unavailable', 'worker_request_scope_required'].includes(error?.message)

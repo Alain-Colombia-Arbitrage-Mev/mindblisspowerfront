@@ -2,8 +2,8 @@
 
 import {
   ArrowUpRight,
+  History,
   LayoutDashboard,
-  Layers,
   LogOut,
   Network,
   Trophy,
@@ -24,8 +24,8 @@ const NAV_GROUPS = [
   { label: "nav.account", items: [
     { icon: LayoutDashboard, label: "nav.summary", href: "/dashboard", exact: true, also: ["/dashboard/home"] },
     { icon: Wallet, label: "nav.wallet", href: "/dashboard/payments", exact: true, also: ["/dashboard/wallet-personal"] },
+    { icon: History, label: "funding.history", href: "/dashboard/wallet-personal/requests" },
     { icon: ArrowUpRight, label: "companyPayment.transferAction", href: "/dashboard/wallet-personal/pay" },
-    { icon: Layers, label: "nav.memberships", href: "/dashboard/packages" },
   ] },
   { label: "nav.communityGroup", items: [
     { icon: Users, label: "nav.community", href: "/dashboard/referrals" },

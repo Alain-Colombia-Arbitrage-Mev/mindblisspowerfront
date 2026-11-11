@@ -329,10 +329,7 @@ test('the personal page selects only its acknowledged request and exposes its ba
   assert.equal(find(tree, 'WalletFundingStatus').props.walletKind, 'personal');
   assert.equal(find(tree, 'WalletFundingStatus').props.checkoutReference, statusReference);
   assert.equal(find(tree, 'WalletFundingStatus').props.focusKey, 0);
-  find(tree, 'WalletFundingHistory').props.onSelectRequest(secondStatusReference);
-  tree = personal.render();
-  assert.equal(find(tree, 'WalletFundingStatus').props.checkoutReference, secondStatusReference);
-  assert.equal(find(tree, 'WalletFundingStatus').props.focusKey, 1);
+  assert.equal(find(tree, 'WalletFundingHistory'), undefined, 'request history lives in its own wallet submenu');
 
   let personalTree = personal.render();
   const clearPersonal = find(personalTree, 'PersonalFundingForm').props.onSelectionChange;
@@ -342,10 +339,8 @@ test('the personal page selects only its acknowledged request and exposes its ba
   assert.equal(find(personalTree, 'PersonalFundingForm').props.onSelectionChange, clearPersonal);
   assert.equal(find(personalTree, 'PersonalFundingForm').props.disabled, false, 'editing does not revoke backend wallet verification');
   assert.equal(find(personalTree, 'PersonalFundingForm').props.destinationAddress, personalStatus.destination.address);
-  assert.equal(find(personalTree, 'WalletFundingHistory').props.refreshKey, 0);
-  find(personalTree, 'WalletFundingHistory').props.onSelectRequest(secondStatusReference);
-  assert.equal(find(personal.render(), 'WalletFundingStatus').props.checkoutReference, secondStatusReference);
-  assert.equal(personalSessions, 2, 'history and local field edits never post another personal purchase');
+  assert.equal(find(personalTree, 'WalletFundingHistory'), undefined);
+  assert.equal(personalSessions, 2, 'local field edits never post another personal purchase');
 });
 
 test('a history status action selects the exact request for a read without changing its recorded payment status', async t => {
@@ -735,10 +730,10 @@ test('explicit funding edits clear a stale provider error without reconnecting o
   assert.equal(find(tree, 'PersonalFundingForm').props.disabled, false);
 });
 
-test('personal funding review uses Ethereum while old funding records retain Polygon', () => {
+test('new personal funding review uses Polygon while old funding records retain their recorded network', () => {
   const harness = formHarness('PersonalFundingForm', {});
   const destination = harness.exports.FundingDestination({ address: personalStatus.destination.address });
-  assert.match(renderToStaticMarkup(destination), /USDT · Ethereum/);
+  assert.match(renderToStaticMarkup(destination), /USDT · Polygon/);
   const { currentFundingView, WalletFundingStatusView } = load('WalletFundingStatus.jsx', statusMocks(() => {}));
   for (const [network, chainId, label] of [['ethereum', 1, 'Ethereum'], ['polygon', 137, 'Polygon']]) {
     const record = { ...personalStatus, destination: { ...personalStatus.destination, network, chainId } };

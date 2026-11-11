@@ -11,7 +11,7 @@ export default function WalletFundingPanels() {
   const { t } = useI18n();
   return <div className={styles.destinations} aria-label={t("walletPage.fundsTitle")}>
     <WalletDestination icon={Wallet} title={t("walletPage.personalWalletLabel")} copy={t("funding.personalDestination")}
-      network="Ethereum" href="/dashboard/wallet-personal" />
+      network="Polygon" href="/dashboard/wallet-personal" />
   </div>;
 }
 

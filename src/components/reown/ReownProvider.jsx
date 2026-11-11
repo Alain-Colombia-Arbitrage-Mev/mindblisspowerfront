@@ -66,7 +66,7 @@ if (configured && walletMetadata) {
     adapters: [new EthersAdapter(), new SolanaAdapter()],
     projectId,
     networks: [mainnet, polygon, solana],
-    defaultNetwork: mainnet,
+    defaultNetwork: polygon,
     defaultAccountTypes: { eip155: "eoa", solana: "eoa" },
     metadata: walletMetadata,
     enableEIP6963: true,
@@ -385,7 +385,9 @@ function ConfiguredReownProvider({ children }) {
       scope.assertActive();
       if (!mounted.current) throw new DOMException("Aborted", "AbortError");
       if (intent.checkoutReference !== requestId || intent.requestedAmount !== requestedAmount
-        || (intent.sourceCurrencyCode ?? 'USD') !== sourceCurrencyCode || intent.paymentMethodType !== selection.paymentMethodType) {
+        || (intent.sourceCurrencyCode ?? 'USD') !== sourceCurrencyCode || intent.paymentMethodType !== selection.paymentMethodType
+        || intent.destinationCurrencyCode !== 'USDT_POLYGON' || intent.destination?.asset !== 'USDT' || intent.destination?.network !== 'polygon'
+        || intent.destination?.chainId !== 137 || !sameAddress(intent.destination?.address, verifiedAddress)) {
         throw new Error('wallet_funding_invalid_acknowledgement');
       }
       setFundingRevision(current => current + 1);

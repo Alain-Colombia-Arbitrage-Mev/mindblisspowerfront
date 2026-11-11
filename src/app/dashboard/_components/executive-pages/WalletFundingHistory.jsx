@@ -6,7 +6,7 @@ import { useI18n } from "@/i18n/LanguageProvider";
 import { readWalletFundingHistory } from "@/lib/wallet-funding-client.mjs";
 import styles from "./wallet-funding.module.css";
 
-export default function WalletFundingHistory({ walletKind, refreshKey, onSelectRequest = undefined }) {
+export default function WalletFundingHistory({ walletKind, refreshKey, onSelectRequest = undefined, showHeading = true }) {
   const { t, locale } = useI18n();
   const [revision, setRevision] = useState(0);
   const [state, setState] = useState({ loading: true, error: false, records: [] });
@@ -23,7 +23,7 @@ export default function WalletFundingHistory({ walletKind, refreshKey, onSelectR
   if (walletKind !== "personal") return null;
   const labels = { initiated: "funding.initiated", session_created: "funding.sessionCreated", unavailable: "funding.unavailable", failed: "funding.failed" };
   return <section className={`mb-wallet-funding-history ${styles.history}`} aria-label={t("funding.history")}>
-    <h3 className="executive-section-title">{t("funding.history")}</h3>
+    {showHeading ? <h3 className="executive-section-title">{t("funding.history")}</h3> : null}
     <p className="mb-onramp-disclosure">{t("funding.personalHistoryCopy")}</p>
     {state.loading ? <p role="status" className="mb-onramp-disclosure">{t("common.loading")}</p>
       : state.error ? <div role="status"><p className="mb-onramp-disclosure">{t("funding.historyError")}</p><button type="button"

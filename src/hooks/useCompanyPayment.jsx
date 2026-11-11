@@ -25,6 +25,7 @@ export function companyPaymentErrorKey(failure) {
     company_payment_wallet_not_linked: "walletMismatch", unauthenticated: "connectCopy", company_payment_transaction_pending: "pendingCopy",
     company_payment_transaction_mismatch: "paymentFailed", company_payment_hash_reused: "paymentFailed",
     company_payment_network_retired: "networkUnavailable",
+    company_payment_network_changed: "networkChanged",
   };
   return `companyPayment.${keys[code] || "networkUnavailable"}`;
 }

@@ -8,10 +8,10 @@ const projectId = "a".repeat(32);
 const checkoutReference = "d8a4c010-cc33-44da-a297-8b3c6440f491";
 const providerUrl = "https://meldcrypto.com/?publicKey=public-reown-key&destinationCurrencyCode=USDC";
 
-test("the retained Meld helper binds Ethereum USDT, the public personal $30 floor, region and provider", () => {
+test("the retained Meld helper binds Polygon USDT, the public personal $30 floor, region and provider", () => {
   const url = new URL(buildMeldOnrampUrl({ providerUrl, address, projectId, checkoutReference, countryCode: "CO", locale: "es-CO", serviceProvider: "TOPPER" }));
   assert.equal(url.origin, "https://meldcrypto.com");
-  assert.equal(url.searchParams.get("destinationCurrencyCode"), "USDT");
+  assert.equal(url.searchParams.get("destinationCurrencyCode"), "USDT_POLYGON");
   assert.equal(url.searchParams.get("sourceCurrencyCode"), "USD");
   assert.equal(url.searchParams.get("sourceAmount"), "30");
   assert.equal(url.searchParams.get("countryCode"), "CO");

@@ -207,3 +207,36 @@ test('legacy verification errors refer to the original Polygon network', () => {
   assert.ok(html.includes(t('legacyNetworkUnavailable')));
   assert.ok(!html.includes(t('networkUnavailable')));
 });
+
+test('the active transfer page starts on sponsored Polygon without exposing an Ethereum selector or a new direct-payment form', () => {
+  function SponsoredForm() { return null; }
+  function PreviousPayments() { return null; }
+  const relay = { stage: 'form', payment: null, preview: null, history: [], historyLoading: false, busy: false, refresh() {} };
+  const Router = load('PersonalTransferRouter.jsx', {
+    'next/link': { default: ({ children }) => React.createElement('a', null, children) },
+    '@/components/reown/ReownContext': { useReownWallet: () => reown },
+    '@/hooks/usePolygonRelay': { usePolygonRelay: () => relay },
+    '@/lib/polygon-relay-contract.mjs': { polygonRelayView: () => null },
+    './SponsoredTransferPanel': { SponsoredTransferForm: SponsoredForm, SponsoredTransferReview: () => null, SponsoredTransferStatus: () => null },
+  }).default;
+  const tree = Router({ DirectPayment: PreviousPayments });
+  const forms = findAll(tree, node => node?.type === SponsoredForm);
+  assert.equal(forms.length, 1); assert.equal(forms[0].props.network, 'polygon'); assert.equal(forms[0].props.flow, relay);
+  assert.equal(findAll(tree, node => node?.props?.role === 'radiogroup').length, 0);
+  assert.equal(findAll(tree, node => node?.type === PreviousPayments)[0].props.historyOnly, true);
+});
+
+test('previous direct payments remain readable and verifiable without a new payment or signature action', () => {
+  for (const record of [payment(), payment('submitted'), payment('confirmed'), legacyPayment('submitted')]) {
+    activeFlow = flow(record, { stage: 'review', history: [record] });
+    const page = PersonalCompanyPayment({ historyOnly: true });
+    assert.equal(findAll(page, node => node?.type === forms.CompanyPaymentForm || node?.type === forms.CompanyPaymentReview).length, 0);
+    const status = findAll(page, node => node?.type === CompanyPaymentStatus)[0]; assert.equal(status.props.readOnly, true);
+    const detail = CompanyPaymentStatus(status.props);
+    assert.equal(button(detail, 'resume'), undefined); assert.equal(button(detail, 'reconnect'), undefined);
+    assert.equal(button(detail, 'newPayment'), undefined); assert.equal(button(detail, 'confirmInWallet'), undefined);
+    if (record.status !== 'prepared') { assert.ok(button(detail, record.chainId === 137 ? 'legacyVerify' : 'verify')); }
+    assert.ok(renderToStaticMarkup(page).includes(t('legacyHistoryTitle')));
+    assert.deepEqual(activeFlow.calls, []);
+  }
+});

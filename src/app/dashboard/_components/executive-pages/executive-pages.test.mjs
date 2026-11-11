@@ -221,14 +221,14 @@ test('finance renders only the independent Ethereum USDT read and never falls ba
   }
 });
 
-test('finance keeps Ethereum and Polygon USDT balances labelled separately without summing them', () => {
+test('finance shows the active Polygon balance without adding or displaying historical Ethereum funds', () => {
   const walletAddress = `0x${'1'.repeat(40)}`;
   const base = { loading: false, error: '', walletAddress, nativeBalanceAtomic: '0', refresh() {} };
   const html = render(loadPages({ summary: { loading: false, error: '', data: { wallet_balance_usd: '987654.32' } },
     walletBalances: { ethereum: { ...base, balanceAtomic: '10000000' }, polygon: { ...base, balanceAtomic: '28433366' } } }).FinanceDashboardPage);
-  assert.match(html, /data-wallet-network="ethereum"[^]*?10 <span>USDT/);
+  assert.doesNotMatch(html, /data-wallet-network="ethereum"/);
   assert.match(html, /data-wallet-network="polygon"[^]*?28\.433366 <span>USDT/);
-  assert.equal((html.match(/data-wallet-network="ethereum"/g) || []).length, 1);
+  assert.equal((html.match(/data-wallet-network="ethereum"/g) || []).length, 0);
   assert.equal((html.match(/data-wallet-network="polygon"/g) || []).length, 1);
   assert.equal((html.match(/class="executive-card-label"/g) || []).length, 3);
   assert.match(html, /class="executive-grid three mb-6"/);

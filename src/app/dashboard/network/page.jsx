@@ -306,8 +306,8 @@ export default function NetworkPage() {
               {t("common.update")}
             </button>
             {state.summary && !paymentReceived ? (
-              <Link href="/dashboard/packages" className="inline-flex min-h-10 items-center justify-center rounded-lg px-3 text-xs font-bold no-underline" style={{ background: "var(--vp-accent)", color: "var(--vp-on-accent)" }}>
-                {t("networkPage.completeMembership")}
+              <Link href="/dashboard/wallet-personal/pay" className="inline-flex min-h-10 items-center justify-center rounded-lg px-3 text-xs font-bold no-underline" style={{ background: "var(--vp-accent)", color: "var(--vp-on-accent)" }}>
+                {t("companyPayment.transferAction")}
               </Link>
             ) : null}
           </div>

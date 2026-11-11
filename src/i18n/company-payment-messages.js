@@ -1,5 +1,7 @@
 export const companyPaymentMessages = {
   es: { companyPayment: {
+    networkChanged: "Los nuevos pagos usan USDT en Polygon. Vuelve a Transferir y revisa el pago en esa red.",
+    legacyHistoryTitle: "Pagos anteriores · consulta y seguimiento",
     activityTitle: "Actividad de transferencias", activityCopy: "Los registros del servidor y los reportes de tu billetera se muestran por separado. Un reporte de la billetera no confirma que el pago fue recibido.",
     activityCanonical: "Registro del servidor", activityClient: "Reporte de la billetera", activitySnapshot: "Estado anterior importado",
     activitySnapshotCopy: "La fecha indica cuándo importamos este registro, no cuándo ocurrió la transferencia.",
@@ -71,6 +73,8 @@ export const companyPaymentMessages = {
     legacyPreparedCopy: "Este borrador conserva su red original. Revisa el importe y los datos antes de confirmarlo en tu billetera.",
   } },
   en: { companyPayment: {
+    networkChanged: "New payments use USDT on Polygon. Return to Transfer and review the payment on that network.",
+    legacyHistoryTitle: "Previous payments · records and tracking",
     activityTitle: "Transfer activity", activityCopy: "Server records and wallet reports are shown separately. A wallet report does not confirm that a payment was received.",
     activityCanonical: "Server record", activityClient: "Wallet report", activitySnapshot: "Previous state imported",
     activitySnapshotCopy: "The date shows when this record was imported, not when the transfer occurred.",
@@ -142,6 +146,8 @@ export const companyPaymentMessages = {
     legacyPreparedCopy: "This draft keeps its original network. Review the amount and details before confirming it in your wallet.",
   } },
   ar: { companyPayment: {
+    networkChanged: "تستخدم المدفوعات الجديدة USDT عبر Polygon. ارجع إلى التحويل وراجع الدفع على هذه الشبكة.",
+    legacyHistoryTitle: "المدفوعات السابقة · السجلات والمتابعة",
     activityTitle: "نشاط التحويلات", activityCopy: "تُعرض سجلات الخادم وتقارير المحفظة بشكل منفصل. لا يؤكد تقرير المحفظة استلام الدفع.",
     activityCanonical: "سجل الخادم", activityClient: "تقرير المحفظة", activitySnapshot: "تم استيراد حالة سابقة",
     activitySnapshotCopy: "يشير التاريخ إلى وقت استيراد هذا السجل، وليس إلى وقت حدوث التحويل.",
@@ -213,6 +219,8 @@ export const companyPaymentMessages = {
     legacyPreparedCopy: "تحتفظ هذه المسودة بشبكتها الأصلية. راجع المبلغ والبيانات قبل تأكيدها في محفظتك.",
   } },
   zh: { companyPayment: {
+    networkChanged: "新付款使用 Polygon 网络的 USDT。请返回转账页面，在该网络上核对付款。",
+    legacyHistoryTitle: "历史付款 · 记录与跟踪",
     activityTitle: "转账活动", activityCopy: "服务器记录和钱包报告会分别显示。钱包报告并不代表付款已到账。",
     activityCanonical: "服务器记录", activityClient: "钱包报告", activitySnapshot: "已导入历史状态",
     activitySnapshotCopy: "此日期表示记录的导入时间，并非转账发生的时间。",

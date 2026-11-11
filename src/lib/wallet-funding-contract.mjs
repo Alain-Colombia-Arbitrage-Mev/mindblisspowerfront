@@ -7,6 +7,7 @@ const CURRENCY = /^[A-Z]{3}$/;
 const METHOD = /^[A-Z0-9_]{2,40}$/;
 const PROVIDERS = new Set(['TRANSAK', 'BANXA']);
 export const PERSONAL_FUNDING_PROVIDERS = Object.freeze(['SWAPPED', 'MERCURYO']);
+export const PERSONAL_FUNDING_DESTINATION = Object.freeze({ destinationCurrencyCode: 'USDT_POLYGON', network: 'polygon', chainId: 137 });
 const PERSONAL_PROVIDERS = new Set(PERSONAL_FUNDING_PROVIDERS);
 export const PERSONAL_FUNDING_MINIMUM_USD = PERSONAL_WALLET_MINIMUM_USD;
 export const PERSONAL_FUNDING_MAXIMUM_USD = PERSONAL_WALLET_MAXIMUM_USD;
@@ -118,7 +119,11 @@ export function fundingAcknowledgement(value, kind) {
     || value.allowedProviders.length < 1 || value.allowedProviders.length > 2
     || value.allowedProviders.some(provider => !PERSONAL_PROVIDERS.has(provider))
     || new Set(value.allowedProviders).size !== value.allowedProviders.length) return null;
-  return { ...safe, paymentMethodType: value.paymentMethodType, allowedProviders: [...value.allowedProviders] };
+  const destination = fundingDestination(value.destination, kind);
+  if (!destination || destination.network !== 'polygon' || destination.chainId !== 137
+    || value.destinationCurrencyCode !== PERSONAL_FUNDING_DESTINATION.destinationCurrencyCode) return null;
+  return { ...safe, destinationCurrencyCode: PERSONAL_FUNDING_DESTINATION.destinationCurrencyCode, destination,
+    paymentMethodType: value.paymentMethodType, allowedProviders: [...value.allowedProviders] };
 }
 
 function fundingDestination(value, kind) {
@@ -183,7 +188,11 @@ export function administrativeSandboxOptions(value) {
   return { ...safe, serviceProvider: value.serviceProvider };
 }
 
-export function personalProductionOptions(value) { return fundingOptions(value, 'personal'); }
+export function personalProductionOptions(value) {
+  if (!value || Object.entries(PERSONAL_FUNDING_DESTINATION).some(([key, expected]) => value[key] !== expected)) return null;
+  const safe = fundingOptions(value, 'personal');
+  return safe ? { ...safe, ...PERSONAL_FUNDING_DESTINATION } : null;
+}
 
 function fundingOptions(value, kind) {
   const administrative = kind === 'administrative';

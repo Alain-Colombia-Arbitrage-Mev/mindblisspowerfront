@@ -11,7 +11,8 @@ const input = { requestId, walletAddress: `0x${'1'.repeat(40)}`, country: 'US', 
 const ack = kind => ({ checkoutReference: requestId, walletKind: kind, environment: kind === 'personal' ? 'production' : 'sandbox',
   provider: kind === 'personal' ? 'reown' : 'meld', status: kind === 'personal' ? 'initiated' : 'session_created',
   requestedAmount: 100, createdAt: '2026-11-10T15:00:00.000Z', ...(kind === 'administrative' ? { checkoutUrl: 'https://sb.meldcrypto.com/?token=synthetic' }
-    : { paymentMethodType: input.paymentMethodType, allowedProviders: ['SWAPPED', 'MERCURYO'] }) });
+    : { paymentMethodType: input.paymentMethodType, allowedProviders: ['SWAPPED', 'MERCURYO'], destinationCurrencyCode: 'USDT_POLYGON',
+      destination: { address: input.walletAddress, asset: 'USDT', network: 'polygon', chainId: 137 } }) });
 const request = (body = input, headers = {}) => new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/wallet-funding/personal/intent`, {
   method: 'POST', headers: { cookie: 'better-auth.session_token=synthetic-session', origin: env.AUTH_PUBLIC_ORIGIN,
     'sec-fetch-site': 'same-origin', 'content-type': 'application/json', 'cf-connecting-ip': '198.51.100.10', ...headers }, body: JSON.stringify(body),
@@ -110,6 +111,7 @@ test('administrative methods use only the selected sandbox country and provider,
 
 test('personal options authenticate and reject crossed countries, sandbox methods and unknown limits', async () => {
   const options = { walletKind: 'personal', environment: 'production', provider: 'reown', country: 'US', sourceCurrencyCode: 'USD',
+    destinationCurrencyCode: 'USDT_POLYGON', network: 'polygon', chainId: 137,
     paymentMethods: ['CREDIT_DEBIT_CARD'], routes: [{ serviceProvider: 'SWAPPED', paymentMethods: [
       { method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount: 100, maximumAmount: 10000, minimumUsd: 100, maximumUsd: 10000 }] }] };
   const get = new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/wallet-funding/personal/options?country=US`,
@@ -136,7 +138,7 @@ test('USD discovery keeps the compatible private path for omitted and explicit c
     const serviceProvider = administrative ? 'BANXA' : 'SWAPPED';
     const suffix = administrative ? `&serviceProvider=${serviceProvider}` : '';
     const legacy = { walletKind: kind, environment: administrative ? 'sandbox' : 'production', provider: administrative ? 'meld' : 'reown',
-      country, ...(administrative ? { serviceProvider } : {}), paymentMethods: ['CREDIT_DEBIT_CARD'],
+      country, ...(administrative ? { serviceProvider } : { destinationCurrencyCode: 'USDT_POLYGON', network: 'polygon', chainId: 137 }), paymentMethods: ['CREDIT_DEBIT_CARD'],
       routes: [{ serviceProvider, paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', minimumUsd: 10, maximumUsd: 1000 }] }] };
     for (const currencyQuery of ['', '&sourceCurrencyCode=USD']) {
       const request = new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/wallet-funding/${kind}/options?country=${country}${currencyQuery}${suffix}`,
