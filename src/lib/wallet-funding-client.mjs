@@ -32,9 +32,34 @@ export async function readPersonalFundingOptions(country, { signal, sourceCurren
   if (!personalProductionOptions({ walletKind: 'personal', environment: 'production', provider: 'reown', country, sourceCurrencyCode, paymentMethods: [], routes: [] })) {
     throw new Error('invalid_request');
   }
-  const data = personalProductionOptions(await request(`/api/member/wallet-funding/personal/options?country=${country}&sourceCurrencyCode=${sourceCurrencyCode}`, { method: 'GET', signal }));
-  if (!data || data.country !== country || data.sourceCurrencyCode !== sourceCurrencyCode) throw new Error('funding_unavailable');
-  return data;
+  const deadline = browserRequestDeadline(signal, 25_000);
+  try {
+    let raw;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        raw = await request(`/api/member/wallet-funding/personal/options?country=${country}&sourceCurrencyCode=${sourceCurrencyCode}`, { method: 'GET', signal: deadline.signal });
+        break;
+      } catch (error) {
+        // Only this public route lookup is replayable. Payment writes, session
+        // failures, throttling and malformed success contracts never retry.
+        if (attempt || deadline.signal.aborted || !(error instanceof TypeError || [502, 503, 504].includes(error?.status))) throw error;
+        await fundingReadRetryDelay(deadline.signal);
+      }
+    }
+    const data = personalProductionOptions(raw);
+    if (!data || data.country !== country || data.sourceCurrencyCode !== sourceCurrencyCode) throw new Error('funding_unavailable');
+    return data;
+  } finally { deadline.dispose(); }
+}
+
+function fundingReadRetryDelay(signal) {
+  return new Promise((resolve, reject) => {
+    let timer;
+    const abort = () => { clearTimeout(timer); signal.removeEventListener('abort', abort); reject(signal.reason instanceof Error ? signal.reason : new DOMException('Aborted', 'AbortError')); };
+    if (signal.aborted) { abort(); return; }
+    signal.addEventListener('abort', abort, { once: true });
+    timer = setTimeout(() => { signal.removeEventListener('abort', abort); resolve(undefined); }, 250);
+  });
 }
 
 /** @param {'personal' | 'administrative'} kind @param {{signal?: AbortSignal}} [options] */
@@ -78,8 +103,10 @@ async function request(path, init) {
     const response = await fetch(path, { ...init, signal: deadline.signal, credentials: 'same-origin', cache: 'no-store', redirect: 'error' });
     const text = await response.text();
     if (text.length > 65536) throw new Error('funding_unavailable');
-    const data = JSON.parse(text);
-    if (!response.ok) throw new Error(typeof data?.error === 'string' ? data.error : 'funding_unavailable');
+    let data;
+    try { data = JSON.parse(text); }
+    catch { throw Object.assign(new Error('funding_unavailable'), { status: response.status }); }
+    if (!response.ok) throw Object.assign(new Error(typeof data?.error === 'string' && /^[a-z0-9_]{1,80}$/.test(data.error) ? data.error : 'funding_unavailable'), { status: response.status });
     if (deadline.signal.aborted) throw new DOMException('Aborted', 'AbortError');
     return data;
   } finally { deadline.dispose(); }

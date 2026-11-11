@@ -62,6 +62,7 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
   const current = options.country === countryCode && (options.sourceCurrencyCode || "USD") === sourceCurrencyCode;
   const methods = current && options.status === "ready" ? eligiblePaymentMethods(options.routes, Number(amount), sourceCurrencyCode) : [];
   const methodsKey = methods.join(",");
+  const routeMinimum = current ? lowestRouteMinimum(options.routes, sourceCurrencyCode) : null;
   const parsedAmount = Number(amount);
   const validAmount = sourceCurrencyCode === "USD" ? validFundingAmount(parsedAmount)
     : sourceCurrencyCode === "MXN" && countryCode === "MX" && method === "SPEI" && Number.isFinite(parsedAmount) && parsedAmount > 0 && parsedAmount <= 1_000_000_000
@@ -116,7 +117,8 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
         <FundingCurrencyField id={id} country={countryCode} value={sourceCurrencyCode} onChange={value => { seededMinimum.current = ""; changeSelection(setSourceCurrencyCode, value); setAmount(value === "USD" ? String(PERSONAL_FUNDING_MINIMUM_USD) : ""); }} busy={busy} />
         <FundingAmountField id={id} amount={amount} sourceCurrencyCode={sourceCurrencyCode} onChange={value => changeSelection(setAmount, value)} busy={busy} />
         <FundingMethodField id={id} value={methods.includes(method) ? method : ""} methods={methods} status={current ? options.status : "loading"}
-          countrySelected={Boolean(countryCode)} sourceCurrencyCode={sourceCurrencyCode} minimumUsd={current ? lowestRouteMinimum(options.routes, sourceCurrencyCode) : null}
+          countrySelected={Boolean(countryCode)} sourceCurrencyCode={sourceCurrencyCode} minimumUsd={routeMinimum}
+          onUseMinimum={routeMinimum !== null && Number(amount) < routeMinimum ? () => changeSelection(setAmount, (Math.ceil(routeMinimum * 100) / 100).toFixed(2)) : undefined}
           limits={current ? selectedMethodLimits(options.routes, method, Number(amount), sourceCurrencyCode) : null} onChange={value => changeSelection(setMethod, value)} onRetry={() => setRevision(value => value + 1)} busy={busy} />
       </div>
       <FundingDestination address={destinationAddress} />
@@ -159,7 +161,7 @@ function FundingCountryField({ id, value, onChange, busy, label = "", countries 
     </select></label>;
 }
 
-function FundingMethodField({ id, value, methods, status, countrySelected, sourceCurrencyCode = "USD", minimumUsd, limits, onChange, onRetry, busy, partialAvailability = false }) {
+function FundingMethodField({ id, value, methods, status, countrySelected, sourceCurrencyCode = "USD", minimumUsd, limits, onChange, onRetry, onUseMinimum = undefined, busy, partialAvailability = false }) {
   const { t, locale } = useI18n();
   const ready = countrySelected && status === "ready";
   const unavailable = countrySelected && (status === "error" || (ready && !methods.length));
@@ -175,11 +177,12 @@ function FundingMethodField({ id, value, methods, status, countrySelected, sourc
       </label>;
     })}</div> : null}
     <div id={`${id}-methods-state`} role="status" className="mb-onramp-disclosure">
-      {unavailable ? <><p>{t(status === "error" ? "funding.methodsLoadFailed" : "funding.methodsForAmountUnavailable")}</p><button className="executive-button" type="button" onClick={onRetry} disabled={busy}><RefreshCw size={14} aria-hidden="true" />{t("walletPage.retry")}</button></>
+      {unavailable ? <><p>{t(status === "error" ? "funding.methodsLoadFailed" : "funding.methodsForAmountUnavailable")}</p>{status === "error" ? <button className="executive-button" type="button" onClick={onRetry} disabled={busy}><RefreshCw size={14} aria-hidden="true" />{t("walletPage.retry")}</button> : null}</>
         : !countrySelected ? t("funding.chooseCountryFirst") : status === "loading" ? t("walletPage.checkingAvailability") : null}
       {ready && partialAvailability && methods.length ? <><p>{t("funding.methodsPartiallyLoaded")}</p><button className="executive-button" type="button" onClick={onRetry} disabled={busy}><RefreshCw size={14} aria-hidden="true" />{t("walletPage.retry")}</button></> : null}
       {ready && limits ? t("funding.methodRange", { minimum: currency(limits.minimumAmount ?? limits.minimumUsd), maximum: currency(limits.maximumAmount ?? limits.maximumUsd) })
         : ready && !methods.length && minimumUsd !== null ? <p>{t("funding.providerMinimum", { amount: currency(minimumUsd) })}</p> : null}
+      {ready && !methods.length && onUseMinimum ? <button className="executive-button" type="button" onClick={onUseMinimum} disabled={busy}>{t("funding.useProviderMinimum", { amount: currency(minimumUsd) })}</button> : null}
       {ready && methods.length ? <p>{t("funding.providerFinalReview")}</p> : null}
     </div>
   </fieldset>;

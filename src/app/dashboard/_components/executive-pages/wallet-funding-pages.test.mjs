@@ -467,6 +467,14 @@ test('personal MXN discovery cancels USD responses and funds SPEI at its provide
   assert.equal(find(tree, 'FundingSubmit').props.disabled, true);
   tree.props.onSubmit({ preventDefault() {} }); await flush();
   assert.equal(submitted.length, 0, 'below-provider minimum cannot initiate checkout');
+  const belowMinimum = find(tree, 'FundingMethodField');
+  const feedback = renderToStaticMarkup(belowMinimum.type(belowMinimum.props));
+  assert.doesNotMatch(feedback, /Reintentar/, 'a successfully loaded route cannot masquerade as a lookup failure');
+  assert.match(feedback, /Usar/);
+  const lookups = calls.length;
+  belowMinimum.props.onUseMinimum(); harness.render(props); tree = harness.render(props);
+  assert.equal(find(tree, 'FundingAmountField').props.amount, '150.00');
+  assert.equal(calls.length, lookups, 'using the provider minimum edits the amount without replaying discovery');
   find(tree, 'FundingAmountField').props.onChange('1200');
   harness.render(props); tree = harness.render(props);
   assert.equal(find(tree, 'FundingSubmit').props.disabled, false);
