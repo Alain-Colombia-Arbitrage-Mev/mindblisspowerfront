@@ -123,6 +123,64 @@ function harness(overrides = {}) {
 const writes = h => h.calls.filter(call => ['prepare', 'authorize', 'submit', 'verify', 'abandon'].includes(call.action));
 async function review(h) { await h.flush(); h.flow.setAmount('28.433366'); await h.flush(); await h.flow.review(); await h.flush(); }
 
+test('an interrupted binding lookup settles the balance spinner without accepting a late read from that lookup', async () => {
+  for (const linkStatus of ['loading', 'error']) {
+    const pending = deferred(), reown = {}, signals = []; let reads = 0;
+    const snapshot = () => ({ walletAddress: wallet, balances: [{ chainId: 137, balanceAtomic, nativeBalanceAtomic: '0' }] });
+    const h = harness({ reown, balance: async options => {
+      signals.push(options.signal); return ++reads === 1 ? pending.promise : snapshot();
+    } });
+    try {
+      await h.flush(); assert.equal(h.flow.loadingBalance, true); assert.equal(reads, 1);
+      reown.linkStatus = linkStatus;
+      await h.connection(false);
+      assert.equal(signals[0].aborted, true);
+      assert.equal(h.flow.verified, false); assert.equal(h.flow.loadingBalance, false);
+      pending.resolve(snapshot()); await h.flush();
+      assert.equal(h.flow.balanceAtomic, null); assert.equal(h.flow.loadingBalance, false);
+      reown.linkStatus = 'linked';
+      await h.connection(true);
+      assert.equal(h.flow.balanceAtomic, balanceAtomic); assert.equal(h.flow.loadingBalance, false);
+      assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
+    } finally { h.unmount(); }
+  }
+});
+
+test('focus and visibility bursts preserve the in-flight balance read and coalesce one follow-up without signing', async t => {
+  const pending = deferred(), signals = []; let reads = 0;
+  const snapshot = amount => ({ walletAddress: wallet, balances: [{ chainId: 137, balanceAtomic: amount, nativeBalanceAtomic: '0' }] });
+  const h = harness({ balance: async options => {
+    signals.push(options.signal); reads++;
+    return reads === 2 ? pending.promise : snapshot(reads === 1 ? balanceAtomic : '26000000');
+  } }); t.after(() => h.unmount());
+  await h.flush(); assert.equal(h.flow.balanceAtomic, balanceAtomic);
+  h.browser.dispatchEvent(new Event('focus')); await h.flush();
+  assert.equal(reads, 2); assert.equal(h.flow.loadingBalance, true); assert.equal(h.flow.refreshingBalance, true);
+  for (let event = 0; event < 4; event++) {
+    h.browser.dispatchEvent(new Event('focus')); h.browser.dispatchEvent(new Event('pageshow'));
+    h.documentRef.dispatchEvent(new Event('visibilitychange')); await h.flush();
+  }
+  assert.equal(reads, 2); assert.equal(signals[1].aborted, false);
+  assert.equal(h.flow.balanceAtomic, balanceAtomic);
+  pending.resolve(snapshot('27000000')); await h.flush();
+  assert.equal(reads, 3); assert.equal(h.flow.balanceAtomic, '26000000');
+  assert.equal(h.flow.loadingBalance, false); assert.equal(h.flow.refreshingBalance, false);
+  assert.equal(h.flow.amount, '26'); assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
+});
+
+test('explicit refresh recovers a failed binding read without connecting, linking or signing a wallet', async t => {
+  let lookups = 0;
+  const reown = { linkStatus: 'error', async refreshLink() { lookups++; reown.linkStatus = 'linked'; } };
+  const h = harness({ reown }); t.after(() => h.unmount());
+  await h.flush(); assert.equal(h.flow.verified, false); assert.equal(h.flow.loadingBalance, false);
+  assert.equal(h.calls.filter(call => call.action === 'balance').length, 0);
+  await h.flow.refresh(); await h.flush();
+  assert.equal(lookups, 1); assert.equal(h.flow.verified, true); assert.equal(h.flow.balanceAtomic, balanceAtomic);
+  assert.equal(h.flow.loadingBalance, false); assert.equal(h.flow.busy, false);
+  assert.equal(h.calls.filter(call => ['connect', 'link'].includes(call.action)).length, 0);
+  assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
+});
+
 test('verification can fence an expired broadcasting lease before an operation hash exists without resubmitting', async t => {
   const broadcasting = payment({ status: 'broadcasting', userOperationHash: null });
   const h = harness({ history: async () => ({ walletKind: 'personal', payments: [broadcasting] }),

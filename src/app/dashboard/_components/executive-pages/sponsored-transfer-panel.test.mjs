@@ -66,11 +66,40 @@ test('Sponsored Polygon form identifies Mindbliss without its address and preser
 });
 test('Unavailable sponsorship, insufficient funds and disconnected wallet never expose an enabled send path', () => {
   locale = 'es';
-  for (const patch of [{ capabilities: { transferEnabled: false } }, { amount: '28.433367' }, { connected: false }]) {
+  for (const patch of [{ capabilities: { transferEnabled: false } }, { capabilities: { transferEnabled: true, loading: true } },
+    { capabilities: { transferEnabled: true, error: 'walletTransfer.unavailable' } }, { loadingBalance: true }, { amount: '28.433367' }, { connected: false }]) {
     const state = flow(patch), tree = SponsoredTransferForm({ flow: state });
     tree.props.onSubmit({ preventDefault() {} }); assert.deepEqual(state.calls, []);
     assert.ok(all(tree, node => node?.type === 'button' && node.props.type === 'submit').every(node => node.props.disabled));
   }
+});
+
+test('initial sponsorship checks are distinct from unavailable coverage and do not claim a failure before verification', () => {
+  for (locale of ['es', 'en', 'ar', 'zh']) {
+    for (const transferEnabled of [false, true]) {
+      const html = renderToStaticMarkup(SponsoredTransferForm({ flow: flow({ capabilities: { loading: true, transferEnabled } }) }));
+      assert.ok(html.includes(translateMessage(locale, 'walletTransfer.checkingSponsorship')));
+      assert.ok(!html.includes(translateMessage(locale, 'walletTransfer.sponsorUnavailable')));
+      assert.ok(!html.includes(translateMessage(locale, 'walletTransfer.sponsored')));
+    }
+    const failed = renderToStaticMarkup(SponsoredTransferForm({ flow: flow({ capabilities: { loading: false, transferEnabled: false, error: 'walletTransfer.unavailable' } }) }));
+    assert.ok(failed.includes(translateMessage(locale, 'walletTransfer.sponsorCheckFailed')));
+    const unverified = renderToStaticMarkup(SponsoredTransferForm({ flow: flow({ verified: false, connected: false, capabilities: { loading: false, transferEnabled: false } }) }));
+    assert.ok(!unverified.includes(translateMessage(locale, 'walletTransfer.sponsorUnavailable')));
+  }
+  locale = 'es';
+});
+
+test('refreshing retains the last verified balance with an updating status while initial reads have no invented amount', () => {
+  for (locale of ['es', 'en', 'ar', 'zh']) {
+    const current = renderToStaticMarkup(SponsoredTransferForm({ flow: flow({ loadingBalance: true }) }));
+    assert.ok(current.includes('28.433366 USDT'));
+    assert.ok(current.includes(translateMessage(locale, 'walletTransfer.updatingBalance')));
+    const initial = renderToStaticMarkup(SponsoredTransferForm({ flow: flow({ balanceAtomic: null, loadingBalance: true }) }));
+    assert.ok(initial.includes(translateMessage(locale, 'companyPayment.loadingBalance')));
+    assert.ok(!initial.includes('28.433366 USDT'));
+  }
+  locale = 'es';
 });
 test('Review identifies Mindbliss without its address and discloses exact amount and nonexpiring authorization before the signature action', () => {
   for (locale of ['es', 'en', 'ar', 'zh']) {
@@ -98,6 +127,7 @@ test('Canonical confirmation enables another payment, while uncertain prepared a
 test('a stale disconnected review or altered wallet/network/token/recipient never enables confirmation', () => {
   locale = 'es';
   for (const patch of [{ connected: false }, { preview: { ...flow().preview, walletAddress: `0x${'9'.repeat(40)}` } },
+    { capabilities: { transferEnabled: true, loading: true } }, { capabilities: { transferEnabled: true, error: 'walletTransfer.unavailable' } },
     { preview: { ...flow().preview, chainId: 1 } }, { preview: { ...flow().preview, tokenAddress: `0x${'9'.repeat(40)}` } },
     { preview: { ...flow().preview, recipientAddress: `0x${'9'.repeat(40)}` } }]) {
     const state = flow(patch), tree = SponsoredTransferReview({ flow: state });

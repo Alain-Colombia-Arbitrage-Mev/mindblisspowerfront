@@ -5,6 +5,7 @@
 .heading p { max-width: 62ch; margin: 7px 0 0; color: var(--vp-muted); font-size: 13px; line-height: 1.65; }
 .balance { display: grid; grid-template-columns: minmax(0, 1fr) 44px; align-items: center; gap: 5px 12px; padding: 15px; border: 1px solid var(--vp-border); border-radius: 12px; background: var(--vp-bg); }
 .balance > span { color: var(--vp-muted); font-size: 12px; }
+.balance > small { grid-column: 1; color: var(--vp-muted); font-size: 12px; }
 .networks { display: grid; gap: 9px; min-width: 0; margin: 0; padding: 0; border: 0; }
 .networks legend { margin-bottom: 9px; color: var(--vp-muted); font-size: 13px; font-weight: 700; }
 .networks > small { color: var(--vp-muted); font-size: 12px; line-height: 1.6; }

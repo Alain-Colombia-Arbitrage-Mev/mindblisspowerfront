@@ -1,5 +1,6 @@
 export const walletTransferMessages = {
   es: { walletTransfer: {
+    checkingSponsorship: "Comprobando cobertura de la comisión de red…", sponsorCheckFailed: "No pudimos comprobar la cobertura de la comisión de red. Actualiza la consulta para reintentar.", updatingBalance: "Actualizando saldo…",
     rateLimited: "Has preparado varios envíos seguidos. Espera unos minutos antes de preparar otro; puedes seguir consultando los pagos registrados.",
     reconciliationTitle: "Pago pendiente de revisión", reconciliationCopy: "Esta autorización ya fue utilizada, pero todavía no verificamos el resultado de este pago. Consulta su estado o contacta a soporte; evita repetir el envío.",
     sponsored: "Comisión de red cubierta por Mindbliss", sponsoredCopy: "Envías USDT desde tu dirección actual. No necesitas comprar POL para este envío.",
@@ -25,6 +26,7 @@ export const walletTransferMessages = {
     ambiguous: "La respuesta del envío está pendiente. Consulta su estado; evita enviarlo de nuevo.", networkMismatch: "Selecciona Polygon en tu billetera para autorizar este envío.",
   } },
   en: { walletTransfer: {
+    checkingSponsorship: "Checking network fee coverage…", sponsorCheckFailed: "We could not check network fee coverage. Refresh to try again.", updatingBalance: "Updating balance…",
     rateLimited: "You have prepared several transfers in a row. Wait a few minutes before preparing another; you can still check recorded payments.",
     reconciliationTitle: "Payment needs review", reconciliationCopy: "This authorization has been used, but this payment's outcome is not verified yet. Check its status or contact support; avoid sending it again.",
     sponsored: "Network fee covered by Mindbliss", sponsoredCopy: "Send USDT from your current address. You do not need to buy POL for this transfer.",
@@ -50,6 +52,7 @@ export const walletTransferMessages = {
     ambiguous: "The transfer response is pending. Check its status and avoid sending it again.", networkMismatch: "Select Polygon in your wallet to authorize this transfer.",
   } },
   ar: { walletTransfer: {
+    checkingSponsorship: "جارٍ التحقق من تغطية رسوم الشبكة…", sponsorCheckFailed: "تعذر التحقق من تغطية رسوم الشبكة. حدّث للاستعلام مجددًا.", updatingBalance: "جارٍ تحديث الرصيد…",
     rateLimited: "لقد أعددت عدة تحويلات متتالية. انتظر بضع دقائق قبل إعداد آخر؛ يمكنك متابعة التحقق من المدفوعات المسجلة.",
     reconciliationTitle: "الدفع بحاجة إلى مراجعة", reconciliationCopy: "استُخدم هذا التفويض، لكن نتيجة هذا الدفع لم تُتحقق بعد. تحقق من الحالة أو اتصل بالدعم؛ تجنب تكرار التحويل.",
     sponsored: "تغطي Mindbliss رسوم الشبكة", sponsoredCopy: "أرسل USDT من عنوانك الحالي. لا تحتاج إلى شراء POL لهذا التحويل.",
@@ -71,6 +74,7 @@ export const walletTransferMessages = {
     sponsorshipUnavailable: "دعم الرسوم غير متاح. تم تسجيل طلبك؛ تحقق من حالته.", ambiguous: "استجابة التحويل معلقة. تحقق من حالته وتجنب إرساله مجددًا.", networkMismatch: "اختر Polygon في محفظتك لتفويض هذا التحويل.",
   } },
   zh: { walletTransfer: {
+    checkingSponsorship: "正在查询网络费赞助…", sponsorCheckFailed: "无法查询网络费赞助，请刷新重试。", updatingBalance: "正在更新余额…",
     rateLimited: "你已连续准备多笔转账。请等待几分钟再准备下一笔；仍可查询已记录的付款。",
     reconciliationTitle: "付款需要核查", reconciliationCopy: "此授权已被使用，但此笔付款的结果尚未验证。请查询状态或联系支持，不要再次发送。",
     sponsored: "Mindbliss 承担网络费用", sponsoredCopy: "从当前地址发送 USDT。此笔转账无需购买 POL。", solanaSponsoredCopy: "Mindbliss 承担网络费用。此笔转账无需购买 SOL。",
