@@ -42,7 +42,7 @@ export default function PanelSidebar({ pathname, member, onNavigate = undefined 
   return (
     <div className="flex h-full flex-col" style={{ background: "var(--vp-shell)" }}>
       <SidebarLogo onNavigate={onNavigate} />
-      <SidebarWalletCard onNavigate={onNavigate} />
+      <SidebarWalletCard key={`${member?.subject || ''}:${member?.email || ''}`} onNavigate={onNavigate} />
 
       <nav aria-label={t("dashboard.memberNavigation")} className="vp-sidebar-nav">
         {NAV_GROUPS.map((group) => (

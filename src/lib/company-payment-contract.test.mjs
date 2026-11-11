@@ -29,6 +29,8 @@ test('company amounts remain positive canonical uint256 strings beyond JavaScrip
 
 test('payment inputs accept only action-specific identifiers and forbid client-controlled financial policy or identity', () => {
   assert.deepEqual(companyPaymentInput({ requestId: paymentId, amountAtomic: '1' }, 'prepare'), { requestId: paymentId, amountAtomic: '1' });
+  for (const chainId of [1, 137]) assert.deepEqual(companyPaymentInput({ requestId: paymentId, amountAtomic: '1', chainId }, 'prepare'), { requestId: paymentId, amountAtomic: '1', chainId });
+  for (const chainId of [10, '137', '1', null, [], true]) assert.equal(companyPaymentInput({ requestId: paymentId, amountAtomic: '1', chainId }, 'prepare'), null);
   assert.deepEqual(companyPaymentInput({ paymentId, transactionHash: hash }, 'submit'), { paymentId, transactionHash: hash });
   assert.deepEqual(companyPaymentInput({ paymentId }, 'verify'), { paymentId });
   assert.deepEqual(companyPaymentInput({ paymentId }, 'abandon'), { paymentId });

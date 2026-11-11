@@ -1,7 +1,7 @@
 export const fundingMessages = {
   es: { funding: {
-    personalBalanceTransferNetwork: "Las transferencias a Mindbliss usan únicamente USDT en Ethereum.",
-    personalBalancePolygonNetwork: "Polygon · Solo consulta",
+    personalBalanceTransferNetwork: "Elige Ethereum o Polygon al transferir. El saldo de cada red se utiliza por separado.",
+    personalBalancePolygonNetwork: "Polygon · ERC-20",
     personalBalancePolygonGas: "Para operar en Polygon necesitas POL para la comisión de red.",
     personalBalanceTitle: "Saldo de tu billetera personal",
     personalBalanceLabel: "Saldo disponible",
@@ -72,8 +72,8 @@ export const fundingMessages = {
     sandboxUnavailable: "No pudimos abrir una sesión de prueba para este país, monto y proveedor. Prueba otra combinación.",
   } },
   en: { funding: {
-    personalBalanceTransferNetwork: "Transfers to Mindbliss use USDT on Ethereum only.",
-    personalBalancePolygonNetwork: "Polygon · View only",
+    personalBalanceTransferNetwork: "Choose Ethereum or Polygon when transferring. Each network balance is used separately.",
+    personalBalancePolygonNetwork: "Polygon · ERC-20",
     personalBalancePolygonGas: "You need POL for network fees when using Polygon.",
     personalBalanceTitle: "Personal wallet balance",
     personalBalanceLabel: "Available balance",
@@ -144,8 +144,8 @@ export const fundingMessages = {
     sandboxUnavailable: "We could not open a test session for this country, amount and provider. Try another combination.",
   } },
   ar: { funding: {
-    personalBalanceTransferNetwork: "التحويلات إلى Mindbliss تستخدم USDT على Ethereum فقط.",
-    personalBalancePolygonNetwork: "Polygon · للعرض فقط",
+    personalBalanceTransferNetwork: "اختر Ethereum أو Polygon عند التحويل. يُستخدم رصيد كل شبكة بشكل منفصل.",
+    personalBalancePolygonNetwork: "Polygon · ERC-20",
     personalBalancePolygonGas: "تحتاج إلى POL لدفع رسوم الشبكة عند استخدام Polygon.",
     personalBalanceTitle: "رصيد محفظتك الشخصية",
     personalBalanceLabel: "الرصيد المتاح",
@@ -216,8 +216,8 @@ export const fundingMessages = {
     sandboxUnavailable: "تعذر فتح جلسة اختبار لهذا البلد والمبلغ والمزوّد. جرّب مجموعة أخرى.",
   } },
   zh: { funding: {
-    personalBalanceTransferNetwork: "向 Mindbliss 转账仅支持 Ethereum 网络上的 USDT。",
-    personalBalancePolygonNetwork: "Polygon · 仅供查看",
+    personalBalanceTransferNetwork: "转账时选择 Ethereum 或 Polygon。各网络余额分开使用。",
+    personalBalancePolygonNetwork: "Polygon · ERC-20",
     personalBalancePolygonGas: "在 Polygon 上操作需要 POL 来支付网络费。",
     personalBalanceTitle: "个人钱包余额",
     personalBalanceLabel: "可用余额",

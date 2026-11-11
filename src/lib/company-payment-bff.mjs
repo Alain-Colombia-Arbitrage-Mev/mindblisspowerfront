@@ -79,8 +79,8 @@ export async function handleCompanyPayment(request, action, { env = runtimeEnvir
       : action === 'history' ? companyPaymentHistory(result.data) : companyPaymentView(result.data);
     if (!safe || (paymentId && (!('paymentId' in safe) || safe.paymentId !== paymentId))
       || (body && (!('paymentId' in safe) || safe.paymentId !== requestedId))
-      || (action === 'prepare' && (!('amountAtomic' in safe) || safe.amountAtomic !== body.amountAtomic
-        || !('chainId' in safe) || safe.chainId !== PERSONAL_COMPANY_PAYMENT.chainId))
+      || (action === 'prepare' && (!('amountAtomic' in safe) || !('amountAtomic' in body) || safe.amountAtomic !== body.amountAtomic
+        || !('chainId' in safe) || safe.chainId !== (body.chainId ?? PERSONAL_COMPANY_PAYMENT.chainId)))
       || (action === 'submit' && (!('transactionHash' in safe) || safe.transactionHash !== requestedHash))) return reply({ error: 'company_payment_unavailable' }, 502);
     if (action === 'abandon' && (!('status' in safe) || safe.status !== 'prepared' || !('abandonedAt' in safe) || safe.abandonedAt === null)) return reply({ error: 'company_payment_unavailable' }, 502);
     return reply(safe);

@@ -107,7 +107,7 @@ test('selection changes clear only a previous onramp error and preserve active w
   assert.match(read('../components/reown/ReownProvider.jsx'), /clearOnrampError: \(\) => \{\}/);
 });
 
-test('company network switching first verifies the connected bound wallet and calls only the Ethereum AppKit SDK switch', async () => {
+test('company network switching first verifies the connected bound wallet before the Ethereum AppKit SDK switch', async () => {
   const address = `0x${'1'.repeat(40)}`, mainnet = Object.freeze({ id: 1, name: 'Ethereum' });
   const provider = { request() { assert.fail('network switching used a raw provider request or transaction RPC'); } };
   const cases = [{}, { account: { isConnected: false } }, { walletProvider: undefined }, { currentAddress: '' }, { boundAddress: '' },
@@ -124,10 +124,23 @@ test('company network switching first verifies the connected bound wallet and ca
       await assert.rejects(callback(), { message: 'personal_company_wallet_unavailable' });
       assert.deepEqual(events, ['verify bound wallet']);
     } else {
-      await callback({ id: 1 });
+      await callback(1);
       assert.deepEqual(events, ['verify bound wallet', 'mainnet SDK switch']);
     }
   }
+});
+
+test('Polygon network switching uses its fixed AppKit network and rejects every other chain without an SDK request', async () => {
+  const address = `0x${'1'.repeat(40)}`, polygon = Object.freeze({ id: 137, name: 'Polygon' });
+  const calls = [];
+  const scope = { getCompanyPaymentProvider: () => calls.push('verify'), mainnet: { id: 1 }, polygon,
+    switchAppKitNetwork: async network => { assert.equal(network, polygon); calls.push('polygon'); } };
+  const callback = onrampCallback('switchCompanyPaymentNetwork', scope);
+  await callback(137); assert.deepEqual(calls, ['verify', 'polygon']);
+  for (const chainId of [10, '137', null, {}, []]) {
+    await assert.rejects(callback(chainId), { message: 'personal_company_chain_changed' });
+  }
+  assert.equal(calls.filter(value => value === 'polygon').length, 1);
 });
 
 test('a hung SDK connect times out with a recoverable category rather than leaving the button busy', async () => {
@@ -267,7 +280,7 @@ test("Reown creates EVM wallets, links one signed address and never replaces mem
   const provider = read("../components/reown/ReownProvider.jsx");
   const dashboardGate = read("../app/dashboard/layout.jsx");
   assert.match(provider, /new EthersAdapter\(\)/);
-  assert.match(provider, /networks: \[mainnet\]/);
+  assert.match(provider, /networks: \[mainnet, polygon\]/);
   assert.match(provider, /defaultNetwork: mainnet/);
   assert.match(provider, /defaultAccountTypes: \{ eip155: "eoa" \}/);
   assert.match(provider, /email: true/);

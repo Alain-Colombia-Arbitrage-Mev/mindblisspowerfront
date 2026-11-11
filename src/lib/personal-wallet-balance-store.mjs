@@ -11,16 +11,24 @@ export function personalWalletBalanceSessionKey(session) {
 /** Memory only; authenticated sessions never share snapshots or in-flight work. */
 export function createPersonalWalletBalanceStore({ read = readPersonalWalletBalances, now = Date.now,
   windowTarget = typeof window === 'undefined' ? null : window,
-  documentTarget = typeof document === 'undefined' ? null : document } = {}) {
+  documentTarget = typeof document === 'undefined' ? null : document,
+  refreshIntervalMs = 60_000, retryDelays = [5000, 15000, 30000] } = {}) {
   const entries = new Map();
   const publish = (entry, snapshot) => { entry.snapshot = Object.freeze(snapshot); for (const listener of entry.listeners) listener(); };
   const visible = () => !documentTarget || documentTarget.visibilityState === 'visible';
+  function retry(key, entry) {
+    clearTimeout(entry.retryTimer);
+    if (entry.retries >= retryDelays.length) return;
+    entry.retryTimer = setTimeout(() => { if (visible()) void refresh(key); }, retryDelays[entry.retries++]);
+    entry.retryTimer?.unref?.();
+  }
   function refresh(key, force = true) {
     const entry = entries.get(key);
     if (!entry || !entry.listeners.size) return Promise.resolve(null);
     if (entry.flight) { if (force) entry.pending = true; return entry.flight; }
     if (!force && entry.successAt !== null && now() - entry.successAt < 5000) return Promise.resolve(entry.snapshot);
     const controller = new AbortController(), token = ++entry.token;
+    clearTimeout(entry.retryTimer);
     entry.controller = controller;
     publish(entry, { ...EMPTY_PERSONAL_BALANCE, loading: true });
     const current = () => entries.get(key) === entry && entry.token === token && !controller.signal.aborted;
@@ -32,11 +40,14 @@ export function createPersonalWalletBalanceStore({ read = readPersonalWalletBala
       })]));
       entry.successAt = value.balances.some(item => !item.error) ? now() : null;
       publish(entry, { ...networks.ethereum, networks });
+      if (value.balances.some(item => item.error)) retry(key, entry);
+      else entry.retries = 0;
       return value;
     }).catch(error => {
       if (current()) {
         entry.successAt = null;
         publish(entry, { ...EMPTY_PERSONAL_BALANCE, error: error?.message || 'company_payment_unavailable' });
+        if (!['unauthenticated', 'company_payment_wallet_not_linked', 'company_payment_forbidden'].includes(error?.message)) retry(key, entry);
       }
       return null;
     }).finally(() => {
@@ -52,7 +63,7 @@ export function createPersonalWalletBalanceStore({ read = readPersonalWalletBala
     let entry = entries.get(key);
     if (!entry) {
       entry = { snapshot: EMPTY_PERSONAL_BALANCE, listeners: new Set(), token: 0, controller: null, flight: null,
-        successAt: null, timer: null, onReturn: null, pending: false };
+        successAt: null, timer: null, onReturn: null, pending: false, retryTimer: null, retries: 0, pollTimer: null };
       entries.set(key, entry);
       entry.onReturn = () => {
         clearTimeout(entry.timer);
@@ -61,12 +72,16 @@ export function createPersonalWalletBalanceStore({ read = readPersonalWalletBala
       };
       for (const event of ['focus', 'pageshow', 'vp:personal-wallet-linked', 'vp:personal-wallet-balance-changed']) windowTarget?.addEventListener(event, entry.onReturn);
       documentTarget?.addEventListener('visibilitychange', entry.onReturn);
+      entry.pollTimer = setInterval(() => {
+        if (visible() && !entry.flight && !['unauthenticated', 'company_payment_wallet_not_linked', 'company_payment_forbidden'].includes(entry.snapshot.error)) void refresh(key, false);
+      }, refreshIntervalMs);
+      entry.pollTimer?.unref?.();
     }
     entry.listeners.add(listener);
     return () => {
       entry.listeners.delete(listener);
       if (entry.listeners.size) return;
-      entry.token++; entry.controller?.abort(); clearTimeout(entry.timer);
+      entry.token++; entry.controller?.abort(); clearTimeout(entry.timer); clearTimeout(entry.retryTimer); clearInterval(entry.pollTimer);
       for (const event of ['focus', 'pageshow', 'vp:personal-wallet-linked', 'vp:personal-wallet-balance-changed']) windowTarget?.removeEventListener(event, entry.onReturn);
       documentTarget?.removeEventListener('visibilitychange', entry.onReturn);
       if (entries.get(key) === entry) entries.delete(key);

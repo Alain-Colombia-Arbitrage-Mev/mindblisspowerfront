@@ -12,6 +12,19 @@ const ack = (patch = {}) => ({ paymentId, walletKind: 'personal', walletAddress:
   abandonedAt: null, membershipAssignment: 'pending', ...patch });
 const input = { requestId: paymentId, amountAtomic: ack().amountAtomic };
 
+test('an explicit Polygon preparation preserves its chain while rejecting an Ethereum acknowledgement for that same request', async () => {
+  const original = globalThis.fetch;
+  try {
+    const polygon = ack(LEGACY_POLYGON_COMPANY_PAYMENT), selected = { ...input, chainId: 137 };
+    globalThis.fetch = async (_path, init) => {
+      assert.deepEqual(JSON.parse(init.body), selected); return Response.json(polygon);
+    };
+    assert.deepEqual(await writeCompanyPayment('prepare', selected), polygon);
+    globalThis.fetch = async () => Response.json(ack());
+    await assert.rejects(writeCompanyPayment('prepare', selected), { message: 'company_payment_unavailable' });
+  } finally { globalThis.fetch = original; }
+});
+
 test('legacy Polygon receipts remain readable but cannot become a new transfer preparation', async () => {
   const original = globalThis.fetch;
   const legacy = ack(LEGACY_POLYGON_COMPANY_PAYMENT);

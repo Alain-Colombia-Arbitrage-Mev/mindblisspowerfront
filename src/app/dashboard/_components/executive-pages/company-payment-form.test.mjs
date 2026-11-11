@@ -22,7 +22,7 @@ new Function('require', 'module', 'exports', code)(id => {
   if (id.endsWith('.module.css')) return { default: new Proxy({}, { get: (_target, name) => name }) };
   assert.fail(`Presentation unexpectedly imports ${id}`);
 }, module, module.exports);
-const { CompanyPaymentForm, CompanyPaymentReview } = module.exports;
+const { CompanyPaymentForm, CompanyPaymentReview, CompanyPaymentNetworks } = module.exports;
 const find = (node, predicate) => predicate(node) ? node : React.Children.toArray(node?.props?.children).map(child => find(child, predicate)).find(Boolean);
 const text = node => typeof node === 'string' ? node : React.Children.toArray(node?.props?.children).map(text).join('');
 const button = (tree, label) => find(tree, node => node?.type === 'button' && text(node) === label);
@@ -44,7 +44,7 @@ test('form is presentation only and invokes review, MAX and refresh exclusively 
   assert.ok(html.includes(values.PERSONAL_COMPANY_PAYMENT.recipientAddress));
   assert.match(html, /<output[^>]+dir="ltr"/);
   assert.match(html, /Ethereum/);
-  assert.doesNotMatch(html, /Polygon|\bPOL\b/);
+  assert.doesNotMatch(html, /\bPOL\b/);
   assert.doesNotMatch(source, /useEffect|useReown|fetch\(|BrowserProvider|eth_sendTransaction|createPersonalCompanyPaymentTransfer/);
 });
 
@@ -76,6 +76,17 @@ test('disconnected wallets offer connection of the existing wallet and busy/load
     assert.equal(reviewed, 0);
     assert.equal(find(tree, node => node?.type === 'button' && node.props.type === 'submit').props.disabled, true);
   }
+});
+
+test('a verified owner can fill MAX on the selected network before connecting, without reviewing or sending', () => {
+  let maximum = 0, reviewed = 0;
+  const tree = CompanyPaymentForm(properties({ connected: false, canRefresh: true, chainId: 137,
+    balanceAtomic: '28433366', amount: '28.433366', onMax: () => maximum++, onReview: () => reviewed++ }));
+  assert.equal(button(tree, translateMessage('es', 'companyPayment.max')).props.disabled, false);
+  button(tree, translateMessage('es', 'companyPayment.max')).props.onClick();
+  tree.props.onSubmit({ preventDefault() {} });
+  assert.equal(maximum, 1); assert.equal(reviewed, 0);
+  assert.ok(button(tree, translateMessage('es', 'companyPayment.reconnect')));
 });
 
 test('the amount field labels and links its validation error, normalizing decimal separators without converting to numbers', () => {
@@ -128,4 +139,49 @@ test('all supported locales render translated controls with full addresses and n
     assert.ok(review.includes(values.PERSONAL_COMPANY_PAYMENT.recipientAddress));
   }
   locale = 'es';
+});
+
+test('network choices expose independent balances and update only the selected network through explicit controls', () => {
+  const changes=[];
+  const choices=CompanyPaymentNetworks({chainId:137,balances:[{chainId:1,balanceAtomic:'10000000'},{chainId:137,balanceAtomic:'7000000'}],onChange:value=>changes.push(value)});
+  const radios=React.Children.toArray(React.Children.toArray(choices.props.children)[1].props.children);
+  assert.equal(radios.length,2); assert.equal(radios[0].props['aria-checked'],false); assert.equal(radios[1].props['aria-checked'],true);
+  assert.ok(renderToStaticMarkup(choices).includes('10 USDT')); assert.ok(renderToStaticMarkup(choices).includes('7 USDT'));
+  assert.ok(!renderToStaticMarkup(choices).includes('17 USDT')); assert.deepEqual(changes,[]);
+  radios[0].props.onClick(); radios[1].props.onClick(); assert.deepEqual(changes,[1]);
+  let prevented = 0, focused = '';
+  radios[1].props.onKeyDown({ key: 'ArrowLeft', preventDefault() { prevented++; }, currentTarget: { parentElement: { querySelector: selector => ({ focus() { focused = selector; } }) } } });
+  assert.equal(prevented, 1); assert.deepEqual(changes, [1, 1]); assert.equal(focused, '[data-chain-id="1"]');
+  const unavailable=renderToStaticMarkup(CompanyPaymentNetworks({chainId:1,balances:[{chainId:1,balanceAtomic:'10000000',error:'unavailable'},{chainId:137,balanceAtomic:'7000000'}]}));
+  assert.match(unavailable,/— USDT/); assert.match(unavailable,/7 USDT/); assert.doesNotMatch(unavailable,/10 USDT/);
+});
+
+test('Polygon review and form use the fixed Polygon token, POL gas and only the selected network balance', () => {
+  for(locale of ['es','en','ar','zh']) {
+    let confirmed=0; const record=payment(values.personalCompanyPaymentPolicy(137));
+    const review=CompanyPaymentReview({payment:record,onConfirm:()=>confirmed++,onBack(){}});
+    const html=renderToStaticMarkup(review);
+    assert.ok(html.includes(translateMessage(locale,'companyPayment.legacyNetwork')));
+    assert.ok(html.includes(translateMessage(locale,'companyPayment.polygonGasCopy')));
+    assert.ok(!html.includes(translateMessage(locale,'companyPayment.gasCopy')));
+    assert.equal(button(review,translateMessage(locale,'companyPayment.confirmInWallet')).props.disabled,false);
+    button(review,translateMessage(locale,'companyPayment.confirmInWallet')).props.onClick(); assert.equal(confirmed,1);
+    const form=CompanyPaymentForm(properties({chainId:137,balanceAtomic:'7000000',amount:'7.000001'}));
+    assert.equal(button(form,translateMessage(locale,'companyPayment.review')).props.disabled,true);
+  }
+  locale='es';
+});
+
+test('connection restoration preserves MAX and displays a precise gas notice for the selected chain before SDK auth', () => {
+  for (const chainId of [1,137]) {
+    const tree=CompanyPaymentForm(properties({connected:false,canRefresh:true,chainId,nativeBalanceAtomic:'0'}));
+    assert.equal(button(tree,translateMessage('es','companyPayment.max')).props.disabled,false);
+    assert.ok(button(tree,translateMessage('es','companyPayment.reconnect')));
+    const html=renderToStaticMarkup(tree);
+    assert.ok(html.includes(translateMessage('es',chainId===137?'companyPayment.polygonZeroGas':'companyPayment.zeroGas')));
+    const waiting=CompanyPaymentForm(properties({connected:false,canRefresh:true,chainId,restoring:true}));
+    assert.equal(button(waiting,translateMessage('es','companyPayment.restoring')).props.disabled,true);
+    assert.ok(renderToStaticMarkup(waiting).includes(translateMessage('es','companyPayment.restoringCopy')));
+    assert.equal(button(waiting,translateMessage('es','companyPayment.max')).props.disabled,false);
+  }
 });

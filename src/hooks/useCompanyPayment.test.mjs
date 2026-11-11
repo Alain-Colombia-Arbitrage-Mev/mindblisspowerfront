@@ -71,7 +71,7 @@ function harness(overrides = {}) {
   const sdk = { creations: [], broadcasts: [], sends: [], networkSwitches: [], balanceReads: [], preflightBalanceReads: [] };
   const provider = { request() { assert.fail('a real wallet RPC was attempted'); } };
   const getProvider = () => provider;
-  const switchProviderNetwork = async () => { sdk.networkSwitches.push('ethereum'); return overrides.switchNetwork?.(); };
+  const switchProviderNetwork = async chainId => { sdk.networkSwitches.push(chainId === 137 ? 'polygon' : 'ethereum'); return overrides.switchNetwork?.(chainId); };
   const reown = () => ({ linkedAddress: sourceWallet, linkStatus: 'linked', isConnected: true, isLinked: true, getCompanyPaymentProvider: getProvider,
     switchCompanyPaymentNetwork: switchProviderNetwork,
     openConnect: () => assert.fail('unexpected wallet connection'), linkWallet: () => assert.fail('unexpected signature'), ...overrides.reown });
@@ -80,14 +80,14 @@ function harness(overrides = {}) {
     async writeCompanyPayment(action, input, options) {
       calls.push({ action, input, options });
       if (overrides.write) return overrides.write(action, input, options);
-      if (action === 'prepare') return payment({ paymentId: input.requestId, amountAtomic: input.amountAtomic, walletAddress: sourceWallet });
+      if (action === 'prepare') return payment({ paymentId: input.requestId, amountAtomic: input.amountAtomic, walletAddress: sourceWallet, ...values.personalCompanyPaymentPolicy(input.chainId) });
       if (action === 'abandon') return payment({ paymentId: input.paymentId, abandonedAt: new Date().toISOString() });
       if (action === 'submit') return payment({ paymentId: input.paymentId, status: 'submitted', transactionHash: input.transactionHash });
       return confirmed({ paymentId: input.paymentId });
     },
   };
   const transfer = {
-    async readPersonalCompanyPaymentBalance(options) { sdk.preflightBalanceReads.push(options); return overrides.preflightBalance ? overrides.preflightBalance(options) : { balanceAtomic }; },
+    async readPersonalCompanyPaymentBalance(options) { sdk.preflightBalanceReads.push(options); return overrides.preflightBalance ? overrides.preflightBalance(options) : { balanceAtomic: options.chainId === 137 ? '7000000' : balanceAtomic }; },
     createPersonalCompanyPaymentTransfer(options) {
       sdk.creations.push(options);
       const sender = { markSubmitted: (...args) => sdk.broadcasts.push(args), async sendPrepared(prepared, config) {
@@ -108,10 +108,14 @@ function harness(overrides = {}) {
     '@/lib/company-payment-recovery.mjs': recovery, '@/lib/personal-company-payment.mjs': transfer, '@/lib/personal-company-payment-values.mjs': values,
     '@/lib/member-session-context': { useMemberSession: () => sourceSession },
     '@/lib/personal-wallet-balance-store.mjs': { personalWalletBalanceSessionKey },
-    '@/lib/personal-wallet-balance.mjs': { async readPersonalWalletBalance(options) {
+    '@/lib/personal-wallet-balance.mjs': { async readPersonalWalletBalances(options) {
       sdk.balanceReads.push(options); const requestedWallet = sourceWallet;
+      if (overrides.balances) return overrides.balances(options);
       const result = overrides.balance ? await overrides.balance(options) : { balanceAtomic };
-      return { walletAddress: requestedWallet, ...result };
+      return { walletAddress: requestedWallet, ...result, balances: [
+        { walletAddress: requestedWallet, chainId: 1, ...result },
+        { walletAddress: requestedWallet, chainId: 137, balanceAtomic: '7000000' },
+      ] };
     } } };
   new Function('require', 'module', 'exports', 'window', 'document', 'crypto', 'navigator', 'globalThis', 'setTimeout', 'clearTimeout', code)(id => {
     assert.ok(Object.hasOwn(imports, id), `Unexpected hook dependency ${id}`); return imports[id];
@@ -465,4 +469,95 @@ test('network switching has a twelve-second deadline and ignores an acknowledgem
   await timed.flush(); await timed.flow.switchNetwork(); await timed.flush();
   assert.equal(timed.flow.busy, false); assert.equal(timed.flow.errorKey, 'companyPayment.networkUnavailable');
   assert.deepEqual(writes(timed), []); assert.equal(timed.sdk.sends.length, 0);
+});
+
+const polygonPayment = (patch = {}) => payment({ ...values.personalCompanyPaymentPolicy(137), amountAtomic: '7000000', ...patch });
+
+test('selecting Ethereum or Polygon only changes the local amount and unsigned preview, never moving funds or summing balances', async t => {
+  const h = harness(); t.after(() => h.unmount()); await h.flush();
+  assert.equal(h.flow.chainId, 1); assert.equal(h.flow.amount, '25.123456');
+  await preview(h, '5'); const oldFlow = h.flow, oldId = h.flow.payment.paymentId;
+  h.flow.changeNetwork(137); await h.flush();
+  assert.equal(h.flow.chainId, 137); assert.equal(h.flow.amount, '7'); assert.equal(h.flow.balanceAtomic, '7000000');
+  assert.equal(h.flow.payment, null); assert.equal(h.flow.stage, 'form');
+  oldFlow.review(); await oldFlow.confirm(); await h.flush();
+  assert.equal(h.flow.payment, null); assert.deepEqual(writes(h), []);
+  assert.equal(h.sdk.preflightBalanceReads.length, 0); assert.equal(h.sdk.creations.length, 0); assert.equal(h.sdk.networkSwitches.length, 0);
+  h.flow.changeNetwork(42161); h.flow.changeNetwork('137'); h.flow.changeNetwork(); await h.flush(); assert.equal(h.flow.chainId, 137);
+  await preview(h, '7'); assert.notEqual(h.flow.payment.paymentId, oldId);
+  assert.equal(h.flow.payment.chainId, 137); assert.equal(h.flow.payment.tokenAddress, values.personalCompanyPaymentPolicy(137).tokenAddress);
+  h.flow.changeNetwork(1); await h.flush(); assert.equal(h.flow.amount, '25.123456');
+  assert.equal(h.flow.payment, null); assert.deepEqual(writes(h), []); assert.equal(h.sdk.sends.length, 0);
+});
+
+test('Polygon MAX prepares and signs only its own seven USDT using chain137, while SDK switching is a separate explicit action', async t => {
+  const h = harness(); t.after(() => h.unmount()); await h.flush(); h.flow.changeNetwork(137); await h.flush();
+  const form = find(page(h), node => node?.type === 'CompanyPaymentForm');
+  assert.equal(form.props.chainId, 137); assert.equal(form.props.chainBalances.find(item => item.chainId === 1).balanceAtomic, balanceAtomic);
+  form.props.onMax(); await h.flush(); assert.equal(h.flow.amount, '7');
+  h.flow.review(); await h.flush(); await h.flow.confirm(); await h.flush();
+  assert.equal(h.sdk.preflightBalanceReads[0].chainId, 137);
+  assert.deepEqual(h.calls.find(call => call.action === 'prepare').input, { requestId: h.sdk.sends[0].prepared.paymentId, amountAtomic: '7000000', chainId: 137 });
+  assert.equal(h.sdk.creations[0].chainId, 137); assert.equal(h.sdk.sends[0].prepared.tokenAddress, values.personalCompanyPaymentPolicy(137).tokenAddress);
+  assert.equal(h.sdk.sends[0].config.reviewedBalanceAtomic, '7000000'); assert.equal(h.sdk.networkSwitches.length, 0);
+  await h.flow.switchNetwork(); await h.flush(); assert.deepEqual(h.sdk.networkSwitches, ['polygon']);
+});
+
+test('a failed Ethereum read leaves Polygon spendable and pending records keep their immutable selected chain', async t => {
+  const h = harness({ balances: async () => ({ walletAddress: wallet, balances: [
+    { chainId: 1, balanceAtomic: null, error: 'company_payment_rpc_unavailable' }, { chainId: 137, balanceAtomic: '7000000' },
+  ] }) }); t.after(() => h.unmount()); await h.flush(); assert.equal(h.flow.balanceAtomic, null);
+  h.flow.changeNetwork(137); await h.flush(); assert.equal(h.flow.balanceAtomic, '7000000'); assert.equal(h.flow.amount, '7'); assert.equal(h.flow.errorKey, '');
+  h.flow.selectHistory(polygonPayment()); await h.flush(); h.flow.changeNetwork(1); await h.flush();
+  assert.equal(h.flow.chainId, 137); assert.equal(h.flow.payment.paymentId, paymentId); assert.equal(h.flow.errorKey, 'companyPayment.pendingExists');
+  h.flow.resume(); await h.flush(); assert.equal(h.flow.stage, 'review'); assert.equal(h.flow.payment.chainId, 137);
+  assert.deepEqual(writes(h), []); assert.equal(h.sdk.sends.length, 0);
+});
+
+test('Polygon history restores chain137 and a prepare acknowledgement cannot reuse that UUID for Ethereum', async t => {
+  const h = harness({ history: async () => ({ records: [polygonPayment()] }),
+    write: async (action,input) => { assert.equal(action,'prepare'); return payment({ paymentId: input.requestId, amountAtomic: input.amountAtomic }); } });
+  t.after(() => h.unmount()); await h.flush(); assert.equal(h.flow.chainId,137); assert.equal(h.flow.payment.chainId,137);
+  h.flow.resume(); await h.flush(); await h.flow.confirm(); await h.flush();
+  assert.equal(h.calls.find(call=>call.action==='prepare').input.chainId,137);
+  assert.equal(h.flow.payment.chainId,137); assert.equal(h.sdk.creations.length,0); assert.equal(h.sdk.sends.length,0);
+  assert.equal(h.flow.errorKey,'companyPayment.walletMismatch');
+  h.flow.selectHistory(payment({ amountAtomic:'7000000' })); await h.flush();
+  assert.equal(h.flow.payment.chainId,137); assert.equal(h.flow.chainId,137);
+});
+
+test('signing recovery and a submitted transaction cannot be dropped by selecting the other network', async t => {
+  for (const mode of ['recovery','submitted']) {
+    const storage = new Map();
+    if(mode==='recovery') recovery.saveCompanyRecovery({getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value)},
+      {version:1,paymentId,walletAddress:wallet,amountAtomic:balanceAtomic,phase:'signing',transactionHash:null});
+    const h = harness({ storage, history:async()=>({records:[mode==='submitted'?payment({status:'submitted',transactionHash}):payment()]}) });
+    t.after(()=>h.unmount()); await h.flush(); h.flow.changeNetwork(137); await h.flush();
+    assert.equal(h.flow.chainId,1); assert.equal(h.flow.payment.paymentId,paymentId);
+    assert.equal(h.flow.stage,'status'); if(mode==='recovery')assert.ok(h.flow.recovery);
+    assert.deepEqual(writes(h),[]); assert.equal(h.sdk.sends.length,0);
+  }
+});
+
+test('restoring a linked wallet is one deduplicated auth operation and never prepares, signs or changes its recorded address', async t => {
+  const pending = deferred(); let connections = 0;
+  const h = harness({ reown: { isConnected: false, isLinked: false, connectWallet: () => { connections++; return pending.promise; },
+    openConnect: () => assert.fail('the transfer bypassed the dedicated connection recovery'), linkWallet: () => assert.fail('a linked wallet was relinked') } });
+  t.after(() => h.unmount()); await h.flush();
+  const first = h.flow.connect(), second = h.flow.connect(); await h.flush();
+  assert.equal(connections, 1); assert.equal(h.flow.busy, true); assert.equal(h.flow.wallet, wallet);
+  assert.deepEqual(writes(h), []); assert.equal(h.sdk.preflightBalanceReads.length, 0); assert.equal(h.sdk.sends.length, 0);
+  pending.resolve({ connected: true }); await Promise.all([first, second]); await h.flush();
+  assert.equal(h.flow.busy, false); assert.equal(h.flow.wallet, wallet); assert.deepEqual(writes(h), []);
+});
+
+test('automatic restoration and an old session cannot open another connection or publish a late auth failure', async t => {
+  const restoring = harness({ reown: { isConnected: false, isLinked: false, isRestoring: true, connectWallet: () => assert.fail('restoration triggered another auth modal') } });
+  t.after(() => restoring.unmount()); await restoring.flush(); await restoring.flow.connect();
+  assert.equal(restoring.flow.restoring, true); assert.deepEqual(writes(restoring), []);
+  const pending = deferred(); const h = harness({ reown: { isConnected: false, isLinked: false, connectWallet: () => pending.promise } });
+  t.after(() => h.unmount()); await h.flush(); const operation = h.flow.connect(); await h.flush();
+  await h.session({ subject: 'owner-B', email: 'member@example.test' });
+  pending.reject(new Error('wallet_connection_timeout')); await operation; await h.flush();
+  assert.equal(h.flow.busy, false); assert.equal(h.flow.errorKey, ''); assert.deepEqual(writes(h), []);
 });

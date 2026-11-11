@@ -21,7 +21,11 @@ test('company payment translations preserve the full locale and interpolation co
     assert.match(catalog.legacyNetwork, /Polygon.*USDT/);
     assert.match(catalog.legacyConfirmedCopy, /Polygon.*12/);
     assert.match(catalog.legacyVerify, /Polygon/);
-    assert.match(catalog.legacyPreparedCopy, /Polygon.*Ethereum/);
+    assert.ok(catalog.legacyPreparedCopy.trim());
+    assert.match(catalog.polygonGasCopy, /POL/);
+    assert.match(catalog.polygonSwitchNetwork, /Polygon/);
+    assert.ok(catalog.chooseNetwork.trim());
+    assert.ok(catalog.networkSelectionCopy.trim());
     for (const key of ['preparedTitle', 'preparedCopy', 'submittedTitle', 'confirmedTitle', 'pendingCopy', 'ambiguousTitle',
       'ambiguousCopy', 'registerHash', 'hashLabel', 'verify', 'resume', 'statusUnavailable', 'emptyHistory', 'switchNetwork',
       'zeroGas', 'balanceChanged', 'walletMismatch', 'rejected', 'serviceUnavailable', 'paymentFailed', 'networkUnavailable',

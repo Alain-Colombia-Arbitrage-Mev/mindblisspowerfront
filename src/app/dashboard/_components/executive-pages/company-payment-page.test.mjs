@@ -60,7 +60,7 @@ function payment(status = 'prepared', patch = {}) {
 function flow(value, patch = {}) {
   const calls = [];
   const method = name => () => calls.push(name);
-  return { connected: true, verified: true, busy: false, payment: value, stage: 'status', transfer: null, recovery: null,
+  return { connected: true, verified: true, chainId: value?.chainId || 1, chainBalances: [], changeNetwork: method('changeNetwork'), busy: false, payment: value, stage: 'status', transfer: null, recovery: null,
     manualHash: '', errorKey: '', history: [], historyLoading: false, balanceAtomic: '100000000', amount: '25.123456', loadingBalance: false,
     confirm: method('confirm'), resume: method('resume'), newPayment: method('newPayment'), abandon: method('abandon'),
     verifyPayment: method('verifyPayment'), review: method('review'), refresh: method('refresh'), connect: method('connect'),
@@ -179,21 +179,21 @@ test('historical Polygon transfers keep their original network, explorer and con
   locale = 'es';
 });
 
-test('a legacy Polygon draft can only be discarded or have a previous hash registered, never resumed for sending', () => {
+test('a Polygon draft keeps its selected network when reviewed or resumed, while recovery remains registration only', () => {
   const record = legacyPayment('prepared');
   activeFlow = flow(record, { stage: 'review' });
   const page = PersonalCompanyPayment();
-  assert.equal(findAll(page, node => node?.type === forms.CompanyPaymentReview).length, 0);
-  assert.equal(findAll(page, node => node?.type === CompanyPaymentStatus).length, 1);
+  assert.equal(findAll(page, node => node?.type === forms.CompanyPaymentReview).length, 1);
+  assert.equal(findAll(page, node => node?.type === CompanyPaymentStatus).length, 0);
   const tree = CompanyPaymentStatus({ flow: activeFlow });
-  assert.ok(renderToStaticMarkup(tree).includes(t('legacyPreparedCopy')));
-  assert.equal(button(tree, 'resume'), undefined);
+  assert.ok(renderToStaticMarkup(tree).includes(t('preparedCopy')));
+  assert.ok(button(tree, 'resume'));
   assert.equal(button(tree, 'connect'), undefined);
   assert.equal(button(tree, 'confirmInWallet'), undefined);
   assert.ok(button(tree, 'abandon'));
-  assert.equal(button(tree, 'registerHash').props.disabled, true);
-  assert.equal(findAll(tree, node => node?.type === 'input').length, 1);
-  const withHash = flow(record, { manualHash: hash });
+  assert.equal(button(tree, 'registerHash'), undefined);
+  assert.equal(findAll(tree, node => node?.type === 'input').length, 0);
+  const withHash = flow(record, { manualHash: hash, recovery: { paymentId: record.paymentId, transactionHash: hash } });
   const recovery = CompanyPaymentStatus({ flow: withHash });
   assert.equal(button(recovery, 'registerHash').props.disabled, false);
   button(recovery, 'registerHash').props.onClick();

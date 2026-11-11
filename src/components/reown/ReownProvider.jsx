@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createAppKit, useAppKit, useAppKitAccount, useAppKitProvider, useAppKitState, useAppKitTheme, useAppKitNetwork, useDisconnect } from "@reown/appkit/react";
 import { EthersAdapter } from "@reown/appkit-adapter-ethers";
 import { OnRampController } from "@reown/appkit-controllers";
-import { mainnet } from "@reown/appkit/networks";
+import { mainnet, polygon } from "@reown/appkit/networks";
 import { BrowserProvider, getAddress } from "ethers";
 import { useMemberSession } from "@/lib/member-session-context";
 import { browserOnrampRegion } from "@/lib/browser-onramp-region.mjs";
@@ -14,6 +14,7 @@ import { PERSONAL_WALLET_ASSET, PERSONAL_WALLET_MINIMUM_USD } from "@/lib/person
 import { readWalletBinding, requestWalletLink, walletBindingFailure } from "@/lib/wallet-binding.mjs";
 import { personalFundingFailure } from "@/lib/personal-funding-errors.mjs";
 import { createReownFundingOperation, verifyReownWalletOwnership } from "@/lib/reown-funding-operation.mjs";
+import { createReownWalletConnectionRequest, reownWalletConnectionState } from "@/lib/reown-wallet-connection.mjs";
 import { ReownContext, useReownWallet } from "./ReownContext";
 
 const projectId = process.env.NEXT_PUBLIC_REOWN_PROJECT_ID?.trim() || "";
@@ -36,6 +37,9 @@ const unavailable = Object.freeze({
   linkError: "configuration",
   isLinked: false,
   isLinking: false,
+  isRestoring: false,
+  connectionStatus: "disconnected",
+  connectWallet: async () => { throw new Error("reown_unavailable"); },
   onrampStatus: "idle",
   onrampError: "configuration",
   fundingRevision: 0,
@@ -56,7 +60,7 @@ if (configured) {
   createAppKit({
     adapters: [new EthersAdapter()],
     projectId,
-    networks: [mainnet],
+    networks: [mainnet, polygon],
     defaultNetwork: mainnet,
     defaultAccountTypes: { eip155: "eoa" },
     metadata: {
@@ -67,6 +71,7 @@ if (configured) {
     },
     enableEIP6963: true,
     enableInjected: true,
+    enableReconnect: true,
     enableWallets: true,
     enableNetworkSwitch: false,
     enableMobileFullScreen: true,
@@ -123,6 +128,10 @@ function ConfiguredReownProvider({ children }) {
   const connectModalSeen = useRef(false);
   const bindingRequest = useRef(null);
   const sessionRetryEmail = useRef("");
+  const connectionRequest = useRef(null);
+  const connectionSnapshot = useRef({ status: "restoring", modalOpen: false });
+  const [connectionBusy, setConnectionBusy] = useState(false);
+  const [restorationTimedOut, setRestorationTimedOut] = useState(false);
 
   useEffect(() => {
     mounted.current = true;
@@ -130,6 +139,7 @@ function ConfiguredReownProvider({ children }) {
       mounted.current = false;
       onrampOperation.current?.cancel();
       linkingOperation.current?.cancel();
+      connectionRequest.current?.cancel();
     };
   }, []);
 
@@ -250,8 +260,32 @@ function ConfiguredReownProvider({ children }) {
   }, [beginOnrampOperation, open]);
   const currentAddress = typeof account.address === "string" && isAddress(account.address) ? getAddress(account.address) : "";
   const boundAddress = binding.status === "linked" && isAddress(binding.address) ? getAddress(binding.address) : "";
-  const isLinked = account.isConnected === true && Boolean(currentAddress) && binding.status === "linked"
+  const isLinked = account.isConnected === true && Boolean(currentAddress) && typeof walletProvider?.request === "function" && binding.status === "linked"
     && binding.address.toLowerCase() === currentAddress.toLowerCase();
+  const sdkConnectionStatus = reownWalletConnectionState({ initialized: appKitState.initialized !== false, loading: appKitState.loading,
+    status: account.status, isConnected: account.isConnected, currentAddress, boundAddress, walletProvider });
+  const connectionStatus = sdkConnectionStatus === "restoring" && restorationTimedOut ? "disconnected" : sdkConnectionStatus;
+  connectionSnapshot.current = { status: connectionStatus, modalOpen: appKitState.open === true };
+
+  useEffect(() => {
+    if (sdkConnectionStatus !== "restoring") { setRestorationTimedOut(false); return undefined; }
+    const timer = setTimeout(() => { if (mounted.current) setRestorationTimedOut(true); }, 15_000);
+    return () => clearTimeout(timer);
+  }, [sdkConnectionStatus]);
+
+  const connectWallet = useCallback(() => {
+    if (connectionSnapshot.current.status === "connected") return Promise.resolve({ connected: true });
+    if (connectionRequest.current) return connectionRequest.current.promise;
+    setConnectionBusy(true);
+    const request = createReownWalletConnectionRequest({ open: () => open({ view: "Connect", namespace: "eip155" }),
+      onSettled() { if (connectionRequest.current === request) connectionRequest.current = null; if (mounted.current) setConnectionBusy(false); } });
+    connectionRequest.current = request;
+    return request.promise;
+  }, [open]);
+
+  useEffect(() => {
+    connectionRequest.current?.update(connectionSnapshot.current);
+  }, [connectionStatus, appKitState.open]);
 
   const linkWallet = useCallback((parentOperation) => {
     if (linking.current) return linking.current;
@@ -480,10 +514,11 @@ function ConfiguredReownProvider({ children }) {
     }
     return walletProvider;
   }, [account.isConnected, walletProvider, currentAddress, boundAddress]);
-  const switchCompanyPaymentNetwork = useCallback(async () => {
+  const switchCompanyPaymentNetwork = useCallback(async (chainId = 1) => {
     getCompanyPaymentProvider();
+    if (![1, 137].includes(chainId)) throw new Error("personal_company_chain_changed");
     // The SDK handles embedded wallets and external EIP-1193 wallets separately.
-    await switchAppKitNetwork(mainnet);
+    await switchAppKitNetwork(chainId === 137 ? polygon : mainnet);
   }, [getCompanyPaymentProvider, switchAppKitNetwork]);
 
   const value = useMemo(() => ({
@@ -496,6 +531,9 @@ function ConfiguredReownProvider({ children }) {
     linkError: verificationError || binding.error,
     isLinked,
     isLinking,
+    isRestoring: connectionBusy || connectionStatus === "restoring",
+    connectionStatus,
+    connectWallet,
     onrampStatus: onrampState.status,
     onrampError: onrampState.error,
     fundingRevision,
@@ -510,7 +548,7 @@ function ConfiguredReownProvider({ children }) {
     linkWallet,
     refreshLink,
     openAccount,
-  }), [account.isConnected, account.status, binding.address, binding.error, binding.status, currentAddress, isLinked, isLinking,
+  }), [account.isConnected, account.status, binding.address, binding.error, binding.status, currentAddress, isLinked, isLinking, connectionBusy, connectionStatus, connectWallet,
     linkWallet, verificationError, fundingRevision, onrampState.error, onrampState.status,
     cancelOnramp, clearOnrampError, getCompanyPaymentProvider, switchCompanyPaymentNetwork, openAccount, openConnect, openOnramp, reconnectWallet, refreshLink, startOnramp]);
 

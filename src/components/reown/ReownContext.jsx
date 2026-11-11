@@ -13,6 +13,9 @@ export const ReownContext = createContext(Object.freeze({
   linkError: "",
   isLinked: false,
   isLinking: false,
+  isRestoring: false,
+  connectionStatus: "disconnected",
+  connectWallet: async () => { throw new Error("reown_unavailable"); },
   onrampStatus: "idle",
   onrampError: "",
   fundingRevision: 0,
@@ -43,6 +46,9 @@ export const ReownContext = createContext(Object.freeze({
  * @property {string} linkError
  * @property {boolean} isLinked
  * @property {boolean} isLinking
+ * @property {boolean} isRestoring
+ * @property {string} connectionStatus
+ * @property {() => Promise<unknown>} connectWallet
  * @property {string} onrampStatus
  * @property {string} onrampError
  * @property {number} fundingRevision
@@ -52,7 +58,7 @@ export const ReownContext = createContext(Object.freeze({
  * @property {() => void} cancelOnramp
  * @property {() => void} clearOnrampError
  * @property {() => {request: (input: {method: string, params?: unknown[]}) => Promise<unknown>}} getCompanyPaymentProvider
- * @property {() => Promise<unknown>} switchCompanyPaymentNetwork
+ * @property {(chainId?: number) => Promise<unknown>} switchCompanyPaymentNetwork
  * @property {() => Promise<unknown>} reconnectWallet
  * @property {() => Promise<unknown>} linkWallet
  * @property {() => Promise<unknown>} refreshLink

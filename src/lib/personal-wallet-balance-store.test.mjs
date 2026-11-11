@@ -7,6 +7,21 @@ const value = (walletAddress = `0x${'1'.repeat(40)}`, balanceAtomic = '10000000'
     { network: 'polygon', balanceAtomic: polygon, nativeBalanceAtomic: '0', observedAt: '2026-11-11T02:00:00Z' }] });
 const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; };
 
+test('temporary gateway errors recover automatically and visible balances refresh without reconnecting the SDK', async () => {
+  let calls = 0, time = 0;
+  const document = Object.assign(new EventTarget(), { visibilityState: 'visible' });
+  const store = createPersonalWalletBalanceStore({ read: async () => {
+    if (++calls === 1) throw Error('company_payment_unavailable'); return value();
+  }, now: () => time, retryDelays: [15], refreshIntervalMs: 20, documentTarget: document });
+  const close = store.subscribe('member', () => {});
+  await store.refresh('member'); assert.equal(store.get('member').balanceAtomic, null);
+  await new Promise(done => setTimeout(done, 40)); assert.equal(store.get('member').balanceAtomic, '10000000');
+  assert.equal(calls, 2); time = 6000;
+  await new Promise(done => setTimeout(done, 35)); assert.equal(calls, 3);
+  document.visibilityState = 'hidden'; time = 12000;
+  await new Promise(done => setTimeout(done, 35)); assert.equal(calls, 3); close();
+});
+
 test('cache scope distinguishes subjects even when their displayed email is identical', () => {
   assert.equal(personalWalletBalanceSessionKey(null), '');
   assert.notEqual(personalWalletBalanceSessionKey({ subject: 'A', email: 'member@example.test' }), personalWalletBalanceSessionKey({ subject: 'B', email: 'member@example.test' }));

@@ -3,9 +3,13 @@ export const PERSONAL_COMPANY_PAYMENT = Object.freeze({
   chainId: 1, tokenAddress: '0xdac17f958d2ee523a2206206994597c13d831ec7', tokenDecimals: 6,
   recipientAddress: '0x0a600b03ef5f8e7f3e182b83440c6d292033db0e',
 });
-// Historical evidence remains on its original chain; this is never a send policy.
-export const LEGACY_POLYGON_COMPANY_PAYMENT = Object.freeze({ ...PERSONAL_COMPANY_PAYMENT,
+export const POLYGON_COMPANY_PAYMENT = Object.freeze({ ...PERSONAL_COMPANY_PAYMENT,
   chainId: 137, tokenAddress: '0xc2132d05d31c914a87c6611c10748aeb04b58e8f' });
+export const LEGACY_POLYGON_COMPANY_PAYMENT = POLYGON_COMPANY_PAYMENT;
+/** A network selector cannot supply an alternative recipient or token. */
+export function personalCompanyPaymentPolicy(chainId = 1) {
+  return chainId === 1 ? PERSONAL_COMPANY_PAYMENT : chainId === 137 ? POLYGON_COMPANY_PAYMENT : null;
+}
 const MAX_UINT256 = (1n << 256n) - 1n;
 
 export function personalCompanyPaymentAtomic(value, allowZero = false) {

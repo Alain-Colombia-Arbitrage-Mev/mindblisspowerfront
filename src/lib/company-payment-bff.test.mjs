@@ -92,7 +92,7 @@ test('CSRF protection rejects foreign or same-site subdomain mutations and non-J
 test('strict body and query shapes cannot assign another owner, destination, asset, package or hash', async () => {
   for (const body of [{ ...input, subject: 'another-owner' }, { ...input, userId: 'another-owner' },
     { ...input, walletKind: 'administrative' }, { ...input, recipientAddress: `0x${'2'.repeat(40)}` }, { ...input, tokenAddress: `0x${'2'.repeat(40)}` },
-    { ...input, packageId: 17 }, { ...input, chainId: 1 }, { ...input, amountAtomic: 20 }, { ...input, amountAtomic: '01' },
+    { ...input, packageId: 17 }, { ...input, chainId: 10 }, { ...input, amountAtomic: 20 }, { ...input, amountAtomic: '01' },
     { ...input, requestId: [paymentId] }]) {
     assert.equal((await handleCompanyPayment(request('prepare', { body }), 'prepare', { env, serviceRequest: forbiddenTransport })).status, 400);
   }

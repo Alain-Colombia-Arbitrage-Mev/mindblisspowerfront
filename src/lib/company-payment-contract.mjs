@@ -12,9 +12,11 @@ export function companyAtomic(value) {
 }
 export function companyPaymentInput(value, action) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const keys = action === 'prepare' ? ['requestId', 'amountAtomic'] : action === 'submit' ? ['paymentId', 'transactionHash'] : ['verify', 'abandon'].includes(action) ? ['paymentId'] : [];
+  const selectedChain = action === 'prepare' && Object.hasOwn(value, 'chainId');
+  const keys = action === 'prepare' ? ['requestId', 'amountAtomic', ...(selectedChain ? ['chainId'] : [])] : action === 'submit' ? ['paymentId', 'transactionHash'] : ['verify', 'abandon'].includes(action) ? ['paymentId'] : [];
   if (!keys.length || Object.keys(value).length !== keys.length || Object.keys(value).some(key => !keys.includes(key))) return null;
-  if (action === 'prepare') return validUuid(value.requestId) && companyAtomic(value.amountAtomic) ? { requestId: value.requestId, amountAtomic: value.amountAtomic } : null;
+  if (action === 'prepare') return validUuid(value.requestId) && companyAtomic(value.amountAtomic)
+    && (!selectedChain || [1, 137].includes(value.chainId)) ? { requestId: value.requestId, amountAtomic: value.amountAtomic, ...(selectedChain ? { chainId: value.chainId } : {}) } : null;
   if (!validUuid(value.paymentId) || (action === 'submit' && !validHash(value.transactionHash))) return null;
   return { paymentId: value.paymentId, ...(action === 'submit' ? { transactionHash: value.transactionHash } : {}) };
 }

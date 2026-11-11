@@ -5,6 +5,7 @@ import test from 'node:test';
 import { Interface } from 'ethers';
 import { PERSONAL_COMPANY_PAYMENT, personalCompanyPaymentAmountAtomic, formatPersonalCompanyPaymentAmount,
   personalCompanyPaymentIntent, readPersonalCompanyPaymentBalance, createPersonalCompanyPaymentTransfer } from './personal-company-payment.mjs';
+import { personalCompanyPaymentPolicy } from './personal-company-payment-values.mjs';
 
 const sender = `0x${'1'.repeat(40)}`;
 const other = `0x${'2'.repeat(40)}`;
@@ -19,7 +20,7 @@ const deferred = () => { let resolve; let reject; const promise = new Promise((y
 const intent = (patch = {}) => ({ paymentId, walletAddress: sender, ...PERSONAL_COMPANY_PAYMENT,
   amountAtomic: balance, status: 'prepared', abandonedAt: null, expiresAt: new Date(now + 60000).toISOString(), ...patch });
 
-function fixture({ balanceAtomic = balance, native = '0x5b8d80', chain = '0x1', accounts = [sender], hooks = {} } = {}) {
+function fixture({ chainId = 1, balanceAtomic = balance, native = '0x5b8d80', chain = chainId === 137 ? '0x89' : '0x1', accounts = [sender], hooks = {} } = {}) {
   const provider = new EventEmitter();
   const calls = [], markers = [], broadcasts = [], states = [];
   provider.request = async request => {
@@ -29,7 +30,7 @@ function fixture({ balanceAtomic = balance, native = '0x5b8d80', chain = '0x1', 
     if (request.method === 'eth_accounts') return accounts;
     if (request.method === 'eth_call') {
       const parsed = abi.parseTransaction({ data: request.params[0].data });
-      assert.equal(request.params[0].to, PERSONAL_COMPANY_PAYMENT.tokenAddress);
+      assert.equal(request.params[0].to, personalCompanyPaymentPolicy(chainId).tokenAddress);
       return uint(parsed.name === 'decimals' ? 6 : balanceAtomic);
     }
     if (request.method === 'eth_estimateGas') return '0xc350'; // 50,000 gas.
@@ -38,11 +39,32 @@ function fixture({ balanceAtomic = balance, native = '0x5b8d80', chain = '0x1', 
     if (request.method === 'eth_sendTransaction') return hash;
     assert.fail(`Unexpected wallet RPC ${request.method}`);
   };
-  const create = patch => createPersonalCompanyPaymentTransfer({ walletProvider: provider, walletAddress: sender,
+  const create = patch => createPersonalCompanyPaymentTransfer({ walletProvider: provider, walletAddress: sender, chainId,
     onDispatchStart: value => markers.push(value), onBroadcast: value => broadcasts.push(value),
     onStateChange: value => states.push(value), now: () => now, readTimeoutMs: 1000, broadcastTimeoutMs: 1000, ...patch });
   return { provider, calls, markers, broadcasts, states, create, sends: () => calls.filter(call => call.method === 'eth_sendTransaction') };
 }
+
+test('each selected network reads and transfers only its own USDT token and exact MAX without combining funds', async () => {
+  for (const chainId of [1, 137]) {
+    const policy = personalCompanyPaymentPolicy(chainId), mock = fixture({ chainId });
+    const read = await readPersonalCompanyPaymentBalance({ walletProvider: mock.provider, walletAddress: sender, chainId });
+    assert.equal(read.chainId, chainId); assert.equal(read.balanceAtomic, balance);
+    const prepared = intent(policy);
+    assert.equal(personalCompanyPaymentIntent(prepared, sender, now, chainId).tokenAddress, policy.tokenAddress);
+    const controller = mock.create();
+    assert.throws(() => controller.sendPrepared(intent(personalCompanyPaymentPolicy(chainId === 1 ? 137 : 1)), { reviewedBalanceAtomic: balance }), { message: 'personal_company_invalid_intent' });
+    await controller.sendPrepared(prepared, { reviewedBalanceAtomic: balance });
+    assert.equal(mock.sends().length, 1);
+    const tx = mock.sends()[0].params[0];
+    assert.equal(tx.chainId, chainId === 1 ? '0x1' : '0x89'); assert.equal(tx.to, policy.tokenAddress);
+    const decoded = abi.parseTransaction({ data: tx.data });
+    assert.equal(decoded.args[0].toLowerCase(), policy.recipientAddress); assert.equal(decoded.args[1], BigInt(balance));
+    const emptyGas = fixture({ chainId, native: '0x0' });
+    await assert.rejects(emptyGas.create().sendPrepared(prepared, { reviewedBalanceAtomic: balance }), { message: chainId === 1 ? 'personal_company_insufficient_eth' : 'personal_company_insufficient_pol' });
+    assert.equal(emptyGas.sends().length, 0);
+  }
+});
 
 test('official Ethereum token identity is exactly twenty bytes and amount conversion preserves all six decimals', () => {
   assert.equal(PERSONAL_COMPANY_PAYMENT.tokenAddress, '0xdac17f958d2ee523a2206206994597c13d831ec7');

@@ -18,5 +18,6 @@ export function usePersonalWalletBalance(expectedAddress = '', network = 'ethere
   const invalid = !['ethereum', 'polygon'].includes(network)
     || (address && (!/^0x[0-9a-f]{40}$/.test(address) || (value.walletAddress && address !== value.walletAddress)));
   if (invalid) return { ...EMPTY_PERSONAL_BALANCE, error: 'personal_wallet_balance_mismatch', refresh };
+  if (!key) return { ...EMPTY_PERSONAL_BALANCE, loading: session === null, refresh };
   return { ...value, refresh };
 }

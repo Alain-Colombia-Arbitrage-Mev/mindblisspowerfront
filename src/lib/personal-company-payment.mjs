@@ -1,5 +1,5 @@
 import { Interface } from 'ethers';
-import { PERSONAL_COMPANY_PAYMENT, personalCompanyPaymentAtomic as atomic, formatPersonalCompanyPaymentAmount } from './personal-company-payment-values.mjs';
+import { personalCompanyPaymentPolicy, personalCompanyPaymentAtomic as atomic, formatPersonalCompanyPaymentAmount } from './personal-company-payment-values.mjs';
 export { PERSONAL_COMPANY_PAYMENT, personalCompanyPaymentAmountAtomic, formatPersonalCompanyPaymentAmount } from './personal-company-payment-values.mjs';
 const ABI = new Interface(['function balanceOf(address) view returns (uint256)', 'function decimals() view returns (uint8)',
   'function transfer(address,uint256) returns (bool)']);
@@ -11,21 +11,22 @@ const error = (code, name = 'Error') => Object.assign(new Error(code), { name, t
 const cancelled = () => error('personal_company_cancelled', 'AbortError');
 const address = value => typeof value === 'string' && ADDRESS.test(value) ? value.toLowerCase() : null;
 
-export function personalCompanyPaymentIntent(value, walletAddress, now = Date.now()) {
+export function personalCompanyPaymentIntent(value, walletAddress, now = Date.now(), chainId = 1) {
   const sender = address(walletAddress);
+  const policy = personalCompanyPaymentPolicy(chainId);
   if (value && typeof value === 'object' && value.abandonedAt !== null && value.abandonedAt !== undefined) throw error('personal_company_intent_abandoned');
-  if (!value || typeof value !== 'object' || Array.isArray(value) || !sender
+  if (!value || typeof value !== 'object' || Array.isArray(value) || !sender || !policy
     || typeof value.paymentId !== 'string' || !UUID.test(value.paymentId)
-    || address(value.walletAddress) !== sender || sender === PERSONAL_COMPANY_PAYMENT.recipientAddress
-    || value.chainId !== PERSONAL_COMPANY_PAYMENT.chainId || value.tokenDecimals !== PERSONAL_COMPANY_PAYMENT.tokenDecimals
-    || address(value.tokenAddress) !== PERSONAL_COMPANY_PAYMENT.tokenAddress
-    || address(value.recipientAddress) !== PERSONAL_COMPANY_PAYMENT.recipientAddress
+    || address(value.walletAddress) !== sender || sender === policy.recipientAddress
+    || value.chainId !== policy.chainId || value.tokenDecimals !== policy.tokenDecimals
+    || address(value.tokenAddress) !== policy.tokenAddress
+    || address(value.recipientAddress) !== policy.recipientAddress
     || atomic(value.amountAtomic) === null || value.status !== 'prepared'
     || typeof value.expiresAt !== 'string' || value.expiresAt.length > 64 || !Number.isFinite(Date.parse(value.expiresAt))) {
     throw error('personal_company_invalid_intent');
   }
   if (!Number.isFinite(now) || Date.parse(value.expiresAt) <= now) throw error('personal_company_intent_expired');
-  return Object.freeze({ paymentId: value.paymentId.toLowerCase(), walletAddress: sender, ...PERSONAL_COMPANY_PAYMENT,
+  return Object.freeze({ paymentId: value.paymentId.toLowerCase(), walletAddress: sender, ...policy,
     amountAtomic: value.amountAtomic, status: 'prepared', abandonedAt: null, expiresAt: value.expiresAt });
 }
 
@@ -46,11 +47,11 @@ function uintResult(value) {
   return BigInt(value);
 }
 
-function walletContext(walletProvider, walletAddress, signal, readTimeoutMs) {
-  if (!walletProvider || typeof walletProvider.request !== 'function' || !address(walletAddress)) throw error('personal_company_wallet_unavailable');
+function walletContext(walletProvider, walletAddress, signal, readTimeoutMs, policy) {
+  if (!policy || !walletProvider || typeof walletProvider.request !== 'function' || !address(walletAddress)) throw error('personal_company_wallet_unavailable');
   let changed;
   const accountsChanged = accounts => { if (!Array.isArray(accounts) || address(accounts[0]) !== walletAddress) changed = 'personal_company_wallet_changed'; };
-  const chainChanged = chain => { try { if (chainIdentity(chain) !== BigInt(PERSONAL_COMPANY_PAYMENT.chainId)) changed = 'personal_company_chain_changed'; } catch { changed = 'personal_company_chain_changed'; } };
+  const chainChanged = chain => { try { if (chainIdentity(chain) !== BigInt(policy.chainId)) changed = 'personal_company_chain_changed'; } catch { changed = 'personal_company_chain_changed'; } };
   const assertActive = () => { if (signal?.aborted) throw cancelled(); if (changed) throw error(changed); };
   if (typeof walletProvider.on === 'function' && typeof walletProvider.removeListener === 'function') {
     walletProvider.on('accountsChanged', accountsChanged); walletProvider.on('chainChanged', chainChanged);
@@ -73,11 +74,11 @@ function walletContext(walletProvider, walletAddress, signal, readTimeoutMs) {
   }
   async function verify() {
     const [chain, accounts] = await Promise.all([read('eth_chainId'), read('eth_accounts')]);
-    if (chainIdentity(chain) !== BigInt(PERSONAL_COMPANY_PAYMENT.chainId)) throw error('personal_company_chain_changed');
+    if (chainIdentity(chain) !== BigInt(policy.chainId)) throw error('personal_company_chain_changed');
     if (!Array.isArray(accounts) || address(accounts[0]) !== walletAddress) throw error('personal_company_wallet_changed');
     assertActive();
   }
-  const tokenRead = data => read('eth_call', [{ to: PERSONAL_COMPANY_PAYMENT.tokenAddress, data }, 'latest']).then(uintResult);
+  const tokenRead = data => read('eth_call', [{ to: policy.tokenAddress, data }, 'latest']).then(uintResult);
   return { assertActive, read, verify,
     balance: () => tokenRead(ABI.encodeFunctionData('balanceOf', [walletAddress])),
     async decimals() { if (await tokenRead(ABI.encodeFunctionData('decimals')) !== 6n) throw error('personal_company_token_mismatch'); },
@@ -86,15 +87,16 @@ function walletContext(walletProvider, walletAddress, signal, readTimeoutMs) {
 }
 
 /** Read-only MAX snapshot. No requestAccounts, chain switch, approval or signature. */
-export async function readPersonalCompanyPaymentBalance({ walletProvider, walletAddress, signal, readTimeoutMs = 10_000 }) {
+export async function readPersonalCompanyPaymentBalance({ walletProvider, walletAddress, signal, readTimeoutMs = 10_000, chainId = 1 }) {
   const sender = address(walletAddress);
-  const context = walletContext(walletProvider, sender, signal, readTimeoutMs);
+  const policy = personalCompanyPaymentPolicy(chainId);
+  const context = walletContext(walletProvider, sender, signal, readTimeoutMs, policy);
   try {
     await context.verify();
     await context.decimals();
     const balance = await context.balance();
     await context.verify();
-    return Object.freeze({ walletAddress: sender, ...PERSONAL_COMPANY_PAYMENT,
+    return Object.freeze({ walletAddress: sender, ...policy,
       balanceAtomic: balance.toString(), amount: formatPersonalCompanyPaymentAmount(balance.toString()) });
   } finally { context.dispose(); }
 }
@@ -104,9 +106,10 @@ export async function readPersonalCompanyPaymentBalance({ walletProvider, wallet
  * hash, even after cancellation. Never automatically retry an ambiguous send.
  */
 export function createPersonalCompanyPaymentTransfer({ walletProvider, walletAddress, onDispatchStart, onBroadcast,
-  onStateChange = (_state) => {}, now = Date.now, readTimeoutMs = 10_000, broadcastTimeoutMs = 90_000 }) {
+  onStateChange = (_state) => {}, now = Date.now, readTimeoutMs = 10_000, broadcastTimeoutMs = 90_000, chainId = 1 }) {
   const sender = address(walletAddress);
-  if (!sender || !walletProvider || typeof walletProvider.request !== 'function'
+  const policy = personalCompanyPaymentPolicy(chainId);
+  if (!policy || !sender || !walletProvider || typeof walletProvider.request !== 'function'
     || typeof onDispatchStart !== 'function' || typeof onBroadcast !== 'function' || typeof now !== 'function'
     || typeof onStateChange !== 'function' || !Number.isFinite(readTimeoutMs) || readTimeoutMs <= 0 || readTimeoutMs > 60_000
     || !Number.isFinite(broadcastTimeoutMs) || broadcastTimeoutMs <= 0 || broadcastTimeoutMs > 300_000) throw error('personal_company_wallet_unavailable');
@@ -155,7 +158,7 @@ export function createPersonalCompanyPaymentTransfer({ walletProvider, walletAdd
 
   /** @param {any} record @param {{signal?: AbortSignal, reviewedBalanceAtomic: string}} options */
   async function run(record, { signal, reviewedBalanceAtomic }) {
-    const context = walletContext(walletProvider, sender, signal, readTimeoutMs);
+    const context = walletContext(walletProvider, sender, signal, readTimeoutMs, policy);
     try {
       await context.verify();
       await context.decimals();
@@ -164,27 +167,27 @@ export function createPersonalCompanyPaymentTransfer({ walletProvider, walletAdd
       if (reviewedBalance === null || balance !== reviewedBalance) throw error('personal_company_balance_changed');
       const amount = BigInt(record.intent.amountAtomic);
       if (amount > balance) throw error('personal_company_insufficient_usdt');
-      const transaction = { from: sender, to: PERSONAL_COMPANY_PAYMENT.tokenAddress, value: '0x0', chainId: '0x1',
-        data: ABI.encodeFunctionData('transfer', [PERSONAL_COMPANY_PAYMENT.recipientAddress, amount]) };
+      const transaction = { from: sender, to: policy.tokenAddress, value: '0x0', chainId: `0x${policy.chainId.toString(16)}`,
+        data: ABI.encodeFunctionData('transfer', [policy.recipientAddress, amount]) };
       const [price, native] = await Promise.all([
         context.read('eth_gasPrice').then(quantity),
         context.read('eth_getBalance', [sender, 'pending']).then(quantity),
       ]);
-      if (native === 0n) throw error('personal_company_insufficient_eth');
+      if (native === 0n) throw error(policy.chainId === 137 ? 'personal_company_insufficient_pol' : 'personal_company_insufficient_eth');
       const estimated = await context.read('eth_estimateGas', [transaction]).then(quantity);
       if (estimated <= 0n || price <= 0n) throw error('personal_company_gas_unavailable');
       const gasLimit = (estimated * 120n + 99n) / 100n;
-      if (gasLimit > MAX_UINT256 || gasLimit * price > native) throw error('personal_company_insufficient_eth');
+      if (gasLimit > MAX_UINT256 || gasLimit * price > native) throw error(policy.chainId === 137 ? 'personal_company_insufficient_pol' : 'personal_company_insufficient_eth');
       transaction.gas = `0x${gasLimit.toString(16)}`;
       transaction.gasPrice = `0x${price.toString(16)}`;
       if (await context.balance() !== reviewedBalance) throw error('personal_company_balance_changed');
       await context.verify();
-      personalCompanyPaymentIntent(record.intent, sender, now());
+      personalCompanyPaymentIntent(record.intent, sender, now(), chainId);
       await onDispatchStart(Object.freeze({ ...record.intent, phase: 'signing' }));
       await context.verify();
       if (await context.balance() !== reviewedBalance) throw error('personal_company_balance_changed');
       context.assertActive();
-      personalCompanyPaymentIntent(record.intent, sender, now());
+      personalCompanyPaymentIntent(record.intent, sender, now(), chainId);
       return await dispatch(record, Object.freeze(transaction), signal, context.assertActive);
     } catch (failure) {
       if (!record.dispatched) update(record, 'reviewing', failure?.message || 'personal_company_unavailable');
@@ -199,7 +202,7 @@ export function createPersonalCompanyPaymentTransfer({ walletProvider, walletAdd
       if (!options || typeof options !== 'object' || Array.isArray(options) || atomic(options.reviewedBalanceAtomic, true) === null) {
         return Promise.reject(error('personal_company_balance_changed'));
       }
-      const intent = personalCompanyPaymentIntent(value, sender, now());
+      const intent = personalCompanyPaymentIntent(value, sender, now(), chainId);
       let record = records.get(intent.paymentId);
       if (record && JSON.stringify(record.intent) !== JSON.stringify(intent)) return Promise.reject(error('personal_company_intent_changed'));
       if (record?.promise) return record.promise;
