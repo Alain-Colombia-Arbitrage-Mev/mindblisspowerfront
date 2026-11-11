@@ -18,6 +18,7 @@ import { personalWalletMetadata } from "@/lib/personal-portal-origin.mjs";
 import { createReownFundingOperation, verifyReownWalletOwnership } from "@/lib/reown-funding-operation.mjs";
 import { createReownWalletConnectionRequest, createReownWalletSwitchRequest, reownWalletConnectionState, reownWalletIdentityMismatch, reownWalletNeedsAccountSelection } from "@/lib/reown-wallet-connection.mjs";
 import { personalWalletBalanceSessionKey } from "@/lib/personal-wallet-balance-store.mjs";
+import { subscribeMemberLogout } from "@/lib/member-logout-sync.mjs";
 import { createReownWalletPreparationRequest } from "@/lib/reown-wallet-preparation.mjs";
 import { useSolanaWalletBinding } from "@/hooks/useSolanaWalletBinding";
 import { ReownContext, SOLANA_WALLET_UNAVAILABLE, useReownWallet } from "./ReownContext";
@@ -142,6 +143,7 @@ function ConfiguredReownProvider({ children }) {
   const onrampOperation = useRef(null);
   const linkingOperation = useRef(null);
   const mounted = useRef(true);
+  const logoutStarted = useRef(false);
   const connectModalSeen = useRef(false);
   const bindingRequest = useRef(null);
   const sessionRetryEmail = useRef("");
@@ -168,6 +170,30 @@ function ConfiguredReownProvider({ children }) {
       preparationRequest.current?.cancel();
     };
   }, []);
+
+  useEffect(() => subscribeMemberLogout(() => {
+    // The notifier snapshots subscribers: the parent may have unmounted this
+    // tree already, but its confirmed-logout SDK cleanup must still run once.
+    if (logoutStarted.current) return;
+    logoutStarted.current = true;
+    // Deny captured callbacks before React unmounts the private dashboard.
+    // Signing/funding work may finish late; it must not reach confirmation.
+    mounted.current = false; latestOwner.current = '';
+    bindingRequest.current?.controller.abort();
+    onrampOperation.current?.cancel();
+    linkingOperation.current?.cancel();
+    connectionRequest.current?.cancel();
+    switchRequest.current?.cancel();
+    preparationRequest.current?.cancel();
+    preparationRequest.current = null; preparationSnapshot.current = null;
+    selectedCandidate.current = null;
+    onrampIntent.current = false; onrampFlow.current = null;
+    onrampSelection.current = null; connectModalSeen.current = false;
+    // SDK cleanup is best effort. It never deletes the canonical ownership
+    // binding or financial recovery markers and cannot delay native sign-out.
+    try { void Promise.resolve(close()).catch(() => {}); } catch { /* already closed */ }
+    try { void Promise.resolve(disconnect()).catch(() => {}); } catch { /* native session is already revoked */ }
+  }), [close, disconnect]);
 
   useEffect(() => () => {
     connectionRequest.current?.cancel();
@@ -198,6 +224,7 @@ function ConfiguredReownProvider({ children }) {
   }, [appKitState.open]);
 
   const refreshLink = useCallback(() => {
+    if (!mounted.current || logoutStarted.current) return Promise.reject(new DOMException('Aborted', 'AbortError'));
     if (bindingRequest.current) return bindingRequest.current.promise;
     if (preparationRequest.current?.completed) preparationRequest.current = null;
     // Fence same-tick activation before React publishes this authoritative
@@ -251,6 +278,7 @@ function ConfiguredReownProvider({ children }) {
   }, [binding.status, refreshLink]);
 
   const beginOnrampOperation = useCallback(() => {
+    if (!mounted.current || logoutStarted.current) throw new DOMException('Aborted', 'AbortError');
     if (onrampOperation.current?.active) return onrampOperation.current;
     const scope = createReownFundingOperation({ onStop(error) {
       if (onrampOperation.current !== scope) return;
@@ -290,6 +318,7 @@ function ConfiguredReownProvider({ children }) {
   }, []);
 
   const openConnect = useCallback(async (parentOperation) => {
+    if (!mounted.current || logoutStarted.current) throw new DOMException('Aborted', 'AbortError');
     const scope = parentOperation || beginOnrampOperation();
     try { return await scope.wait(() => open({ view: "Connect", namespace: "eip155" })); }
     finally {
@@ -354,6 +383,7 @@ function ConfiguredReownProvider({ children }) {
   }, [disconnect, open, ownerKey]);
 
   const connectWallet = useCallback(() => {
+    if (!mounted.current || logoutStarted.current) return Promise.reject(new DOMException('Aborted', 'AbortError'));
     if (switchRequest.current) return switchRequest.current.promise;
     if (walletIdentityMismatch || walletNeedsAccountSelection) return chooseWallet();
     if (connectionSnapshot.current.status === "connected") return Promise.resolve({ connected: true });
@@ -372,6 +402,7 @@ function ConfiguredReownProvider({ children }) {
   }, [sdkConnectionStatus, appKitState.open, account.isConnected, account.status]);
 
   const linkWallet = useCallback((parentOperation) => {
+    if (!mounted.current || logoutStarted.current) return Promise.reject(new DOMException('Aborted', 'AbortError'));
     if (linking.current) return linking.current;
     const scope = parentOperation || beginOnrampOperation();
     linkingOperation.current = scope;
@@ -432,6 +463,7 @@ function ConfiguredReownProvider({ children }) {
   }, [ownerKey]);
 
   const runOnramp = useCallback((selection = onrampSelection.current || {}) => {
+    if (!mounted.current || logoutStarted.current) return Promise.reject(new DOMException('Aborted', 'AbortError'));
     let context;
     try {
       context = reownFundingSelection(selection, detectPersonalFundingCountry);
@@ -531,6 +563,7 @@ function ConfiguredReownProvider({ children }) {
   const openOnramp = useCallback(() => runOnramp(), [runOnramp]);
 
   const startOnramp = useCallback(async (selection = {}) => {
+    if (!mounted.current || logoutStarted.current) throw new DOMException('Aborted', 'AbortError');
     try {
       reownFundingSelection(selection, detectPersonalFundingCountry);
     } catch (error) {
@@ -574,6 +607,7 @@ function ConfiguredReownProvider({ children }) {
   }, [account.isConnected, beginOnrampOperation, boundAddress, currentAddress, openConnect, runOnramp, walletProvider]);
 
   const reconnectWallet = useCallback(async () => {
+    if (!mounted.current || logoutStarted.current) throw new DOMException('Aborted', 'AbortError');
     if (onrampOperation.current?.active) return onrampFlow.current || { pending: true };
     const scope = beginOnrampOperation();
     onrampIntent.current = true;
@@ -611,16 +645,19 @@ function ConfiguredReownProvider({ children }) {
     }
   }, [account.isConnected, appKitState.open, cancelOnramp, onrampState.status]);
   const openAccount = useCallback(
-    () => open({ view: account.isConnected ? "Account" : "Connect", namespace: "eip155" }),
+    () => {
+      if (!mounted.current || logoutStarted.current) return Promise.reject(new DOMException('Aborted', 'AbortError'));
+      return open({ view: account.isConnected ? "Account" : "Connect", namespace: "eip155" });
+    },
     [account.isConnected, open],
   );
 
   const getCompanyPaymentProvider = useCallback(() => {
-    if (switchRequest.current || walletIdentityMismatch || account.isConnected !== true || !walletProvider || !currentAddress || !boundAddress || !sameAddress(currentAddress, boundAddress)) {
+    if (!mounted.current || logoutStarted.current || latestOwner.current !== ownerKey || switchRequest.current || walletIdentityMismatch || account.isConnected !== true || !walletProvider || !currentAddress || !boundAddress || !sameAddress(currentAddress, boundAddress)) {
       throw new Error("personal_company_wallet_unavailable");
     }
     return walletProvider;
-  }, [account.isConnected, walletProvider, currentAddress, boundAddress, walletIdentityMismatch]);
+  }, [ownerKey, account.isConnected, walletProvider, currentAddress, boundAddress, walletIdentityMismatch]);
   const switchCompanyPaymentNetwork = useCallback(async (chainId = 1) => {
     getCompanyPaymentProvider();
     if (![1, 137].includes(chainId)) throw new Error("personal_company_chain_changed");

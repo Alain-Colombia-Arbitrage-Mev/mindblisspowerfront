@@ -164,6 +164,7 @@ test('another wrong embedded account stays a mismatch after choosing and a stall
  * No browser storage, real wallet, provider RPC, email or signature is used. */
 function providerHarness(t, { bound = false, reset = async () => {}, proof = false, accountState = {}, readBinding } = {}) {
   const require = createRequire(import.meta.url), slots = [], queued = [], calls = [];
+  const logoutListeners = new Set();
   let cursor = 0, dirty = true, unmounted = false, value;
   let member = { subject: 'owner-new', email: 'new@example.test' };
   const account = { isConnected: true, status: 'connected', address, embeddedWalletInfo: { user: { email: 'previous@example.test' } }, ...accountState };
@@ -217,6 +218,7 @@ function providerHarness(t, { bound = false, reset = async () => {}, proof = fal
     '@/lib/reown-funding-operation.mjs': { createReownFundingOperation, verifyReownWalletOwnership },
     '@/lib/reown-wallet-connection.mjs': { createReownWalletConnectionRequest, createReownWalletSwitchRequest, reownWalletConnectionState: state, reownWalletIdentityMismatch: identityMismatch, reownWalletNeedsAccountSelection: needsSelection },
     '@/lib/personal-wallet-balance-store.mjs': { personalWalletBalanceSessionKey },
+    '@/lib/member-logout-sync.mjs': { subscribeMemberLogout: listener => { logoutListeners.add(listener); return () => logoutListeners.delete(listener); } },
     '@/lib/reown-wallet-preparation.mjs': { createReownWalletPreparationRequest },
     '@/hooks/useSolanaWalletBinding': { useSolanaWalletBinding: () => ({}) }, './ReownContext': { ReownContext: context, SOLANA_WALLET_UNAVAILABLE: {}, useReownWallet() {} },
   };
@@ -229,6 +231,8 @@ function providerHarness(t, { bound = false, reset = async () => {}, proof = fal
     assert.ok(name in imports, `Unmocked provider dependency: ${name}`); return imports[name];
   }, module, module.exports, { env: { NEXT_PUBLIC_REOWN_PROJECT_ID: 'a'.repeat(32) } });
   const view = { calls, get value() { return value; },
+    logout() { for (const listener of logoutListeners) listener(); },
+    snapshotLogout() { const callbacks = [...logoutListeners]; return () => { for (const listener of callbacks) listener(); }; },
     async flush() {
       for (let turn = 0, quiet = 0; turn < 40; turn++) {
         if (dirty && !unmounted) { dirty = false; cursor = 0; const outer = module.exports.default({ children: null }); value = outer.type(outer.props).props.value; }
@@ -430,4 +434,58 @@ test('an authoritative read already pending preserves activation coalescing unti
   const first = h.value.prepareWallet(), refresh = h.value.refreshLink(), second = h.value.prepareWallet();
   assert.equal(first, second); pending.resolve({ linked: true, address });
   await refresh; await h.flush(); assert.deepEqual(await first, { linked: true, address }); assert.deepEqual(h.calls, []);
+});
+
+test('confirmed member logout disconnects once and immediately denies a captured wallet provider without another signature', async t => {
+  const h = providerHarness(t, { bound: true }); await h.flush();
+  const getProvider = h.value.getCompanyPaymentProvider;
+  assert.doesNotThrow(getProvider);
+  h.logout(); h.logout();
+  assert.deepEqual(h.calls, ['disconnect']);
+  assert.throws(getProvider, { message: 'personal_company_wallet_unavailable' });
+  await assert.rejects(h.value.prepareWallet(), { name: 'AbortError' });
+  h.unmount(); h.logout(); assert.deepEqual(h.calls, ['disconnect']);
+});
+
+test('logout cancels an unfinished activation and a late binding response cannot authenticate, sign or fund', async t => {
+  const pending = deferred(); let signal;
+  const h = providerHarness(t, { readBinding: options => { signal = options.signal; return pending.promise; } }); await h.flush();
+  const activation = h.value.prepareWallet(), cancelled = assert.rejects(activation, { name: 'AbortError' });
+  h.logout(); assert.equal(signal.aborted, true); await cancelled;
+  pending.resolve({ linked: true, address }); await h.flush();
+  assert.deepEqual(h.calls, ['disconnect']);
+  assert.throws(h.value.getCompanyPaymentProvider, { message: 'personal_company_wallet_unavailable' });
+});
+
+test('wallet SDK disconnection failure cannot reopen a signer or require another login during confirmed logout', async t => {
+  const h = providerHarness(t, { bound: true, reset: async () => { throw Error('synthetic SDK failure'); } }); await h.flush();
+  assert.doesNotThrow(() => h.logout()); await h.flush();
+  assert.deepEqual(h.calls, ['disconnect']);
+  assert.throws(h.value.getCompanyPaymentProvider, { message: 'personal_company_wallet_unavailable' });
+  await assert.rejects(h.value.prepareWallet(), { name: 'AbortError' });
+});
+
+test('a snapshotted logout still disconnects once when the parent boundary unmounts the provider first', async t => {
+  const h = providerHarness(t, { bound: true }); await h.flush();
+  const notify = h.snapshotLogout(); h.unmount(); notify(); notify();
+  assert.deepEqual(h.calls, ['disconnect']);
+  assert.throws(h.value.getCompanyPaymentProvider, { message: 'personal_company_wallet_unavailable' });
+});
+
+test('every captured public wallet action rejects after logout without reopening auth or starting another lookup', async t => {
+  let reads = 0;
+  const h = providerHarness(t, { bound: true, readBinding: async () => { reads++; return { linked: true, address }; } }); await h.flush();
+  const previous = h.value; assert.equal(reads, 1);
+  h.logout();
+  for (const method of ['openAccount', 'openConnect', 'reconnectWallet', 'connectWallet', 'refreshLink', 'linkWallet', 'startOnramp', 'openOnramp', 'prepareWallet']) {
+    await assert.rejects(() => previous[method](), { name: 'AbortError' }, method);
+  }
+  assert.equal(reads, 1); assert.deepEqual(h.calls, ['disconnect']);
+});
+
+test('a captured disconnected-wallet connection callback cannot open the SDK after logout', async t => {
+  const h = providerHarness(t, { bound: true, accountState: { isConnected: false, status: 'disconnected', address: undefined } }); await h.flush();
+  const connect = h.value.connectWallet; h.logout();
+  await assert.rejects(connect(), { name: 'AbortError' });
+  assert.deepEqual(h.calls, ['disconnect']);
 });

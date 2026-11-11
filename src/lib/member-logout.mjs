@@ -1,4 +1,5 @@
 import { browserRequestDeadline } from './browser-request-deadline.mjs';
+import { publishMemberLogout } from './member-logout-sync.mjs';
 
 const unavailable = 'No pudimos confirmar el cierre de sesión. Intenta de nuevo.';
 let pending = null;
@@ -62,6 +63,7 @@ export function logoutMember({ fetchImpl = globalThis.fetch, clearCaches = clear
       // permits clearing local presentation data and replacing the whole document,
       // which also discards the Router Cache and mounted member resources.
       try { clearCaches(); } catch { /* An optional local cache cannot prevent leaving a revoked session. */ }
+      publishMemberLogout();
       navigate('/login');
     } finally { deadline.dispose(); }
   })().catch(() => { throw new Error(unavailable); }).finally(() => { pending = null; });
