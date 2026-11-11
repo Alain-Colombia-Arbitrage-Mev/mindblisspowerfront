@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { reownWalletConnectionState as state, createReownWalletConnectionRequest } from './reown-wallet-connection.mjs';
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import React from 'react';
+import ts from 'typescript';
+import { createReownFundingOperation, verifyReownWalletOwnership } from './reown-funding-operation.mjs';
+import { personalWalletBalanceSessionKey } from './personal-wallet-balance-store.mjs';
+import { reownWalletConnectionState as state, createReownWalletConnectionRequest, createReownWalletSwitchRequest,
+  reownWalletIdentityMismatch as identityMismatch, reownWalletNeedsAccountSelection as needsSelection } from './reown-wallet-connection.mjs';
 
 const address = `0x${'1'.repeat(40)}`, other = `0x${'2'.repeat(40)}`;
 const provider = { request() { assert.fail('connection status must not request an RPC or signature'); } };
@@ -84,4 +91,276 @@ test('the connection deadline recovers a stalled third-party wallet login withou
   await assert.rejects(request.promise, { name: 'TimeoutError', message: 'wallet_connection_timeout' });
   const failure = createReownWalletConnectionRequest({ open: async () => { throw new Error('provider_failed'); } });
   await assert.rejects(failure.promise, { message: 'provider_failed' });
+});
+
+test('only known different embedded emails on an unlinked account suppress a restored candidate; email never proves ownership', () => {
+  const input = { bindingStatus: 'unlinked', sessionEmail: ' Member@Example.Test ', embeddedEmail: 'other@example.test' };
+  assert.equal(identityMismatch(input), true);
+  assert.equal(identityMismatch({ ...input, embeddedEmail: 'member@example.test' }), false);
+  assert.equal(identityMismatch({ ...input, embeddedEmail: undefined }), false);
+  assert.equal(identityMismatch({ ...input, sessionEmail: '' }), false);
+  assert.equal(identityMismatch({ ...input, bindingStatus: 'loading' }), false);
+  assert.equal(identityMismatch({ ...input, bindingStatus: 'linked' }), false);
+  assert.equal(state({ ...linked, boundAddress: '', identityMismatch: true }), 'mismatch');
+  // The same email still cannot stand in for an unlocked signer or binding.
+  assert.equal(state({ boundAddress: address, identityMismatch: false }), 'disconnected');
+});
+
+const deferred = () => { let resolve, reject; const promise = new Promise((done, fail) => { resolve = done; reject = fail; }); return { promise, resolve, reject }; };
+const tick = async () => { for (let count = 0; count < 6; count++) await Promise.resolve(); };
+
+test('wallet selection requires both completed reset and observable disconnection, ignoring stale connected snapshots before fresh Connect', async () => {
+  const reset = deferred(); let resets = 0, opens = 0, completed = false;
+  const choice = createReownWalletSwitchRequest({ disconnect: () => { resets++; return reset.promise; }, open: () => { opens++; } });
+  choice.promise.then(() => { completed = true; });
+  await tick(); assert.equal(resets, 1);
+  choice.update({ status: 'connected', modalOpen: false, disconnected: false });
+  reset.resolve(); await tick(); assert.equal(opens, 0); assert.equal(completed, false);
+  choice.update({ status: 'disconnected', modalOpen: false, disconnected: true });
+  choice.update({ status: 'connected', modalOpen: false, disconnected: false });
+  assert.equal(completed, false);
+  await tick(); assert.equal(opens, 1); assert.equal(completed, false);
+  choice.update({ status: 'connected', modalOpen: false, disconnected: false });
+  assert.deepEqual(await choice.promise, { connected: true }); assert.equal(opens, 1);
+});
+
+test('a failed disconnect cannot open auth, accept the old connection, or claim the wallet is ready', async () => {
+  let opens = 0;
+  const choice = createReownWalletSwitchRequest({ disconnect: () => Promise.reject(Error('reset_failed')), open: () => opens++ });
+  const failed = assert.rejects(choice.promise, { message: 'reset_failed' });
+  choice.update({ status: 'connected', modalOpen: false, disconnected: false });
+  await failed; assert.equal(opens, 0);
+});
+
+test('owner cancellation suppresses late disconnect results and fresh auth events', async () => {
+  const reset = deferred(); let opens = 0;
+  const choice = createReownWalletSwitchRequest({ disconnect: () => reset.promise, open: () => opens++ });
+  const failed = assert.rejects(choice.promise, { name: 'AbortError' });
+  await tick(); choice.cancel(); reset.resolve();
+  choice.update({ status: 'disconnected', modalOpen: false, disconnected: true });
+  choice.update({ status: 'connected', modalOpen: true, disconnected: false });
+  await failed; await tick(); assert.equal(opens, 0);
+  let disconnects = 0;
+  const immediate = createReownWalletSwitchRequest({ disconnect: () => disconnects++, open: () => opens++ });
+  const cancelled = assert.rejects(immediate.promise, { name: 'AbortError' }); immediate.cancel();
+  await cancelled; await tick(); assert.equal(disconnects, 0);
+});
+
+test('another wrong embedded account stays a mismatch after choosing and a stalled reset has a bounded deadline', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const choice = createReownWalletSwitchRequest({ initialState: { status: 'disconnected', modalOpen: false, disconnected: true },
+    disconnect: async () => {}, open: async () => {} });
+  await tick(); choice.update({ status: 'mismatch', modalOpen: true, disconnected: false });
+  const mismatch = assert.rejects(choice.promise, { message: 'wallet_address_mismatch' });
+  choice.update({ status: 'mismatch', modalOpen: false, disconnected: false });
+  t.mock.timers.tick(500); await mismatch;
+  const stuck = createReownWalletSwitchRequest({ disconnect: () => new Promise(() => {}), open: () => assert.fail('no disconnect observed') });
+  const expired = assert.rejects(stuck.promise, { name: 'TimeoutError' });
+  t.mock.timers.tick(90_000); await expired; t.mock.timers.reset();
+});
+
+/** Exercise the actual provider callbacks with a synthetic SDK and session.
+ * No browser storage, real wallet, provider RPC, email or signature is used. */
+function providerHarness(t, { bound = false, reset = async () => {}, proof = false, accountState = {}, readBinding } = {}) {
+  const require = createRequire(import.meta.url), slots = [], queued = [], calls = [];
+  let cursor = 0, dirty = true, unmounted = false, value;
+  let member = { subject: 'owner-new', email: 'new@example.test' };
+  const account = { isConnected: true, status: 'connected', address, embeddedWalletInfo: { user: { email: 'previous@example.test' } }, ...accountState };
+  const sdk = { initialized: true, loading: false, open: false };
+  const originals = new Map(['window', 'document', 'MutationObserver'].map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)]));
+  Object.defineProperty(globalThis, 'window', { configurable: true, value: { location: { origin: 'https://app.mindblisspower.com' }, addEventListener() {}, removeEventListener() {}, dispatchEvent() {} } });
+  Object.defineProperty(globalThis, 'document', { configurable: true, value: { documentElement: { dataset: { theme: 'light' } }, body: { classList: { toggle() {}, remove() {} } } } });
+  Object.defineProperty(globalThis, 'MutationObserver', { configurable: true, value: class { observe() {} disconnect() {} } });
+  const changed = (left, right) => !left || !right || left.length !== right.length || left.some((item, index) => item !== right[index]);
+  const hooks = { ...React,
+    useRef(initial) { return slots[cursor++] ??= { current: initial }; },
+    useState(initial) {
+      const cell = slots[cursor++] ??= { value: typeof initial === 'function' ? initial() : initial };
+      cell.set ??= update => { assert.equal(unmounted, false, 'No state updates after unmount'); const next = typeof update === 'function' ? update(cell.value) : update;
+        if (!Object.is(cell.value, next)) { cell.value = next; dirty = true; } };
+      return [cell.value, cell.set];
+    },
+    useMemo(callback, dependencies) { const cell = slots[cursor++] ??= {}; if (changed(cell.dependencies, dependencies)) { cell.dependencies = dependencies; cell.value = callback(); } return cell.value; },
+    useCallback(callback, dependencies) { return hooks.useMemo(() => callback, dependencies); },
+    useEffect(effect, dependencies) { const cell = slots[cursor++] ??= {}; if (changed(cell.dependencies, dependencies)) {
+      cell.dependencies = dependencies; queued.push(() => { cell.cleanup?.(); cell.cleanup = effect(); }); } },
+  };
+  const open = async () => { calls.push('open'); }, disconnect = async () => { calls.push('disconnect'); await reset(); };
+  const context = { Provider: () => null };
+  const imports = {
+    react: hooks,
+    '@reown/appkit/react': { createAppKit() {}, useAppKit: () => ({ open, close: async () => {} }),
+      useAppKitAccount: options => options?.namespace === 'solana' ? {} : account, useAppKitProvider: () => ({ walletProvider: provider }),
+      useAppKitState: () => sdk, useAppKitTheme: () => ({ setThemeMode() {}, setThemeVariables() {} }), useAppKitNetwork: () => ({ switchNetwork() { assert.fail('No payment network switch'); } }),
+      useDisconnect: () => ({ disconnect }) },
+    '@reown/appkit-adapter-ethers': { EthersAdapter: class {} }, '@reown/appkit-adapter-solana/react': { SolanaAdapter: class {} },
+    '@reown/appkit-controllers': { OnRampController: { state: { providers: [] } } }, '@reown/appkit/networks': { mainnet: {}, polygon: {}, solana: {} },
+    ethers: { getAddress: input => input.toLowerCase(), BrowserProvider: class {
+      getSigner() { assert.equal(proof, true, 'No signature in connection tests'); return {
+        getAddress: async () => account.address,
+        signMessage: async () => { calls.push('sign'); return `0x${'1'.repeat(130)}`; },
+      }; }
+    } },
+    '@/lib/member-session-context': { useMemberSession: () => member }, '@/lib/browser-onramp-region.mjs': { browserOnrampRegion() { assert.fail('No funding region lookup'); } },
+    '@/lib/reown-production-onramp.mjs': { buildReownProductionOnrampUrl() { assert.fail('No funding URL'); }, reownFundingSelection() { assert.fail('No funding selection'); } },
+    '@/lib/wallet-funding-client.mjs': { createPersonalFundingIntent() { assert.fail('No funding intent'); }, fundingRequestId() { assert.fail('No funding intent'); } },
+    '@/lib/personal-wallet.mjs': { PERSONAL_WALLET_ASSET: 'USDT', PERSONAL_WALLET_MINIMUM_USD: 30 },
+    '@/lib/wallet-binding.mjs': { readWalletBinding: async options => readBinding ? readBinding(options) : bound ? { linked: true, address } : { linked: false },
+      requestWalletLink: async path => {
+        assert.equal(proof, true, 'Foreign candidate must not request ownership proof');
+        if (path.endsWith('/challenge')) { calls.push('challenge'); return { linked: false, address: account.address, message: 'Synthetic explicit wallet ownership proof', challengeId: '11111111-1111-4111-8111-111111111111' }; }
+        assert.ok(path.endsWith('/confirm')); calls.push('confirm'); return { linked: true, address: account.address };
+      }, walletBindingFailure: error => error.message },
+    '@/lib/personal-funding-errors.mjs': { personalFundingFailure: error => error.message },
+    '@/lib/personal-portal-origin.mjs': { personalWalletMetadata: () => ({ url: 'https://app.mindblisspower.com' }) },
+    '@/lib/reown-funding-operation.mjs': { createReownFundingOperation, verifyReownWalletOwnership },
+    '@/lib/reown-wallet-connection.mjs': { createReownWalletConnectionRequest, createReownWalletSwitchRequest, reownWalletConnectionState: state, reownWalletIdentityMismatch: identityMismatch, reownWalletNeedsAccountSelection: needsSelection },
+    '@/lib/personal-wallet-balance-store.mjs': { personalWalletBalanceSessionKey },
+    '@/hooks/useSolanaWalletBinding': { useSolanaWalletBinding: () => ({}) }, './ReownContext': { ReownContext: context, SOLANA_WALLET_UNAVAILABLE: {}, useReownWallet() {} },
+  };
+  const code = ts.transpileModule(readFileSync(new URL('../components/reown/ReownProvider.jsx', import.meta.url), 'utf8'), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS },
+  }).outputText;
+  const module = { exports: {} };
+  new Function('require', 'module', 'exports', 'process', code)(name => {
+    if (name === 'react/jsx-runtime') return require(name);
+    assert.ok(name in imports, `Unmocked provider dependency: ${name}`); return imports[name];
+  }, module, module.exports, { env: { NEXT_PUBLIC_REOWN_PROJECT_ID: 'a'.repeat(32) } });
+  const view = { calls, get value() { return value; },
+    async flush() {
+      for (let turn = 0, quiet = 0; turn < 40; turn++) {
+        if (dirty && !unmounted) { dirty = false; cursor = 0; const outer = module.exports.default({ children: null }); value = outer.type(outer.props).props.value; }
+        while (queued.length && !unmounted) queued.shift()();
+        await new Promise(done => setImmediate(done));
+        if (!dirty && !queued.length) { if (++quiet === 3) return value; } else quiet = 0;
+      }
+      assert.fail('Synthetic provider failed to settle');
+    },
+    async account(next) { Object.assign(account, next); dirty = true; return view.flush(); },
+    async member(next) { member = next; dirty = true; return view.flush(); },
+    unmount() { for (const cell of slots) cell?.cleanup?.(); unmounted = true; },
+  };
+  t.after(() => { if (!unmounted) view.unmount();
+    for (const [name, original] of originals) original ? Object.defineProperty(globalThis, name, original) : delete globalThis[name]; }); return view;
+}
+
+test('actual provider hides a known foreign embedded wallet and refuses its ownership signature before a backend challenge', async t => {
+  const h = providerHarness(t); await h.flush();
+  assert.equal(h.value.walletIdentityMismatch, true); assert.equal(h.value.address, ''); assert.equal(h.value.isConnected, false);
+  await assert.rejects(h.value.linkWallet(), { message: 'wallet_address_mismatch' });
+  assert.deepEqual(h.calls, []); assert.throws(() => h.value.getCompanyPaymentProvider());
+});
+
+test('actual provider coalesces explicit selection and connect requests while waiting for a fresh disconnected SDK observation', async t => {
+  const h = providerHarness(t); await h.flush();
+  const first = h.value.chooseWallet(), second = h.value.chooseWallet(), third = h.value.connectWallet();
+  assert.equal(first, second); assert.equal(second, third); await h.flush();
+  assert.deepEqual(h.calls, ['disconnect']); assert.equal(h.value.address, '');
+  await h.account({ isConnected: false, status: 'disconnected' });
+  assert.deepEqual(h.calls, ['disconnect', 'open']); assert.equal(h.value.isConnected, false);
+  await h.account({ isConnected: true, status: 'connected', address: other, embeddedWalletInfo: { user: { email: 'new@example.test' } } });
+  assert.deepEqual(await first, { connected: true }); await h.flush();
+  assert.equal(h.value.address, other); assert.equal(h.value.isLinked, false); assert.equal(h.value.walletIdentityMismatch, false);
+  assert.deepEqual(h.calls, ['disconnect', 'open']);
+});
+
+test('a valid authoritative linked wallet keeps its restored session despite a different wallet login email', async t => {
+  const h = providerHarness(t, { bound: true }); await h.flush();
+  assert.equal(h.value.walletIdentityMismatch, false); assert.equal(h.value.isLinked, true); assert.equal(h.value.address, address);
+  assert.deepEqual(await h.value.connectWallet(), { connected: true }); await h.flush(); assert.deepEqual(h.calls, []);
+});
+
+test('actual provider fails a reset without exposing the foreign account or initiating funding', async t => {
+  const h = providerHarness(t, { reset: async () => { throw Error('synthetic_reset_failure'); } }); await h.flush();
+  await assert.rejects(h.value.chooseWallet(), { message: 'synthetic_reset_failure' }); await h.flush();
+  assert.equal(h.value.walletIdentityMismatch, true); assert.equal(h.value.address, '');
+  assert.deepEqual(h.calls, ['disconnect']); assert.equal(h.value.onrampStatus, 'idle');
+});
+
+test('missing embedded email and matching email both require fresh owner-scoped selection before showing an unlinked wallet', async t => {
+  const h = providerHarness(t); await h.flush();
+  for (const embeddedWalletInfo of [undefined, { user: { email: 'new@example.test' } }]) {
+    await h.account({ embeddedWalletInfo });
+    assert.equal(h.value.walletIdentityMismatch, false); assert.equal(h.value.walletNeedsAccountSelection, true);
+    assert.equal(h.value.address, ''); assert.equal(h.value.isConnected, false);
+    await assert.rejects(h.value.linkWallet(), { message: 'wallet_address_mismatch' });
+  }
+  assert.deepEqual(h.calls, []);
+});
+
+test('fresh selection exposes only a candidate; only explicit signed ownership proof links it, and later address changes invalidate selection', async t => {
+  const h = providerHarness(t, { proof: true }); await h.flush();
+  await h.account({ embeddedWalletInfo: undefined });
+  const choice = h.value.connectWallet(); await h.flush();
+  await h.account({ isConnected: false, status: 'disconnected' });
+  await h.account({ isConnected: true, status: 'connected', address: other });
+  await choice; await h.flush();
+  assert.equal(h.value.walletNeedsAccountSelection, false); assert.equal(h.value.isLinked, false);
+  assert.deepEqual(h.calls, ['disconnect', 'open']);
+  await h.value.linkWallet(); await h.flush();
+  assert.equal(h.value.isLinked, true); assert.equal(h.value.linkedAddress, other);
+  assert.deepEqual(h.calls, ['disconnect', 'open', 'challenge', 'sign', 'confirm']);
+});
+
+test('an unlinked candidate selection cannot survive SDK address replacement, including a later return to the old address', async t => {
+  const h = providerHarness(t); await h.flush(); await h.account({ embeddedWalletInfo: undefined });
+  const choice = h.value.chooseWallet(); await h.flush();
+  await h.account({ isConnected: false, status: 'disconnected' });
+  await h.account({ isConnected: true, status: 'connected', address: other }); await choice; await h.flush();
+  assert.equal(h.value.address, other);
+  await h.account({ address }); assert.equal(h.value.address, ''); assert.equal(h.value.walletNeedsAccountSelection, true);
+  await h.account({ address: other }); assert.equal(h.value.address, ''); assert.equal(h.value.walletNeedsAccountSelection, true);
+  assert.deepEqual(h.calls, ['disconnect', 'open']);
+});
+
+test('actual provider cancels an old owner selection and ignores late reset completion after session change or unmount', async t => {
+  const reset = deferred(), h = providerHarness(t, { reset: () => reset.promise }); await h.flush();
+  const choice = h.value.chooseWallet(), cancelled = assert.rejects(choice, { name: 'AbortError' }); await h.flush();
+  await h.member({ subject: 'owner-next', email: 'next@example.test' }); await cancelled;
+  reset.resolve(); await h.account({ isConnected: false, status: 'disconnected' }); assert.deepEqual(h.calls, ['disconnect']);
+  const again = h.value.chooseWallet(), stopped = assert.rejects(again, { name: 'AbortError' }); h.unmount(); await stopped;
+  await tick(); assert.deepEqual(h.calls, ['disconnect']);
+});
+
+test('a first wallet with no existing SDK connection opens initial auth once without calling disconnect on an unattached adapter', async t => {
+  const h = providerHarness(t, { accountState: { isConnected: false, status: 'disconnected', address: undefined, embeddedWalletInfo: undefined },
+    reset: () => assert.fail('Cannot disconnect an unattached adapter') });
+  await h.flush(); const choice = h.value.connectWallet(); await h.flush();
+  assert.deepEqual(h.calls, ['open']); assert.equal(h.value.isConnected, false);
+  await h.account({ isConnected: true, status: 'connected', address: other, embeddedWalletInfo: { user: { email: 'new@example.test' } } });
+  await choice; await h.flush(); assert.equal(h.value.address, other); assert.equal(h.value.isLinked, false);
+});
+
+test('an SDK restoration placeholder cannot authorize reset or opening auth before its actual disconnected observation', async () => {
+  let resets = 0, opens = 0;
+  const choice = createReownWalletSwitchRequest({ initialState: { status: 'restoring', disconnected: false, modalOpen: false },
+    disconnect: () => { resets++; }, open: () => { opens++; } });
+  await tick(); assert.equal(resets, 0); assert.equal(opens, 0);
+  choice.update({ status: 'restoring', disconnected: false, modalOpen: false });
+  await tick(); assert.equal(resets, 0);
+  choice.update({ status: 'disconnected', disconnected: true, modalOpen: false });
+  await tick(); assert.equal(resets, 1); assert.equal(opens, 1);
+  choice.update({ status: 'connected', disconnected: false, modalOpen: false }); await choice.promise;
+});
+
+test('a pending authoritative binding read hides the restored SDK candidate until its own linked address is confirmed', async t => {
+  const pending = deferred(), h = providerHarness(t, { readBinding: () => pending.promise });
+  await h.flush();
+  assert.equal(h.value.linkStatus, 'loading'); assert.equal(h.value.address, '');
+  assert.equal(h.value.isConnected, false); assert.equal(h.value.isLinked, false);
+  assert.deepEqual(h.calls, []);
+  pending.resolve({ linked: true, address }); await h.flush();
+  assert.equal(h.value.linkStatus, 'linked'); assert.equal(h.value.address, address);
+  assert.equal(h.value.isConnected, true); assert.equal(h.value.isLinked, true);
+  assert.deepEqual(await h.value.connectWallet(), { connected: true });
+  assert.deepEqual(h.calls, []);
+});
+
+test('a failed authoritative binding read never presents the restored SDK account as the member wallet', async t => {
+  const h = providerHarness(t, { readBinding: async () => { throw Error('synthetic_binding_unavailable'); } });
+  await h.flush();
+  assert.equal(h.value.linkStatus, 'error'); assert.equal(h.value.address, '');
+  assert.equal(h.value.isConnected, false); assert.equal(h.value.isLinked, false);
+  assert.throws(() => h.value.getCompanyPaymentProvider());
+  assert.deepEqual(h.calls, []);
 });

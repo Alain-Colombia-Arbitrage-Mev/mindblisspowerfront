@@ -1,6 +1,8 @@
 export const fundingMessages = {
   es: { funding: {
     chooseWallet: "Elegir otra billetera",
+    walletAccountMismatch: "La conexión abierta pertenece a otra cuenta. Continúa con {email} para preparar tu propia billetera.",
+    walletAccountChange: "Usa el correo de tu cuenta Mindbliss para crear o conectar tu propia billetera. La conexión anterior no se vinculará.",
     walletAlreadyUsed: "Esta billetera ya está vinculada a otra cuenta. Elige otra billetera para continuar.",
     prepareWallet: "Preparar billetera", prepareWalletCopy: "Completa una vez el acceso de tu billetera y confirma su vinculación segura a tu cuenta Mindbliss.",
     networkChanged: "Las nuevas recargas usan USDT en Polygon. Actualiza esta página y revisa el destino antes de continuar.",
@@ -77,6 +79,8 @@ export const fundingMessages = {
   } },
   en: { funding: {
     chooseWallet: "Choose another wallet",
+    walletAccountMismatch: "The open connection belongs to another account. Continue with {email} to set up your own wallet.",
+    walletAccountChange: "Use your Mindbliss account email to create or connect your own wallet. The previous connection will not be linked.",
     walletAlreadyUsed: "This wallet is already linked to another account. Choose another wallet to continue.",
     prepareWallet: "Set up wallet", prepareWalletCopy: "Complete wallet authentication once, then confirm its secure link to your Mindbliss account.",
     networkChanged: "New top-ups use USDT on Polygon. Reload this page and review the destination before continuing.",
@@ -153,6 +157,8 @@ export const fundingMessages = {
   } },
   ar: { funding: {
     chooseWallet: "اختيار محفظة أخرى",
+    walletAccountMismatch: "الاتصال المفتوح يخص حسابًا آخر. تابع باستخدام {email} لإعداد محفظتك الخاصة.",
+    walletAccountChange: "استخدم بريد حساب Mindbliss لإنشاء محفظتك الخاصة أو ربطها. لن يتم ربط الاتصال السابق.",
     walletAlreadyUsed: "هذه المحفظة مرتبطة بحساب آخر. اختر محفظة أخرى للمتابعة.",
     prepareWallet: "إعداد المحفظة", prepareWalletCopy: "أكمل تسجيل الدخول إلى محفظتك مرة واحدة، ثم أكد ربطها الآمن بحسابك في Mindbliss.",
     networkChanged: "تستخدم الإيداعات الجديدة USDT عبر Polygon. أعد تحميل هذه الصفحة وراجع عنوان الوجهة قبل المتابعة.",
@@ -229,6 +235,8 @@ export const fundingMessages = {
   } },
   zh: { funding: {
     chooseWallet: "选择其他钱包",
+    walletAccountMismatch: "当前连接属于其他账户。请使用 {email} 继续设置自己的钱包。",
+    walletAccountChange: "请使用 Mindbliss 账户邮箱创建或连接自己的钱包。之前的连接不会被绑定。",
     walletAlreadyUsed: "此钱包已绑定其他账户。请选择其他钱包以继续。",
     prepareWallet: "设置钱包", prepareWalletCopy: "完成一次钱包身份验证，然后确认将其安全绑定到你的 Mindbliss 账户。",
     networkChanged: "新充值使用 Polygon 网络的 USDT。请重新加载此页面并核对收款地址后继续。",

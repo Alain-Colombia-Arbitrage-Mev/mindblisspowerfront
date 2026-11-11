@@ -27,8 +27,11 @@ export const ReownContext = createContext(Object.freeze({
   isLinking: false,
   isRestoring: false,
   connectionStatus: "disconnected",
+  walletIdentityMismatch: false,
+  walletNeedsAccountSelection: false,
   solana: SOLANA_WALLET_UNAVAILABLE,
   connectWallet: async () => { throw new Error("reown_unavailable"); },
+  chooseWallet: async () => { throw new Error("reown_unavailable"); },
   onrampStatus: "idle",
   onrampError: "",
   fundingRevision: 0,
@@ -61,8 +64,11 @@ export const ReownContext = createContext(Object.freeze({
  * @property {boolean} isLinking
  * @property {boolean} isRestoring
  * @property {string} connectionStatus
+ * @property {boolean} walletIdentityMismatch
+ * @property {boolean} walletNeedsAccountSelection
  * @property {SolanaWalletContextValue} solana
  * @property {() => Promise<unknown>} connectWallet
+ * @property {() => Promise<unknown>} chooseWallet
  * @property {string} onrampStatus
  * @property {string} onrampError
  * @property {number} fundingRevision

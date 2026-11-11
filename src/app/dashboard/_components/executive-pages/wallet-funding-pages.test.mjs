@@ -103,7 +103,8 @@ test('first wallet setup explains authentication in every locale and starts only
   for (const locale of ['es', 'en', 'ar', 'zh']) {
     const calls = [];
     const reown = { configured: true, isConnected: false, address: '', linkedAddress: '', linkStatus: 'unlinked', onrampStatus: 'idle',
-      async openConnect() { calls.push('connect'); },
+      async connectWallet() { calls.push('connect'); },
+      async chooseWallet() { calls.push('choose'); },
       async linkWallet() { calls.push('link'); reown.linkStatus = 'linked'; reown.linkedAddress = reown.address; },
       async startOnramp() { assert.fail('Wallet setup cannot open a purchase'); } };
     const harness = componentHarness('PersonalWalletFundingPage.jsx', 'PersonalWalletFunding', {
@@ -129,6 +130,33 @@ test('first wallet setup explains authentication in every locale and starts only
     assert.ok(!renderToStaticMarkup(tree).includes(translateMessage(locale, 'funding.prepareWalletCopy')));
     assert.equal(find(tree, node => node?.type === 'button' && renderToStaticMarkup(node).includes(translateMessage(locale, 'funding.prepareWallet'))), undefined);
   }
+});
+
+test('an unlinked foreign embedded connection never exposes its address or requests a proof; setup switches accounts without starting a purchase', async t => {
+  const shared = load('WalletFundingUI.jsx', { 'lucide-react': icons, '@/i18n/LanguageProvider': i18n });
+  function PersonalFundingForm() { return null; }
+  const calls = [], foreignAddress = `0x${'9'.repeat(40)}`;
+  const reown = { configured: true, isConnected: true, address: foreignAddress, linkedAddress: '', linkStatus: 'unlinked',
+    walletIdentityMismatch: true, onrampStatus: 'idle',
+    async chooseWallet() { calls.push('choose'); },
+    async openConnect() { assert.fail('A cached foreign connection must be cleared first'); },
+    async connectWallet() { assert.fail('The explicit account change action is required'); },
+    async linkWallet() { assert.fail('Cannot ask the other account for a signature'); },
+    async startOnramp() { assert.fail('Account switching cannot start a purchase'); } };
+  const harness = componentHarness('PersonalWalletFundingPage.jsx', 'PersonalWalletFunding', {
+    'lucide-react': icons, '@/i18n/LanguageProvider': i18n, '@/components/reown/ReownContext': { useReownWallet: () => reown },
+    '@/lib/personal-funding-errors.mjs': { personalFundingFailure }, './WalletFundingForm': { PersonalFundingForm },
+    './WalletFundingStatus': { default: () => null }, './WalletFundingUI': shared,
+  }); t.after(() => harness.unmount());
+  const tree = harness.render(), markup = renderToStaticMarkup(tree);
+  assert.ok(!markup.includes(foreignAddress));
+  assert.ok(markup.includes(translateMessage('es', 'funding.walletAccountChange')));
+  assert.equal(find(tree, 'PersonalFundingForm').props.disabled, true);
+  assert.equal(find(tree, 'PersonalFundingForm').props.destinationAddress, '');
+  assert.equal(find(tree, node => node?.type === 'button' && renderToStaticMarkup(node).includes(translateMessage('es', 'funding.verifyWallet'))), undefined);
+  assert.deepEqual(calls, []);
+  await find(tree, node => node?.type === 'button' && renderToStaticMarkup(node).includes(translateMessage('es', 'funding.prepareWallet'))).props.onClick();
+  assert.deepEqual(calls, ['choose']);
 });
 
 test('personal countries discard canceled responses, respect route limits and submit only the selected production method', async t => {

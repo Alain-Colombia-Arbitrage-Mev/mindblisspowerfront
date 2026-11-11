@@ -42,6 +42,7 @@ function fundingRuntime(overrides = {}) {
     getAddress: value => value, mounted: { current: true }, account: { isConnected: false }, boundAddress: address,
     currentAddress: '', walletProvider: undefined, binding: { status: 'linked', address },
     onrampOperation: ref(), linkingOperation: ref(), onrampFlow: ref(), onrampSelection: ref(), onrampIntent: ref(),
+    switchRequest: ref(), walletIdentityMismatch: false, walletNeedsAccountSelection: false,
     linking: ref(), connectModalSeen: ref(), appKitState: { open: false },
     PERSONAL_WALLET_MINIMUM_USD: 30, PERSONAL_WALLET_ASSET: 'USDT', DOMException,
     setBinding: value => bindings.push(value), setOnrampState: value => states.push(value),
@@ -113,10 +114,11 @@ test('company network switching first verifies the connected bound wallet before
   const address = `0x${'1'.repeat(40)}`, mainnet = Object.freeze({ id: 1, name: 'Ethereum' });
   const provider = { request() { assert.fail('network switching used a raw provider request or transaction RPC'); } };
   const cases = [{}, { account: { isConnected: false } }, { walletProvider: undefined }, { currentAddress: '' }, { boundAddress: '' },
-    { currentAddress: `0x${'2'.repeat(40)}` }];
+    { currentAddress: `0x${'2'.repeat(40)}` }, { switchRequest: { current: { pending: true } } }, { walletIdentityMismatch: true }];
   for (const change of cases) {
     const events = [];
     const scope = { account: { isConnected: true }, walletProvider: provider, currentAddress: address, boundAddress: address,
+      switchRequest: { current: null }, walletIdentityMismatch: false,
       sameAddress: (left, right) => left.toLowerCase() === right.toLowerCase(), mainnet,
       switchAppKitNetwork: async network => { assert.equal(network, mainnet); events.push('mainnet SDK switch'); }, ...change };
     const verifiedProvider = onrampCallback('getCompanyPaymentProvider', scope);
@@ -213,6 +215,26 @@ test('an old cancelled signature cannot confirm ownership or overwrite a newly c
   signature.resolve('old cancelled signature'); await taskTick();
   assert.equal(confirms, 1); assert.equal(runtime.bindings.length, 1);
   assert.equal(runtime.bindings[0].address, address);
+});
+
+test('ownership callbacks refuse a mismatched, unselected or switching wallet before challenge, signer or provider access', async () => {
+  for (const [guard, message] of [
+    [{ walletIdentityMismatch: true }, 'wallet_address_mismatch'],
+    [{ walletNeedsAccountSelection: true }, 'wallet_address_mismatch'],
+    [{ switchRequest: { current: { pending: true } } }, 'wallet_not_connected'],
+  ]) {
+    let challengeCalls = 0, signerCalls = 0;
+    const runtime = fundingRuntime({ account: { isConnected: true }, currentAddress: `0x${'1'.repeat(40)}`,
+      walletProvider: { request() { assert.fail('Guarded wallet reached its provider'); } },
+      boundAddress: '', binding: { status: 'unlinked', address: '' }, ...guard,
+      requestWalletLink: async () => { challengeCalls++; assert.fail('Guarded wallet requested an ownership challenge'); },
+      BrowserProvider: class { constructor() { signerCalls++; assert.fail('Guarded wallet reached its signer'); } },
+    });
+    await assert.rejects(runtime.scope.linkWallet(), { message });
+    assert.equal(challengeCalls, 0); assert.equal(signerCalls, 0);
+    assert.deepEqual(runtime.bindings, []); assert.deepEqual(runtime.events, []);
+    assert.equal(runtime.scope.linking.current, null); assert.equal(runtime.scope.onrampOperation.current, null);
+  }
 });
 
 test('SPEI handoff forwards the actual MXN amount without claiming a USD valuation', async () => {

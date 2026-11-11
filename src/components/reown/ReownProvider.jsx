@@ -16,7 +16,8 @@ import { readWalletBinding, requestWalletLink, walletBindingFailure } from "@/li
 import { personalFundingFailure } from "@/lib/personal-funding-errors.mjs";
 import { personalWalletMetadata } from "@/lib/personal-portal-origin.mjs";
 import { createReownFundingOperation, verifyReownWalletOwnership } from "@/lib/reown-funding-operation.mjs";
-import { createReownWalletConnectionRequest, reownWalletConnectionState } from "@/lib/reown-wallet-connection.mjs";
+import { createReownWalletConnectionRequest, createReownWalletSwitchRequest, reownWalletConnectionState, reownWalletIdentityMismatch, reownWalletNeedsAccountSelection } from "@/lib/reown-wallet-connection.mjs";
+import { personalWalletBalanceSessionKey } from "@/lib/personal-wallet-balance-store.mjs";
 import { useSolanaWalletBinding } from "@/hooks/useSolanaWalletBinding";
 import { ReownContext, SOLANA_WALLET_UNAVAILABLE, useReownWallet } from "./ReownContext";
 
@@ -43,8 +44,11 @@ const unavailable = Object.freeze({
   isLinking: false,
   isRestoring: false,
   connectionStatus: "disconnected",
+  walletIdentityMismatch: false,
+  walletNeedsAccountSelection: false,
   solana: SOLANA_WALLET_UNAVAILABLE,
   connectWallet: async () => { throw new Error("reown_unavailable"); },
+  chooseWallet: async () => { throw new Error("reown_unavailable"); },
   onrampStatus: "idle",
   onrampError: "configuration",
   fundingRevision: 0,
@@ -118,6 +122,8 @@ function ConfiguredReownProvider({ children }) {
   const solanaWallet = useSolanaWalletBinding({ account: solanaAccount, walletProvider: solanaWalletProvider, appKitState, open, switchNetwork: switchSolanaNetwork });
   const appKitTheme = useAppKitTheme();
   const memberSession = useMemberSession();
+  const ownerKey = personalWalletBalanceSessionKey(memberSession);
+  const latestOwner = useRef(ownerKey); latestOwner.current = ownerKey;
   const appKitThemeRef = useRef(appKitTheme);
   appKitThemeRef.current = appKitTheme;
   const [binding, setBinding] = useState({ status: "loading", address: "", error: "" });
@@ -136,8 +142,12 @@ function ConfiguredReownProvider({ children }) {
   const bindingRequest = useRef(null);
   const sessionRetryEmail = useRef("");
   const connectionRequest = useRef(null);
-  const connectionSnapshot = useRef({ status: "restoring", modalOpen: false });
+  const switchRequest = useRef(null);
+  const selectedCandidate = useRef(null);
+  const [selectionRevision, setSelectionRevision] = useState(0);
+  const connectionSnapshot = useRef({ status: "restoring", modalOpen: false, disconnected: false, address: "" });
   const [connectionBusy, setConnectionBusy] = useState(false);
+  const [walletSwitching, setWalletSwitching] = useState(false);
   const [restorationTimedOut, setRestorationTimedOut] = useState(false);
 
   useEffect(() => {
@@ -147,8 +157,16 @@ function ConfiguredReownProvider({ children }) {
       onrampOperation.current?.cancel();
       linkingOperation.current?.cancel();
       connectionRequest.current?.cancel();
+      switchRequest.current?.cancel();
     };
   }, []);
+
+  useEffect(() => () => {
+    connectionRequest.current?.cancel();
+    switchRequest.current?.cancel();
+    linkingOperation.current?.cancel();
+    onrampOperation.current?.cancel();
+  }, [ownerKey]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -267,12 +285,21 @@ function ConfiguredReownProvider({ children }) {
   }, [beginOnrampOperation, open]);
   const currentAddress = typeof account.address === "string" && isAddress(account.address) ? getAddress(account.address) : "";
   const boundAddress = binding.status === "linked" && isAddress(binding.address) ? getAddress(binding.address) : "";
+  const walletIdentityMismatch = reownWalletIdentityMismatch({ bindingStatus: binding.status,
+    sessionEmail: memberSession?.email, embeddedEmail: account.embeddedWalletInfo?.user?.email });
+  if (selectedCandidate.current && (selectedCandidate.current.owner !== ownerKey
+    || !sameAddress(selectedCandidate.current.address, currentAddress) || account.isConnected !== true)) selectedCandidate.current = null;
+  const walletNeedsAccountSelection = reownWalletNeedsAccountSelection({ bindingStatus: binding.status, owner: ownerKey,
+    currentAddress, selectedOwner: selectedCandidate.current?.owner, selectedAddress: selectedCandidate.current?.address,
+    identityMismatch: walletIdentityMismatch });
   const isLinked = account.isConnected === true && Boolean(currentAddress) && typeof walletProvider?.request === "function" && binding.status === "linked"
-    && binding.address.toLowerCase() === currentAddress.toLowerCase();
+    && binding.address.toLowerCase() === currentAddress.toLowerCase() && !walletSwitching;
   const sdkConnectionStatus = reownWalletConnectionState({ initialized: appKitState.initialized !== false, loading: appKitState.loading,
-    status: account.status, isConnected: account.isConnected, currentAddress, boundAddress, walletProvider });
-  const connectionStatus = sdkConnectionStatus === "restoring" && restorationTimedOut ? "disconnected" : sdkConnectionStatus;
-  connectionSnapshot.current = { status: connectionStatus, modalOpen: appKitState.open === true };
+    status: account.status, isConnected: account.isConnected, currentAddress, boundAddress, walletProvider, identityMismatch: walletIdentityMismatch });
+  const restoredStatus = sdkConnectionStatus === "restoring" && restorationTimedOut ? "disconnected" : sdkConnectionStatus;
+  const connectionStatus = walletSwitching ? "restoring" : restoredStatus;
+  connectionSnapshot.current = { status: sdkConnectionStatus, modalOpen: appKitState.open === true,
+    disconnected: sdkConnectionStatus === "disconnected", address: currentAddress };
 
   useEffect(() => {
     if (sdkConnectionStatus !== "restoring") { setRestorationTimedOut(false); return undefined; }
@@ -280,7 +307,40 @@ function ConfiguredReownProvider({ children }) {
     return () => clearTimeout(timer);
   }, [sdkConnectionStatus]);
 
+  const chooseWallet = useCallback(() => {
+    if (switchRequest.current) return switchRequest.current.promise;
+    if (!ownerKey || latestOwner.current !== ownerKey || !mounted.current) return Promise.reject(new DOMException("Aborted", "AbortError"));
+    // This action must never set onrampIntent or invoke a funding/payment flow.
+    connectionRequest.current?.cancel();
+    selectedCandidate.current = null;
+    onrampIntent.current = false; onrampSelection.current = null;
+    const funding = onrampOperation.current; funding?.cancel(); linkingOperation.current?.cancel();
+    const valid = () => {
+      if (!mounted.current || latestOwner.current !== ownerKey) throw new DOMException("Aborted", "AbortError");
+    };
+    setWalletSwitching(true); setConnectionBusy(true); setVerificationError("");
+    const request = createReownWalletSwitchRequest({ initialState: connectionSnapshot.current,
+      disconnect: () => { valid(); return connectionSnapshot.current.disconnected ? Promise.resolve() : disconnect({ namespace: "eip155" }); },
+      open: () => { valid(); return open({ view: "Connect", namespace: "eip155" }); },
+      onSettled(error) {
+        if (switchRequest.current !== request) return;
+        switchRequest.current = null;
+        if (mounted.current && latestOwner.current === ownerKey) {
+          if (!error && connectionSnapshot.current.status === "connected" && isAddress(connectionSnapshot.current.address)) {
+            selectedCandidate.current = { owner: ownerKey, address: connectionSnapshot.current.address };
+            setSelectionRevision(value => value + 1);
+          }
+          setWalletSwitching(false); setConnectionBusy(false);
+        }
+      },
+    });
+    switchRequest.current = request;
+    return request.promise;
+  }, [disconnect, open, ownerKey]);
+
   const connectWallet = useCallback(() => {
+    if (switchRequest.current) return switchRequest.current.promise;
+    if (walletIdentityMismatch || walletNeedsAccountSelection) return chooseWallet();
     if (connectionSnapshot.current.status === "connected") return Promise.resolve({ connected: true });
     if (connectionRequest.current) return connectionRequest.current.promise;
     setConnectionBusy(true);
@@ -289,11 +349,12 @@ function ConfiguredReownProvider({ children }) {
       onSettled() { if (connectionRequest.current === request) connectionRequest.current = null; if (mounted.current) setConnectionBusy(false); } });
     connectionRequest.current = request;
     return request.promise;
-  }, [open]);
+  }, [chooseWallet, open, walletIdentityMismatch, walletNeedsAccountSelection]);
 
   useEffect(() => {
     connectionRequest.current?.update(connectionSnapshot.current);
-  }, [connectionStatus, appKitState.open]);
+    switchRequest.current?.update(connectionSnapshot.current);
+  }, [sdkConnectionStatus, appKitState.open, account.isConnected, account.status]);
 
   const linkWallet = useCallback((parentOperation) => {
     if (linking.current) return linking.current;
@@ -302,6 +363,8 @@ function ConfiguredReownProvider({ children }) {
     const operation = (async () => {
       scope.assertActive();
       setVerificationError("");
+      if (walletIdentityMismatch || walletNeedsAccountSelection) throw new Error("wallet_address_mismatch");
+      if (switchRequest.current) throw new Error("wallet_not_connected");
       if (account.isConnected !== true || !currentAddress || !walletProvider) throw new Error("wallet_not_connected");
       if (binding.status === "linked") {
         if (binding.address.toLowerCase() !== currentAddress.toLowerCase()) throw new Error("wallet_already_linked");
@@ -332,7 +395,7 @@ function ConfiguredReownProvider({ children }) {
     });
     linking.current = operation;
     return operation;
-  }, [account.isConnected, beginOnrampOperation, binding.address, binding.status, currentAddress, walletProvider]);
+  }, [account.isConnected, beginOnrampOperation, binding.address, binding.status, currentAddress, walletIdentityMismatch, walletNeedsAccountSelection, walletProvider]);
 
   const runOnramp = useCallback((selection = onrampSelection.current || {}) => {
     let context;
@@ -519,11 +582,11 @@ function ConfiguredReownProvider({ children }) {
   );
 
   const getCompanyPaymentProvider = useCallback(() => {
-    if (account.isConnected !== true || !walletProvider || !currentAddress || !boundAddress || !sameAddress(currentAddress, boundAddress)) {
+    if (switchRequest.current || walletIdentityMismatch || account.isConnected !== true || !walletProvider || !currentAddress || !boundAddress || !sameAddress(currentAddress, boundAddress)) {
       throw new Error("personal_company_wallet_unavailable");
     }
     return walletProvider;
-  }, [account.isConnected, walletProvider, currentAddress, boundAddress]);
+  }, [account.isConnected, walletProvider, currentAddress, boundAddress, walletIdentityMismatch]);
   const switchCompanyPaymentNetwork = useCallback(async (chainId = 1) => {
     getCompanyPaymentProvider();
     if (![1, 137].includes(chainId)) throw new Error("personal_company_chain_changed");
@@ -534,8 +597,8 @@ function ConfiguredReownProvider({ children }) {
   const value = useMemo(() => ({
     configured: true,
     solana: solanaWallet,
-    isConnected: account.isConnected === true,
-    address: currentAddress,
+    isConnected: ["linked", "unlinked"].includes(binding.status) && account.isConnected === true && !walletIdentityMismatch && !walletNeedsAccountSelection && !walletSwitching,
+    address: !["linked", "unlinked"].includes(binding.status) || walletIdentityMismatch || walletNeedsAccountSelection || walletSwitching ? "" : currentAddress,
     status: account.status || "disconnected",
     linkedAddress: binding.address,
     linkStatus: binding.status,
@@ -544,7 +607,10 @@ function ConfiguredReownProvider({ children }) {
     isLinking,
     isRestoring: connectionBusy || connectionStatus === "restoring" || binding.status === "loading",
     connectionStatus,
+    walletIdentityMismatch,
+    walletNeedsAccountSelection,
     connectWallet,
+    chooseWallet,
     onrampStatus: onrampState.status,
     onrampError: onrampState.error,
     fundingRevision,
@@ -559,7 +625,7 @@ function ConfiguredReownProvider({ children }) {
     linkWallet,
     refreshLink,
     openAccount,
-  }), [solanaWallet, account.isConnected, account.status, binding.address, binding.error, binding.status, currentAddress, isLinked, isLinking, connectionBusy, connectionStatus, connectWallet,
+  }), [solanaWallet, account.isConnected, account.status, binding.address, binding.error, binding.status, currentAddress, isLinked, isLinking, connectionBusy, connectionStatus, connectWallet, chooseWallet, walletIdentityMismatch, walletNeedsAccountSelection, walletSwitching, selectionRevision,
     linkWallet, verificationError, fundingRevision, onrampState.error, onrampState.status,
     cancelOnramp, clearOnrampError, getCompanyPaymentProvider, switchCompanyPaymentNetwork, openAccount, openConnect, openOnramp, reconnectWallet, refreshLink, startOnramp]);
 
