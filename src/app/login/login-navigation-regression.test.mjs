@@ -11,6 +11,7 @@ import * as referralSync from '../../lib/referral-sync.mjs';
 import * as registration from '../register/registration-model.mjs';
 import * as auth from './better-auth-login.mjs';
 import * as deadline from '../../lib/browser-request-deadline.mjs';
+import * as walletSetupHandoff from '../../lib/wallet-setup-handoff.mjs';
 
 const require = createRequire(import.meta.url);
 const email = 'navigation-fixture@example.test';
@@ -83,15 +84,16 @@ function dom() {
   document.documentElement = document.appendChild(document.createElement('html'));
   document.body = document.documentElement.appendChild(document.createElement('body'));
   document.activeElement = document.body;
-  const destinations = [], navigationMethods = [];
+  const destinations = [], navigationMethods = [], sessionValues = new Map();
   const window = {
     document, Node: HostNode, HTMLElement: HostNode, HTMLIFrameElement: class {},
+    sessionStorage: { getItem: key => sessionValues.get(key) ?? null, setItem: (key, value) => sessionValues.set(key, value), removeItem: key => sessionValues.delete(key) },
     location: { search: '', assign: path => { navigationMethods.push('assign'); destinations.push(path); },
       replace: path => { navigationMethods.push('replace'); destinations.push(path); } },
     addEventListener() {}, removeEventListener() {}, getSelection: () => null,
   };
   document.defaultView = window;
-  return { window, document, destinations, navigationMethods, container: document.body.appendChild(document.createElement('main')) };
+  return { window, document, destinations, navigationMethods, sessionValues, container: document.body.appendChild(document.createElement('main')) };
 }
 function nodes(root, predicate) {
   return [root, ...root.childNodes.flatMap(child => nodes(child, () => true))].filter(predicate);
@@ -114,6 +116,7 @@ function component() {
     './SocialLoginButtons': { default: () => null },
     '@/lib/referral-sync.mjs': referralSync,
     '@/lib/browser-request-deadline.mjs': deadline,
+    '@/lib/wallet-setup-handoff.mjs': walletSetupHandoff,
     './better-auth-login.mjs': auth,
     '../register/registration-model.mjs': registration,
   };
@@ -184,6 +187,7 @@ test('real React StrictMode checks one browser cookie roundtrip after delayed na
     return response(path);
   });
   await ui.send(); await ui.code();
+  assert.equal(ui.sessionValues.size, 0, 'requesting or entering a code cannot schedule wallet setup');
   let pending;
   await act(async () => {
     const form = nodes(ui.container, node => node.nodeName === 'FORM')[0];
@@ -198,6 +202,7 @@ test('real React StrictMode checks one browser cookie roundtrip after delayed na
   assert.equal(nodes(ui.container, node => node.nodeName === 'A' && node.getAttribute('href') === '/dashboard').length, 1);
   assert.equal(ui.paths.filter(path => path === '/api/auth/session?view=access').length, 1);
   assert.equal(ui.paths.filter(path => path === '/api/auth/sign-in/email-otp').length, 1);
+  assert.equal(walletSetupHandoff.consumeWalletSetupAfterAuth({ subject: 'synthetic-user', email }, ui.window)?.email, email);
 });
 
 test('real React mobile login still confirms fresh proof and navigates with both modern AbortSignal methods absent', async t => {
@@ -225,6 +230,7 @@ test('real React rejects a failed sign-in POST and permits an explicit retry wit
   assert.doesNotMatch(ui.container.textContent, /Correo verificado correctamente/);
   assert.deepEqual(ui.destinations, []);
   assert.equal(nodes(ui.container, node => node.nodeName === 'A' && node.getAttribute('href') === '/dashboard').length, 0);
+  assert.equal(ui.sessionValues.size, 0, 'a failed proof cannot schedule wallet setup');
   await ui.confirm();
   assert.deepEqual(ui.destinations, ['/dashboard']);
   assert.equal(ui.paths.filter(path => path.endsWith('/send-verification-otp')).length, 1);
@@ -243,6 +249,8 @@ test('a temporary cookie check failure keeps the real native dashboard link and 
   assert.equal(ui.paths.filter(path => path === '/api/auth/sign-in/email-otp').length, 1);
   assert.equal(ui.paths.filter(path => path.endsWith('/send-verification-otp')).length, 1);
   assert.doesNotMatch(ui.container.textContent, /synthetic_summary_unavailable|Revisar acceso/);
+  assert.equal(walletSetupHandoff.consumeWalletSetupAfterAuth({ subject: 'synthetic-user', email }, ui.window)?.email, email,
+    'a valid native POST keeps its UI handoff available for the explicit dashboard fallback');
 });
 
 test('real React unmount cancels a delayed sign-in POST and suppresses stale navigation', async t => {
@@ -282,6 +290,7 @@ test('real React rejects send acknowledgements, unverified and mismatched POST p
     assert.doesNotMatch(ui.container.textContent, /Correo verificado correctamente/);
     assert.deepEqual(ui.destinations, []);
     assert.equal(ui.paths.some(path => path.startsWith('/api/auth/session')), false);
+    assert.equal(ui.sessionValues.size, 0);
     await ui.unmount();
   }
 });

@@ -7,6 +7,7 @@ import * as contacts from './contact-phone-model.mjs';
 import * as emailOtp from '../../lib/email-otp-client.mjs';
 import * as referral from '../../lib/referral-attribution.js';
 import * as access from '../login/better-auth-login.mjs';
+import * as walletSetupHandoff from '../../lib/wallet-setup-handoff.mjs';
 import { registrationViewHarness, findRegistrationNode as find, registrationFieldStub, registrationButtonStub } from './registration-view-test-harness.mjs';
 
 const contactView = ({ id, label, value }) => React.createElement('div', null, label, React.createElement('input', { id, value: value.national, readOnly: true }));
@@ -42,7 +43,9 @@ const signupAck = () => Response.json({ ok: true, mode: 'better-auth', email: va
 const confirmationAck = () => Response.json({ ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: false, sessionEstablished: true });
 function browser(t) {
   const previous = globalThis.window, destinations = [];
-  globalThis.window = { location: { assign: href => destinations.push(href), replace: href => destinations.push(href) } };
+  const values = new Map();
+  globalThis.window = { sessionStorage: { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) },
+    location: { assign: href => destinations.push(href), replace: href => destinations.push(href) } };
   t.after(() => { if (previous === undefined) delete globalThis.window; else globalThis.window = previous; });
   return destinations;
 }
@@ -236,6 +239,7 @@ test('passwordless registration hands off once after fresh native session proof 
   let tree = harness.render(props);
   assert.match(renderToStaticMarkup(tree), /Verifica tu correo/);
   assert.deepEqual(destinations, [], 'signup acknowledgement is not proof of a native session');
+  assert.equal(walletSetupHandoff.consumeWalletSetupAfterAuth({ subject: 'synthetic-user', email: valid.email }, window), null);
   find(tree, node => node?.props?.id === 'code').props.onChange({ target: { value: '001234' } });
   await submit(harness.render(props));
   tree = harness.render(props);
@@ -246,6 +250,7 @@ test('passwordless registration hands off once after fresh native session proof 
   const continuation = find(tree, node => node?.props?.children === 'Continuar al panel');
   assert.equal(continuation.props.href, '/dashboard');
   assert.deepEqual(destinations, ['/dashboard']);
+  assert.equal(walletSetupHandoff.consumeWalletSetupAfterAuth({ subject: 'synthetic-user', email: valid.email }, window)?.email, valid.email);
   for (let render = 0; render < 3; render++) harness.render(props);
   assert.deepEqual(destinations, ['/dashboard']);
   assert.equal(find(tree, node => node?.props?.children === 'Crear o cambiar contraseña (opcional)').props.href, '/forgot-password');
@@ -427,6 +432,7 @@ test('manual registration resend acknowledgement guides the latest code without 
 });
 
 test('registration cannot show verified success from URL hints, send success, an invalid code or an ambiguous response', async t => {
+  browser(t);
   for (const [status, payload] of [[400, { ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: false, sessionEstablished: true }],
     [503, { ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: false, sessionEstablished: true }],
     [200, { ok: true }], [200, { ok: true, mode: 'better-auth', userConfirmed: false, needsLogin: false, sessionEstablished: true }],
@@ -440,6 +446,7 @@ test('registration cannot show verified success from URL hints, send success, an
     await submit(harness.render(resume));
     tree = harness.render(resume);
     assert.doesNotMatch(renderToStaticMarkup(tree), /Correo verificado correctamente|El correo está verificado/);
+    assert.equal(walletSetupHandoff.consumeWalletSetupAfterAuth({ subject: 'synthetic-user', email: valid.email }, window), null);
     assert.deepEqual(paths, ['/api/auth/register/confirm']);
   }
 });

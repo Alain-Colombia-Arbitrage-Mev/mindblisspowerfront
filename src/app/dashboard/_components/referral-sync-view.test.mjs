@@ -23,6 +23,7 @@ function view(sync) {
     '@/lib/member-navigation.mjs': { memberPageKeysFor: () => ({ titleKey: 'pages.summary', sectionKey: '' }) },
     '@/i18n/LanguageProvider': { useI18n: () => ({ locale: 'es', dir: 'ltr', t: (key, values) => translateMessage('es', key, values) }) },
     '@/components/reown/DashboardWalletProvider': { default: ({ children }) => children },
+    '@/components/reown/PostAuthWalletSetup': { default: () => null, usePostAuthWalletSetup: () => ({ request: null, finish() {} }) },
     '@/lib/member-session-context': { MemberSessionContext: { Provider: ({ children }) => children } },
     '@/lib/referral-sync.mjs': sync, '@/components/panel/panel-shell.css': {},
   });

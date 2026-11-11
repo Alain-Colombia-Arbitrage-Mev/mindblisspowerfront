@@ -9,6 +9,7 @@ import { bindReferralCodeToEmail } from '@/lib/referral-attribution';
 import { RegistrationButton, RegistrationField } from './RegistrationFields';
 import { beginVerifiedReferralSync } from '@/lib/referral-sync.mjs';
 import { browserRequestDeadline } from '@/lib/browser-request-deadline.mjs';
+import { rememberWalletSetupAfterAuth } from '@/lib/wallet-setup-handoff.mjs';
 import ContactPhoneField from './ContactPhoneField';
 import { initialContactPhone, registrationContactValues } from './contact-phone-model.mjs';
 import { REGISTRATION_RESEND_SECONDS, consumeRegistrationPrefill, registrationEmail, registrationErrors, registrationCodeFailure, registrationFailure, registrationHints, registrationLoginUrl, registrationUrl, registrationRetrySeconds, registrationAcknowledged, registrationPendingDelivery, registrationTimeoutMs } from './registration-model.mjs';
@@ -111,6 +112,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
       if (hints.referralCode) bindReferralCodeToEmail(email, hints.referralCode, undefined, undefined, 'registration', hints.preferredSide);
       if (hints.referralCode) void beginVerifiedReferralSync(email, hints.referralCode, hints.preferredSide);
     } catch { /* Server referral persistence independently verifies ownership. */ }
+    rememberWalletSetupAfterAuth(email, window);
     dashboardNavigation.current = true;
     try {
       window.location.replace('/dashboard');

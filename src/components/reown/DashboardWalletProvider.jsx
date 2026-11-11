@@ -16,14 +16,14 @@ function WalletLoading() {
 
 /** Keep one owner-bound provider alive after its first use. Ordinary dashboard
  * visits do not load AppKit, and route changes cannot tear down an unlocked wallet. */
-export default function DashboardWalletProvider({ children }) {
+export default function DashboardWalletProvider({ children, requested = false, setup = null }) {
   const pathname = usePathname();
   const owner = personalWalletBalanceSessionKey(useMemberSession());
   const walletRoute = typeof pathname === "string" && (pathname === "/dashboard/wallet-personal" || pathname.startsWith("/dashboard/wallet-personal/") || pathname === "/dashboard/packages");
   const [activatedOwner, setActivatedOwner] = useState("");
-  const activate = Boolean(owner) && (walletRoute || activatedOwner === owner);
+  const activate = Boolean(owner) && (walletRoute || requested || activatedOwner === owner);
   useEffect(() => { if (activate) setActivatedOwner(owner); }, [activate, owner]);
 
   if (!activate) return walletRoute && !owner ? <WalletLoading /> : children;
-  return <WalletProvider key={owner}>{children}</WalletProvider>;
+  return <WalletProvider key={owner}>{setup}{children}</WalletProvider>;
 }

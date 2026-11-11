@@ -8,6 +8,7 @@ import PanelSidebar from "@/components/panel/PanelSidebar";
 import NavigationDrawer from "@/components/panel/NavigationDrawer";
 import SupportWidget from "@/components/panel/SupportWidget";
 import DashboardWalletProvider from "@/components/reown/DashboardWalletProvider";
+import PostAuthWalletSetup, { usePostAuthWalletSetup } from "@/components/reown/PostAuthWalletSetup";
 import { memberPageKeysFor } from "@/lib/member-navigation.mjs";
 import { MemberSessionContext } from "@/lib/member-session-context";
 import { browserReferralChoice, chooseBrowserReferral, pendingVerifiedReferral, readVerifiedReferral, retryVerifiedReferral } from '@/lib/referral-sync.mjs';
@@ -19,6 +20,7 @@ export default function DashboardShell({ authMode: _authMode, children }) {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [member, setMember] = useState(null);
+  const walletSetup = usePostAuthWalletSetup(member);
   const [referralNotice, setReferralNotice] = useState('');
   const [referralSaving, setReferralSaving] = useState(false);
   const [referralChoice, setReferralChoice] = useState(null);
@@ -171,7 +173,7 @@ export default function DashboardShell({ authMode: _authMode, children }) {
                     : referralChoice ? t("dashboard.saveReferral") : referralPending ? t("dashboard.retrySaveReferral") : t("dashboard.retryReferralCheck")}
                 </button>
               </div> : null}
-              <DashboardWalletProvider>
+              <DashboardWalletProvider requested={Boolean(walletSetup.request)} setup={walletSetup.request ? <PostAuthWalletSetup request={walletSetup.request} onFinish={walletSetup.finish} /> : null}>
                 {children}
               </DashboardWalletProvider>
             </div>

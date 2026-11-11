@@ -53,6 +53,20 @@ test('Better Auth password verification receives a safe registration continuatio
   harness.unmount();
 });
 
+test('password sign-in does not schedule the OTP-only wallet setup handoff', async t => {
+  const destinations = browser(t), values = new Map(), paths = [];
+  window.location.replace = path => destinations.push(path);
+  window.sessionStorage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) };
+  t.mock.method(globalThis, 'fetch', async path => {
+    paths.push(path); assert.equal(path, '/api/auth/session?view=access');
+    return Response.json({ authenticated: true, mode: 'better-auth', email: 'member@example.test' });
+  });
+  const harness = magicView(), tree = harness.render({ authMode: 'better-auth', initialMode: 'password', initialEmail: 'member@example.test' });
+  await find(tree, node => node?.type === passwordView).props.onVerified('member@example.test');
+  assert.deepEqual(destinations, ['/dashboard']); assert.equal(values.size, 0);
+  assert.deepEqual(paths, ['/api/auth/session?view=access']); harness.unmount();
+});
+
 test('login offers email registration without phone validation or SMS sign-in', t => {
   const destinations = browser(t);
   const harness = magicView();

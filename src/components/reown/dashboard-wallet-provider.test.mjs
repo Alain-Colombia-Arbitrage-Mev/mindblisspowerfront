@@ -53,11 +53,20 @@ test('one lazy owner-keyed provider survives wallet, payment, history and summar
   assert.equal(first.type,h.Provider);const key=first.key;
   for(const route of ['/dashboard/wallet-personal/pay','/dashboard/wallet-personal/requests','/dashboard']){
     const next=h.render(route,member);assert.equal(next.type,first.type);assert.equal(next.key,key);
-    assert.equal(next.props.children,content);
+    assert.equal(next.props.children[1],content);
   }
   const other={subject:'owner-b',email:'two@example.test'};
   assert.equal(h.render('/dashboard',other),content,'A different owner must never inherit the prior activation');
   const changed=h.render('/dashboard/wallet-personal/pay',other);
   assert.equal(changed.type,h.Provider);assert.notEqual(changed.key,key);
   assert.notEqual(h.render('/dashboard/wallet-personal/pay',null).type,h.Provider);
+});
+
+test('initial setup stays inside the owner boundary and appears before the dashboard content',()=>{
+  const h=harness(),setup=React.createElement('aside',null,'setup');
+  const active=h.render('/dashboard',member,{requested:true,setup});
+  assert.equal(active.type,h.Provider);assert.equal(active.props.children[0],setup);
+  assert.equal(active.props.children[1],content);
+  assert.equal(h.render('/dashboard',member).key,active.key);
+  assert.equal(harness().render('/dashboard',null,{requested:true,setup}),content);
 });

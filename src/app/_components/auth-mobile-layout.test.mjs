@@ -11,6 +11,7 @@ import * as registration from '../register/registration-model.mjs';
 import * as emailOtp from '../../lib/email-otp-client.mjs';
 import * as auth from '../login/better-auth-login.mjs';
 import * as deadline from '../../lib/browser-request-deadline.mjs';
+import * as walletSetupHandoff from '../../lib/wallet-setup-handoff.mjs';
 
 const require = createRequire(import.meta.url);
 const source = file => readFileSync(new URL(file, import.meta.url), 'utf8');
@@ -47,6 +48,7 @@ const loginMocks = {
   './better-auth-login.mjs': auth,
   '../register/registration-model.mjs': registration,
   '@/lib/browser-request-deadline.mjs': deadline,
+  '@/lib/wallet-setup-handoff.mjs': walletSetupHandoff,
 };
 
 test('the real AuthShell renders the approved identity card and compact access landmarks', t => {
