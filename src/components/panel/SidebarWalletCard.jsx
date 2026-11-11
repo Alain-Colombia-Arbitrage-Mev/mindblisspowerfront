@@ -40,6 +40,12 @@ export default function SidebarWalletCard({ onNavigate }) {
         <code title={address || undefined}>{address ? compactAddress(address) : t(status === "loading" ? "walletPage.checking" : status === "error" ? "walletPage.checkFailed" : "funding.noPersonalAddress")}</code>
         {address ? <button type="button" onClick={copy} aria-label={t("walletPage.copyAddress")}><Copy size={12} aria-hidden="true" /></button> : null}
       </div>
+      {status === "unlinked" ? <div className="grid gap-2">
+        <p className="text-xs leading-relaxed text-[var(--vp-muted)]">{t("funding.prepareWalletCopy")}</p>
+        <Link href="/dashboard/wallet-personal#personal-wallet" onClick={onNavigate} className="vp-sidebar-wallet-action primary">
+          <Wallet size={14} aria-hidden="true" /><span>{t("funding.prepareWallet")}</span>
+        </Link>
+      </div> : null}
       <div className="vp-sidebar-wallet-actions">
         <Link href="/dashboard/wallet-personal" onClick={onNavigate} className="vp-sidebar-wallet-action primary">
           <CreditCard size={14} aria-hidden="true" />

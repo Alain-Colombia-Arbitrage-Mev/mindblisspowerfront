@@ -125,12 +125,50 @@ test('a refreshed binding replaces the common address and an aborted old read ca
 test('unlinked or unavailable wallets keep the two existing-wallet destinations without inventing an address or creating one', () => {
   for (const status of ['loading', 'unlinked', 'error']) {
     const tree = card({ boundAddress: '', status }).render();
-    assert.equal(findAll(tree, node => node.type === Link).length, 2);
+    const links = findAll(tree, node => node.type === Link);
+    assert.equal(links.length, status === 'unlinked' ? 3 : 2);
+    assert.deepEqual(links.slice(-2).map(node => node.props.href), ['/dashboard/wallet-personal', '/dashboard/wallet-personal/pay']);
     assert.equal(findAll(tree, node => node.type === 'button').length, 0);
     const code = findAll(tree, node => node.type === 'code')[0];
     assert.equal(code.props.title, undefined);
     assert.equal(text(code), translateMessage('es', status === 'loading' ? 'walletPage.checking' : status === 'error' ? 'walletPage.checkFailed' : 'funding.noPersonalAddress'));
   }
+});
+
+test('post-login setup is offered only for an unlinked wallet and remains a translated navigation action without AppKit or auto-linking', () => {
+  for (const locale of ['es', 'en', 'ar', 'zh']) {
+    const view = card({ locale, boundAddress: '', status: 'unlinked' });
+    let navigated = 0;
+    const tree = view.render({ onNavigate: () => { navigated++; } });
+    const html = renderToStaticMarkup(tree);
+    const setup = findAll(tree, node => node.type === Link && node.props.href === '/dashboard/wallet-personal#personal-wallet');
+    assert.equal(setup.length, 1); assert.equal(text(setup[0]), translateMessage(locale, 'funding.prepareWallet'));
+    assert.ok(html.includes(translateMessage(locale, 'funding.prepareWalletCopy')));
+    setup[0].props.onClick(); assert.equal(navigated, 1); assert.equal(view.reads.length, 0);
+    for (const status of ['linked', 'loading', 'error']) {
+      const existing = card({ locale, status, boundAddress: status === 'linked' ? address : '' }).render();
+      assert.equal(findAll(existing, node => node.type === Link && node.props.href.includes('#personal-wallet')).length, 0);
+      assert.ok(!renderToStaticMarkup(existing).includes(translateMessage(locale, 'funding.prepareWalletCopy')));
+    }
+  }
+});
+
+test('setup waits for the authenticated binding response and disappears once the existing binding is confirmed', async t => {
+  browser(t);
+  const replies = [];
+  const view = card({ boundAddress: '', status: 'loading', readBinding: () => new Promise(resolve => replies.push(resolve)) });
+  const setupLinks = tree => findAll(tree, node => node.type === Link && node.props.href.includes('#personal-wallet'));
+  let tree = view.render(); const cleanup = view.mount();
+  try {
+    assert.equal(setupLinks(tree).length, 0);
+    replies[0]({ linked: false, address: '' }); await setImmediate(); tree = view.render();
+    assert.equal(setupLinks(tree).length, 1); assert.equal(view.reads.length, 1);
+    window.dispatchEvent(new Event('vp:personal-wallet-linked'));
+    replies[1]({ linked: true, address }); await setImmediate(); tree = view.render();
+    assert.equal(setupLinks(tree).length, 0);
+    assert.equal(findAll(tree, node => node.type === 'code')[0].props.title, address);
+    assert.equal(view.reads.length, 2);
+  } finally { cleanup(); }
 });
 
 test('the two-column action rail can shrink and wrap localized labels while icons remain centered and touch targets stay usable', () => {

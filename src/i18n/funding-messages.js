@@ -1,5 +1,6 @@
 export const fundingMessages = {
   es: { funding: {
+    prepareWallet: "Preparar billetera", prepareWalletCopy: "Completa una vez el acceso de tu billetera y confirma su vinculación segura a tu cuenta Mindbliss.",
     networkChanged: "Las nuevas recargas usan USDT en Polygon. Actualiza esta página y revisa el destino antes de continuar.",
     personalBalanceTransferNetwork: "Recarga y transfiere USDT en Polygon. Los pagos anteriores conservan su red original.",
     personalBalancePolygonNetwork: "Polygon · ERC-20",
@@ -73,6 +74,7 @@ export const fundingMessages = {
     sandboxUnavailable: "No pudimos abrir una sesión de prueba para este país, monto y proveedor. Prueba otra combinación.",
   } },
   en: { funding: {
+    prepareWallet: "Set up wallet", prepareWalletCopy: "Complete wallet authentication once, then confirm its secure link to your Mindbliss account.",
     networkChanged: "New top-ups use USDT on Polygon. Reload this page and review the destination before continuing.",
     personalBalanceTransferNetwork: "Top up and transfer USDT on Polygon. Previous payments retain their original network.",
     personalBalancePolygonNetwork: "Polygon · ERC-20",
@@ -146,6 +148,7 @@ export const fundingMessages = {
     sandboxUnavailable: "We could not open a test session for this country, amount and provider. Try another combination.",
   } },
   ar: { funding: {
+    prepareWallet: "إعداد المحفظة", prepareWalletCopy: "أكمل تسجيل الدخول إلى محفظتك مرة واحدة، ثم أكد ربطها الآمن بحسابك في Mindbliss.",
     networkChanged: "تستخدم الإيداعات الجديدة USDT عبر Polygon. أعد تحميل هذه الصفحة وراجع عنوان الوجهة قبل المتابعة.",
     personalBalanceTransferNetwork: "اشحن وحوّل USDT عبر Polygon. تحتفظ المدفوعات السابقة بشبكتها الأصلية.",
     personalBalancePolygonNetwork: "Polygon · ERC-20",
@@ -219,6 +222,7 @@ export const fundingMessages = {
     sandboxUnavailable: "تعذر فتح جلسة اختبار لهذا البلد والمبلغ والمزوّد. جرّب مجموعة أخرى.",
   } },
   zh: { funding: {
+    prepareWallet: "设置钱包", prepareWalletCopy: "完成一次钱包身份验证，然后确认将其安全绑定到你的 Mindbliss 账户。",
     networkChanged: "新充值使用 Polygon 网络的 USDT。请重新加载此页面并核对收款地址后继续。",
     personalBalanceTransferNetwork: "通过 Polygon 充值和转账 USDT。历史付款保留其原始网络。",
     personalBalancePolygonNetwork: "Polygon · ERC-20",

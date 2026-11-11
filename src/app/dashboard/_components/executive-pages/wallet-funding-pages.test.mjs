@@ -96,6 +96,41 @@ test('a connected Reown address never claims backend verification and check fail
   }
 });
 
+test('first wallet setup explains authentication in every locale and starts only after an explicit user action', async t => {
+  const shared = load('WalletFundingUI.jsx', { 'lucide-react': icons, '@/i18n/LanguageProvider': i18n,
+    'next/link': { default: ({ prefetch: _prefetch, children, ...props }) => React.createElement('a', props, children) } });
+  function PersonalFundingForm() { return null; }
+  for (const locale of ['es', 'en', 'ar', 'zh']) {
+    const calls = [];
+    const reown = { configured: true, isConnected: false, address: '', linkedAddress: '', linkStatus: 'unlinked', onrampStatus: 'idle',
+      async openConnect() { calls.push('connect'); },
+      async linkWallet() { calls.push('link'); reown.linkStatus = 'linked'; reown.linkedAddress = reown.address; },
+      async startOnramp() { assert.fail('Wallet setup cannot open a purchase'); } };
+    const harness = componentHarness('PersonalWalletFundingPage.jsx', 'PersonalWalletFunding', {
+      'lucide-react': icons, 'next/dynamic': { default: () => () => null },
+      '@/i18n/LanguageProvider': { useI18n: () => ({ locale, t: (key, values) => translateMessage(locale, key, values) }) },
+      '@/components/reown/ReownContext': { useReownWallet: () => reown },
+      '@/lib/personal-funding-errors.mjs': { personalFundingFailure }, './WalletFundingForm': { PersonalFundingForm },
+      './WalletFundingStatus': { default: () => null }, './WalletFundingUI': shared,
+    }); t.after(() => harness.unmount());
+    let tree = harness.render();
+    assert.deepEqual(calls, []);
+    assert.ok(renderToStaticMarkup(tree).includes(translateMessage(locale, 'funding.prepareWalletCopy')));
+    assert.equal(find(tree, 'PersonalFundingForm').props.disabled, true);
+    const setup = find(tree, node => node?.type === 'button' && renderToStaticMarkup(node).includes(translateMessage(locale, 'funding.prepareWallet')));
+    assert.ok(setup); await setup.props.onClick();
+    assert.deepEqual(calls, ['connect']);
+    reown.isConnected = true; reown.address = personalStatus.destination.address;
+    tree = harness.render(); assert.deepEqual(calls, ['connect'], 'Connecting does not silently sign the ownership proof');
+    const verify = find(tree, node => node?.type === 'button' && renderToStaticMarkup(node).includes(translateMessage(locale, 'funding.verifyWallet')));
+    assert.ok(verify); await verify.props.onClick(); tree = harness.render();
+    assert.deepEqual(calls, ['connect', 'link']);
+    assert.equal(find(tree, 'PersonalFundingForm').props.disabled, false);
+    assert.ok(!renderToStaticMarkup(tree).includes(translateMessage(locale, 'funding.prepareWalletCopy')));
+    assert.equal(find(tree, node => node?.type === 'button' && renderToStaticMarkup(node).includes(translateMessage(locale, 'funding.prepareWallet'))), undefined);
+  }
+});
+
 test('personal countries discard canceled responses, respect route limits and submit only the selected production method', async t => {
   if (typeof navigator === 'undefined') { Object.defineProperty(globalThis, 'navigator', { value: { language: 'es-CO', languages: ['es-CO'] }, configurable: true }); t.after(() => { delete globalThis.navigator; }); }
   const calls = [], submitted = [];

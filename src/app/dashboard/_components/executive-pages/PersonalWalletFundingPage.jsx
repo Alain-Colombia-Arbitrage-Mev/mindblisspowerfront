@@ -86,7 +86,7 @@ export function PersonalWalletFunding() {
   }
 
   const statusLabel = { unavailable: "recharge.providerConfiguration", checking: "walletPage.checking", error: "walletPage.checkFailed",
-    connected: "walletPage.connectedPending", verifying: "funding.verifyingWallet", verified: "funding.walletVerified", disconnected: "funding.connectWallet" }[state];
+    connected: "walletPage.connectedPending", verifying: "funding.verifyingWallet", verified: "funding.walletVerified", disconnected: "funding.prepareWallet" }[state];
 
   return <WalletFundingScreen title={t("walletPage.personalTitle")} subtitle={t("walletPage.personalCopy")}>
     <div className="flex flex-wrap gap-3">
@@ -106,12 +106,12 @@ export function PersonalWalletFunding() {
           <div className={styles.stateHeading}>{verified ? <CheckCircle2 size={19} aria-hidden="true" /> : <ShieldCheck size={19} aria-hidden="true" />}
             <h2>{t(statusLabel)}</h2></div>
           <p className={styles.hint}>{t(verified ? "walletPage.simpleLinkedCopy" : state === "connected" || state === "verifying" ? "walletPage.connectedPendingCopy"
-            : state === "error" ? (reown.linkError === "session" ? "walletPage.checkSession" : "walletPage.checkUnavailable") : state === "checking" ? "walletPage.checkingCopy" : "funding.connectWalletCopy")}</p>
+            : state === "error" ? (reown.linkError === "session" ? "walletPage.checkSession" : "walletPage.checkUnavailable") : state === "checking" ? "walletPage.checkingCopy" : state === "disconnected" ? "funding.prepareWalletCopy" : "funding.connectWalletCopy")}</p>
           <WalletAddress address={address} label={t("walletPage.personalWalletLabel")} loading={state === "checking"}
             emptyLabel={t(state === "checking" ? "walletPage.destinationLoading" : "funding.noPersonalAddress")} onCopyError={() => setCopyError(t("walletPage.administrativeCopyFailed"))} />
           {!["verified", "checking", "verifying"].includes(state) ? <button className="executive-button primary" type="button" disabled={busy || !reown.configured} onClick={() => void walletAction()}>
             {actionBusy ? <Loader2 className="animate-spin" size={17} aria-hidden="true" /> : state === "error" ? <RefreshCw size={17} aria-hidden="true" /> : <ShieldCheck size={17} aria-hidden="true" />}
-            {t(state === "error" ? "walletPage.retryCheck" : state === "connected" ? "funding.verifyWallet" : "funding.connectWallet")}
+            {t(state === "error" ? "walletPage.retryCheck" : state === "connected" ? "funding.verifyWallet" : state === "disconnected" ? "funding.prepareWallet" : "funding.connectWallet")}
           </button> : null}
           <WalletActionError message={copyError} />
         </section>
