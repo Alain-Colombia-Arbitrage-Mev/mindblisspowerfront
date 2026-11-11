@@ -22,7 +22,9 @@ export default function PersonalTransferRouter({ DirectPayment }) {
       restored.current = value.paymentId; setMode("polygon");
     }
   }, [relay.payment?.paymentId, relay.payment?.status]);
-  const openPolygon = relay.capabilities?.transferEnabled || relay.payment || relay.history.length ? () => setMode("polygon") : undefined;
+  // A temporary sponsor outage must never silently select a user-paid transfer.
+  // The sponsored form keeps sending disabled until the server is ready.
+  const openPolygon = () => setMode("polygon");
   if (mode === "direct") return <DirectPayment onSponsoredPolygon={openPolygon} />;
   const locked = relay.busy || (relay.payment && !["prepared", "confirmed", "failed", "expired"].includes(relay.payment.status));
   const statusLabel = value => value.status === "confirmed" ? "walletTransfer.confirmedTitle" : value.status === "authorized" ? "walletTransfer.authorizedTitle"
