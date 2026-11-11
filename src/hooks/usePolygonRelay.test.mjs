@@ -240,6 +240,98 @@ test('a fresh balance discovered during Review updates the displayed maximum and
   assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
 });
 
+test('one partial Polygon RPC failure during review recovers with exactly one read-only retry', async t => {
+  for (const partial of [[], [{ chainId: 1, balanceAtomic: '10000000', nativeBalanceAtomic: '0' }],
+    [{ chainId: 137, balanceAtomic: null, nativeBalanceAtomic: null, error: 'company_payment_rpc_unavailable' }],
+    [{ chainId: 137, balanceAtomic: null, nativeBalanceAtomic: '0' }]]) {
+    let reads = 0;
+    const good = [{ chainId: 137, balanceAtomic, nativeBalanceAtomic: '0' }];
+    const h = harness({ balance: async () => ({ walletAddress: wallet, balances: ++reads === 2 ? partial : good }) });
+    try {
+      await h.flush(); h.flow.setAmount('1'); await h.flush();
+      await h.flow.review(); await h.flush();
+      assert.equal(reads, 3); assert.equal(h.flow.errorKey, '');
+      assert.equal(h.flow.stage, 'review'); assert.equal(h.flow.preview.amountAtomic, '1000000'); assert.equal(h.flow.payment, null);
+      assert.equal(h.flow.balanceAtomic, balanceAtomic); assert.equal(h.flow.amount, '1'); assert.equal(h.flow.busy, false);
+      assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
+    } finally { h.unmount(); }
+  }
+});
+
+test('two partial failures report unavailable without inventing insufficient funds and a later explicit review can recover', async t => {
+  let reads = 0;
+  const snapshot = () => ({ walletAddress: wallet, balances: [{ chainId: 137, balanceAtomic, nativeBalanceAtomic: '0' }] });
+  const h = harness({ balance: async () => ++reads === 2 || reads === 3 ? { walletAddress: wallet,
+    balances: [{ chainId: 137, balanceAtomic: null, nativeBalanceAtomic: null, error: 'company_payment_rpc_unavailable' }] } : snapshot() }); t.after(() => h.unmount());
+  await h.flush(); h.flow.setAmount('1'); await h.flush(); await h.flow.review(); await h.flush();
+  assert.equal(reads, 3); assert.equal(h.flow.errorKey, 'walletTransfer.unavailable'); assert.equal(h.flow.stage, 'form');
+  assert.equal(h.flow.preview, null); assert.equal(h.flow.payment, null); assert.equal(h.flow.balanceAtomic, balanceAtomic); assert.equal(h.flow.amount, '1');
+  assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
+  await h.flow.review(); await h.flush();
+  assert.equal(reads, 4); assert.equal(h.flow.stage, 'review'); assert.equal(h.flow.preview.amountAtomic, '1000000');
+  assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
+});
+
+test('only an exact chain RPC error retries; auth, rate limits and malformed response failures never do', async t => {
+  for (const error of ['company_payment_rpc_unavailable', 'unauthenticated', 'polygon_relay_rate_limited', 'company_payment_unavailable']) {
+    let reads = 0;
+    const h = harness({ balance: async () => {
+      if (++reads === 2) throw new Error(error);
+      return { walletAddress: wallet, balances: [{ chainId: 137, balanceAtomic, nativeBalanceAtomic: '0' }] };
+    } });
+    try {
+      await h.flush(); h.flow.setAmount('1'); await h.flush(); await h.flow.review(); await h.flush();
+      assert.equal(reads, error === 'company_payment_rpc_unavailable' ? 3 : 2);
+      assert.equal(h.flow.stage, error === 'company_payment_rpc_unavailable' ? 'review' : 'form');
+      assert.equal(Boolean(h.flow.preview), error === 'company_payment_rpc_unavailable');
+      assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
+    } finally { h.unmount(); }
+  }
+});
+
+test('losing the live signer during a pending failed read prevents its retry and any preview', async t => {
+  const pending = deferred(); let reads = 0;
+  const h = harness({ balance: async () => ++reads === 2 ? pending.promise : { walletAddress: wallet,
+    balances: [{ chainId: 137, balanceAtomic, nativeBalanceAtomic: '0' }] } }); t.after(() => h.unmount());
+  await h.flush(); h.flow.setAmount('1'); await h.flush();
+  const reviewing = h.flow.review(); await h.flush(); assert.equal(reads, 2);
+  await h.connection(false);
+  pending.resolve({ walletAddress: wallet, balances: [{ chainId: 137, balanceAtomic: null, nativeBalanceAtomic: null,
+    error: 'company_payment_rpc_unavailable' }] });
+  await reviewing; await h.flush();
+  assert.equal(reads, 2); assert.equal(h.flow.stage, 'form'); assert.equal(h.flow.preview, null); assert.equal(h.flow.busy, false);
+  assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
+});
+
+test('a changed Polygon balance requires another review and only a genuinely excessive edited amount reports insufficient funds', async t => {
+  for (const latest of ['30000000', '20000000', '500000']) {
+    let reads = 0;
+    const h = harness({ balance: async () => ({ walletAddress: wallet, balances: [{ chainId: 137,
+      balanceAtomic: ++reads === 1 ? balanceAtomic : latest, nativeBalanceAtomic: '0' }] }) });
+    try {
+      await h.flush(); h.flow.setAmount('1'); await h.flush();
+      await h.flow.review(); await h.flush();
+      assert.equal(h.flow.balanceAtomic, latest); assert.equal(h.flow.amount, '1'); assert.equal(h.flow.preview, null);
+      assert.equal(h.flow.stage, 'form');
+      assert.equal(h.flow.errorKey, latest === '500000' ? 'walletTransfer.insufficientBalance' : 'companyPayment.balanceChanged');
+      assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
+      if (latest === '500000') { h.flow.setAmount('0.5'); await h.flush(); }
+      await h.flow.review(); await h.flush();
+      assert.equal(h.flow.stage, 'review'); assert.equal(h.flow.preview.amountAtomic, latest === '500000' ? latest : '1000000');
+      assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
+    } finally { h.unmount(); }
+  }
+});
+
+test('a fresh balance response from another wallet cannot be classified as funds or enter review', async t => {
+  let reads = 0;
+  const h = harness({ balance: async () => ({ walletAddress: ++reads === 1 ? wallet : otherWallet,
+    balances: [{ chainId: 137, balanceAtomic, nativeBalanceAtomic: '0' }] }) }); t.after(() => h.unmount());
+  await h.flush(); h.flow.setAmount('1'); await h.flush(); await h.flow.review(); await h.flush();
+  assert.equal(h.flow.errorKey, 'walletTransfer.walletMismatch'); assert.equal(h.flow.preview, null); assert.equal(h.flow.stage, 'form');
+  assert.equal(h.flow.balanceAtomic, balanceAtomic); assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
+});
+
 test('a confirmed payment refreshes its balance before another maximum can be prepared', async t => {
   let latest = balanceAtomic;
   const h = harness({ history: async () => ({ payments: [submitted()] }), status: async () => submitted(),

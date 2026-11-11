@@ -47,10 +47,11 @@ export function polygonRelayErrorKey(failure) {
   if (failure?.name === "AbortError") return "";
   if (failure?.code === 4001 || failure?.code === "ACTION_REJECTED") return "walletTransfer.rejected";
   const code = failure?.message || "";
+  if (code === "polygon_relay_balance_changed") return "companyPayment.balanceChanged";
   const keys = { unauthenticated: "session", wallet_connection_timeout: "session", reown_connection_timeout: "ambiguous",
     wallet_address_mismatch: "walletMismatch", personal_company_wallet_unavailable: "walletMismatch", polygon_relay_wallet_changed: "walletMismatch",
     polygon_relay_wallet_not_linked: "walletMismatch", polygon_relay_expired: "expired", polygon_relay_insufficient_balance: "insufficientBalance",
-    polygon_relay_balance_changed: "insufficientBalance", polygon_relay_pending_exists: "pending", polygon_relay_recovery_unavailable: "pending",
+    polygon_relay_pending_exists: "pending", polygon_relay_recovery_unavailable: "pending",
     polygon_relay_invalid_authorization: "invalidAuthorization", polygon_relay_signature_invalid: "invalidAuthorization",
     polygon_relay_authorization_nonce_changed: "invalidAuthorization", polygon_relay_forbidden: "walletMismatch",
     polygon_relay_rate_limited: "rateLimited", polygon_relay_budget_exceeded: "budgetUnavailable",
@@ -249,12 +250,25 @@ export function usePolygonRelay(reown) {
       await enabled(value); assertReview(); await identity(value, reown.getCompanyPaymentProvider()); assertReview();
       const key = await value.scope.wait(() => keyPromise); assertReview();
       if (readRecovery(key, wallet)) throw new Error("polygon_relay_pending_exists");
-      const result = await value.scope.wait(() => readPersonalWalletBalances({ signal: value.scope.signal })); assertReview();
-      const funds = result.walletAddress === wallet && result.balances.find(item => item.chainId === 137 && !item.error);
-      if (!funds || funds.balanceAtomic === null) throw new Error("polygon_relay_balance_changed");
+      const readFunds = async () => {
+        const result = await value.scope.wait(() => readPersonalWalletBalances({ signal: value.scope.signal })); assertReview();
+        if (result.walletAddress !== wallet) throw new Error("polygon_relay_wallet_changed");
+        const entry = result.balances.find(item => item.chainId === 137);
+        if (!entry) return null;
+        if (entry.error && entry.error !== "company_payment_rpc_unavailable") throw new Error("polygon_relay_unavailable");
+        return entry.error || entry.balanceAtomic === null ? null : entry;
+      };
+      let funds;
+      try { funds = await readFunds(); }
+      catch (failure) { assertReview(); if (failure?.message !== "company_payment_rpc_unavailable") throw failure; }
+      // Retry one transient, owner-matched chain read. Never repeat preparation,
+      // authorization, identity changes or any write/signing operation here.
+      if (!funds) { assertReview(); funds = await readFunds(); }
+      if (!funds) throw new Error("polygon_relay_unavailable");
       if (funds.balanceAtomic !== balance.balanceAtomic) {
         setBalance({ wallet, loading: false, balanceAtomic: funds.balanceAtomic, nativeBalanceAtomic: funds.nativeBalanceAtomic ?? null, error: "" });
         if (!edited.current && !selected.current && !previewRef.current) setAmountState(formatPersonalCompanyPaymentAmount(funds.balanceAtomic));
+        if (edited.current && BigInt(atomic) > BigInt(funds.balanceAtomic)) throw new Error("polygon_relay_insufficient_balance");
         throw new Error("polygon_relay_balance_changed");
       }
       if (selected.current && unresolved(selected.current)) throw new Error("polygon_relay_pending_exists");
