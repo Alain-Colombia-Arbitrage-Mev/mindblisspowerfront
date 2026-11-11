@@ -8,6 +8,7 @@ import * as amounts from '../lib/personal-company-payment-values.mjs';
 import { personalWalletBalanceSessionKey } from '../lib/personal-wallet-balance-store.mjs';
 import { createReownFundingOperation } from '../lib/reown-funding-operation.mjs';
 import { FUNDING_UUID } from '../lib/wallet-funding-contract.mjs';
+import { isPolygonRelayChain } from '../lib/polygon-relay-chain.mjs';
 
 const wallet = `0x${'1'.repeat(40)}`, otherWallet = `0x${'2'.repeat(40)}`, relayer = `0x${'3'.repeat(40)}`;
 const id = '11111111-1111-4111-8111-111111111111', hash = `0x${'4'.repeat(64)}`, blockHash = `0x${'5'.repeat(64)}`;
@@ -45,9 +46,10 @@ function harness(overrides = {}) {
   const slots = [], effects = [], calls = [], signatures = [], providerCalls = [], storage = overrides.storage || new Map();
   let cursor = 0, dirty = true, current, sourceWallet = wallet, connected = overrides.connected !== false;
   let session = { subject: 'owner-A', email: 'member@example.test' };
+  let selectedChain = Object.hasOwn(overrides, 'chainId') ? overrides.chainId : '0x89';
   const localStorage = { getItem: key => storage.get(key) ?? null, setItem: (key, value) => { if (overrides.storageFailure) throw Error('quota'); storage.set(key, value); }, removeItem: key => storage.delete(key) };
   const browser = Object.assign(new EventTarget(), { localStorage }), documentRef = Object.assign(new EventTarget(), { visibilityState: 'visible' });
-  const provider = { request(input) { providerCalls.push(input); return Promise.resolve(input.method === 'eth_chainId' ? overrides.chainId || '0x89'
+  const provider = { request(input) { providerCalls.push(input); return Promise.resolve(input.method === 'eth_chainId' ? selectedChain
     : input.method === 'eth_accounts' ? [sourceWallet] : signature); } };
   const getProvider = () => provider;
   const reown = () => ({ linkedAddress: sourceWallet, address: sourceWallet, linkStatus: 'linked', isConnected: connected, isLinked: connected,
@@ -82,6 +84,7 @@ function harness(overrides = {}) {
     '@/lib/wallet-funding-contract.mjs': { FUNDING_UUID },
     '@/lib/personal-wallet-balance-store.mjs': { personalWalletBalanceSessionKey }, '@/lib/personal-company-payment-values.mjs': amounts,
     '@/lib/polygon-relay-contract.mjs': contract, '@/lib/polygon-relay-client.mjs': client,
+    '@/lib/polygon-relay-chain.mjs': { isPolygonRelayChain },
     '@/lib/reown-funding-operation.mjs': { createReownFundingOperation: options => createReownFundingOperation({ ...options, ...(overrides.timeoutMs ? { timeoutMs: overrides.timeoutMs } : {}) }) },
     '@/lib/personal-wallet-balance.mjs': { async readPersonalWalletBalances(options) { calls.push({ action: 'balance' });
       return overrides.balance ? overrides.balance(options) : { walletAddress: sourceWallet, balances: [
@@ -101,6 +104,7 @@ function harness(overrides = {}) {
   overrides.setTimeout || setTimeout, overrides.clearTimeout || clearTimeout);
   function render() { cursor = 0; dirty = false; current = module.exports.usePolygonRelay(reown()); }
   return { get flow() { return current; }, calls, signatures, providerCalls, storage, browser, documentRef,
+    chain(value) { selectedChain = value; },
     async flush() { for (let turn = 0, quiet = 0; turn < 80; turn++) {
       if (dirty) render(); while (effects.length) effects.shift()(); await new Promise(resolve => setImmediate(resolve));
       if (dirty || effects.length) quiet = 0; else if (++quiet === 3) return current;
@@ -299,6 +303,41 @@ test('a read-only Polygon preflight exposes the network switch before creating a
   assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
   assert.ok(h.providerCalls.every(call => ['eth_chainId', 'eth_accounts'].includes(call.method)));
   await h.flow.switchNetwork(); await h.flush(); assert.deepEqual(h.calls.find(call => call.action === 'switch'), { action: 'switch', chainId: 137 });
+  assert.equal(h.flow.errorKey, 'walletTransfer.networkMismatch', 'a swallowed SDK failure cannot report a successful switch');
+  assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
+});
+
+test('embedded numeric and canonical Polygon identities can review without preparing or signing', async () => {
+  for (const chainId of [137, '137', '0x89', 'eip155:137']) {
+    const h = harness({ chainId });
+    try {
+      await review(h); assert.equal(h.flow.stage, 'review'); assert.equal(h.flow.errorKey, '');
+      assert.equal(h.flow.preview.chainId, 137); assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
+      assert.ok(h.providerCalls.every(call => ['eth_chainId', 'eth_accounts'].includes(call.method)));
+    } finally { h.unmount(); }
+  }
+});
+
+test('network switching requires the current provider to acknowledge Polygon before Review can proceed', async t => {
+  const h = harness({ chainId: '0x1', reown: { switchCompanyPaymentNetwork: async chainId => {
+    assert.equal(chainId, 137); h.chain(137);
+  } } }); t.after(() => h.unmount());
+  await review(h); assert.equal(h.flow.errorKey, 'walletTransfer.networkMismatch');
+  await h.flow.switchNetwork(); await h.flush(); assert.equal(h.flow.errorKey, '');
+  assert.equal(h.flow.preview, null); assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
+  await h.flow.review(); await h.flush(); assert.equal(h.flow.stage, 'review');
+  assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
+});
+
+test('invalid or coercible provider chain identities stop Review without preparing or signing', async () => {
+  for (const chainId of [1, '0x1', NaN, Infinity, true, 137n, '0137', '0x089', '137 ', 'eip155:1', ['137'],
+    { valueOf() { throw new Error('chain IDs must not be coerced'); } }]) {
+    const h = harness({ chainId });
+    try {
+      await review(h); assert.equal(h.flow.preview, null); assert.equal(h.flow.errorKey, 'walletTransfer.networkMismatch');
+      assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
+    } finally { h.unmount(); }
+  }
 });
 
 test('a wallet-wide lock excludes another tab before the first signature marker exists', async () => {

@@ -5,6 +5,7 @@ import { Wallet, TypedDataEncoder } from 'ethers';
 import { LEGACY_POLYGON_COMPANY_PAYMENT as policy } from './personal-company-payment-values.mjs';
 import { POLYGON_RELAY_DOMAIN, POLYGON_RELAY_META_FIELDS, POLYGON_RELAY_ENTRY_POINT, polygonRelayTransferCall, polygonRelayView } from './polygon-relay-contract.mjs';
 import { signPolygonRelay } from './polygon-relay-signing.mjs';
+import { isPolygonRelayChain } from './polygon-relay-chain.mjs';
 import { handlePolygonRelay } from './polygon-relay-bff.mjs';
 import { writePolygonRelay } from './polygon-relay-client.mjs';
 import { walletTransferMessages } from '../i18n/wallet-transfer-messages.js';
@@ -67,6 +68,38 @@ test('Wrong domain, different wallet/network, stale ownership and altered author
   const changed = payment(); changed.typedData.domain.name = 'Untrusted';
   await assert.rejects(signPolygonRelay(changed, provider, address));
   assert.equal(prompts, 0);
+});
+test('Polygon signer accepts only explicit mainnet chain formats without coercing untrusted values', async () => {
+  const valid = [137, '137', '0x89', 'eip155:137'];
+  const invalid = [1, '0x1', null, undefined, NaN, Infinity, true, 137n, '0137', '0x089', '0X89', '137 ', 'eip155:0137', ['137'],
+    { valueOf() { throw new Error('must not coerce'); }, toString() { throw new Error('must not coerce'); } }];
+  for (const chain of [...valid, ...invalid]) {
+    const value = payment(); let prompts = 0;
+    const provider = { async request({ method }) {
+      if (method === 'eth_chainId') return chain;
+      if (method === 'eth_accounts') return [address];
+      assert.equal(method, 'eth_signTypedData_v4'); prompts++;
+      return signer.signTypedData(value.typedData.domain, value.typedData.types, value.typedData.message);
+    } };
+    if (valid.includes(chain)) {
+      assert.equal(isPolygonRelayChain(chain), true);
+      assert.equal((await signPolygonRelay(value, provider, address)).paymentId, id); assert.equal(prompts, 1);
+    } else {
+      assert.equal(isPolygonRelayChain(chain), false);
+      await assert.rejects(signPolygonRelay(value, provider, address), { message: 'polygon_relay_network_mismatch' }); assert.equal(prompts, 0);
+    }
+  }
+});
+test('a chain change while a typed signature is pending discards the authorization', async () => {
+  const value = payment(); let chain = 137, prompts = 0;
+  const provider = { async request({ method }) {
+    if (method === 'eth_chainId') return chain;
+    if (method === 'eth_accounts') return [address];
+    assert.equal(method, 'eth_signTypedData_v4'); prompts++; chain = 1;
+    return signer.signTypedData(value.typedData.domain, value.typedData.types, value.typedData.message);
+  } };
+  await assert.rejects(signPolygonRelay(value, provider, address), { message: 'polygon_relay_network_mismatch' });
+  assert.equal(prompts, 1);
 });
 test('Relay BFF keeps all credentials private and validates the exact intent before projecting safe results', async () => {
   let calls = 0;

@@ -8,6 +8,7 @@ import { personalCompanyPaymentAmountAtomic, formatPersonalCompanyPaymentAmount,
 import { readPolygonRelayCapabilities, readPolygonRelayHistory, readPolygonRelayStatus, writePolygonRelay } from "@/lib/polygon-relay-client.mjs";
 import { polygonRelayView } from "@/lib/polygon-relay-contract.mjs";
 import { signPolygonRelay } from "@/lib/polygon-relay-signing.mjs";
+import { isPolygonRelayChain } from "@/lib/polygon-relay-chain.mjs";
 import { createReownFundingOperation } from "@/lib/reown-funding-operation.mjs";
 import { FUNDING_UUID } from "@/lib/wallet-funding-contract.mjs";
 
@@ -184,7 +185,7 @@ export function usePolygonRelay(reown) {
     ])); active(value);
     if (signer.current.generation !== captured || !signer.current.connected || !Array.isArray(accounts) || accounts.length !== 1
       || typeof accounts[0] !== "string" || accounts[0].toLowerCase() !== wallet) throw new Error("polygon_relay_wallet_changed");
-    if (chain !== "0x89") throw new Error("polygon_relay_network_mismatch");
+    if (!isPolygonRelayChain(chain)) throw new Error("polygon_relay_network_mismatch");
   }
   async function review() {
     const atomic = personalCompanyPaymentAmountAtomic(amount);
@@ -311,7 +312,12 @@ export function usePolygonRelay(reown) {
   }
   async function switchNetwork() {
     const value = begin(); if (!value) return;
-    try { await value.scope.wait(() => reown.switchCompanyPaymentNetwork(137)); active(value); }
+    try {
+      await value.scope.wait(() => reown.switchCompanyPaymentNetwork(137)); active(value);
+      // AppKit's React switch wrapper may swallow a rejected network change.
+      // The account's actual provider must acknowledge Polygon before clearing the CTA.
+      await identity(value, reown.getCompanyPaymentProvider());
+    }
     catch (failure) { if (live()) setErrorKey(polygonRelayErrorKey(failure)); } finally { finish(value); }
   }
   function newPayment() {
