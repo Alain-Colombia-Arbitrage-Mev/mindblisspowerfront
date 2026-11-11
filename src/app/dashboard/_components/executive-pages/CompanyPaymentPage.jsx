@@ -74,7 +74,7 @@ export function CompanyPaymentStatus({ flow, readOnly = false }) {
   return <section className={`executive-panel ${styles.panel}`} aria-label={t(`companyPayment.${title}`)} aria-busy={flow.busy}>
     <header className={styles.heading}>{confirmed ? <CheckCircle2 size={22} aria-hidden="true" /> : <Clock3 size={22} aria-hidden="true" />}<div><h2>{t(`companyPayment.${title}`)}</h2><p>{t(`companyPayment.${copy}`)}</p></div></header>
     <div className={styles.reviewAmount}><span>{t("companyPayment.amountLabel")}</span><strong><bdi dir="ltr">{formatPersonalCompanyPaymentAmount(value.amountAtomic)} USDT</bdi></strong></div>
-    <dl className={styles.reviewDetails}><div><dt>{t("companyPayment.recipientLabel")}</dt><dd><code dir="ltr">{value.recipientAddress}</code></dd></div>
+    <dl className={styles.reviewDetails}><div><dt>{t("companyPayment.recipientLabel")}</dt><dd>Mindbliss</dd></div>
       <div><dt>{t("companyPayment.networkLabel")}</dt><dd>{t(legacy ? "companyPayment.legacyNetwork" : "companyPayment.network")}</dd></div>
       {value.transactionHash ? <div><dt>{t("companyPayment.hashLabel")}</dt><dd><a href={`https://${legacy ? "polygonscan.com" : "etherscan.io"}/tx/${value.transactionHash}`} target="_blank" rel="noreferrer noopener"><code dir="ltr">{value.transactionHash}</code></a></dd></div> : null}
     </dl>

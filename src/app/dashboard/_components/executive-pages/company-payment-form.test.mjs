@@ -30,6 +30,12 @@ const properties = patch => ({ balanceAtomic: '100000000', amount: '25.123456', 
   onAmountChange() {}, onMax() {}, onReview() {}, onRefresh() {}, onConnect() {}, ...patch });
 const payment = patch => ({ paymentId: 'd8a4c010-cc33-44da-a297-8b3c6440f491', walletAddress: `0x${'1'.repeat(40)}`,
   ...values.PERSONAL_COMPANY_PAYMENT, status: 'prepared', abandonedAt: null, amountAtomic: '25123456', expiresAt: new Date(Date.now() + 60000).toISOString(), ...patch });
+function assertMerchantPresentation(html) {
+  assert.ok(!html.toLowerCase().includes(values.PERSONAL_COMPANY_PAYMENT.recipientAddress.slice(2)),
+    'The merchant address must not appear in rendered text, hidden elements, titles or ARIA/data attributes');
+  assert.match(html, />Mindbliss</);
+  assert.ok(html.includes(translateMessage(locale, 'companyPayment.recipientLabel')));
+}
 
 test('form is presentation only and invokes review, MAX and refresh exclusively through user controls', () => {
   let reviewed = 0, maximum = 0, refreshed = 0;
@@ -41,8 +47,7 @@ test('form is presentation only and invokes review, MAX and refresh exclusively 
   assert.deepEqual([reviewed, maximum, refreshed], [1, 1, 1]);
   const html = renderToStaticMarkup(tree);
   assert.match(html, /25123456|25\.123456/);
-  assert.ok(html.includes(values.PERSONAL_COMPANY_PAYMENT.recipientAddress));
-  assert.match(html, /<output[^>]+dir="ltr"/);
+  assertMerchantPresentation(html);
   assert.match(html, /Ethereum/);
   assert.doesNotMatch(html, /\bPOL\b/);
   assert.doesNotMatch(source, /useEffect|useReown|fetch\(|BrowserProvider|eth_sendTransaction|createPersonalCompanyPaymentTransfer/);
@@ -108,7 +113,7 @@ test('review shows the exact transfer and only opens wallet confirmation after a
   const html = renderToStaticMarkup(tree);
   assert.ok(html.includes('25.123456 USDT'));
   assert.ok(html.includes(`0x${'1'.repeat(40)}`));
-  assert.ok(html.includes(values.PERSONAL_COMPANY_PAYMENT.recipientAddress));
+  assertMerchantPresentation(html);
   assert.ok(html.includes(translateMessage('es', 'companyPayment.gasCopy')));
   assert.ok(html.includes(translateMessage('es', 'companyPayment.allocationPending')));
   button(tree, translateMessage('es', 'companyPayment.confirmInWallet')).props.onClick();
@@ -130,13 +135,19 @@ test('invalid, expired or wrong-destination review data can never invoke the con
   }
 });
 
-test('all supported locales render translated controls with full addresses and no wallet or network dependency', () => {
+test('all supported locales identify Mindbliss without its address while preserving the sender, amount and selected network', () => {
   for (locale of ['es', 'en', 'ar', 'zh']) {
-    const form = renderToStaticMarkup(CompanyPaymentForm(properties()));
-    const review = renderToStaticMarkup(CompanyPaymentReview({ payment: payment(), onConfirm() {}, onBack() {} }));
-    assert.doesNotMatch(form + review, /companyPayment\./);
-    assert.ok(form.includes(values.PERSONAL_COMPANY_PAYMENT.recipientAddress));
-    assert.ok(review.includes(values.PERSONAL_COMPANY_PAYMENT.recipientAddress));
+    for (const chainId of [1, 137]) {
+      const record = payment(values.personalCompanyPaymentPolicy(chainId));
+      const form = renderToStaticMarkup(CompanyPaymentForm(properties({ chainId })));
+      const review = renderToStaticMarkup(CompanyPaymentReview({ payment: record, onConfirm() {}, onBack() {} }));
+      assert.doesNotMatch(form + review, /companyPayment\./);
+      assertMerchantPresentation(form); assertMerchantPresentation(review);
+      assert.ok(form.includes('25.123456')); assert.ok(review.includes('25.123456 USDT'));
+      assert.ok(review.includes(record.walletAddress));
+      const network = translateMessage(locale, chainId === 137 ? 'companyPayment.legacyNetwork' : 'companyPayment.network');
+      assert.ok(form.includes(network)); assert.ok(review.includes(network));
+    }
   }
   locale = 'es';
 });

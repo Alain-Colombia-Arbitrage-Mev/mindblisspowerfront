@@ -33,7 +33,7 @@ export function TransferNetworkPicker({ selected, onChange, disabled = false, so
 
 export function SponsoredTransferForm({ flow, network = "polygon" }) {
   const { t } = useI18n(); const id = useId();
-  const policy = networkPolicy(network), available = network === "solana" ? solanaAtomic(flow.balanceAtomic) : personalCompanyPaymentAtomic(flow.balanceAtomic, true)?.toString() ?? null;
+  const available = network === "solana" ? solanaAtomic(flow.balanceAtomic) : personalCompanyPaymentAtomic(flow.balanceAtomic, true)?.toString() ?? null;
   const entered = personalCompanyPaymentAmountAtomic(flow.amount);
   const validAmount = entered !== null && (network !== "solana" || solanaAtomic(entered, false) !== null);
   const insufficient = available !== null && validAmount && BigInt(entered) > BigInt(available);
@@ -54,7 +54,7 @@ export function SponsoredTransferForm({ flow, network = "polygon" }) {
       <button type="button" className={styles.max} disabled={flow.busy || available === null || available === "0"} onClick={() => flow.setAmount(formatPersonalCompanyPaymentAmount(available))}>{t("companyPayment.max")}</button>
     </div>{invalid ? <p className={styles.fieldError} id={`${id}-error`} role="alert">{t(insufficient ? "companyPayment.insufficientBalance" : "companyPayment.amountInvalid")}</p> : null}</div>
     <div className={styles.destination}><div className={styles.destinationHeading}><label htmlFor={`${id}-recipient`}>{t("companyPayment.recipientLabel")}</label><span>{networkName(network)} · USDT</span></div>
-      <output id={`${id}-recipient`} className={styles.readonlyAddress} dir="ltr">{policy?.recipientAddress}</output></div>
+      <output id={`${id}-recipient`} className={`${styles.readonlyAddress} ${styles.recipientName}`}>Mindbliss</output></div>
     {flow.capabilities?.transferEnabled ? <p className={styles.note}><ShieldCheck size={16} aria-hidden="true" /><span>{t("walletTransfer.sponsored")}. {t(network === "solana" ? "walletTransfer.solanaSponsoredCopy" : "walletTransfer.sponsoredCopy")}</span></p>
       : <p className={styles.note} role="status">{t("walletTransfer.sponsorUnavailable")}</p>}
     {error ? <p className={styles.error} role="alert">{error}</p> : null}
@@ -77,7 +77,7 @@ export function SponsoredTransferReview({ flow, network = "polygon" }) {
   return <section className={`executive-panel ${styles.panel}`} aria-label={t("companyPayment.reviewTitle")} aria-busy={flow.busy}>
     <header className={styles.heading}><ShieldCheck size={22} aria-hidden="true" /><div><h2>{t("companyPayment.reviewTitle")}</h2><p>{t("walletTransfer.confirmCopy")}</p></div></header>
     {valid ? <><div className={styles.reviewAmount}><span>{t("companyPayment.amountLabel")}</span><strong><bdi dir="ltr">{formatPersonalCompanyPaymentAmount(value.amountAtomic)} USDT</bdi></strong></div>
-      <dl className={styles.reviewDetails}><div><dt>{t("companyPayment.senderLabel")}</dt><dd><code dir="ltr">{value.walletAddress}</code></dd></div><div><dt>{t("companyPayment.recipientLabel")}</dt><dd><code dir="ltr">{policy.recipientAddress}</code></dd></div>
+      <dl className={styles.reviewDetails}><div><dt>{t("companyPayment.senderLabel")}</dt><dd><code dir="ltr">{value.walletAddress}</code></dd></div><div><dt>{t("companyPayment.recipientLabel")}</dt><dd>Mindbliss</dd></div>
         <div><dt>{t("companyPayment.networkLabel")}</dt><dd>{networkName(network)} · USDT</dd></div><div><dt>{t("walletTransfer.sponsored")}</dt><dd><bdi dir="ltr">0 {network === "polygon" ? "POL" : "SOL"}</bdi></dd></div></dl>
     </> : <p className={styles.error} role="alert">{t("companyPayment.invalidReview")}</p>}
     {network === "polygon" ? <p className={styles.note}>{t("walletTransfer.authorizationCopy")}</p> : null}
@@ -103,7 +103,7 @@ export function SponsoredTransferStatus({ flow, network = "polygon" }) {
   return <section className={`executive-panel ${styles.panel}`} aria-label={t(`walletTransfer.${title}`)} aria-busy={flow.busy}>
     <header className={styles.heading}>{confirmed ? <CheckCircle2 size={22} aria-hidden="true" /> : <Clock3 size={22} aria-hidden="true" />}<div><h2>{t(abandoned ? "companyPayment.abandonedTitle" : prepared ? "companyPayment.preparedTitle" : `walletTransfer.${title}`)}</h2><p role="status">{t(abandoned ? "companyPayment.abandonedCopy" : prepared ? flow.recovery ? "walletTransfer.ambiguous" : "companyPayment.preparedCopy" : `walletTransfer.${copy}`)}</p></div></header>
     <div className={styles.reviewAmount}><span>{t("companyPayment.amountLabel")}</span><strong><bdi dir="ltr">{formatPersonalCompanyPaymentAmount(value.amountAtomic)} USDT</bdi></strong></div>
-    <dl className={styles.reviewDetails}><div><dt>{t("companyPayment.networkLabel")}</dt><dd>{networkName(network)} · USDT</dd></div><div><dt>{t("companyPayment.recipientLabel")}</dt><dd><code dir="ltr">{value.recipientAddress}</code></dd></div>
+    <dl className={styles.reviewDetails}><div><dt>{t("companyPayment.networkLabel")}</dt><dd>{networkName(network)} · USDT</dd></div><div><dt>{t("companyPayment.recipientLabel")}</dt><dd>Mindbliss</dd></div>
       {hash ? <div><dt>{t("walletTransfer.receipt")}</dt><dd><a href={network === "polygon" ? `https://polygonscan.com/tx/${hash}` : `https://solscan.io/tx/${hash}`} target="_blank" rel="noreferrer noopener"><code dir="ltr">{hash}</code></a></dd></div> : null}</dl>
     {flow.errorKey ? <p className={styles.error} role="alert">{t(flow.errorKey)}</p> : null}
     <div className={styles.actions}>

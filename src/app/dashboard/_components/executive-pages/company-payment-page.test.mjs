@@ -68,6 +68,12 @@ function flow(value, patch = {}) {
     switchNetwork: method('switchNetwork'), setManualHash: method('setManualHash'), setAmount: method('setAmount'), selectHistory: method('selectHistory'),
     calls, ...patch };
 }
+function assertMerchantPresentation(html) {
+  assert.ok(!html.toLowerCase().includes(values.PERSONAL_COMPANY_PAYMENT.recipientAddress.slice(2)),
+    'The merchant address must be absent from receipt text and every rendered attribute, including hidden content');
+  assert.match(html, />Mindbliss</);
+  assert.ok(html.includes(t('recipientLabel')));
+}
 
 test('a submitted transaction remains pending even when its former preparation was abandoned', () => {
   const record = payment('submitted', { abandonedAt: new Date().toISOString(), confirmations: 5 });
@@ -140,10 +146,35 @@ test('verified receipt copy leaves membership allocation pending, including tran
       assert.ok(html.includes(t('confirmedCopy')));
       assert.ok(html.includes(t('allocationPending')));
       assert.ok(html.includes('25.123456 USDT'));
-      assert.ok(html.includes(values.PERSONAL_COMPANY_PAYMENT.recipientAddress));
+      assertMerchantPresentation(html);
       assert.equal(button(tree, 'confirmInWallet'), undefined);
       assert.equal(button(tree, 'resume'), undefined);
       assert.deepEqual(state.calls, []);
+    }
+  }
+  locale = 'es';
+});
+
+test('all historical payment states name Mindbliss without its address and preserve exact amounts, networks and explorer links in every locale', () => {
+  for (locale of ['es', 'en', 'ar', 'zh']) {
+    for (const chainId of [1, 137]) {
+      for (const status of ['prepared', 'submitted', 'confirmed', 'failed']) {
+        const record = payment(status, values.personalCompanyPaymentPolicy(chainId));
+        assert.ok(companyPaymentView(record), `Valid ${chainId}/${status} fixture`);
+        const state = flow(record), tree = CompanyPaymentStatus({ flow: state, readOnly: true });
+        const html = renderToStaticMarkup(tree);
+        assertMerchantPresentation(html); assert.ok(html.includes('25.123456 USDT'));
+        assert.ok(html.includes(t(chainId === 137 ? 'legacyNetwork' : 'network')));
+        const links = findAll(tree, node => node?.type === 'a');
+        assert.equal(links.length, status === 'prepared' ? 0 : 1);
+        if (links.length) {
+          assert.equal(links[0].props.href, `https://${chainId === 137 ? 'polygonscan.com' : 'etherscan.io'}/tx/${hash}`);
+          assert.equal(links[0].props.target, '_blank'); assert.equal(links[0].props.rel, 'noreferrer noopener');
+          assert.ok(html.includes(hash));
+        }
+        assert.equal(button(tree, 'confirmInWallet'), undefined);
+        assert.equal(button(tree, 'resume'), undefined); assert.deepEqual(state.calls, []);
+      }
     }
   }
   locale = 'es';

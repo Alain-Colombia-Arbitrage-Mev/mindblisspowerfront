@@ -39,7 +39,7 @@ export function CompanyPaymentForm({ balanceAtomic = null, amount = "", onAmount
       {invalid ? <p className={styles.fieldError} id={`${id}-amount-error`} role="alert">{t(insufficient ? "companyPayment.insufficientBalance" : "companyPayment.amountInvalid")}</p> : null}
     </div>
     <div className={styles.destination}><div className={styles.destinationHeading}><label htmlFor={`${id}-recipient`}>{t("companyPayment.recipientLabel")}</label><span>{t(polygon ? "companyPayment.legacyNetwork" : "companyPayment.network")}</span></div>
-      <output id={`${id}-recipient`} className={styles.readonlyAddress} dir="ltr">{policy?.recipientAddress || "—"}</output>
+      <output id={`${id}-recipient`} className={`${styles.readonlyAddress} ${styles.recipientName}`}>Mindbliss</output>
     </div>
     <p className={styles.note}><ShieldCheck size={16} aria-hidden="true" /><span>{t(polygon ? "companyPayment.polygonGasCopy" : "companyPayment.gasCopy")}</span></p>
     {!loading && nativeBalanceAtomic === "0" ? <p className={styles.fieldError} role="status">{t(polygon ? "companyPayment.polygonZeroGas" : "companyPayment.zeroGas")}</p> : null}
@@ -97,7 +97,7 @@ export function CompanyPaymentReview({ payment, onConfirm, onBack, busy = false,
     <header className={styles.heading}><ShieldCheck size={22} aria-hidden="true" /><div><h2>{t("companyPayment.reviewTitle")}</h2><p>{t("companyPayment.reviewCopy")}</p></div></header>
     {valid ? <><div className={styles.reviewAmount}><span>{t("companyPayment.amountLabel")}</span><strong><bdi dir="ltr">{formatPersonalCompanyPaymentAmount(payment.amountAtomic)} USDT</bdi></strong></div>
       <dl className={styles.reviewDetails}><div><dt>{t("companyPayment.senderLabel")}</dt><dd><code dir="ltr">{payment.walletAddress}</code></dd></div>
-        <div><dt>{t("companyPayment.recipientLabel")}</dt><dd><code dir="ltr">{payment.recipientAddress}</code></dd></div>
+        <div><dt>{t("companyPayment.recipientLabel")}</dt><dd>Mindbliss</dd></div>
         <div><dt>{t("companyPayment.networkLabel")}</dt><dd>{t(polygon ? "companyPayment.legacyNetwork" : "companyPayment.network")}</dd></div></dl></>
       : <p className={styles.error} role="alert">{t("companyPayment.invalidReview")}</p>}
     <p className={styles.note}><ShieldCheck size={16} aria-hidden="true" /><span>{t(polygon ? "companyPayment.polygonGasCopy" : "companyPayment.gasCopy")}</span></p>
