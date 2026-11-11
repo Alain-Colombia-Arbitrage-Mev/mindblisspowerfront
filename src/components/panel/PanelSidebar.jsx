@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ArrowUpRight,
   LayoutDashboard,
   Layers,
   LogOut,
@@ -22,8 +23,9 @@ import { useI18n } from "@/i18n/LanguageProvider";
 const NAV_GROUPS = [
   { label: "nav.account", items: [
     { icon: LayoutDashboard, label: "nav.summary", href: "/dashboard", exact: true, also: ["/dashboard/home"] },
+    { icon: Wallet, label: "nav.wallet", href: "/dashboard/payments", exact: true, also: ["/dashboard/wallet-personal"] },
+    { icon: ArrowUpRight, label: "companyPayment.transferAction", href: "/dashboard/wallet-personal/pay" },
     { icon: Layers, label: "nav.memberships", href: "/dashboard/packages" },
-    { icon: Wallet, label: "nav.wallet", href: "/dashboard/payments", also: ["/dashboard/wallet-personal"] },
   ] },
   { label: "nav.communityGroup", items: [
     { icon: Users, label: "nav.community", href: "/dashboard/referrals" },
@@ -54,7 +56,7 @@ export default function PanelSidebar({ pathname, member, onNavigate = undefined 
                 href={item.href}
                 active={
                   (item.exact ? pathname === item.href : matchesRoute(pathname, item.href)) ||
-                  (item.also?.some((prefix) => matchesRoute(pathname, prefix)) ?? false)
+                  (item.also?.some((prefix) => item.exact ? pathname === prefix : matchesRoute(pathname, prefix)) ?? false)
                 }
                 onNavigate={onNavigate}
               />
