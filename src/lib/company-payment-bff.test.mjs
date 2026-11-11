@@ -120,7 +120,8 @@ test('oversized, malformed and invalid-UTF8 bodies are bounded and never invoke 
 
 test('acknowledgements cannot change request amount, destination, wallet kind, hash or payment identity', async () => {
   for (const data of [ack({ paymentId: otherId }), ack({ amountAtomic: '1' }), ack({ recipientAddress: `0x${'2'.repeat(40)}` }),
-    ack({ tokenAddress: `0x${'2'.repeat(40)}` }), ack({ chainId: 1 }), ack({ tokenDecimals: 18 }), ack({ walletKind: 'administrative' }),
+    ack({ tokenAddress: `0x${'2'.repeat(40)}` }), ack({ chainId: 137 }),
+    ack({ chainId: 137, tokenAddress: '0xc2132d05d31c914a87c6611c10748aeb04b58e8f' }), ack({ tokenDecimals: 18 }), ack({ walletKind: 'administrative' }),
     ack({ membershipAssignment: 'activated' }), ack({ paymentId: [paymentId] })]) {
     assert.equal((await handleCompanyPayment(request('prepare'), 'prepare', { env, serviceRequest: async () => ({ ok: true, data }) })).status, 502);
   }

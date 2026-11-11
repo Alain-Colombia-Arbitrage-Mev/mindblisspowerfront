@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createAppKit, useAppKit, useAppKitAccount, useAppKitProvider, useAppKitState, useAppKitTheme, useAppKitNetwork, useDisconnect } from "@reown/appkit/react";
 import { EthersAdapter } from "@reown/appkit-adapter-ethers";
 import { OnRampController } from "@reown/appkit-controllers";
-import { mainnet, polygon } from "@reown/appkit/networks";
+import { mainnet } from "@reown/appkit/networks";
 import { BrowserProvider, getAddress } from "ethers";
 import { useMemberSession } from "@/lib/member-session-context";
 import { browserOnrampRegion } from "@/lib/browser-onramp-region.mjs";
@@ -56,8 +56,8 @@ if (configured) {
   createAppKit({
     adapters: [new EthersAdapter()],
     projectId,
-    networks: [polygon, mainnet],
-    defaultNetwork: polygon,
+    networks: [mainnet],
+    defaultNetwork: mainnet,
     defaultAccountTypes: { eip155: "eoa" },
     metadata: {
       name: "Mindbliss Power",
@@ -483,7 +483,7 @@ function ConfiguredReownProvider({ children }) {
   const switchCompanyPaymentNetwork = useCallback(async () => {
     getCompanyPaymentProvider();
     // The SDK handles embedded wallets and external EIP-1193 wallets separately.
-    await switchAppKitNetwork(polygon);
+    await switchAppKitNetwork(mainnet);
   }, [getCompanyPaymentProvider, switchAppKitNetwork]);
 
   const value = useMemo(() => ({

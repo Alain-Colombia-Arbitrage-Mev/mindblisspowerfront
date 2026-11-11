@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readCompanyPaymentHistory, readCompanyPaymentStatus, writeCompanyPayment } from './company-payment-client.mjs';
-import { PERSONAL_COMPANY_PAYMENT } from './personal-company-payment-values.mjs';
+import { PERSONAL_COMPANY_PAYMENT, LEGACY_POLYGON_COMPANY_PAYMENT } from './personal-company-payment-values.mjs';
 
 const paymentId = 'd8a4c010-cc33-44da-a297-8b3c6440f491';
 const otherId = 'd8a4c010-cc33-44da-a297-8b3c6440f492';
@@ -11,6 +11,16 @@ const ack = (patch = {}) => ({ paymentId, walletKind: 'personal', walletAddress:
   transactionHash: null, blockHash: null, blockNumber: null, confirmations: 0, requiredConfirmations: 12, failureReason: null,
   abandonedAt: null, membershipAssignment: 'pending', ...patch });
 const input = { requestId: paymentId, amountAtomic: ack().amountAtomic };
+
+test('legacy Polygon receipts remain readable but cannot become a new transfer preparation', async () => {
+  const original = globalThis.fetch;
+  const legacy = ack(LEGACY_POLYGON_COMPANY_PAYMENT);
+  try {
+    globalThis.fetch = async () => Response.json(legacy);
+    assert.deepEqual(await readCompanyPaymentStatus(paymentId), legacy);
+    await assert.rejects(writeCompanyPayment('prepare', input), { message: 'company_payment_unavailable' });
+  } finally { globalThis.fetch = original; }
+});
 
 test('prepare sends exact atomic units only to the same-origin personal endpoint without a wallet/provider fallback', async () => {
   const original = globalThis.fetch, calls = [];

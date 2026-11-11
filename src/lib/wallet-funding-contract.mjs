@@ -121,6 +121,14 @@ export function fundingAcknowledgement(value, kind) {
   return { ...safe, paymentMethodType: value.paymentMethodType, allowedProviders: [...value.allowedProviders] };
 }
 
+function fundingDestination(value, kind) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)
+    || typeof value.address !== 'string' || value.address.length !== 42 || !ADDRESS.test(value.address) || value.asset !== 'USDT'
+    || !((value.network === 'polygon' && value.chainId === 137)
+      || (kind === 'personal' && value.network === 'ethereum' && value.chainId === 1))) return null;
+  return { address: value.address, asset: 'USDT', network: value.network, chainId: value.chainId };
+}
+
 export function fundingHistory(value, kind) {
   if (!['personal', 'administrative'].includes(kind)) return null;
   const environment = kind === 'personal' ? 'production' : 'sandbox';
@@ -130,12 +138,13 @@ export function fundingHistory(value, kind) {
     || !Array.isArray(value.records) || value.records.length > 50) return null;
   const records = value.records.map(record => {
     const source = requestedSource(record, kind, true);
+    const destination = record?.destination === undefined ? undefined : fundingDestination(record.destination, kind);
     if (!record || !FUNDING_UUID.test(record.checkoutReference || '') || !source
       || !COUNTRY.test(record.country || '') || !STATUSES.has(record.status) || record.provider !== provider
       || (kind === 'personal' && record.status !== 'initiated')
-      || typeof record.createdAt !== 'string' || record.createdAt.length > 64 || !Number.isFinite(Date.parse(record.createdAt))) return null;
+      || destination === null || typeof record.createdAt !== 'string' || record.createdAt.length > 64 || !Number.isFinite(Date.parse(record.createdAt))) return null;
     return { checkoutReference: record.checkoutReference, requestedAmount: record.requestedAmount, country: record.country,
-      status: record.status, createdAt: record.createdAt, provider, ...source };
+      status: record.status, createdAt: record.createdAt, provider, ...source, ...(destination ? { destination } : {}) };
   });
   if (records.some(record => !record) || new Set(records.map(record => record.checkoutReference)).size !== records.length) return null;
   return { walletKind: kind, environment, settlement: 'unconfirmed', records };
@@ -149,7 +158,7 @@ export function fundingStatus(value, kind) {
   if (!['personal', 'administrative'].includes(kind)) return null;
   const environment = kind === 'personal' ? 'production' : 'sandbox';
   const provider = kind === 'personal' ? 'reown' : 'meld';
-  const destination = value?.destination;
+  const destination = fundingDestination(value?.destination, kind);
   const confirmation = value?.confirmation;
   const source = requestedSource(value, kind, true);
   if (!value || typeof value !== 'object' || Array.isArray(value) || value.walletKind !== kind
@@ -158,15 +167,13 @@ export function fundingStatus(value, kind) {
     || !FUNDING_UUID.test(value.checkoutReference) || !source
     || typeof value.country !== 'string' || value.country.length !== 2 || !COUNTRY.test(value.country) || !STATUSES.has(value.requestStatus)
     || (kind === 'personal' && value.requestStatus !== 'initiated')
-    || !destination || typeof destination !== 'object' || Array.isArray(destination)
-    || typeof destination.address !== 'string' || destination.address.length !== 42 || !ADDRESS.test(destination.address) || destination.asset !== 'USDT'
-    || destination.network !== 'polygon' || destination.chainId !== 137
+    || !destination
     || !confirmation || typeof confirmation !== 'object' || Array.isArray(confirmation)
     || confirmation.state !== 'unconfirmed' || confirmation.source !== 'none'
     || confirmation.testMode !== (kind === 'administrative')) return null;
   return { checkoutReference: value.checkoutReference.toLowerCase(), walletKind: kind, environment, provider,
     requestedAmount: value.requestedAmount, country: value.country, requestStatus: value.requestStatus, ...source,
-    destination: { address: destination.address, asset: 'USDT', network: 'polygon', chainId: 137 },
+    destination,
     confirmation: { state: 'unconfirmed', source: 'none', testMode: kind === 'administrative' } };
 }
 

@@ -733,3 +733,18 @@ test('explicit funding edits clear a stale provider error without reconnecting o
   assert.equal(find(tree, 'PersonalFundingForm').props.destinationAddress, personalStatus.destination.address);
   assert.equal(find(tree, 'PersonalFundingForm').props.disabled, false);
 });
+
+test('personal funding review uses Ethereum while old funding records retain Polygon', () => {
+  const harness = formHarness('PersonalFundingForm', {});
+  const destination = harness.exports.FundingDestination({ address: personalStatus.destination.address });
+  assert.match(renderToStaticMarkup(destination), /USDT · Ethereum/);
+  const { currentFundingView, WalletFundingStatusView } = load('WalletFundingStatus.jsx', statusMocks(() => {}));
+  for (const [network, chainId, label] of [['ethereum', 1, 'Ethereum'], ['polygon', 137, 'Polygon']]) {
+    const record = { ...personalStatus, destination: { ...personalStatus.destination, network, chainId } };
+    const view = currentFundingView(record, 'personal', statusReference);
+    assert.ok(view, network);
+    const html = renderToStaticMarkup(WalletFundingStatusView({ view }));
+    assert.ok(html.includes('USDT · ' + label));
+    assert.ok(!html.includes('USDT · ' + (network === 'ethereum' ? 'Polygon' : 'Ethereum')));
+  }
+});

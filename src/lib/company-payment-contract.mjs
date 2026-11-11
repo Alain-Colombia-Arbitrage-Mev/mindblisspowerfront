@@ -1,4 +1,4 @@
-import { PERSONAL_COMPANY_PAYMENT } from './personal-company-payment-values.mjs';
+import { PERSONAL_COMPANY_PAYMENT, LEGACY_POLYGON_COMPANY_PAYMENT } from './personal-company-payment-values.mjs';
 import { FUNDING_UUID } from './wallet-funding-contract.mjs';
 
 const HASH = /^0x[0-9a-f]{64}$/;
@@ -21,9 +21,10 @@ export function companyPaymentInput(value, action) {
 
 /** Canonical payment evidence is independent of membership activation or credit. */
 export function companyPaymentView(value) {
+  const policy = value?.chainId === 137 ? LEGACY_POLYGON_COMPANY_PAYMENT : PERSONAL_COMPANY_PAYMENT;
   if (!value || typeof value !== 'object' || Array.isArray(value) || !validUuid(value.paymentId)
     || value.walletKind !== 'personal' || typeof value.walletAddress !== 'string' || !ADDRESS.test(value.walletAddress) || value.walletAddress === PERSONAL_COMPANY_PAYMENT.recipientAddress
-    || Object.entries(PERSONAL_COMPANY_PAYMENT).some(([key, expected]) => value[key] !== expected)
+    || Object.entries(policy).some(([key, expected]) => value[key] !== expected)
     || !companyAtomic(value.amountAtomic) || !statuses.has(value.status) || value.membershipAssignment !== 'pending'
     || typeof value.createdAt !== 'string' || value.createdAt.length > 64 || !Number.isFinite(Date.parse(value.createdAt))
     || typeof value.expiresAt !== 'string' || value.expiresAt.length > 64 || !Number.isFinite(Date.parse(value.expiresAt))
@@ -39,7 +40,7 @@ export function companyPaymentView(value) {
   if (value.status === 'confirmed' && (!value.blockHash || !value.blockNumber || value.confirmations < 12 || value.failureReason !== null)) return null;
   if (value.status !== 'confirmed' && (value.blockHash !== null || value.blockNumber !== null || value.confirmations >= 12)) return null;
   if (value.status === 'failed' ? value.failureReason === null : value.failureReason !== null) return null;
-  return { paymentId: value.paymentId, walletKind: 'personal', walletAddress: value.walletAddress, ...PERSONAL_COMPANY_PAYMENT,
+  return { paymentId: value.paymentId, walletKind: 'personal', walletAddress: value.walletAddress, ...policy,
     amountAtomic: value.amountAtomic, status: value.status, createdAt: value.createdAt, expiresAt: value.expiresAt,
     transactionHash: value.transactionHash, blockHash: value.blockHash, blockNumber: value.blockNumber, confirmations: value.confirmations,
     requiredConfirmations: 12, failureReason: value.failureReason, abandonedAt: value.abandonedAt, membershipAssignment: 'pending' };

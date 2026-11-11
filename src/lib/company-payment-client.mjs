@@ -1,6 +1,7 @@
 import { companyPaymentHistory, companyPaymentInput, companyPaymentView } from './company-payment-contract.mjs';
 import { FUNDING_UUID } from './wallet-funding-contract.mjs';
 import { browserRequestDeadline } from './browser-request-deadline.mjs';
+import { PERSONAL_COMPANY_PAYMENT } from './personal-company-payment-values.mjs';
 
 async function request(path, init) {
   const deadline = browserRequestDeadline(init.signal, 25_000);
@@ -36,7 +37,7 @@ export async function writeCompanyPayment(action, input, { signal } = {}) {
   const data = companyPaymentView(await request(`/api/member/company-payments/${action}`, { method: 'POST', signal,
     headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }));
   if (!data || data.paymentId !== ('requestId' in body ? body.requestId : body.paymentId)
-    || (action === 'prepare' && data.amountAtomic !== body.amountAtomic)
+    || (action === 'prepare' && (data.amountAtomic !== body.amountAtomic || data.chainId !== PERSONAL_COMPANY_PAYMENT.chainId))
     || (action === 'submit' && data.transactionHash !== ('transactionHash' in body ? body.transactionHash : undefined))) throw new Error('company_payment_unavailable');
   if (action === 'abandon' && (data.status !== 'prepared' || data.abandonedAt === null)) throw new Error('company_payment_unavailable');
   return data;

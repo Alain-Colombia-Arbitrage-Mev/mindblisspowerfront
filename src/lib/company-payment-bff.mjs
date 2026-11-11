@@ -6,13 +6,14 @@ import { boundedServiceRequest } from './private-service-request.mjs';
 import { browserRequestDeadline } from './browser-request-deadline.mjs';
 import { companyPaymentHistory, companyPaymentInput, companyPaymentView } from './company-payment-contract.mjs';
 import { FUNDING_UUID } from './wallet-funding-contract.mjs';
+import { PERSONAL_COMPANY_PAYMENT } from './personal-company-payment-values.mjs';
 
 const reply = (data, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' } });
 const safeErrors = new Set(['unauthenticated', 'invalid_origin', 'invalid_request', 'company_payment_unavailable', 'company_payment_not_found',
   'company_payment_unconfigured', 'company_payment_wallet_not_linked', 'company_payment_insufficient_balance', 'company_payment_pending',
   'company_payment_request_already_used', 'company_payment_transaction_pending', 'company_payment_transaction_mismatch', 'company_payment_rate_limited',
   'company_payment_forbidden', 'company_payment_hash_reused', 'company_payment_pending_exists', 'company_payment_rpc_unavailable',
-  'company_payment_invalid_transition', 'company_payment_confirmation_conflict']);
+  'company_payment_invalid_transition', 'company_payment_confirmation_conflict', 'company_payment_network_retired']);
 
 async function inputBody(request) {
   const reader = request.body?.getReader();
@@ -76,7 +77,8 @@ export async function handleCompanyPayment(request, action, { env = runtimeEnvir
     const safe = action === 'history' ? companyPaymentHistory(result.data) : companyPaymentView(result.data);
     if (!safe || (paymentId && (!('paymentId' in safe) || safe.paymentId !== paymentId))
       || (body && (!('paymentId' in safe) || safe.paymentId !== requestedId))
-      || (action === 'prepare' && (!('amountAtomic' in safe) || safe.amountAtomic !== body.amountAtomic))
+      || (action === 'prepare' && (!('amountAtomic' in safe) || safe.amountAtomic !== body.amountAtomic
+        || !('chainId' in safe) || safe.chainId !== PERSONAL_COMPANY_PAYMENT.chainId))
       || (action === 'submit' && (!('transactionHash' in safe) || safe.transactionHash !== requestedHash))) return reply({ error: 'company_payment_unavailable' }, 502);
     if (action === 'abandon' && (!('status' in safe) || safe.status !== 'prepared' || !('abandonedAt' in safe) || safe.abandonedAt === null)) return reply({ error: 'company_payment_unavailable' }, 502);
     return reply(safe);

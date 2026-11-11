@@ -10,15 +10,15 @@ export default function WalletFundingPanels() {
   const { t } = useI18n();
   return <div className={styles.destinations} aria-label={t("walletPage.fundsTitle")}>
     <WalletDestination icon={Wallet} title={t("walletPage.personalWalletLabel")} copy={t("funding.personalDestination")}
-      provider="Reown" href="/dashboard/wallet-personal" />
+      network="Ethereum" href="/dashboard/wallet-personal" />
   </div>;
 }
 
-function WalletDestination({ icon: Icon, title, copy, provider, href }) {
+function WalletDestination({ icon: Icon, title, copy, network, href }) {
   const { t } = useI18n();
   return <section className={`executive-panel ${styles.destination}`}>
     <div className={styles.destinationHeading}><span className="mb-wallet-funding-icon"><Icon size={20} aria-hidden="true" /></span>
-      <div><h2>{title}</h2><span className={styles.provider}>{provider} · USDT</span></div></div>
+      <div><h2>{title}</h2><span className={styles.provider}>{network} · USDT</span></div></div>
     <p>{copy}</p>
     <Link className="executive-button primary" href={href} prefetch={false}>{t("walletPage.addFundsAction")}<ArrowUpRight size={17} aria-hidden="true" /></Link>
   </section>;

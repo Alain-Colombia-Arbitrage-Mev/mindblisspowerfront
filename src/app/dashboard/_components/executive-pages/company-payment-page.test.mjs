@@ -152,9 +152,57 @@ test('recovery hashes are presented only as external explorer links without chan
   const state = flow(payment('submitted'));
   const tree = CompanyPaymentStatus({ flow: state });
   const link = findAll(tree, node => node?.type === 'a')[0];
-  assert.equal(link.props.href, `https://polygonscan.com/tx/${hash}`);
+  assert.equal(link.props.href, `https://etherscan.io/tx/${hash}`);
   assert.equal(link.props.target, '_blank');
   assert.equal(link.props.rel, 'noreferrer noopener');
   assert.deepEqual(state.calls, []);
   assert.equal(state.payment.status, 'submitted');
+});
+
+const legacyPayment = (status, patch = {}) => payment(status, { chainId: 137, tokenAddress: '0xc2132d05d31c914a87c6611c10748aeb04b58e8f', ...patch });
+
+test('historical Polygon transfers keep their original network, explorer and confirmation wording in every locale', () => {
+  for (locale of ['es', 'en', 'ar', 'zh']) {
+    const state = flow(legacyPayment('confirmed'));
+    assert.ok(companyPaymentView(state.payment));
+    const tree = CompanyPaymentStatus({ flow: state });
+    const html = renderToStaticMarkup(tree);
+    assert.ok(html.includes(t('legacyNetwork')));
+    assert.ok(html.includes(t('legacyConfirmedCopy')));
+    assert.ok(!html.includes(t('confirmedCopy')));
+    assert.equal(findAll(tree, node => node?.type === 'a')[0].props.href, 'https://polygonscan.com/tx/' + hash);
+    assert.equal(button(tree, 'legacyVerify').props.disabled, false);
+    assert.equal(button(tree, 'resume'), undefined);
+    assert.equal(button(tree, 'confirmInWallet'), undefined);
+    assert.deepEqual(state.calls, []);
+  }
+  locale = 'es';
+});
+
+test('a legacy Polygon draft can only be discarded or have a previous hash registered, never resumed for sending', () => {
+  const record = legacyPayment('prepared');
+  activeFlow = flow(record, { stage: 'review' });
+  const page = PersonalCompanyPayment();
+  assert.equal(findAll(page, node => node?.type === forms.CompanyPaymentReview).length, 0);
+  assert.equal(findAll(page, node => node?.type === CompanyPaymentStatus).length, 1);
+  const tree = CompanyPaymentStatus({ flow: activeFlow });
+  assert.ok(renderToStaticMarkup(tree).includes(t('legacyPreparedCopy')));
+  assert.equal(button(tree, 'resume'), undefined);
+  assert.equal(button(tree, 'connect'), undefined);
+  assert.equal(button(tree, 'confirmInWallet'), undefined);
+  assert.ok(button(tree, 'abandon'));
+  assert.equal(button(tree, 'registerHash').props.disabled, true);
+  assert.equal(findAll(tree, node => node?.type === 'input').length, 1);
+  const withHash = flow(record, { manualHash: hash });
+  const recovery = CompanyPaymentStatus({ flow: withHash });
+  assert.equal(button(recovery, 'registerHash').props.disabled, false);
+  button(recovery, 'registerHash').props.onClick();
+  assert.deepEqual(withHash.calls, ['verifyPayment']);
+});
+
+test('legacy verification errors refer to the original Polygon network', () => {
+  const tree = CompanyPaymentStatus({ flow: flow(legacyPayment('submitted'), { errorKey: 'companyPayment.networkUnavailable' }) });
+  const html = renderToStaticMarkup(tree);
+  assert.ok(html.includes(t('legacyNetworkUnavailable')));
+  assert.ok(!html.includes(t('networkUnavailable')));
 });

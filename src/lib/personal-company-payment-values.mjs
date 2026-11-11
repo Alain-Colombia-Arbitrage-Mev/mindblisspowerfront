@@ -1,8 +1,11 @@
 // Shared display/contract values without wallet, RPC or ethers dependencies.
 export const PERSONAL_COMPANY_PAYMENT = Object.freeze({
-  chainId: 137, tokenAddress: '0xc2132d05d31c914a87c6611c10748aeb04b58e8f', tokenDecimals: 6,
+  chainId: 1, tokenAddress: '0xdac17f958d2ee523a2206206994597c13d831ec7', tokenDecimals: 6,
   recipientAddress: '0x0a600b03ef5f8e7f3e182b83440c6d292033db0e',
 });
+// Historical evidence remains on its original chain; this is never a send policy.
+export const LEGACY_POLYGON_COMPANY_PAYMENT = Object.freeze({ ...PERSONAL_COMPANY_PAYMENT,
+  chainId: 137, tokenAddress: '0xc2132d05d31c914a87c6611c10748aeb04b58e8f' });
 const MAX_UINT256 = (1n << 256n) - 1n;
 
 export function personalCompanyPaymentAtomic(value, allowZero = false) {

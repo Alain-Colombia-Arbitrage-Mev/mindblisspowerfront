@@ -82,7 +82,7 @@ export function WalletFundingStatusView({ view }) {
     <dl className={styles.statusDetails}>
       <div><dt>{t("funding.statusRequestedAmount")}</dt><dd>{new Intl.NumberFormat(locale, { style: "currency", currency: view.sourceCurrencyCode || "USD" }).format(view.requestedAmount)}</dd></div>
       {confirmed ? <div><dt>{t("funding.statusReceived")}</dt><dd><bdi dir="ltr">{view.receivedAmount} USDT</bdi></dd></div> : null}
-      <div><dt>{t("funding.reviewDestination")}</dt><dd><code dir="ltr">{view.destination.address}</code><small>USDT · Polygon</small></dd></div>
+      <div><dt>{t("funding.reviewDestination")}</dt><dd><code dir="ltr">{view.destination.address}</code><small>USDT · {view.destination.network === "ethereum" ? "Ethereum" : "Polygon"}</small></dd></div>
       {confirmed ? <div><dt>{t("funding.statusConfirmedAt")}</dt><dd>{new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(view.confirmedAt))}</dd></div> : null}
       <div><dt>{t("funding.statusReference")}</dt><dd><code dir="ltr">{view.checkoutReference}</code></dd></div>
     </dl>

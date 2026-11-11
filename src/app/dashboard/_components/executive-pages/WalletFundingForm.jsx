@@ -131,13 +131,13 @@ function FundingAmountField({ id, amount, sourceCurrencyCode = "USD", onChange, 
   const invalid = amount !== "" && !validFundingSourceAmount(Number(amount), "personal", sourceCurrencyCode);
   const currency = value => new Intl.NumberFormat(locale, { style: "currency", currency: "USD" }).format(value);
   const sliderAmount = Number.isFinite(Number(amount)) ? Math.min(PERSONAL_FUNDING_MAXIMUM_USD, Math.max(PERSONAL_FUNDING_MINIMUM_USD, Number(amount))) : PERSONAL_FUNDING_MINIMUM_USD;
-  const useSliderAmount = value => onChange(String(Math.min(PERSONAL_FUNDING_MAXIMUM_USD, Math.max(PERSONAL_FUNDING_MINIMUM_USD, Math.round(value * 100) / 100))));
+  const setSliderAmount = value => onChange(String(Math.min(PERSONAL_FUNDING_MAXIMUM_USD, Math.max(PERSONAL_FUNDING_MINIMUM_USD, Math.round(value * 100) / 100))));
   function sliderKeyDown(event) {
     const next = { ArrowRight: sliderAmount + 100, ArrowUp: sliderAmount + 100, ArrowLeft: sliderAmount - 100, ArrowDown: sliderAmount - 100,
       PageUp: sliderAmount + 1000, PageDown: sliderAmount - 1000, Home: PERSONAL_FUNDING_MINIMUM_USD, End: PERSONAL_FUNDING_MAXIMUM_USD }[event.key];
     if (next === undefined) return;
     event.preventDefault();
-    useSliderAmount(next);
+    setSliderAmount(next);
   }
   return <fieldset className={`mb-onramp-amount-fieldset ${styles.amountField}`} disabled={busy}>
     <legend>{t("onramp.amountLabel")}</legend>
@@ -149,7 +149,7 @@ function FundingAmountField({ id, amount, sourceCurrencyCode = "USD", onChange, 
     {usd ? <div className={styles.amountSliderGroup}>
       <label className="sr-only" htmlFor={`${id}-amount-slider`}>{t("funding.amountSlider")}</label>
       <input className={styles.amountSlider} id={`${id}-amount-slider`} name="amountSlider" type="range" dir="ltr" min={PERSONAL_FUNDING_MINIMUM_USD} max={PERSONAL_FUNDING_MAXIMUM_USD} step="any" value={sliderAmount}
-        onChange={event => useSliderAmount(Math.round(Number(event.target.value) / 100) * 100)} onKeyDown={sliderKeyDown} aria-valuetext={currency(sliderAmount)} aria-describedby={`${id}-usd-limits`} />
+        onChange={event => setSliderAmount(Math.round(Number(event.target.value) / 100) * 100)} onKeyDown={sliderKeyDown} aria-valuetext={currency(sliderAmount)} aria-describedby={`${id}-usd-limits`} />
       <div className={styles.sliderLimits} dir="ltr" aria-hidden="true"><span>{currency(PERSONAL_FUNDING_MINIMUM_USD)}</span><span>{currency(PERSONAL_FUNDING_MAXIMUM_USD)}</span></div>
       <small id={`${id}-usd-limits`} className="mb-onramp-disclosure">{t("funding.personalAmountLimits", { minimum: currency(PERSONAL_FUNDING_MINIMUM_USD), maximum: currency(PERSONAL_FUNDING_MAXIMUM_USD) })}</small>
     </div> : null}
@@ -212,7 +212,7 @@ function FundingSubmit({ disabled, busy }) {
 export function FundingDestination({ address }) {
   const { t } = useI18n();
   const id = useId();
-  return <div className={styles.destinationReview}><label htmlFor={`${id}-destination`}>{t("funding.reviewDestination")}<small>USDT · Polygon</small></label>
+  return <div className={styles.destinationReview}><label htmlFor={`${id}-destination`}>{t("funding.reviewDestination")}<small>USDT · Ethereum</small></label>
     <input id={`${id}-destination`} type="text" readOnly value={address} dir="ltr" title={address || undefined}
       aria-describedby={`${id}-destination-help`} placeholder={t("funding.destinationReviewEmpty")} />
     <small id={`${id}-destination-help`} className={address ? "sr-only" : undefined}>{address ? t("funding.destinationReviewCopy") : t("funding.destinationReviewEmpty")}</small>

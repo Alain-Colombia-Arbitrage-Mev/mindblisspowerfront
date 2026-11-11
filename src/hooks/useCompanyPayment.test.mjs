@@ -69,7 +69,7 @@ function harness(overrides = {}) {
   const sdk = { creations: [], broadcasts: [], sends: [], networkSwitches: [], balanceReads: [] };
   const provider = { request() { assert.fail('a real wallet RPC was attempted'); } };
   const getProvider = () => provider;
-  const switchProviderNetwork = async () => { sdk.networkSwitches.push('polygon'); return overrides.switchNetwork?.(); };
+  const switchProviderNetwork = async () => { sdk.networkSwitches.push('ethereum'); return overrides.switchNetwork?.(); };
   const reown = () => ({ linkedAddress: sourceWallet, linkStatus: 'linked', isConnected: true, isLinked: true, getCompanyPaymentProvider: getProvider,
     switchCompanyPaymentNetwork: switchProviderNetwork,
     openConnect: () => assert.fail('unexpected wallet connection'), linkWallet: () => assert.fail('unexpected signature'), ...overrides.reown });

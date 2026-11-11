@@ -1,4 +1,5 @@
 import { FUNDING_UUID, PERSONAL_FUNDING_PROVIDERS, validFundingSourceAmount, fundingCurrencyCode, fundingSourceSupported, personalFundingCountry, personalFundingMethod } from './wallet-funding-contract.mjs';
+import { PERSONAL_WALLET_MELD_ASSET } from './personal-wallet.mjs';
 
 /** Validate before linking, selecting a provider or creating a personal intent. */
 export function reownFundingCurrency(sourceCurrencyCode = 'USD', context = {}) {
@@ -34,13 +35,13 @@ export function buildReownProductionOnrampUrl({ providerUrl, address, projectId,
   url.searchParams.set('walletAddress', address);
   url.searchParams.set('externalSessionId', checkoutReference);
   url.searchParams.set('sourceCurrencyCode', sourceCurrencyCode);
-  url.searchParams.set('destinationCurrencyCode', 'USDT_POLYGON');
+  url.searchParams.set('destinationCurrencyCode', PERSONAL_WALLET_MELD_ASSET);
   url.searchParams.set('sourceAmount', String(amount));
   url.searchParams.set('countryCode', countryCode);
   url.searchParams.set('paymentMethodType', paymentMethodType);
   // Checkout's documented locks use the actual values, not boolean flags.
   for (const [key, value] of Object.entries({ walletAddress: address, countryCode,
-    sourceCurrencyCode, destinationCurrencyCode: 'USDT_POLYGON', sourceAmount: String(amount), paymentMethodType })) {
+    sourceCurrencyCode, destinationCurrencyCode: PERSONAL_WALLET_MELD_ASSET, sourceAmount: String(amount), paymentMethodType })) {
     url.searchParams.set(`${key}Locked`, value);
   }
   // Internal provider restrictions are merchant configuration. The public

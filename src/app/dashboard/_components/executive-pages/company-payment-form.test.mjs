@@ -43,7 +43,8 @@ test('form is presentation only and invokes review, MAX and refresh exclusively 
   assert.match(html, /25123456|25\.123456/);
   assert.ok(html.includes(values.PERSONAL_COMPANY_PAYMENT.recipientAddress));
   assert.match(html, /<output[^>]+dir="ltr"/);
-  assert.match(html, /Polygon/);
+  assert.match(html, /Ethereum/);
+  assert.doesNotMatch(html, /Polygon|\bPOL\b/);
   assert.doesNotMatch(source, /useEffect|useReown|fetch\(|BrowserProvider|eth_sendTransaction|createPersonalCompanyPaymentTransfer/);
 });
 
@@ -106,7 +107,7 @@ test('review shows the exact transfer and only opens wallet confirmation after a
 
 test('invalid, expired or wrong-destination review data can never invoke the confirmation callback', () => {
   for (const patch of [{ recipientAddress: `0x${'2'.repeat(40)}` }, { tokenAddress: `0x${'2'.repeat(40)}` },
-    { recipientAddress: [] }, { walletAddress: [] }, { chainId: 1 }, { tokenDecimals: 18 }, { status: 'confirmed' },
+    { recipientAddress: [] }, { walletAddress: [] }, { chainId: 137 }, { tokenDecimals: 18 }, { status: 'confirmed' },
     { amountAtomic: '0' }, { amountAtomic: 1 }, { expiresAt: new Date(Date.now() - 1).toISOString() }, { paymentId: 'not-a-uuid' },
     { abandonedAt: new Date().toISOString() }, { abandonedAt: false }, { abandonedAt: '' }]) {
     let confirmed = 0;

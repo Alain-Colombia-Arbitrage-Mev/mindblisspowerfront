@@ -54,7 +54,7 @@ export function CompanyPaymentReview({ payment, onConfirm, onBack, busy = false,
     && payment.walletAddress.toLowerCase() !== PERSONAL_COMPANY_PAYMENT.recipientAddress
     && typeof payment.recipientAddress === "string" && payment.recipientAddress.toLowerCase() === PERSONAL_COMPANY_PAYMENT.recipientAddress
     && typeof payment.tokenAddress === "string" && payment.tokenAddress.toLowerCase() === PERSONAL_COMPANY_PAYMENT.tokenAddress
-    && payment.chainId === 137 && payment.tokenDecimals === 6 && personalCompanyPaymentAtomic(payment.amountAtomic) !== null
+    && payment.chainId === PERSONAL_COMPANY_PAYMENT.chainId && payment.tokenDecimals === PERSONAL_COMPANY_PAYMENT.tokenDecimals && personalCompanyPaymentAtomic(payment.amountAtomic) !== null
     && typeof payment.expiresAt === "string" && Number.isFinite(Date.parse(payment.expiresAt)) && Date.parse(payment.expiresAt) > Date.now());
   return <section className={`executive-panel ${styles.panel}`} aria-label={t("companyPayment.reviewTitle")}>
     <header className={styles.heading}><ShieldCheck size={22} aria-hidden="true" /><div><h2>{t("companyPayment.reviewTitle")}</h2><p>{t("companyPayment.reviewCopy")}</p></div></header>

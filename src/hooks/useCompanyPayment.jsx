@@ -11,7 +11,7 @@ export function companyPaymentErrorKey(failure) {
   const code = failure?.message || "";
   if (failure?.name === "AbortError") return "";
   const keys = {
-    personal_company_insufficient_pol: "zeroGas", personal_company_balance_changed: "balanceChanged", personal_company_rejected: "rejected",
+    personal_company_insufficient_eth: "zeroGas", personal_company_balance_changed: "balanceChanged", personal_company_rejected: "rejected",
     personal_company_wallet_changed: "walletMismatch", personal_company_wallet_unavailable: "walletMismatch", personal_company_chain_changed: "switchNetwork",
     personal_company_intent_expired: "expired", personal_company_recovery_unavailable: "recoveryUnavailable",
     personal_company_intent_abandoned: "abandonedCopy",
@@ -20,6 +20,7 @@ export function companyPaymentErrorKey(failure) {
     company_payment_pending_exists: "pendingExists", company_payment_unconfigured: "serviceUnavailable", company_payment_forbidden: "walletMismatch",
     company_payment_wallet_not_linked: "walletMismatch", unauthenticated: "connectCopy", company_payment_transaction_pending: "pendingCopy",
     company_payment_transaction_mismatch: "paymentFailed", company_payment_hash_reused: "paymentFailed",
+    company_payment_network_retired: "legacyPreparedCopy",
   };
   return `companyPayment.${keys[code] || "networkUnavailable"}`;
 }
@@ -120,7 +121,7 @@ export function useCompanyPayment(reown) {
     if (!safe) throw new Error("company_payment_unavailable");
     const current = selected.current;
     if (current && current.paymentId === safe.paymentId && ["confirmed", "failed"].includes(current.status)) return current;
-    if (live(wallet) && (!current || current.paymentId === safe.paymentId)) select(safe, safe.status === "prepared" && !safe.abandonedAt ? "review" : "status");
+    if (live(wallet) && (!current || current.paymentId === safe.paymentId)) select(safe, safe.status === "prepared" && !safe.abandonedAt && safe.chainId === PERSONAL_COMPANY_PAYMENT.chainId ? "review" : "status");
     return safe;
   }, [live, wallet, select]);
 
@@ -145,7 +146,8 @@ export function useCompanyPayment(reown) {
   function review() {
     const atomic = personalCompanyPaymentAmountAtomic(amount);
     if (inflight.current || !connected || !atomic || balance.wallet !== wallet || balance.balanceAtomic === null || BigInt(atomic) > BigInt(balance.balanceAtomic)) return;
-    if (persisted.current && selected.current && selected.current.status === "prepared" && selected.current.amountAtomic !== atomic) { setErrorKey("companyPayment.pendingExists"); setStage("status"); return; }
+    if (persisted.current && selected.current && selected.current.status === "prepared"
+      && (selected.current.chainId !== PERSONAL_COMPANY_PAYMENT.chainId || selected.current.amountAtomic !== atomic)) { setErrorKey("companyPayment.pendingExists"); setStage("status"); return; }
     setErrorKey("");
     // The preview is local and editable. Persist the exact intent on Confirm,
     // before opening the wallet. A preview never claims server registration.
@@ -158,7 +160,7 @@ export function useCompanyPayment(reown) {
 
   async function confirm() {
     const preview = selected.current;
-    if (inflight.current || !connected || !preview || preview.status !== "prepared" || preview.abandonedAt || preview.walletAddress !== wallet || balance.balanceAtomic === null) return;
+    if (inflight.current || !connected || !preview || preview.chainId !== PERSONAL_COMPANY_PAYMENT.chainId || preview.status !== "prepared" || preview.abandonedAt || preview.walletAddress !== wallet || balance.balanceAtomic === null) return;
     const stored = readCompanyRecovery(window.localStorage, wallet, preview.paymentId);
     if (stored) { setRecovery(stored); setStage("status"); setErrorKey("companyPayment.ambiguousCopy"); return; }
     const operation = {}; inflight.current = operation; setBusy(true); setErrorKey("");
@@ -275,7 +277,7 @@ export function useCompanyPayment(reown) {
     balanceAtomic: balance.wallet === wallet ? balance.balanceAtomic : null, loadingBalance: balance.loading,
     errorKey: errorKey || balance.error || history.error, history: history.wallet === wallet ? history.records : [], historyLoading: history.loading,
     payment, stage, transfer, recovery, manualHash, setManualHash, busy, review, confirm, connect, switchNetwork, verifyPayment, edit, abandon, newPayment,
-    resume() { if (!busy && selected.current?.status === "prepared" && !selected.current.abandonedAt && !recovery) setStage("review"); },
+    resume() { if (!busy && selected.current?.chainId === PERSONAL_COMPANY_PAYMENT.chainId && selected.current?.status === "prepared" && !selected.current.abandonedAt && !recovery) setStage("review"); },
     refresh: () => setRevision(number => number + 1), selectHistory(value) {
       select(value); setManualHash("");
       if (["confirmed", "failed"].includes(value.status)) clearCompanyRecovery(window.localStorage, value.walletAddress, value.paymentId);

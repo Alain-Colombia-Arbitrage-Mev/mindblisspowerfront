@@ -15,9 +15,13 @@ test('company payment translations preserve the full locale and interpolation co
       assert.deepEqual(placeholders(catalog[key]), placeholders(companyPaymentMessages.es.companyPayment[key]));
       assert.equal(translateMessage(locale, `companyPayment.${key}`), catalog[key]);
     }
-    assert.match(catalog.gasCopy, /POL/);
-    assert.match(catalog.network, /Polygon.*USDT/);
+    assert.match(catalog.gasCopy, /ETH/);
+    assert.match(catalog.network, /Ethereum.*USDT/);
     assert.match(catalog.confirmedCopy, /12/);
+    assert.match(catalog.legacyNetwork, /Polygon.*USDT/);
+    assert.match(catalog.legacyConfirmedCopy, /Polygon.*12/);
+    assert.match(catalog.legacyVerify, /Polygon/);
+    assert.match(catalog.legacyPreparedCopy, /Polygon.*Ethereum/);
     for (const key of ['preparedTitle', 'preparedCopy', 'submittedTitle', 'confirmedTitle', 'pendingCopy', 'ambiguousTitle',
       'ambiguousCopy', 'registerHash', 'hashLabel', 'verify', 'resume', 'statusUnavailable', 'emptyHistory', 'switchNetwork',
       'zeroGas', 'balanceChanged', 'walletMismatch', 'rejected', 'serviceUnavailable', 'paymentFailed', 'networkUnavailable',

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { companyAtomic, companyPaymentInput, companyPaymentView, companyPaymentHistory } from './company-payment-contract.mjs';
-import { PERSONAL_COMPANY_PAYMENT } from './personal-company-payment-values.mjs';
+import { PERSONAL_COMPANY_PAYMENT, LEGACY_POLYGON_COMPANY_PAYMENT } from './personal-company-payment-values.mjs';
 
 const paymentId = 'd8a4c010-cc33-44da-a297-8b3c6440f491';
 const otherId = 'd8a4c010-cc33-44da-a297-8b3c6440f492';
@@ -12,6 +12,14 @@ const ack = (patch = {}) => ({ paymentId, walletKind: 'personal', walletAddress:
   amountAtomic: '9007199254740993123456', status: 'prepared', createdAt: '2026-11-11T10:00:00.000Z', expiresAt: '2026-11-11T10:15:00.000Z',
   transactionHash: null, blockHash: null, blockNumber: null, confirmations: 0, requiredConfirmations: 12, failureReason: null,
   abandonedAt: null, membershipAssignment: 'pending', ...patch });
+
+test('Ethereum and historical Polygon evidence retain the exact chain and token pair', () => {
+  const legacy = ack({ ...LEGACY_POLYGON_COMPANY_PAYMENT, status: 'confirmed', transactionHash: hash, blockHash, blockNumber: '80000000', confirmations: 12 });
+  assert.deepEqual(companyPaymentView(legacy), legacy);
+  assert.equal(companyPaymentView(ack({ chainId: 137 })), null);
+  assert.equal(companyPaymentView({ ...legacy, chainId: 1 }), null);
+  assert.equal(companyPaymentView(ack()).chainId, 1);
+});
 
 test('company amounts remain positive canonical uint256 strings beyond JavaScript precision', () => {
   for (const amount of ['1', '9007199254740993123456', ((1n << 256n) - 1n).toString()]) assert.equal(companyAtomic(amount), true);
@@ -45,7 +53,7 @@ test('canonical receipts strip private fields and never convert confirmation int
 });
 
 test('receipt policy rejects changed token, receiver, chain, precision, sender and personal-wallet context', () => {
-  for (const patch of [{ recipientAddress: sender }, { tokenAddress: sender }, { chainId: 1 }, { tokenDecimals: 18 },
+  for (const patch of [{ recipientAddress: sender }, { tokenAddress: sender }, { chainId: 137 }, { tokenDecimals: 18 },
     { walletKind: 'administrative' }, { walletAddress: PERSONAL_COMPANY_PAYMENT.recipientAddress }, { walletAddress: 'invalid' },
     { amountAtomic: 100 }, { amountAtomic: '01' }, { paymentId: 'invalid' }, { status: 'complete' }, { requiredConfirmations: 1 },
     { expiresAt: 'not-a-date' }, { expiresAt: ack().createdAt }]) assert.equal(companyPaymentView(ack(patch)), null);

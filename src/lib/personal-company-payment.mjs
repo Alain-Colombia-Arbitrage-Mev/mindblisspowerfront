@@ -50,7 +50,7 @@ function walletContext(walletProvider, walletAddress, signal, readTimeoutMs) {
   if (!walletProvider || typeof walletProvider.request !== 'function' || !address(walletAddress)) throw error('personal_company_wallet_unavailable');
   let changed;
   const accountsChanged = accounts => { if (!Array.isArray(accounts) || address(accounts[0]) !== walletAddress) changed = 'personal_company_wallet_changed'; };
-  const chainChanged = chain => { try { if (chainIdentity(chain) !== 137n) changed = 'personal_company_chain_changed'; } catch { changed = 'personal_company_chain_changed'; } };
+  const chainChanged = chain => { try { if (chainIdentity(chain) !== BigInt(PERSONAL_COMPANY_PAYMENT.chainId)) changed = 'personal_company_chain_changed'; } catch { changed = 'personal_company_chain_changed'; } };
   const assertActive = () => { if (signal?.aborted) throw cancelled(); if (changed) throw error(changed); };
   if (typeof walletProvider.on === 'function' && typeof walletProvider.removeListener === 'function') {
     walletProvider.on('accountsChanged', accountsChanged); walletProvider.on('chainChanged', chainChanged);
@@ -73,7 +73,7 @@ function walletContext(walletProvider, walletAddress, signal, readTimeoutMs) {
   }
   async function verify() {
     const [chain, accounts] = await Promise.all([read('eth_chainId'), read('eth_accounts')]);
-    if (chainIdentity(chain) !== 137n) throw error('personal_company_chain_changed');
+    if (chainIdentity(chain) !== BigInt(PERSONAL_COMPANY_PAYMENT.chainId)) throw error('personal_company_chain_changed');
     if (!Array.isArray(accounts) || address(accounts[0]) !== walletAddress) throw error('personal_company_wallet_changed');
     assertActive();
   }
@@ -164,17 +164,17 @@ export function createPersonalCompanyPaymentTransfer({ walletProvider, walletAdd
       if (reviewedBalance === null || balance !== reviewedBalance) throw error('personal_company_balance_changed');
       const amount = BigInt(record.intent.amountAtomic);
       if (amount > balance) throw error('personal_company_insufficient_usdt');
-      const transaction = { from: sender, to: PERSONAL_COMPANY_PAYMENT.tokenAddress, value: '0x0', chainId: '0x89',
+      const transaction = { from: sender, to: PERSONAL_COMPANY_PAYMENT.tokenAddress, value: '0x0', chainId: '0x1',
         data: ABI.encodeFunctionData('transfer', [PERSONAL_COMPANY_PAYMENT.recipientAddress, amount]) };
       const [price, native] = await Promise.all([
         context.read('eth_gasPrice').then(quantity),
         context.read('eth_getBalance', [sender, 'pending']).then(quantity),
       ]);
-      if (native === 0n) throw error('personal_company_insufficient_pol');
+      if (native === 0n) throw error('personal_company_insufficient_eth');
       const estimated = await context.read('eth_estimateGas', [transaction]).then(quantity);
       if (estimated <= 0n || price <= 0n) throw error('personal_company_gas_unavailable');
       const gasLimit = (estimated * 120n + 99n) / 100n;
-      if (gasLimit > MAX_UINT256 || gasLimit * price > native) throw error('personal_company_insufficient_pol');
+      if (gasLimit > MAX_UINT256 || gasLimit * price > native) throw error('personal_company_insufficient_eth');
       transaction.gas = `0x${gasLimit.toString(16)}`;
       transaction.gasPrice = `0x${price.toString(16)}`;
       if (await context.balance() !== reviewedBalance) throw error('personal_company_balance_changed');

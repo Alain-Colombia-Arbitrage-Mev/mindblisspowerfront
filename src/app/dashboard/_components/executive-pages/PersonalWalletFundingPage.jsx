@@ -16,8 +16,13 @@ import styles from "./wallet-funding.module.css";
 
 const ReownProvider = dynamic(() => import("@/components/reown/ReownProvider"), {
   ssr: false,
-  loading: () => <div className="executive-panel" role="status"><Loader2 className="animate-spin" aria-label="Reown" /></div>,
+  loading: WalletLoading,
 });
+
+function WalletLoading() {
+  const { t } = useI18n();
+  return <div className="executive-panel" role="status"><Loader2 className="animate-spin" aria-hidden="true" /><span className="sr-only">{t("walletPage.checking")}</span></div>;
+}
 
 export default function PersonalWalletFundingPage() {
   return <ReownProvider><PersonalWalletFunding /></ReownProvider>;

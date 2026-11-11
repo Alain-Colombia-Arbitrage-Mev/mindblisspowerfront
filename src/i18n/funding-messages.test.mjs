@@ -33,12 +33,26 @@ test('personal funding copy distinguishes USD30 from administrative USD50 and lo
     assert.ok(funding.preparingTopUp.trim());
     assert.match(funding.amountRange, /50/);
     assert.match(funding.localMinimumPending, /50/);
-    assert.equal(funding.personalEnvironment, 'Reown');
+    assert.ok(funding.personalEnvironment.trim());
     assert.match(messages[locale].walletPage.administrativeProviderCopy, /50/);
     assert.match(messages[locale].walletPage.minimumTopUpCopy, /30/);
     assert.match(messages[locale].overview.plansFrom, /20/);
     assert.doesNotMatch(messages[locale].walletPage.simpleProviderNote, /Topper/);
     assert.match(messages[locale].walletPage.simpleProviderNote, /Swapped/);
     assert.match(messages[locale].walletPage.simpleProviderNote, /Mercuryo/);
+  }
+});
+
+test('personal wallet customer copy uses wallet terminology instead of the integration name in every locale', () => {
+  for (const locale of SUPPORTED_LOCALES) {
+    const wallet = messages[locale].walletPage;
+    const funding = fundingMessages[locale].funding;
+    const visible = [messages[locale].recharge.providerConfiguration, wallet.connected, wallet.walletCreationCopy,
+      wallet.simpleProviderNote, wallet.managedByMeld, funding.personalDestination, funding.personalEnvironment,
+      funding.connectWalletCopy, funding.personalProviderNote];
+    assert.doesNotMatch(visible.join(' '), /reown|rewon/i, locale);
+    assert.match(wallet.managedByMeld, /\{asset\}/, locale);
+    assert.match(funding.personalProviderNote, /Swapped/);
+    assert.match(funding.personalProviderNote, /Mercuryo/);
   }
 });

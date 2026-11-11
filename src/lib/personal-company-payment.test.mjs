@@ -19,7 +19,7 @@ const deferred = () => { let resolve; let reject; const promise = new Promise((y
 const intent = (patch = {}) => ({ paymentId, walletAddress: sender, ...PERSONAL_COMPANY_PAYMENT,
   amountAtomic: balance, status: 'prepared', abandonedAt: null, expiresAt: new Date(now + 60000).toISOString(), ...patch });
 
-function fixture({ balanceAtomic = balance, native = '0x5b8d80', chain = '0x89', accounts = [sender], hooks = {} } = {}) {
+function fixture({ balanceAtomic = balance, native = '0x5b8d80', chain = '0x1', accounts = [sender], hooks = {} } = {}) {
   const provider = new EventEmitter();
   const calls = [], markers = [], broadcasts = [], states = [];
   provider.request = async request => {
@@ -44,8 +44,8 @@ function fixture({ balanceAtomic = balance, native = '0x5b8d80', chain = '0x89',
   return { provider, calls, markers, broadcasts, states, create, sends: () => calls.filter(call => call.method === 'eth_sendTransaction') };
 }
 
-test('official Polygon token identity is exactly twenty bytes and amount conversion preserves all six decimals', () => {
-  assert.equal(PERSONAL_COMPANY_PAYMENT.tokenAddress, '0xc2132d05d31c914a87c6611c10748aeb04b58e8f');
+test('official Ethereum token identity is exactly twenty bytes and amount conversion preserves all six decimals', () => {
+  assert.equal(PERSONAL_COMPANY_PAYMENT.tokenAddress, '0xdac17f958d2ee523a2206206994597c13d831ec7');
   assert.equal(PERSONAL_COMPANY_PAYMENT.tokenAddress.length, 42);
   assert.equal(PERSONAL_COMPANY_PAYMENT.tokenDecimals, 6);
   assert.equal(personalCompanyPaymentAmountAtomic('9007199254740993.123456'), balance);
@@ -66,35 +66,35 @@ test('MAX reads the complete token balance without requesting signatures, accoun
   const result = await readPersonalCompanyPaymentBalance({ walletProvider: mock.provider, walletAddress: sender });
   assert.equal(result.balanceAtomic, balance);
   assert.equal(result.amount, '9007199254740993.123456');
-  assert.equal(result.chainId, 137);
+  assert.equal(result.chainId, 1);
   assert.deepEqual([...new Set(mock.calls.map(call => call.method))].sort(), ['eth_accounts', 'eth_call', 'eth_chainId']);
   assert.equal(mock.provider.listenerCount('accountsChanged'), 0);
   assert.equal(mock.provider.listenerCount('chainChanged'), 0);
 });
 
 test('the installed AppKit embedded provider numeric chain ID is accepted without weakening gas or token quantities', async () => {
-  const mock = fixture({ chain: 137, hooks: { eth_gasPrice: (_request, provider) => { provider.emit('chainChanged', 137); return '0x64'; } } });
+  const mock = fixture({ chain: 1, hooks: { eth_gasPrice: (_request, provider) => { provider.emit('chainChanged', 1); return '0x64'; } } });
   const result = await readPersonalCompanyPaymentBalance({ walletProvider: mock.provider, walletAddress: sender });
   assert.equal(result.balanceAtomic, balance);
-  assert.equal(result.chainId, 137);
+  assert.equal(result.chainId, 1);
   assert.equal((await mock.create().sendPrepared(intent(), { reviewedBalanceAtomic: balance })).phase, 'broadcast');
   assert.equal(mock.sends().length, 1);
-  const wrong = fixture({ chain: 1 });
+  const wrong = fixture({ chain: 137 });
   await assert.rejects(readPersonalCompanyPaymentBalance({ walletProvider: wrong.provider, walletAddress: sender }), { message: 'personal_company_chain_changed' });
-  for (const chain of [null, [137], { chainId: 137 }, 137.5, Number.MAX_SAFE_INTEGER + 1, Infinity, NaN]) {
+  for (const chain of [null, [1], { chainId: 1 }, 1.5, Number.MAX_SAFE_INTEGER + 1, Infinity, NaN]) {
     const invalid = fixture({ chain });
     await assert.rejects(readPersonalCompanyPaymentBalance({ walletProvider: invalid.provider, walletAddress: sender }));
     assert.equal(invalid.sends().length, 0);
   }
-  const numericGas = fixture({ chain: 137, hooks: { eth_gasPrice: () => 100 } });
+  const numericGas = fixture({ chain: 1, hooks: { eth_gasPrice: () => 100 } });
   await assert.rejects(numericGas.create().sendPrepared(intent(), { reviewedBalanceAtomic: balance }), { message: 'personal_company_rpc_unavailable' });
   assert.equal(numericGas.sends().length, 0);
-  const numericToken = fixture({ chain: 137, hooks: { eth_call: () => 6 } });
+  const numericToken = fixture({ chain: 1, hooks: { eth_call: () => 6 } });
   await assert.rejects(readPersonalCompanyPaymentBalance({ walletProvider: numericToken.provider, walletAddress: sender }), { message: 'personal_company_rpc_unavailable' });
 });
 
 test('a prepared backend intent cannot change the sender, company, token, chain, precision or expiry', () => {
-  for (const patch of [{ walletAddress: other }, { recipientAddress: other }, { tokenAddress: other }, { chainId: 1 },
+  for (const patch of [{ walletAddress: other }, { recipientAddress: other }, { tokenAddress: other }, { chainId: 137 },
     { tokenDecimals: 18 }, { amountAtomic: 20 }, { amountAtomic: '01' }, { amountAtomic: '0' }, { status: 'confirmed' },
     { paymentId: 'bad' }, { expiresAt: 'not-a-date' }]) assert.throws(() => personalCompanyPaymentIntent(intent(patch), sender, now));
   assert.throws(() => personalCompanyPaymentIntent(intent({ expiresAt: new Date(now).toISOString() }), sender, now), { message: 'personal_company_intent_expired' });
@@ -130,7 +130,7 @@ test('one user action sends only the exact ERC20 transfer and retains its hash b
   assert.equal(transaction.from, sender);
   assert.equal(transaction.to, PERSONAL_COMPANY_PAYMENT.tokenAddress);
   assert.equal(transaction.value, '0x0');
-  assert.equal(transaction.chainId, '0x89');
+  assert.equal(transaction.chainId, '0x1');
   assert.equal(transaction.gas, '0xea60');
   assert.equal(transaction.gasPrice, '0x64');
   const decoded = abi.parseTransaction({ data: transaction.data });
@@ -143,10 +143,10 @@ test('one user action sends only the exact ERC20 transfer and retains its hash b
   assert.equal(controller.snapshot().transactionHash, hash);
 });
 
-test('insufficient USDT or POL and unavailable gas estimates never open a transaction prompt', async () => {
+test('insufficient USDT or ETH and unavailable gas estimates never open a transaction prompt', async () => {
   for (const [mock, prepared, expected] of [
     [fixture(), intent({ amountAtomic: (BigInt(balance) + 1n).toString() }), 'personal_company_insufficient_usdt'],
-    [fixture({ native: '0x5b8d7f' }), intent(), 'personal_company_insufficient_pol'],
+    [fixture({ native: '0x5b8d7f' }), intent(), 'personal_company_insufficient_eth'],
     [fixture({ hooks: { eth_estimateGas: () => '0x0' } }), intent(), 'personal_company_gas_unavailable'],
     [fixture({ hooks: { eth_gasPrice: () => '0x0' } }), intent(), 'personal_company_gas_unavailable'],
   ]) {
@@ -156,9 +156,9 @@ test('insufficient USDT or POL and unavailable gas estimates never open a transa
   }
 });
 
-test('a zero POL balance reports the specific gas requirement before estimating or sending a transaction', async () => {
+test('a zero ETH balance reports the specific gas requirement before estimating or sending a transaction', async () => {
   const mock = fixture({ native: '0x0', hooks: { eth_estimateGas: () => assert.fail('zero-gas wallet reached estimation') } });
-  await assert.rejects(mock.create().sendPrepared(intent(), { reviewedBalanceAtomic: balance }), { message: 'personal_company_insufficient_pol' });
+  await assert.rejects(mock.create().sendPrepared(intent(), { reviewedBalanceAtomic: balance }), { message: 'personal_company_insufficient_eth' });
   assert.equal(mock.calls.some(call => call.method === 'eth_estimateGas'), false);
   assert.equal(mock.sends().length, 0);
   assert.equal(mock.markers.length, 0);
@@ -166,7 +166,7 @@ test('a zero POL balance reports the specific gas requirement before estimating 
 
 test('wrong chain, wrong selected account and a different token precision fail closed', async () => {
   for (const [mock, message] of [
-    [fixture({ chain: '0x1' }), 'personal_company_chain_changed'],
+    [fixture({ chain: '0x89' }), 'personal_company_chain_changed'],
     [fixture({ accounts: [other, sender] }), 'personal_company_wallet_changed'],
     [fixture({ hooks: { eth_call: request => uint(request.params[0].data === abi.encodeFunctionData('decimals') ? 18 : balance) } }), 'personal_company_token_mismatch'],
   ]) {
@@ -177,9 +177,9 @@ test('wrong chain, wrong selected account and a different token precision fail c
 
 test('account or network changes during RPC invalidate the entire review even if the provider later switches back', async () => {
   for (const [event, changed, message] of [['accountsChanged', [other], 'personal_company_wallet_changed'],
-    ['chainChanged', '0x1', 'personal_company_chain_changed']]) {
+    ['chainChanged', '0x89', 'personal_company_chain_changed']]) {
     const mock = fixture({ hooks: { eth_estimateGas: (_request, provider) => {
-      provider.emit(event, changed); provider.emit(event, event === 'chainChanged' ? '0x89' : [sender]); return '0xc350';
+      provider.emit(event, changed); provider.emit(event, event === 'chainChanged' ? '0x1' : [sender]); return '0xc350';
     } } });
     await assert.rejects(mock.create().sendPrepared(intent(), { reviewedBalanceAtomic: balance }), { message });
     assert.equal(mock.sends().length, 0);

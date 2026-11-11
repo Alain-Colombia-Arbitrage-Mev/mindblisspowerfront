@@ -11,7 +11,7 @@ test('Reown production retains merchant attribution and records only an initiate
   assert.equal(url.searchParams.get('externalCustomerId'), projectId);
   assert.equal(url.searchParams.get('externalSessionId'), input.checkoutReference);
   assert.equal(url.searchParams.get('walletAddress'), input.address);
-  assert.equal(url.searchParams.get('destinationCurrencyCode'), 'USDT_POLYGON');
+  assert.equal(url.searchParams.get('destinationCurrencyCode'), 'USDT');
   assert.equal(url.searchParams.get('sourceAmount'), '100');
   assert.equal(url.searchParams.get('sourceCurrencyCode'), 'USD');
   assert.equal(url.searchParams.get('sourceCurrencyCodeLocked'), 'USD');
@@ -75,7 +75,7 @@ test('SPEI handoff locks the actual MXN amount and method without a fabricated U
   assert.equal(url.searchParams.get('sourceAmountLocked'), '931');
   assert.equal(url.searchParams.get('paymentMethodType'), 'SPEI');
   assert.equal(url.searchParams.get('paymentMethodTypeLocked'), 'SPEI');
-  assert.equal(url.searchParams.get('destinationCurrencyCode'), 'USDT_POLYGON');
+  assert.equal(url.searchParams.get('destinationCurrencyCode'), 'USDT');
   assert.equal(url.searchParams.has('minimumUsd'), false);
   for (const patch of [{ countryCode: 'US' }, { paymentMethodType: 'CREDIT_DEBIT_CARD' }, { sourceCurrencyCode: 'COP' }]) {
     assert.throws(() => buildReownProductionOnrampUrl({ ...input, ...selection, ...patch }), { message: 'wallet_funding_valuation_unavailable' });
