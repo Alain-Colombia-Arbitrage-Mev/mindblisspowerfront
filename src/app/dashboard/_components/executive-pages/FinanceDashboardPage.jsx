@@ -7,7 +7,6 @@ import { useI18n } from "@/i18n/LanguageProvider";
 import { isRecoverySummary } from "@/lib/member-read.mjs";
 import { formatPaymentDate as fmtMoneyDate, formatPaymentMoney as money } from "@/lib/payment-display.mjs";
 import NOWPaymentsBalances from "@/components/panel/NOWPaymentsBalances";
-import PersonalWalletBalances from "@/components/wallet/PersonalWalletBalances";
 import StripeSalesHistory from "../../packages/StripeSalesHistory";
 import { MetricCard, PageHeader, StatusPill } from "./executive-ui";
 import WalletFundingPanels from "./WalletFundingPanels";
@@ -48,8 +47,8 @@ function FinanceLoading() {
   const { t } = useI18n();
   return (
     <>
-      <div className="executive-grid metrics mb-6">
-        {[0, 1, 2, 3].map((index) => (
+      <div className="executive-grid three mb-6">
+        {[0, 1, 2].map((index) => (
           <div key={index} className="executive-card">
             <div className="mb-5 flex items-start justify-between gap-4">
               <span className="skeleton-line" style={{ width: "60%", height: 12, borderRadius: 6, background: "var(--vp-surface-raised)" }} />
@@ -98,8 +97,7 @@ function FinanceContent({ data }) {
 
   return (
     <>
-      <div className="executive-grid metrics mb-6">
-        <PersonalWalletBalances />
+      <div className="executive-grid three mb-6">
         <MetricCard label={t("walletPage.activeMemberships")} value={String(data.active_packages ?? 0)} detail={t("walletPage.activeMembershipsCopy")} icon={CreditCard} tone="info" />
         <MetricCard label={t("walletPage.registeredPayments")} value={String(payments.length)} detail={t("walletPage.registeredPaymentsCopy")} icon={ReceiptText} tone="accent" />
         <MetricCard label={t("walletPage.pendingPayments")} value={String(pendingPayments)} detail={t("walletPage.pendingPaymentsCopy")} icon={Info} tone="muted" />

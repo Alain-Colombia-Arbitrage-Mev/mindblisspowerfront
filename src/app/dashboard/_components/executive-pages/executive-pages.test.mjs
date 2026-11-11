@@ -228,6 +228,13 @@ test('finance keeps Ethereum and Polygon USDT balances labelled separately witho
     walletBalances: { ethereum: { ...base, balanceAtomic: '10000000' }, polygon: { ...base, balanceAtomic: '28433366' } } }).FinanceDashboardPage);
   assert.match(html, /data-wallet-network="ethereum"[^]*?10 <span>USDT/);
   assert.match(html, /data-wallet-network="polygon"[^]*?28\.433366 <span>USDT/);
+  assert.equal((html.match(/data-wallet-network="ethereum"/g) || []).length, 1);
+  assert.equal((html.match(/data-wallet-network="polygon"/g) || []).length, 1);
+  assert.equal((html.match(/class="executive-card-label"/g) || []).length, 3);
+  assert.match(html, /class="executive-grid three mb-6"/);
+  for (const label of ['walletPage.activeMemberships', 'walletPage.registeredPayments', 'walletPage.pendingPayments']) {
+    assert.match(html, new RegExp(translateMessage('es', label)));
+  }
   assert.doesNotMatch(html, /38\.433366|987654|987,654/);
 });
 
