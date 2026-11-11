@@ -46,58 +46,47 @@ export function usePostAuthWalletSetup(member) {
   return { request: request?.ownerKey === owner && attempt.current?.owner === owner && attempt.current?.hint === request ? request : null, finish };
 }
 
-/** Initial Reown authentication may open once after Mindbliss OTP. Creating an
- * ownership proof remains explicit; this component never prepares a payment. */
+/** One explicit activation starts authentication and the unique ownership
+ * proof. Effects never open a wallet, sign a message or prepare a payment. */
 export default function PostAuthWalletSetup({ request, onFinish }) {
   const { t } = useI18n();
   const owner = personalWalletBalanceSessionKey(useMemberSession());
   const reown = useReownWallet();
   const latest = useRef({ reown, owner, createdAt: request.createdAt }); latest.current = { reown, owner, createdAt: request.createdAt };
-  const [stage, setStage] = useState("opening");
+  const [stage, setStage] = useState("ready");
   const [failure, setFailure] = useState("funding.personalLinkFailed");
-  const active = useRef(false), action = useRef(false);
+  const active = useRef(false), action = useRef(false), completed = useRef("");
   const ready = reown.linkStatus !== "loading";
   const live = () => active.current && latest.current.owner === request.ownerKey && latest.current.createdAt === request.createdAt;
+  const finish = useCallback(() => {
+    const key = JSON.stringify([request.ownerKey, request.createdAt]);
+    if (!active.current || latest.current.owner !== request.ownerKey || latest.current.createdAt !== request.createdAt || completed.current === key) return;
+    completed.current = key; onFinish(request.ownerKey, request.createdAt);
+  }, [request.ownerKey, request.createdAt, onFinish]);
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   useEffect(() => {
     if (!ready || owner !== request.ownerKey) return undefined;
-    let stopped = false;
     const wallet = latest.current.reown;
-    if (wallet.linkStatus === "linked") { onFinish(request.ownerKey, request.createdAt); return undefined; }
+    if (wallet.linkStatus === "linked") { finish(); return undefined; }
     if (!wallet.configured || wallet.linkStatus !== "unlinked") { setStage("error"); return undefined; }
-    if (wallet.isConnected && !wallet.walletIdentityMismatch) { setStage("verify"); return undefined; }
-    setStage("opening");
-    // Shared connection requests coalesce callers and wait for SDK restoration.
-    void wallet.connectWallet().then(() => {
-      if (!stopped && latest.current.owner === request.ownerKey) setStage("verify");
-    }).catch(() => {
-      if (!stopped && latest.current.owner === request.ownerKey) setStage("error");
-    });
-    return () => { stopped = true; };
-  }, [ready, owner, request.ownerKey, request.createdAt, onFinish]);
+    if (!action.current) setStage("ready");
+    return undefined;
+  }, [ready, owner, request.ownerKey, request.createdAt, reown.linkStatus, finish]);
 
   async function proceed() {
     if (!live() || action.current) return;
     action.current = true; setStage("working"); setFailure("funding.personalLinkFailed");
     try {
-      let wallet = latest.current.reown;
-      if (wallet.linkStatus === "linked") { onFinish(request.ownerKey, request.createdAt); return; }
+      const wallet = latest.current.reown;
+      if (wallet.linkStatus === "linked") { finish(); return; }
       if (wallet.linkStatus === "error") {
         await wallet.refreshLink();
-        if (live()) setStage("verify"); return;
+        if (live()) setStage("ready"); return;
       }
-      if (wallet.walletIdentityMismatch) {
-        await wallet.chooseWallet();
-        if (live()) setStage("verify"); return;
-      }
-      if (!wallet.isConnected) {
-        await wallet.connectWallet();
-        if (live()) setStage("verify"); return;
-      }
-      wallet = latest.current.reown;
-      if (wallet.linkStatus !== "unlinked") throw new Error("wallet_setup_unavailable");
-      await wallet.linkWallet();
-      if (live()) onFinish(request.ownerKey, request.createdAt);
+      if (!wallet.configured || wallet.linkStatus !== "unlinked") throw new Error("wallet_setup_unavailable");
+      const result = await wallet.prepareWallet();
+      if (result?.linked !== true || !/^0x[0-9a-f]{40}$/i.test(result.address || "")) throw new Error("wallet_setup_unavailable");
+      if (live()) finish();
     } catch (error) { if (live()) { setFailure(error?.code === "wallet_address_in_use" ? "funding.walletAlreadyUsed" : "funding.personalLinkFailed"); setStage("error"); } }
     finally { action.current = false; }
   }
@@ -106,21 +95,20 @@ export default function PostAuthWalletSetup({ request, onFinish }) {
     action.current = true; setStage("working"); setFailure("funding.personalLinkFailed");
     try {
       await latest.current.reown.chooseWallet();
-      if (live()) setStage("verify");
+      if (live()) setStage("ready");
     } catch { if (live()) setStage("error"); }
     finally { action.current = false; }
   }
   if (owner !== request.ownerKey) return null;
-  const busy = ["opening", "working"].includes(stage);
-  return <section className="executive-panel mb-5 grid gap-3" aria-label={t("funding.prepareWallet")} aria-busy={busy}>
-    <h2 className="flex items-center gap-2 text-base font-bold"><ShieldCheck size={18} aria-hidden="true" />{t("funding.prepareWallet")}</h2>
-    <p className="text-sm leading-relaxed text-[var(--vp-muted)]">{t(reown.walletIdentityMismatch ? "funding.walletAccountMismatch" : stage === "verify" ? "walletPage.connectedPendingCopy" : "funding.prepareWalletCopy", { email: request.email })}</p>
+  const busy = !ready || stage === "working";
+  return <section className="executive-panel mb-5 grid gap-3" aria-label={t("funding.activateWallet")} aria-busy={busy}>
+    <h2 className="flex items-center gap-2 text-base font-bold"><ShieldCheck size={18} aria-hidden="true" />{t("funding.activateWallet")}</h2>
+    <p className="text-sm leading-relaxed text-[var(--vp-muted)]">{t(reown.walletIdentityMismatch ? "funding.walletAccountMismatch" : "funding.activateWalletCopy", { email: request.email })}</p>
     {stage === "error" ? <p role="alert" className="text-sm text-[var(--vp-danger)]">{t(failure)}</p> : null}
-    {stage === "verify" && reown.address && !reown.walletIdentityMismatch ? <code dir="ltr" className="break-all text-sm">{reown.address}</code> : null}
     <div className="flex flex-wrap gap-3">
-      {busy ? <p role="status" className="flex items-center gap-2 text-sm"><Loader2 className="animate-spin" size={16} aria-hidden="true" />{t("recharge.connecting")}</p>
-        : <><button type="button" className="executive-button primary" onClick={() => void proceed()}>{t(reown.walletIdentityMismatch ? "funding.chooseWallet" : stage === "verify" ? "funding.verifyWallet" : "walletPage.retryCheck")}</button>
-          {!reown.walletIdentityMismatch && (stage === "verify" || reown.isConnected) ? <button type="button" className="executive-button" onClick={() => void chooseWallet()}>{t("funding.chooseWallet")}</button> : null}
+      {busy ? <p role="status" className="flex items-center gap-2 text-sm"><Loader2 className="animate-spin" size={16} aria-hidden="true" />{t(ready ? "funding.activatingWallet" : "walletPage.checking")}</p>
+        : <><button type="button" className="executive-button primary" disabled={!reown.configured} onClick={() => void proceed()}>{t(reown.linkStatus === "error" ? "walletPage.retryCheck" : "funding.activateWallet")}</button>
+          {reown.isConnected || reown.walletIdentityMismatch ? <button type="button" className="executive-button" onClick={() => void chooseWallet()}>{t("funding.chooseWallet")}</button> : null}
           <button type="button" className="executive-button" onClick={() => onFinish(request.ownerKey, request.createdAt)}>{t("recharge.notNow")}</button></>}
     </div>
   </section>;

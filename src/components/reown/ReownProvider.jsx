@@ -18,6 +18,7 @@ import { personalWalletMetadata } from "@/lib/personal-portal-origin.mjs";
 import { createReownFundingOperation, verifyReownWalletOwnership } from "@/lib/reown-funding-operation.mjs";
 import { createReownWalletConnectionRequest, createReownWalletSwitchRequest, reownWalletConnectionState, reownWalletIdentityMismatch, reownWalletNeedsAccountSelection } from "@/lib/reown-wallet-connection.mjs";
 import { personalWalletBalanceSessionKey } from "@/lib/personal-wallet-balance-store.mjs";
+import { createReownWalletPreparationRequest } from "@/lib/reown-wallet-preparation.mjs";
 import { useSolanaWalletBinding } from "@/hooks/useSolanaWalletBinding";
 import { ReownContext, SOLANA_WALLET_UNAVAILABLE, useReownWallet } from "./ReownContext";
 
@@ -49,6 +50,7 @@ const unavailable = Object.freeze({
   solana: SOLANA_WALLET_UNAVAILABLE,
   connectWallet: async () => { throw new Error("reown_unavailable"); },
   chooseWallet: async () => { throw new Error("reown_unavailable"); },
+  prepareWallet: async () => { throw new Error("reown_unavailable"); },
   onrampStatus: "idle",
   onrampError: "configuration",
   fundingRevision: 0,
@@ -144,6 +146,9 @@ function ConfiguredReownProvider({ children }) {
   const connectionRequest = useRef(null);
   const switchRequest = useRef(null);
   const selectedCandidate = useRef(null);
+  const preparationRequest = useRef(null);
+  const preparationSnapshot = useRef(null);
+  const preparationListeners = useRef(new Set());
   const [selectionRevision, setSelectionRevision] = useState(0);
   const connectionSnapshot = useRef({ status: "restoring", modalOpen: false, disconnected: false, address: "" });
   const [connectionBusy, setConnectionBusy] = useState(false);
@@ -158,12 +163,15 @@ function ConfiguredReownProvider({ children }) {
       linkingOperation.current?.cancel();
       connectionRequest.current?.cancel();
       switchRequest.current?.cancel();
+      preparationRequest.current?.cancel();
     };
   }, []);
 
   useEffect(() => () => {
     connectionRequest.current?.cancel();
     switchRequest.current?.cancel();
+    preparationRequest.current?.cancel();
+    preparationRequest.current = null;
     linkingOperation.current?.cancel();
     onrampOperation.current?.cancel();
   }, [ownerKey]);
@@ -189,6 +197,11 @@ function ConfiguredReownProvider({ children }) {
 
   const refreshLink = useCallback(() => {
     if (bindingRequest.current) return bindingRequest.current.promise;
+    if (preparationRequest.current?.completed) preparationRequest.current = null;
+    // Fence same-tick activation before React publishes this authoritative
+    // refresh. A previous acknowledgement must not bypass a new status read.
+    if (preparationSnapshot.current) preparationSnapshot.current = { ...preparationSnapshot.current,
+      linkStatus: "loading", linkedAddress: "", address: "", isConnected: false, isCandidate: false };
     const controller = new AbortController();
     setBinding(current => ({ status: "loading", address: current.address, error: "" }));
     const request = { controller, promise: null };
@@ -396,6 +409,25 @@ function ConfiguredReownProvider({ children }) {
     linking.current = operation;
     return operation;
   }, [account.isConnected, beginOnrampOperation, binding.address, binding.status, currentAddress, walletIdentityMismatch, walletNeedsAccountSelection, walletProvider]);
+
+  const prepareWallet = useCallback(() => {
+    if (!mounted.current || !ownerKey || latestOwner.current !== ownerKey) return Promise.reject(new DOMException("Aborted", "AbortError"));
+    if (preparationRequest.current?.owner === ownerKey) return preparationRequest.current.promise;
+    preparationRequest.current?.cancel();
+    const request = { ...createReownWalletPreparationRequest({ owner: ownerKey,
+      read: () => preparationSnapshot.current,
+      subscribe: listener => { preparationListeners.current.add(listener); return () => preparationListeners.current.delete(listener); },
+      // The successful immutable backend binding is idempotent for this owner,
+      // including a second click before React publishes its new binding state.
+      onSettled(error) {
+        if (preparationRequest.current !== request) return;
+        if (error) preparationRequest.current = null;
+        else request.completed = true;
+      },
+    }), owner: ownerKey, completed: false };
+    preparationRequest.current = request;
+    return request.promise;
+  }, [ownerKey]);
 
   const runOnramp = useCallback((selection = onrampSelection.current || {}) => {
     let context;
@@ -611,6 +643,7 @@ function ConfiguredReownProvider({ children }) {
     walletNeedsAccountSelection,
     connectWallet,
     chooseWallet,
+    prepareWallet,
     onrampStatus: onrampState.status,
     onrampError: onrampState.error,
     fundingRevision,
@@ -625,9 +658,19 @@ function ConfiguredReownProvider({ children }) {
     linkWallet,
     refreshLink,
     openAccount,
-  }), [solanaWallet, account.isConnected, account.status, binding.address, binding.error, binding.status, currentAddress, isLinked, isLinking, connectionBusy, connectionStatus, connectWallet, chooseWallet, walletIdentityMismatch, walletNeedsAccountSelection, walletSwitching, selectionRevision,
+  }), [solanaWallet, account.isConnected, account.status, binding.address, binding.error, binding.status, currentAddress, isLinked, isLinking, connectionBusy, connectionStatus, connectWallet, chooseWallet, prepareWallet, walletIdentityMismatch, walletNeedsAccountSelection, walletSwitching, selectionRevision,
     linkWallet, verificationError, fundingRevision, onrampState.error, onrampState.status,
     cancelOnramp, clearOnrampError, getCompanyPaymentProvider, switchCompanyPaymentNetwork, openAccount, openConnect, openOnramp, reconnectWallet, refreshLink, startOnramp]);
+
+  preparationSnapshot.current = { owner: ownerKey, linkStatus: binding.status, linkedAddress: binding.address,
+    address: value.address, isConnected: value.isConnected,
+    isCandidate: !walletNeedsAccountSelection && !walletIdentityMismatch && !walletSwitching,
+    connectWallet, linkWallet,
+    cancelConnection(promise) {
+      if (switchRequest.current?.promise === promise) switchRequest.current.cancel();
+      if (connectionRequest.current?.promise === promise) connectionRequest.current.cancel();
+    } };
+  useEffect(() => { for (const notify of preparationListeners.current) notify(); });
 
   return <ReownContext.Provider value={value}>{children}</ReownContext.Provider>;
 }

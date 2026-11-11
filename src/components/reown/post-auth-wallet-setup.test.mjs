@@ -44,7 +44,8 @@ function harness({ mode = 'hook', member = memberA, reown = {}, readBinding = as
   const request = requestFor(memberA), finish = owner => finishes.push(owner);
   const account = { configured: true, isConnected: false, address: '', linkStatus: 'unlinked',
     connectWallet: async () => { calls.push('connect'); }, chooseWallet: async () => { calls.push('choose'); }, openConnect: async () => { assert.fail('Initial setup must not enter an onramp operation'); },
-    linkWallet: async () => { calls.push('link'); }, refreshLink: async () => { calls.push('refresh'); }, ...reown };
+    prepareWallet: async () => { calls.push('activate'); return { linked: true, address: walletAddress }; },
+    linkWallet: async () => { assert.fail('The UI must use the composed activation action'); }, refreshLink: async () => { calls.push('refresh'); }, ...reown };
   const changed = (left, right) => !left || !right || left.length !== right.length || left.some((value, index) => !Object.is(value, right[index]));
   const hooks = { ...React,
     useRef(value) { return slots[cursor++] ??= { current: value }; },
@@ -157,7 +158,7 @@ test('unmount aborts lookup and ignores late unlinked results', async t => {
 
 test('a bound wallet skips setup without another connection or ownership signature', async t => {
   browser(t); const view = harness({ mode: 'controller', reown: { linkStatus: 'linked', linkedAddress: walletAddress } });
-  t.after(() => view.unmount()); await view.flush(); await view.rerender();
+  t.after(() => view.unmount()); await view.flush(); await view.rerender(); await view.replayEffects();
   assert.deepEqual(view.finishes, [requestFor(memberA).ownerKey]); assert.deepEqual(view.calls, []);
 });
 
@@ -167,53 +168,69 @@ test('a pending binding lookup cannot open authentication or claim a missing wal
   assert.deepEqual(view.finishes, [requestFor(memberA).ownerKey]); assert.deepEqual(view.calls, []);
 });
 
-test('initial disconnected setup opens once then waits for explicit verification without creating a payment', async t => {
-  browser(t); const connection = deferred(); let opens = 0;
-  const view = harness({ mode: 'controller', reown: { connectWallet() { opens++; return connection.promise; } } });
-  t.after(() => view.unmount()); await view.flush(); await view.rerender(); assert.equal(opens, 1); assert.deepEqual(view.calls, []);
-  await view.patch({ isConnected: true, address: walletAddress }); connection.resolve({ connected: true }); await view.flush();
-  assert.ok(renderToStaticMarkup(view.value).includes(walletAddress)); assert.ok(named(view.value, 'funding.verifyWallet'));
-  assert.deepEqual(view.calls, []); assert.deepEqual(view.finishes, []);
-});
-
-test('already connected initial wallets require one explicit proof and never reconnect automatically', async t => {
-  browser(t); const proof = deferred();
-  const view = harness({ mode: 'controller', reown: { isConnected: true, address: walletAddress,
-    linkWallet() { view.calls.push('link'); return proof.promise; } } }); t.after(() => view.unmount()); await view.flush();
-  assert.deepEqual(view.calls, []); const verify = primary(view.value); verify.props.onClick(); verify.props.onClick(); await view.flush();
-  assert.deepEqual(view.calls, ['link']); assert.deepEqual(view.finishes, []); proof.resolve({ linked: true, address: walletAddress }); await view.flush();
+test('initial disconnected setup waits for one explicit activation and never opens authentication from an effect', async t => {
+  browser(t); const activation = deferred();
+  const view = harness({ mode: 'controller', reown: { prepareWallet() { view.calls.push('activate'); return activation.promise; } } });
+  t.after(() => view.unmount()); await view.flush(); await view.rerender();
+  assert.deepEqual(view.calls, []); assert.ok(named(view.value, 'funding.activateWallet'));
+  assert.equal(named(view.value, 'funding.verifyWallet'), undefined);
+  primary(view.value).props.onClick(); await view.flush(); assert.deepEqual(view.calls, ['activate']);
+  assert.ok(renderToStaticMarkup(view.value).includes(translateMessage('es', 'funding.activatingWallet')));
+  activation.resolve({ linked: true, address: walletAddress }); await view.flush();
   assert.deepEqual(view.finishes, [requestFor(memberA).ownerKey]);
 });
 
-test('StrictMode callers share the provider connection and never auto-sign ownership', async t => {
-  browser(t); const connection = deferred(); let callers = 0, opened = false, opens = 0;
-  const view = harness({ mode: 'controller', reown: { connectWallet() { callers++; if (!opened) { opened = true; opens++; } return connection.promise; } } });
-  t.after(() => view.unmount()); await view.flush(); await view.replayEffects(); assert.equal(callers, 2); assert.equal(opens, 1);
-  await view.patch({ isConnected: true, address: walletAddress }); connection.resolve(); await view.flush();
-  assert.deepEqual(view.calls, []); assert.deepEqual(view.finishes, []); assert.ok(named(view.value, 'funding.verifyWallet'));
+test('already connected initial wallets use one duplicate-locked activation without another UI verification step', async t => {
+  browser(t); const proof = deferred();
+  const view = harness({ mode: 'controller', reown: { isConnected: true, address: walletAddress,
+    prepareWallet() { view.calls.push('activate'); return proof.promise; } } }); t.after(() => view.unmount()); await view.flush();
+  assert.deepEqual(view.calls, []); const activate = primary(view.value); activate.props.onClick(); activate.props.onClick(); await view.flush();
+  assert.deepEqual(view.calls, ['activate']); assert.deepEqual(view.finishes, []); proof.resolve({ linked: true, address: walletAddress }); await view.flush();
+  assert.deepEqual(view.finishes, [requestFor(memberA).ownerKey]);
+  await view.patch({ linkStatus: 'linked', linkedAddress: walletAddress }); await view.replayEffects();
+  assert.deepEqual(view.finishes, [requestFor(memberA).ownerKey], 'Canonical state and the action acknowledgement finish only once');
+});
+
+test('StrictMode and repeated renders cannot activate, reconnect or sign a wallet', async t => {
+  browser(t); const view = harness({ mode: 'controller' }); t.after(() => view.unmount());
+  await view.flush(); await view.replayEffects();
+  for (let index = 0; index < 100; index++) await view.rerender();
+  assert.deepEqual(view.calls, []); assert.deepEqual(view.finishes, []); assert.ok(named(view.value, 'funding.activateWallet'));
+});
+
+test('activation cannot finish from a connection acknowledgement or a malformed linked result', async t => {
+  browser(t);
+  for (const result of [undefined, { connected: true }, { linked: false, address: walletAddress }, { linked: true, address: '0x1234' }]) {
+    const view = harness({ mode: 'controller', reown: { prepareWallet() { view.calls.push('activate'); return Promise.resolve(result); } } });
+    await view.flush(); primary(view.value).props.onClick(); await view.flush(); await view.rerender();
+    assert.deepEqual(view.calls, ['activate']); assert.deepEqual(view.finishes, []);
+    assert.equal(all(view.value, node => node.props?.role === 'alert').length, 1);
+    assert.ok(named(view.value, 'funding.activateWallet')); view.unmount();
+  }
 });
 
 test('cancelled and failed initial authentication expose retry and decline without background linking', async t => {
   browser(t);
   for (const failure of [new DOMException('Cancelled', 'AbortError'), Error('Synthetic provider failure')]) {
-    const view = harness({ mode: 'controller', reown: { connectWallet: async () => { throw failure; } } }); await view.flush();
+    const view = harness({ mode: 'controller', reown: { prepareWallet: async () => { throw failure; } } }); await view.flush();
+    primary(view.value).props.onClick(); await view.flush();
     assert.equal(all(view.value, node => node.props?.role === 'alert').length, 1); assert.deepEqual(view.calls, []); assert.deepEqual(view.finishes, []);
     named(view.value, 'recharge.notNow').props.onClick(); view.unmount(); assert.deepEqual(view.finishes, [requestFor(memberA).ownerKey]); assert.equal(view.lateUpdates, 0);
   }
 });
 
-test('declining setup fences a stale verification click after unmount', async t => {
+test('declining setup fences a stale activation click after unmount', async t => {
   browser(t); const view = harness({ mode: 'controller', reown: { isConnected: true, address: walletAddress } }); await view.flush();
   const verify = primary(view.value); named(view.value, 'recharge.notNow').props.onClick(); view.unmount(); verify.props.onClick(); await view.flush();
   assert.deepEqual(view.calls, []); assert.equal(view.lateUpdates, 0); assert.deepEqual(view.finishes, [requestFor(memberA).ownerKey]);
 });
 
-test('owner changes fence pending connection, proof and wallet choice completions', async t => {
+test('owner changes fence pending activation and wallet choice completions', async t => {
   browser(t);
-  for (const stage of ['connect', 'link', 'choose']) {
-    const pending = deferred(), view = harness({ mode: 'controller', reown: { isConnected: stage !== 'connect', address: stage !== 'connect' ? walletAddress : '',
-      connectWallet: () => pending.promise, linkWallet: () => pending.promise, chooseWallet: () => pending.promise } });
-    await view.flush(); if (stage === 'link') { primary(view.value).props.onClick(); await view.flush(); }
+  for (const stage of ['activate', 'choose']) {
+    const pending = deferred(), view = harness({ mode: 'controller', reown: { isConnected: true, address: walletAddress,
+      prepareWallet: () => pending.promise, chooseWallet: () => pending.promise } });
+    await view.flush(); if (stage === 'activate') { primary(view.value).props.onClick(); await view.flush(); }
     if (stage === 'choose') { named(view.value, 'funding.chooseWallet').props.onClick(); await view.flush(); }
     await view.session(memberB); assert.equal(view.value, null); pending.resolve({ linked: true, address: walletAddress }); await view.flush();
     assert.equal(view.value, null); assert.deepEqual(view.finishes, []); view.unmount();
@@ -227,7 +244,8 @@ test('choosing another wallet is explicit and duplicate-locked without disconnec
   t.after(() => view.unmount()); await view.flush(); assert.deepEqual(view.calls, []);
   const choose = named(view.value, 'funding.chooseWallet'); choose.props.onClick(); choose.props.onClick(); await view.flush(); assert.deepEqual(view.calls, ['choose']);
   const nextAddress = `0x${'2'.repeat(40)}`; await view.patch({ address: nextAddress }); choice.resolve(); await view.flush();
-  assert.ok(renderToStaticMarkup(view.value).includes(nextAddress)); assert.deepEqual(view.calls, ['choose']); assert.deepEqual(view.finishes, []);
+  assert.ok(!renderToStaticMarkup(view.value).includes(nextAddress)); assert.deepEqual(view.calls, ['choose']); assert.deepEqual(view.finishes, []);
+  assert.ok(named(view.value, 'funding.activateWallet'));
 });
 
 test('cancelling explicit wallet choice exposes retry without silently connecting or linking', async t => {
@@ -235,7 +253,7 @@ test('cancelling explicit wallet choice exposes retry without silently connectin
     chooseWallet: async () => { throw new DOMException('Cancelled', 'AbortError'); } } }); t.after(() => view.unmount());
   await view.flush(); named(view.value, 'funding.chooseWallet').props.onClick(); await view.flush();
   assert.equal(all(view.value, node => node.props?.role === 'alert').length, 1); assert.deepEqual(view.calls, []); assert.deepEqual(view.finishes, []);
-  assert.ok(named(view.value, 'walletPage.retryCheck')); assert.ok(named(view.value, 'recharge.notNow'));
+  assert.ok(named(view.value, 'funding.activateWallet')); assert.ok(named(view.value, 'recharge.notNow'));
 });
 
 test('unavailable configuration and binding errors cannot automatically authenticate a wallet', async t => {
@@ -255,25 +273,25 @@ test('a wallet owned by another account shows safe guidance and explicit wallet 
   browser(t);
   for (const locale of ['es', 'en', 'ar', 'zh']) {
     const view = harness({ mode: 'controller', locale, reown: { isConnected: true, address: walletAddress,
-      linkWallet() { view.calls.push('link'); throw Object.assign(Error('synthetic-private-owner@example.test'), { code: 'wallet_address_in_use' }); },
+      prepareWallet() { view.calls.push('activate'); throw Object.assign(Error('synthetic-private-owner@example.test'), { code: 'wallet_address_in_use' }); },
     } });
     await view.flush(); primary(view.value).props.onClick(); await view.flush(); await view.rerender();
     const html = renderToStaticMarkup(view.value);
     assert.ok(html.includes(translateMessage(locale, 'funding.walletAlreadyUsed')));
-    assert.ok(!html.includes('synthetic-private-owner')); assert.deepEqual(view.calls, ['link']); assert.deepEqual(view.finishes, []);
+    assert.ok(!html.includes('synthetic-private-owner')); assert.deepEqual(view.calls, ['activate']); assert.deepEqual(view.finishes, []);
     const choose = named(view.value, 'funding.chooseWallet', locale); assert.ok(choose);
-    choose.props.onClick(); await view.flush(); assert.deepEqual(view.calls, ['link', 'choose']); assert.deepEqual(view.finishes, []);
+    choose.props.onClick(); await view.flush(); assert.deepEqual(view.calls, ['activate', 'choose']); assert.deepEqual(view.finishes, []);
     view.unmount();
   }
 });
 
-test('all locales distinguish connected initial wallets from verified backend ownership', async t => {
+test('all locales explain one activation without displaying an unverified address or separate verification CTA', async t => {
   browser(t);
   for (const locale of ['es', 'en', 'ar', 'zh']) {
     const view = harness({ mode: 'controller', locale, reown: { isConnected: true, address: walletAddress } }); await view.flush();
-    const html = renderToStaticMarkup(view.value); assert.ok(html.includes(translateMessage(locale, 'funding.prepareWallet')));
-    assert.ok(html.includes(translateMessage(locale, 'walletPage.connectedPendingCopy'))); assert.ok(named(view.value, 'funding.verifyWallet', locale));
-    assert.ok(html.includes(walletAddress)); assert.deepEqual(view.calls, []); assert.deepEqual(view.finishes, []); view.unmount();
+    const html = renderToStaticMarkup(view.value); assert.ok(html.includes(translateMessage(locale, 'funding.activateWallet')));
+    assert.ok(html.includes(translateMessage(locale, 'funding.activateWalletCopy'))); assert.equal(named(view.value, 'funding.verifyWallet', locale), undefined);
+    assert.ok(!html.includes(walletAddress)); assert.deepEqual(view.calls, []); assert.deepEqual(view.finishes, []); view.unmount();
   }
 });
 
@@ -336,17 +354,18 @@ test('a stale same-owner completion cannot dismiss a later pending handoff gener
 });
 
 test('a restored wallet from another embedded account is never displayed or offered for ownership proof', async t => {
-  browser(t); const connect = deferred();
+  browser(t); const activation = deferred();
   const view = harness({ mode: 'controller', reown: { isConnected: true, address: walletAddress, walletIdentityMismatch: true,
-    connectWallet() { view.calls.push('connect'); return connect.promise; } } }); t.after(() => view.unmount());
+    prepareWallet() { view.calls.push('activate'); return activation.promise; } } }); t.after(() => view.unmount());
   await view.flush(); let html = renderToStaticMarkup(view.value);
-  assert.ok(!html.includes(walletAddress)); assert.ok(html.includes(memberA.email)); assert.deepEqual(view.calls, ['connect']);
-  connect.reject(Error('Synthetic account selection failed')); await view.flush();
+  assert.ok(!html.includes(walletAddress)); assert.ok(html.includes(memberA.email)); assert.deepEqual(view.calls, []);
+  primary(view.value).props.onClick(); await view.flush(); assert.deepEqual(view.calls, ['activate']);
+  activation.reject(Error('Synthetic account selection failed')); await view.flush();
   html = renderToStaticMarkup(view.value); assert.ok(!html.includes(walletAddress));
   assert.ok(named(view.value, 'funding.chooseWallet')); assert.equal(named(view.value, 'funding.verifyWallet'), undefined);
   assert.equal(all(view.value, node => node.type === 'button' && node.props.children === translateMessage('es', 'funding.chooseWallet')).length, 1);
-  primary(view.value).props.onClick(); await view.flush();
-  assert.deepEqual(view.calls, ['connect', 'choose']); assert.deepEqual(view.finishes, []);
+  named(view.value, 'funding.chooseWallet').props.onClick(); await view.flush();
+  assert.deepEqual(view.calls, ['activate', 'choose']); assert.deepEqual(view.finishes, []);
   assert.ok(!renderToStaticMarkup(view.value).includes(walletAddress));
 });
 

@@ -43,16 +43,19 @@ export function PersonalWalletFunding() {
   }, [reown.clearOnrampError]);
   const state = personalWalletState(reown);
   const verified = state === "verified";
-  const address = !verified && reown.walletIdentityMismatch ? "" : reown.linkedAddress || reown.address || "";
+  const address = verified ? reown.linkedAddress : "";
   const busy = actionBusy || ["connecting", "linking", "opening"].includes(reown.onrampStatus);
 
   async function walletAction(change = false) {
     if (actionBusy) return;
     setActionBusy(true); setActionError(""); setActionDiagnostic("");
     try {
-      if (change || reown.walletIdentityMismatch) await reown.chooseWallet();
+      if (change) await reown.chooseWallet();
       else if (state === "error") await reown.refreshLink();
-      else if (state === "connected") await reown.linkWallet();
+      else if (!verified) {
+        const result = await reown.prepareWallet();
+        if (result?.linked !== true || !/^0x[0-9a-f]{40}$/i.test(result.address || "")) throw new Error("wallet_link_unavailable");
+      }
       else await reown.connectWallet();
     } catch (error) {
       setActionError(personalOnrampError(personalFundingFailure(error, "link"), t));
@@ -77,7 +80,7 @@ export function PersonalWalletFunding() {
   }
 
   const statusLabel = { unavailable: "recharge.providerConfiguration", checking: "walletPage.checking", error: "walletPage.checkFailed",
-    connected: "walletPage.connectedPending", verifying: "funding.verifyingWallet", verified: "funding.walletVerified", disconnected: "funding.prepareWallet" }[state];
+    connected: "funding.activateWallet", verifying: "funding.activatingWallet", verified: "funding.walletVerified", disconnected: "funding.activateWallet" }[state];
 
   return <WalletFundingScreen title={t("walletPage.personalTitle")} subtitle={t("walletPage.personalCopy")}>
     <div className="flex flex-wrap gap-3">
@@ -87,22 +90,21 @@ export function PersonalWalletFunding() {
     <div className={`${styles.flowLayout}${!verified ? ` ${styles.setupRequired}` : ""}`} id="personal-wallet">
       <section className={`executive-panel ${styles.formPanel}`} aria-label={t("walletPage.addFundsAction")}>
         <PersonalFundingForm disabled={!verified} busy={busy} onContinue={openProvider} onSelectionChange={clearSelectedStatus} destinationAddress={verified ? reown.linkedAddress : ""} />
-        {busy ? <div className={styles.connectionPending} role="status"><p>{t("funding.connectionPending")}</p><button className="executive-button" type="button" onClick={cancelConnection}>{t("funding.cancelConnection")}</button></div> : null}
-        {!verified ? <p className={styles.hint}>{t("funding.verifyBeforeFunding")}</p> : null}
+        {busy ? <div className={styles.connectionPending} role="status"><p>{t(!verified && actionBusy ? "funding.activatingWallet" : "funding.connectionPending")}</p>{!actionBusy ? <button className="executive-button" type="button" onClick={cancelConnection}>{t("funding.cancelConnection")}</button> : null}</div> : null}
         <WalletActionError diagnostic={actionDiagnostic} message={actionError || (reown.onrampStatus === "error" ? personalOnrampError(reown.onrampError, t) : reown.linkError ? personalOnrampError(reown.linkError, t) : "")} />
       </section>
       <aside className={styles.details} aria-label={t("funding.destinationDetails")}>
         <PersonalWalletBalances expectedAddress={verified ? reown.linkedAddress : ""} />
         <section className={styles.detailCard}>
           <div className={styles.stateHeading}>{verified ? <CheckCircle2 size={19} aria-hidden="true" /> : <ShieldCheck size={19} aria-hidden="true" />}
-            <h2>{t(statusLabel)}</h2></div>
-          <p className={styles.hint}>{t(verified ? "walletPage.simpleLinkedCopy" : reown.walletIdentityMismatch ? "funding.walletAccountChange" : state === "connected" || state === "verifying" ? "walletPage.connectedPendingCopy"
-            : state === "error" ? (reown.linkError === "session" ? "walletPage.checkSession" : "walletPage.checkUnavailable") : state === "checking" ? "walletPage.checkingCopy" : state === "disconnected" ? "funding.prepareWalletCopy" : "funding.connectWalletCopy")}</p>
+            <h2>{t(!verified && actionBusy ? "funding.activatingWallet" : statusLabel)}</h2></div>
+          <p className={styles.hint}>{t(verified ? "walletPage.simpleLinkedCopy" : reown.walletIdentityMismatch ? "funding.walletAccountChange"
+            : state === "error" ? (reown.linkError === "session" ? "walletPage.checkSession" : "walletPage.checkUnavailable") : state === "checking" ? "walletPage.checkingCopy" : "funding.activateWalletCopy")}</p>
           <WalletAddress address={address} label={t("walletPage.personalWalletLabel")} loading={state === "checking"}
             emptyLabel={t(state === "checking" ? "walletPage.destinationLoading" : "funding.noPersonalAddress")} onCopyError={() => setCopyError(t("walletPage.administrativeCopyFailed"))} />
           {!["verified", "checking", "verifying"].includes(state) ? <button className="executive-button primary" type="button" disabled={busy || !reown.configured} onClick={() => void walletAction()}>
             {actionBusy ? <Loader2 className="animate-spin" size={17} aria-hidden="true" /> : state === "error" ? <RefreshCw size={17} aria-hidden="true" /> : <ShieldCheck size={17} aria-hidden="true" />}
-            {t(state === "error" ? "walletPage.retryCheck" : state === "connected" ? "funding.verifyWallet" : state === "disconnected" ? "funding.prepareWallet" : "funding.connectWallet")}
+            {t(actionBusy ? "funding.activatingWallet" : state === "error" ? "walletPage.retryCheck" : "funding.activateWallet")}
           </button> : null}
           {!verified && state === "connected" ? <button className="executive-button" type="button" disabled={busy} onClick={() => void walletAction(true)}>{t("funding.chooseWallet")}</button> : null}
           <WalletActionError message={copyError} />

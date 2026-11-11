@@ -1,6 +1,9 @@
 export const fundingMessages = {
   es: { funding: {
     chooseWallet: "Elegir otra billetera",
+    activateWallet: "Activar mi billetera",
+    activatingWallet: "Activando tu billetera…",
+    activateWalletCopy: "Completa el acceso y la vinculación de tu billetera a Mindbliss en un solo flujo. Solo la primera vez se confirma un mensaje de propiedad; no mueve fondos ni cobra comisión.",
     walletAccountMismatch: "La conexión abierta pertenece a otra cuenta. Continúa con {email} para preparar tu propia billetera.",
     walletAccountChange: "Usa el correo de tu cuenta Mindbliss para crear o conectar tu propia billetera. La conexión anterior no se vinculará.",
     walletAlreadyUsed: "Esta billetera ya está vinculada a otra cuenta. Elige otra billetera para continuar.",
@@ -79,6 +82,9 @@ export const fundingMessages = {
   } },
   en: { funding: {
     chooseWallet: "Choose another wallet",
+    activateWallet: "Activate my wallet",
+    activatingWallet: "Activating your wallet…",
+    activateWalletCopy: "Complete wallet access and linking to Mindbliss in one flow. Only the first time requires a proof-of-ownership message; it moves no funds and charges no fee.",
     walletAccountMismatch: "The open connection belongs to another account. Continue with {email} to set up your own wallet.",
     walletAccountChange: "Use your Mindbliss account email to create or connect your own wallet. The previous connection will not be linked.",
     walletAlreadyUsed: "This wallet is already linked to another account. Choose another wallet to continue.",
@@ -157,6 +163,9 @@ export const fundingMessages = {
   } },
   ar: { funding: {
     chooseWallet: "اختيار محفظة أخرى",
+    activateWallet: "تفعيل محفظتي",
+    activatingWallet: "جارٍ تفعيل محفظتك…",
+    activateWalletCopy: "أكمل الوصول إلى محفظتك وربطها بـ Mindbliss في مسار واحد. يتطلب الربط الأول فقط تأكيد رسالة إثبات ملكية؛ لا تنقل أموالاً ولا تفرض رسوماً.",
     walletAccountMismatch: "الاتصال المفتوح يخص حسابًا آخر. تابع باستخدام {email} لإعداد محفظتك الخاصة.",
     walletAccountChange: "استخدم بريد حساب Mindbliss لإنشاء محفظتك الخاصة أو ربطها. لن يتم ربط الاتصال السابق.",
     walletAlreadyUsed: "هذه المحفظة مرتبطة بحساب آخر. اختر محفظة أخرى للمتابعة.",
@@ -235,6 +244,9 @@ export const fundingMessages = {
   } },
   zh: { funding: {
     chooseWallet: "选择其他钱包",
+    activateWallet: "启用我的钱包",
+    activatingWallet: "正在启用钱包…",
+    activateWalletCopy: "在同一流程中完成钱包登录并绑定至 Mindbliss。仅首次绑定需要确认所有权消息，不会转移资金或收取费用。",
     walletAccountMismatch: "当前连接属于其他账户。请使用 {email} 继续设置自己的钱包。",
     walletAccountChange: "请使用 Mindbliss 账户邮箱创建或连接自己的钱包。之前的连接不会被绑定。",
     walletAlreadyUsed: "此钱包已绑定其他账户。请选择其他钱包以继续。",

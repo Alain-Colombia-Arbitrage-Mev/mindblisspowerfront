@@ -96,16 +96,18 @@ test('a connected Reown address never claims backend verification and check fail
   }
 });
 
-test('first wallet setup explains authentication in every locale and starts only after an explicit user action', async t => {
+test('first wallet setup composes authentication and ownership into one explicit activation in every locale', async t => {
   const shared = load('WalletFundingUI.jsx', { 'lucide-react': icons, '@/i18n/LanguageProvider': i18n,
     'next/link': { default: ({ prefetch: _prefetch, children, ...props }) => React.createElement('a', props, children) } });
   function PersonalFundingForm() { return null; }
   for (const locale of ['es', 'en', 'ar', 'zh']) {
     const calls = [];
     const reown = { configured: true, isConnected: false, address: '', linkedAddress: '', linkStatus: 'unlinked', onrampStatus: 'idle',
-      async connectWallet() { calls.push('connect'); },
+      async connectWallet() { assert.fail('The page must use the composed activation action'); },
       async chooseWallet() { calls.push('choose'); },
-      async linkWallet() { calls.push('link'); reown.linkStatus = 'linked'; reown.linkedAddress = reown.address; },
+      async linkWallet() { assert.fail('No separate verification step'); },
+      async prepareWallet() { calls.push('activate'); reown.linkStatus = 'linked'; reown.address = personalStatus.destination.address;
+        reown.linkedAddress = reown.address; reown.isConnected = true; return { linked: true, address: reown.linkedAddress }; },
       async startOnramp() { assert.fail('Wallet setup cannot open a purchase'); } };
     const harness = componentHarness('PersonalWalletFundingPage.jsx', 'PersonalWalletFunding', {
       'lucide-react': icons, 'next/dynamic': { default: () => () => null },
@@ -116,19 +118,15 @@ test('first wallet setup explains authentication in every locale and starts only
     }); t.after(() => harness.unmount());
     let tree = harness.render();
     assert.deepEqual(calls, []);
-    assert.ok(renderToStaticMarkup(tree).includes(translateMessage(locale, 'funding.prepareWalletCopy')));
+    assert.ok(renderToStaticMarkup(tree).includes(translateMessage(locale, 'funding.activateWalletCopy')));
     assert.equal(find(tree, 'PersonalFundingForm').props.disabled, true);
-    const setup = find(tree, node => node?.type === 'button' && renderToStaticMarkup(node).includes(translateMessage(locale, 'funding.prepareWallet')));
+    const setup = find(tree, node => node?.type === 'button' && renderToStaticMarkup(node).includes(translateMessage(locale, 'funding.activateWallet')));
     assert.ok(setup); await setup.props.onClick();
-    assert.deepEqual(calls, ['connect']);
-    reown.isConnected = true; reown.address = personalStatus.destination.address;
-    tree = harness.render(); assert.deepEqual(calls, ['connect'], 'Connecting does not silently sign the ownership proof');
-    const verify = find(tree, node => node?.type === 'button' && renderToStaticMarkup(node).includes(translateMessage(locale, 'funding.verifyWallet')));
-    assert.ok(verify); await verify.props.onClick(); tree = harness.render();
-    assert.deepEqual(calls, ['connect', 'link']);
+    await flush(); tree = harness.render(); assert.deepEqual(calls, ['activate']);
+    assert.equal(find(tree, node => node?.type === 'button' && renderToStaticMarkup(node).includes(translateMessage(locale, 'funding.verifyWallet'))), undefined);
     assert.equal(find(tree, 'PersonalFundingForm').props.disabled, false);
-    assert.ok(!renderToStaticMarkup(tree).includes(translateMessage(locale, 'funding.prepareWalletCopy')));
-    assert.equal(find(tree, node => node?.type === 'button' && renderToStaticMarkup(node).includes(translateMessage(locale, 'funding.prepareWallet'))), undefined);
+    assert.ok(!renderToStaticMarkup(tree).includes(translateMessage(locale, 'funding.activateWalletCopy')));
+    assert.equal(find(tree, node => node?.type === 'button' && renderToStaticMarkup(node).includes(translateMessage(locale, 'funding.activateWallet'))), undefined);
   }
 });
 
@@ -139,6 +137,7 @@ test('an unlinked foreign embedded connection never exposes its address or reque
   const reown = { configured: true, isConnected: true, address: foreignAddress, linkedAddress: '', linkStatus: 'unlinked',
     walletIdentityMismatch: true, onrampStatus: 'idle',
     async chooseWallet() { calls.push('choose'); },
+    async prepareWallet() { calls.push('activate'); return { linked: true, address: personalStatus.destination.address }; },
     async openConnect() { assert.fail('A cached foreign connection must be cleared first'); },
     async connectWallet() { assert.fail('The explicit account change action is required'); },
     async linkWallet() { assert.fail('Cannot ask the other account for a signature'); },
@@ -155,8 +154,33 @@ test('an unlinked foreign embedded connection never exposes its address or reque
   assert.equal(find(tree, 'PersonalFundingForm').props.destinationAddress, '');
   assert.equal(find(tree, node => node?.type === 'button' && renderToStaticMarkup(node).includes(translateMessage('es', 'funding.verifyWallet'))), undefined);
   assert.deepEqual(calls, []);
-  await find(tree, node => node?.type === 'button' && renderToStaticMarkup(node).includes(translateMessage('es', 'funding.prepareWallet'))).props.onClick();
-  assert.deepEqual(calls, ['choose']);
+  await find(tree, node => node?.type === 'button' && renderToStaticMarkup(node).includes(translateMessage('es', 'funding.activateWallet'))).props.onClick();
+  await flush(); assert.deepEqual(calls, ['activate']);
+});
+
+test('connected activation stays busy until canonical linkage and never offers an onramp cancel for a wallet proof', async t => {
+  const shared = load('WalletFundingUI.jsx', { 'lucide-react': icons, '@/i18n/LanguageProvider': i18n });
+  function PersonalFundingForm() { return null; }
+  let complete; const pending = new Promise(resolve => { complete = resolve; });
+  const calls = [], reown = { configured: true, isConnected: true, address: personalStatus.destination.address,
+    linkedAddress: '', linkStatus: 'unlinked', onrampStatus: 'idle',
+    prepareWallet() { calls.push('activate'); return pending; },
+    connectWallet() { assert.fail('No separate connection action'); }, linkWallet() { assert.fail('No separate proof action'); },
+    startOnramp() { assert.fail('Activation cannot open a purchase'); }, cancelOnramp() { assert.fail('Activation does not own an onramp'); } };
+  const harness = componentHarness('PersonalWalletFundingPage.jsx', 'PersonalWalletFunding', {
+    'lucide-react': icons, '@/i18n/LanguageProvider': i18n, '@/components/reown/ReownContext': { useReownWallet: () => reown },
+    '@/lib/personal-funding-errors.mjs': { personalFundingFailure }, './WalletFundingForm': { PersonalFundingForm },
+    './WalletFundingStatus': { default: () => null }, './WalletFundingUI': shared,
+  }); t.after(() => harness.unmount());
+  let tree = harness.render(); assert.ok(!renderToStaticMarkup(tree).includes(reown.address));
+  find(tree, node => node?.type === 'button' && renderToStaticMarkup(node).includes(translateMessage('es', 'funding.activateWallet'))).props.onClick();
+  tree = harness.render(); assert.deepEqual(calls, ['activate']);
+  assert.ok(renderToStaticMarkup(tree).includes(translateMessage('es', 'funding.activatingWallet')));
+  assert.equal(find(tree, node => node?.type === 'button' && renderToStaticMarkup(node).includes(translateMessage('es', 'funding.cancelConnection'))), undefined);
+  assert.equal(find(tree, 'PersonalFundingForm').props.disabled, true);
+  reown.linkStatus = 'linked'; reown.linkedAddress = reown.address; complete({ linked: true, address: reown.address });
+  await flush(); tree = harness.render(); assert.equal(find(tree, 'PersonalFundingForm').props.disabled, false);
+  assert.deepEqual(calls, ['activate']);
 });
 
 test('personal countries discard canceled responses, respect route limits and submit only the selected production method', async t => {

@@ -6,6 +6,7 @@ import React from 'react';
 import ts from 'typescript';
 import { createReownFundingOperation, verifyReownWalletOwnership } from './reown-funding-operation.mjs';
 import { personalWalletBalanceSessionKey } from './personal-wallet-balance-store.mjs';
+import { createReownWalletPreparationRequest } from './reown-wallet-preparation.mjs';
 import { reownWalletConnectionState as state, createReownWalletConnectionRequest, createReownWalletSwitchRequest,
   reownWalletIdentityMismatch as identityMismatch, reownWalletNeedsAccountSelection as needsSelection } from './reown-wallet-connection.mjs';
 
@@ -216,6 +217,7 @@ function providerHarness(t, { bound = false, reset = async () => {}, proof = fal
     '@/lib/reown-funding-operation.mjs': { createReownFundingOperation, verifyReownWalletOwnership },
     '@/lib/reown-wallet-connection.mjs': { createReownWalletConnectionRequest, createReownWalletSwitchRequest, reownWalletConnectionState: state, reownWalletIdentityMismatch: identityMismatch, reownWalletNeedsAccountSelection: needsSelection },
     '@/lib/personal-wallet-balance-store.mjs': { personalWalletBalanceSessionKey },
+    '@/lib/reown-wallet-preparation.mjs': { createReownWalletPreparationRequest },
     '@/hooks/useSolanaWalletBinding': { useSolanaWalletBinding: () => ({}) }, './ReownContext': { ReownContext: context, SOLANA_WALLET_UNAVAILABLE: {}, useReownWallet() {} },
   };
   const code = ts.transpileModule(readFileSync(new URL('../components/reown/ReownProvider.jsx', import.meta.url), 'utf8'), {
@@ -363,4 +365,69 @@ test('a failed authoritative binding read never presents the restored SDK accoun
   assert.equal(h.value.isConnected, false); assert.equal(h.value.isLinked, false);
   assert.throws(() => h.value.getCompanyPaymentProvider());
   assert.deepEqual(h.calls, []);
+});
+
+test('one explicit activation coalesces fresh connection and ownership proof without a second application action', async t => {
+  const h = providerHarness(t, { proof: true, accountState: { embeddedWalletInfo: undefined } }); await h.flush();
+  const first = h.value.prepareWallet(), second = h.value.prepareWallet(); assert.equal(first, second);
+  await h.flush(); assert.deepEqual(h.calls, ['disconnect']);
+  await h.account({ isConnected: false, status: 'disconnected' }); assert.deepEqual(h.calls, ['disconnect', 'open']);
+  await h.account({ isConnected: true, status: 'connected', address: other });
+  assert.deepEqual(await first, { linked: true, address: other });
+  assert.equal(h.value.prepareWallet(), first, 'A completed canonical proof remains idempotent before binding state publication');
+  await h.flush();
+  assert.equal(h.value.isLinked, true); assert.deepEqual(h.calls, ['disconnect', 'open', 'challenge', 'sign', 'confirm']);
+  assert.deepEqual(await h.value.prepareWallet(), { linked: true, address: other });
+  assert.deepEqual(h.calls, ['disconnect', 'open', 'challenge', 'sign', 'confirm']);
+});
+
+test('an activation cancelled by unmount cannot request ownership proof after late SDK disconnection', async t => {
+  const reset = deferred(), h = providerHarness(t, { reset: () => reset.promise }); await h.flush();
+  const pending = h.value.prepareWallet(), cancelled = assert.rejects(pending, { name: 'AbortError' });
+  await h.flush(); assert.deepEqual(h.calls, ['disconnect']); h.unmount(); await cancelled;
+  reset.resolve(); await tick(); assert.deepEqual(h.calls, ['disconnect']);
+});
+
+test('an explicit binding refresh invalidates completed activation before same-tick calls and returns only the new authoritative address', async t => {
+  let response = { linked: true, address };
+  const h = providerHarness(t, { readBinding: () => response }); await h.flush();
+  const previous = h.value.prepareWallet(); assert.deepEqual(await previous, { linked: true, address });
+  const pending = deferred(); response = pending.promise;
+  const refresh = h.value.refreshLink(), activation = h.value.prepareWallet();
+  assert.notEqual(activation, previous); await h.flush();
+  assert.equal(h.value.linkStatus, 'loading'); assert.equal(h.value.address, '');
+  pending.resolve({ linked: true, address: other }); await refresh; await h.flush();
+  assert.deepEqual(await activation, { linked: true, address: other }); assert.deepEqual(h.calls, []);
+});
+
+test('a refreshed binding error cannot reuse an earlier completed activation acknowledgement', async t => {
+  let response = { linked: true, address };
+  const h = providerHarness(t, { readBinding: () => response }); await h.flush();
+  const previous = h.value.prepareWallet(); await previous;
+  const pending = deferred(); response = pending.promise;
+  const refresh = h.value.refreshLink(), failedRefresh = assert.rejects(refresh, /synthetic_refresh_failure/);
+  const activation = h.value.prepareWallet(), failedActivation = assert.rejects(activation, /wallet_status_unavailable/);
+  assert.notEqual(activation, previous); pending.reject(Error('synthetic_refresh_failure'));
+  await failedRefresh; await h.flush(); await failedActivation;
+  assert.equal(h.value.linkStatus, 'error'); assert.equal(h.value.address, ''); assert.deepEqual(h.calls, []);
+});
+
+test('a refreshed unlinked binding cannot reuse a completed activation and requires fresh selection instead', async t => {
+  let response = { linked: true, address };
+  const h = providerHarness(t, { readBinding: () => response, accountState: { embeddedWalletInfo: undefined } }); await h.flush();
+  const previous = h.value.prepareWallet(); await previous;
+  const pending = deferred(); response = pending.promise;
+  const refresh = h.value.refreshLink(), activation = h.value.prepareWallet();
+  const cancelled = assert.rejects(activation, { name: 'AbortError' });
+  assert.notEqual(activation, previous); pending.resolve({ linked: false }); await refresh; await h.flush();
+  assert.equal(h.value.linkStatus, 'unlinked'); assert.equal(h.value.walletNeedsAccountSelection, true);
+  assert.equal(h.value.address, ''); assert.deepEqual(h.calls, ['disconnect']);
+  h.unmount(); await cancelled;
+});
+
+test('an authoritative read already pending preserves activation coalescing until its canonical result arrives', async t => {
+  const pending = deferred(), h = providerHarness(t, { readBinding: () => pending.promise }); await h.flush();
+  const first = h.value.prepareWallet(), refresh = h.value.refreshLink(), second = h.value.prepareWallet();
+  assert.equal(first, second); pending.resolve({ linked: true, address });
+  await refresh; await h.flush(); assert.deepEqual(await first, { linked: true, address }); assert.deepEqual(h.calls, []);
 });
