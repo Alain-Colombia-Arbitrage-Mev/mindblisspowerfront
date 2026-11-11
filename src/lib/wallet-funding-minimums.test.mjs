@@ -16,12 +16,12 @@ const ack = (kind, amount) => ({ ...identity(kind), checkoutReference: reference
     ? { paymentMethodType: 'CREDIT_DEBIT_CARD', allowedProviders: ['SWAPPED'] }
     : { checkoutUrl: 'https://sb.meldcrypto.com/?token=synthetic' }) });
 
-test('personal USD requests use 100 to 15000 while administrative requests retain 50 to 25000 and exact cents', () => {
-  assert.equal(PERSONAL_FUNDING_MINIMUM_USD, 100);
+test('personal USD requests use 30 to 15000 while administrative requests retain 50 to 25000 and exact cents', () => {
+  assert.equal(PERSONAL_FUNDING_MINIMUM_USD, 30);
   assert.equal(ADMINISTRATIVE_FUNDING_MINIMUM_USD, 50);
   assert.equal(validFundingAmount(19.99), false);
   assert.equal(validFundingAmount(20), false);
-  assert.equal(validFundingAmount(49.99), false);
+  assert.equal(validFundingAmount(49.99), true);
   assert.equal(validFundingAmount(100), true);
   assert.equal(validFundingAmount(15000), true);
   assert.equal(validFundingAmount(15000.01), false);
@@ -39,7 +39,7 @@ test('personal USD requests use 100 to 15000 while administrative requests retai
 });
 
 test('new acknowledgements apply current wallet limits while persisted status and history retain their original amounts', () => {
-  for (const [kind, minimum] of [['personal', 100], ['administrative', 50]]) {
+  for (const [kind, minimum] of [['personal', 30], ['administrative', 50]]) {
     const status = { ...identity(kind), checkoutReference: reference, requestedAmount: minimum, country: 'US',
       requestStatus: kind === 'personal' ? 'initiated' : 'session_created',
       destination: { address, asset: 'USDT', network: 'polygon', chainId: 137 },
@@ -68,7 +68,7 @@ test('Swapped and Mercuryo keep independent route limits instead of sharing the 
   const discovery = { ...identity('personal'), country: 'MX', sourceCurrencyCode: 'USD', paymentMethods: ['CREDIT_DEBIT_CARD'],
     routes: [route('SWAPPED', 7.81), route('MERCURYO', 128.04)] };
   const parsed = personalProductionOptions(discovery);
-  assert.deepEqual(parsed.routes, [route('SWAPPED', 100), route('MERCURYO', 128.04)]);
+  assert.deepEqual(parsed.routes, [route('SWAPPED', 30), route('MERCURYO', 128.04)]);
   assert.deepEqual(parsed.routes.filter(route => route.paymentMethods.some(method => 100 >= method.minimumAmount && 100 <= method.maximumAmount))
     .map(route => route.serviceProvider), ['SWAPPED']);
   assert.equal(personalProductionOptions({ ...discovery, routes: [route('TOPPER', 10)] }), null);

@@ -30,7 +30,7 @@ test('personal country methods reject sandbox payloads and do not fall back to a
   const paths = [];
   try {
     globalThis.fetch = async path => { paths.push(path); return Response.json(personal); };
-    assert.deepEqual(await readPersonalFundingOptions('US'), { ...personal, routes: [{ ...personal.routes[0], paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount: 100, maximumAmount: 15000, minimumUsd: 100, maximumUsd: 15000 }] }] });
+    assert.deepEqual(await readPersonalFundingOptions('US'), { ...personal, routes: [{ ...personal.routes[0], paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount: 30, maximumAmount: 15000, minimumUsd: 30, maximumUsd: 15000 }] }] });
     assert.deepEqual(paths, ['/api/member/wallet-funding/personal/options?country=US&sourceCurrencyCode=USD']);
     globalThis.fetch = async () => Response.json(options);
     await assert.rejects(readPersonalFundingOptions('US'), { message: 'funding_unavailable' });

@@ -42,7 +42,7 @@ function fundingRuntime(overrides = {}) {
     currentAddress: '', walletProvider: undefined, binding: { status: 'linked', address },
     onrampOperation: ref(), linkingOperation: ref(), onrampFlow: ref(), onrampSelection: ref(), onrampIntent: ref(),
     linking: ref(), connectModalSeen: ref(), appKitState: { open: false },
-    PERSONAL_WALLET_MINIMUM_USD: 100, PERSONAL_WALLET_ASSET: 'USDT', DOMException,
+    PERSONAL_WALLET_MINIMUM_USD: 30, PERSONAL_WALLET_ASSET: 'USDT', DOMException,
     setBinding: value => bindings.push(value), setOnrampState: value => states.push(value),
     setVerificationError() {}, setIsLinking() {}, setFundingRevision: () => events.push('revision'),
     OnRampController: { state: { providers: [provider], selectedProvider: provider }, setSelectedProvider() {} },
@@ -244,7 +244,7 @@ test('personal dollar continuation explicitly forwards its currency to the inten
   const callback = onrampCallback('runOnramp', {
     reownFundingSelection, detectPersonalFundingCountry: () => 'US', buildReownProductionOnrampUrl, personalFundingFailure, projectId,
     boundAddress: address, mounted: { current: true }, navigator: { languages: ['en-US'], language: 'en-US' },
-    PERSONAL_WALLET_MINIMUM_USD: 100, PERSONAL_WALLET_ASSET: 'USDT', AbortController,
+    PERSONAL_WALLET_MINIMUM_USD: 30, PERSONAL_WALLET_ASSET: 'USDT', AbortController,
     onrampFlow: { current: null }, onrampSelection: { current: null }, onrampIntent: { current: false },
     beginOnrampOperation: () => operation, onrampOperation: { current: operation },
     OnRampController: { state: { providers: [provider], selectedProvider: provider }, setSelectedProvider() { events.push('provider'); } },
@@ -324,7 +324,7 @@ test("personal portal renders only its personal wallet and preserves native memb
  assert.match(personal,/reown\.startOnramp\(\{ walletAddress: reown\.linkedAddress, \.\.\.input \}\)/);
  assert.doesNotMatch(personal,/Administrative|startAdministrative|SandboxFunding/);
  assert.match(policy,/MINDBLISS_ONRAMP_FEE_BPS = 100/);assert.match(policy,/PERSONAL_WALLET_ASSET = "USDT"/);
- assert.match(policy,/PERSONAL_WALLET_MINIMUM_USD = 100/);
+ assert.match(policy,/PERSONAL_WALLET_MINIMUM_USD = 30/);
 });
 
 test("personal funding navigation has one destination and one neutral action label", () => {

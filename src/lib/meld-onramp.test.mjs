@@ -8,12 +8,12 @@ const projectId = "a".repeat(32);
 const checkoutReference = "d8a4c010-cc33-44da-a297-8b3c6440f491";
 const providerUrl = "https://meldcrypto.com/?publicKey=public-reown-key&destinationCurrencyCode=USDC";
 
-test("the retained Meld helper binds Polygon USDT, the public personal $100 floor, region and provider", () => {
+test("the retained Meld helper binds Polygon USDT, the public personal $30 floor, region and provider", () => {
   const url = new URL(buildMeldOnrampUrl({ providerUrl, address, projectId, checkoutReference, countryCode: "CO", locale: "es-CO", serviceProvider: "TOPPER" }));
   assert.equal(url.origin, "https://meldcrypto.com");
   assert.equal(url.searchParams.get("destinationCurrencyCode"), "USDT_POLYGON");
   assert.equal(url.searchParams.get("sourceCurrencyCode"), "USD");
-  assert.equal(url.searchParams.get("sourceAmount"), "100");
+  assert.equal(url.searchParams.get("sourceAmount"), "30");
   assert.equal(url.searchParams.get("countryCode"), "CO");
   assert.equal(url.searchParams.get("walletAddress"), address);
   assert.equal(url.searchParams.get("externalCustomerId"), checkoutReference);
@@ -52,7 +52,7 @@ test("approved quote selection is preserved in the checkout handoff", () => {
   assert.equal(url.searchParams.get("paymentMethodType"), "CREDIT_DEBIT_CARD");
   assert.equal(url.searchParams.get("serviceProviders"), "TOPPER");
   assert.throws(() => buildMeldOnrampUrl({ providerUrl, address, projectId, checkoutReference, amount: 19.99, serviceProvider: "TOPPER" }), /meld_context_invalid/);
-  assert.throws(() => buildMeldOnrampUrl({ providerUrl, address, projectId, checkoutReference, amount: 99.99, serviceProvider: "TOPPER" }), /meld_context_invalid/);
+  assert.throws(() => buildMeldOnrampUrl({ providerUrl, address, projectId, checkoutReference, amount: 29.99, serviceProvider: "TOPPER" }), /meld_context_invalid/);
   assert.throws(() => buildMeldOnrampUrl({ providerUrl, address, projectId, checkoutReference, amount: 15000.01, serviceProvider: "TOPPER" }), /meld_context_invalid/);
   assert.equal(new URL(buildMeldOnrampUrl({ providerUrl, address, projectId, checkoutReference, amount: 15000, serviceProvider: "SWAPPED" })).searchParams.get('sourceAmount'), '15000');
   assert.equal(new URL(buildAdministrativeMeldOnrampUrl({ providerUrl, address, checkoutReference, amount: 25000, serviceProvider: "SWAPPED" })).searchParams.get('sourceAmount'), '25000');

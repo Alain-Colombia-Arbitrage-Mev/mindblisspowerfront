@@ -26,7 +26,7 @@ const route = (serviceProvider, minimumAmount, maximumAmount, method = 'CREDIT_D
 const discovery = routes => ({ walletKind: 'personal', environment: 'production', provider: 'reown', country: 'US', sourceCurrencyCode: 'USD',
   paymentMethods: [...new Set(routes.flatMap(route => route.paymentMethods.map(method => method.method)))], routes });
 
-test('new personal USD requests, acknowledgements and locked Reown handoff agree on 100 to 15000 without a testing exception', async () => {
+test('new personal USD requests, acknowledgements and locked Reown handoff agree on 30 to 15000 without a testing exception', async () => {
   const original = globalThis.fetch;
   const projectId = 'a'.repeat(32);
   const handoff = amount => buildReownProductionOnrampUrl({ providerUrl: `https://meldcrypto.com/?publicKey=synthetic&externalCustomerId=${projectId}`,
@@ -35,14 +35,14 @@ test('new personal USD requests, acknowledgements and locked Reown handoff agree
   try {
     let calls = 0;
     globalThis.fetch = async () => { calls++; assert.fail('invalid funding reached transport'); };
-    for (const amount of [20, 50, 99.99, 15000.01, 25000]) {
+    for (const amount of [20, 29.99, 15000.01, 25000]) {
       assert.equal(fundingInput(input(amount), 'personal'), null);
       assert.equal(fundingAcknowledgement(ack(amount), 'personal'), null);
       await assert.rejects(createPersonalFundingIntent(input(amount)), { message: 'invalid_request' });
       assert.throws(() => handoff(amount), { message: 'reown_context_invalid' });
     }
     assert.equal(calls, 0);
-    for (const amount of [100, 15000]) {
+    for (const amount of [30, 15000]) {
       globalThis.fetch = async (path, init) => { calls++; assert.equal(path, '/api/member/wallet-funding/personal/intent');
         assert.equal(JSON.parse(init.body).amount, amount); return Response.json(ack(amount)); };
       assert.equal((await createPersonalFundingIntent(input(amount))).requestedAmount, amount);
@@ -54,7 +54,7 @@ test('new personal USD requests, acknowledgements and locked Reown handoff agree
   } finally { globalThis.fetch = original; }
 });
 
-test('old USD20, USD50 and USD25000 records survive browser and private BFF reads without authorizing a new request', async () => {
+test('old USD20, USD50 and USD25000 records survive browser and private BFF reads independently of the new request policy', async () => {
   const original = globalThis.fetch;
   try {
     for (const amount of [20, 50, 25000]) {
@@ -76,7 +76,7 @@ test('old USD20, USD50 and USD25000 records survive browser and private BFF read
       assert.equal(persisted.confirmation.state, 'unconfirmed');
       assert.equal(privateReads, 2);
       assert.ok(fundingHistory(history, 'personal')); assert.ok(fundingStatus(storedStatus, 'personal'));
-      assert.equal(fundingInput(input(amount), 'personal'), null);
+      assert.equal(Boolean(fundingInput(input(amount), 'personal')), amount === 50);
     }
   } finally { globalThis.fetch = original; }
 });
@@ -90,13 +90,13 @@ test('USD discovery clamps canonical and legacy aliases together across BFF and 
       serviceRequest: async () => ({ ok: true, data: raw }) });
     const safe = await readPersonalFundingOptions('US');
     assert.deepEqual(safe.routes.map(route => route.paymentMethods[0]), [
-      { method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount: 100, maximumAmount: 15000, minimumUsd: 100, maximumUsd: 15000 },
+      { method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount: 30, maximumAmount: 15000, minimumUsd: 30, maximumUsd: 15000 },
       { method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount: 500, maximumAmount: 15000, minimumUsd: 500, maximumUsd: 15000 },
     ]);
-    const unavailable = personalProductionOptions(discovery([route('SWAPPED', 20, 80)]));
+    const unavailable = personalProductionOptions(discovery([route('SWAPPED', 20, 29)]));
     assert.deepEqual(unavailable.routes, []); assert.deepEqual(unavailable.paymentMethods, []);
     const inconsistent = structuredClone(raw);
-    inconsistent.routes[0].paymentMethods[0].minimumAmount = 100;
+    inconsistent.routes[0].paymentMethods[0].minimumAmount = 30;
     assert.equal(personalProductionOptions(inconsistent), null, 'stale USD aliases cannot conceal an inconsistent upstream contract');
   } finally { globalThis.fetch = original; }
 });
@@ -120,10 +120,10 @@ test('the private BFF blocks old-range new writes before transport and admits on
     method: 'POST', headers: { cookie: 'better-auth.session_token=synthetic', origin: env.AUTH_PUBLIC_ORIGIN,
       'sec-fetch-site': 'same-origin', 'content-type': 'application/json' }, body: JSON.stringify(input(amount)),
   }), 'personal', { env, serviceRequest: async (_url, init) => { calls++; const amount = JSON.parse(init.body).amount;
-    assert.ok(amount >= 100 && amount <= 15000); return { ok: true, data: ack(amount) }; } });
-  for (const amount of [20, 50, 99.99, 15000.01, 25000]) assert.equal((await send(amount)).status, 400);
+    assert.ok(amount >= 30 && amount <= 15000); return { ok: true, data: ack(amount) }; } });
+  for (const amount of [20, 29.99, 15000.01, 25000]) assert.equal((await send(amount)).status, 400);
   assert.equal(calls, 0);
-  for (const amount of [100, 15000]) assert.equal((await send(amount)).status, 200);
+  for (const amount of [30, 15000]) assert.equal((await send(amount)).status, 200);
   assert.equal(calls, 2);
 });
 
