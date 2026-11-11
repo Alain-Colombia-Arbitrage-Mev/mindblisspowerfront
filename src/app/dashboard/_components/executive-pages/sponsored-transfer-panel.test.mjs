@@ -42,7 +42,7 @@ function payment(patch = {}) {
 function flow(patch = {}) {
   const calls = [];
   return { wallet, amount: '28.433366', balanceAtomic: '28433366', connected: true, verified: true, busy: false, loadingBalance: false,
-    capabilities: { transferEnabled: true }, preview: { walletAddress: wallet, recipientAddress: values.LEGACY_POLYGON_COMPANY_PAYMENT.recipientAddress, amountAtomic: '28433366' },
+    capabilities: { transferEnabled: true }, preview: { ...values.LEGACY_POLYGON_COMPANY_PAYMENT, walletAddress: wallet, amountAtomic: '28433366' },
     setAmount: amount => calls.push(['amount', amount]), review: () => calls.push('review'), confirm: () => calls.push('confirm'), cancelReview() {},
     newPayment: () => calls.push('new'), verifyPayment: () => calls.push('verify'), resume: () => calls.push('resume'), refresh() {}, connect() {}, calls, ...patch };
 }
@@ -85,4 +85,19 @@ test('Canonical confirmation enables another payment, while uncertain prepared a
   assert.equal(SponsoredTransferStatus({ flow: flow({ payment: { ...confirmed, confirmations: 11 } }) }), null);
   const uncertain = SponsoredTransferStatus({ flow: flow({ payment: payment(), recovery: { phase: 'authorizing' } }) });
   assert.ok(!all(uncertain, node => node?.type === 'button').some(node => node.props.className?.includes('primary')));
+});
+
+test('a stale disconnected review or altered wallet/network/token never enables confirmation', () => {
+  locale = 'es';
+  for (const patch of [{ connected: false }, { preview: { ...flow().preview, walletAddress: `0x${'9'.repeat(40)}` } },
+    { preview: { ...flow().preview, chainId: 1 } }, { preview: { ...flow().preview, tokenAddress: `0x${'9'.repeat(40)}` } }]) {
+    const state = flow(patch), tree = SponsoredTransferReview({ flow: state });
+    const confirm = all(tree, node => node?.type === 'button' && node.props.className?.includes('primary'))[0];
+    assert.equal(confirm.props.disabled, true); confirm.props.onClick(); assert.deepEqual(state.calls, []);
+  }
+});
+
+test('a receipt for another bound wallet is not displayed or given verification actions', () => {
+  const state = flow({ wallet: `0x${'9'.repeat(40)}`, payment: payment() });
+  assert.equal(SponsoredTransferStatus({ flow: state }), null); assert.deepEqual(state.calls, []);
 });

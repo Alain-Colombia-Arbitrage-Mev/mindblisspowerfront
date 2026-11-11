@@ -43,16 +43,17 @@ function clock() {
 }
 
 function harness(overrides = {}) {
-  const slots = [], effects = [], calls = [], signatures = [], providerCalls = [], storage = overrides.storage || new Map();
+  const slots = [], effects = [], calls = [], signatures = [], providerCalls = [], storage = overrides.storage || new Map(), digests = new Set();
   let cursor = 0, dirty = true, current, sourceWallet = wallet, connected = overrides.connected !== false;
+  let sdkAddress = sourceWallet;
   let session = { subject: 'owner-A', email: 'member@example.test' };
   let selectedChain = Object.hasOwn(overrides, 'chainId') ? overrides.chainId : '0x89';
   const localStorage = { getItem: key => storage.get(key) ?? null, setItem: (key, value) => { if (overrides.storageFailure) throw Error('quota'); storage.set(key, value); }, removeItem: key => storage.delete(key) };
   const browser = Object.assign(new EventTarget(), { localStorage }), documentRef = Object.assign(new EventTarget(), { visibilityState: 'visible' });
   const provider = { request(input) { providerCalls.push(input); return Promise.resolve(input.method === 'eth_chainId' ? selectedChain
-    : input.method === 'eth_accounts' ? [sourceWallet] : signature); } };
+    : input.method === 'eth_accounts' ? [sdkAddress] : signature); } };
   const getProvider = () => provider;
-  const reown = () => ({ linkedAddress: sourceWallet, address: sourceWallet, linkStatus: 'linked', isConnected: connected, isLinked: connected,
+  const reown = () => ({ linkedAddress: sourceWallet, address: sdkAddress, linkStatus: 'linked', isConnected: connected, isLinked: connected && sdkAddress === sourceWallet,
     getCompanyPaymentProvider: getProvider, connectWallet: async () => calls.push({ action: 'connect' }),
     linkWallet: async () => calls.push({ action: 'link' }), switchCompanyPaymentNetwork: async chainId => calls.push({ action: 'switch', chainId }), ...overrides.reown });
   const changed = (a, b) => !a || !b || a.length !== b.length || a.some((value, index) => !Object.is(value, b[index]));
@@ -100,17 +101,21 @@ function harness(overrides = {}) {
   const module = { exports: {} }, browserNavigator = { locks: overrides.locks || locks() };
   new Function('require', 'module', 'exports', 'window', 'document', 'crypto', 'globalThis', 'Date', 'setTimeout', 'clearTimeout', code)(name => {
     assert.ok(Object.hasOwn(mocks, name), `Unexpected relay dependency: ${name}`); return mocks[name];
-  }, module, module.exports, browser, documentRef, { subtle: webcrypto.subtle, randomUUID: () => id }, { navigator: browserNavigator }, overrides.Date || Date,
+  }, module, module.exports, browser, documentRef, { subtle: { digest(algorithm, input) {
+    const pending = webcrypto.subtle.digest(algorithm, input); digests.add(pending); void pending.finally(() => digests.delete(pending)); return pending;
+  } }, randomUUID: () => id }, { navigator: browserNavigator }, overrides.Date || Date,
   overrides.setTimeout || setTimeout, overrides.clearTimeout || clearTimeout);
   function render() { cursor = 0; dirty = false; current = module.exports.usePolygonRelay(reown()); }
   return { get flow() { return current; }, calls, signatures, providerCalls, storage, browser, documentRef,
     chain(value) { selectedChain = value; },
     async flush() { for (let turn = 0, quiet = 0; turn < 80; turn++) {
       if (dirty) render(); while (effects.length) effects.shift()(); await new Promise(resolve => setImmediate(resolve));
+      if (digests.size) { await Promise.all([...digests]); quiet = 0; continue; }
       if (dirty || effects.length) quiet = 0; else if (++quiet === 3) return current;
     } assert.fail('Relay hook did not settle'); },
     async session(next, flush = true) { session = next; dirty = true; if (!flush) { render(); return current; } return this.flush(); },
-    async wallet(next) { sourceWallet = next; dirty = true; return this.flush(); },
+    async wallet(next) { sourceWallet = next; sdkAddress = next; dirty = true; return this.flush(); },
+    async sdkAccount(next) { sdkAddress = next; dirty = true; return this.flush(); },
     async connection(next) { connected = next; dirty = true; return this.flush(); },
     unmount() { for (const cell of slots) cell?.cleanup?.(); },
   };
@@ -442,4 +447,101 @@ test('polling is single-flight, aborts when hidden or logged out, and cannot ext
     boundedClock.tick(15 * 60_000); await bounded.flush(); assert.equal(queries, 1);
     boundedClock.tick(12_000); await bounded.flush(); assert.equal(queries, 1);
   } finally { bounded.unmount(); }
+});
+
+test('a disconnected or changed SDK account cancels a late read-only review without creating a payment', async () => {
+  for (const change of ['disconnect', 'account', 'session']) {
+    const response = deferred(); let reads = 0;
+    const h = harness({ balance: async () => {
+      reads++; return reads === 1 ? { walletAddress: wallet, balances: [{ chainId: 137, balanceAtomic, nativeBalanceAtomic: '0' }] } : response.promise;
+    } });
+    try {
+      await h.flush(); const reviewing = h.flow.review(); await h.flush(); assert.equal(reads, 2);
+      if (change === 'disconnect') await h.connection(false);
+      else if (change === 'account') await h.sdkAccount(otherWallet);
+      else await h.session({ subject: 'owner-B', email: 'second@example.test' });
+      response.resolve({ walletAddress: wallet, balances: [{ chainId: 137, balanceAtomic, nativeBalanceAtomic: '0' }] });
+      await reviewing; await h.flush();
+      assert.equal(h.flow.preview, null); assert.equal(h.flow.payment, null); assert.equal(h.flow.busy, false);
+      assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
+    } finally { h.unmount(); }
+  }
+});
+
+test('the frozen reviewed amount is the only amount prepared even if editable state later changes', async t => {
+  const h = harness(); t.after(() => h.unmount()); await review(h);
+  assert.equal(Object.isFrozen(h.flow.preview), true);
+  assert.throws(() => { h.flow.preview.amountAtomic = '1000000'; }, TypeError);
+  h.flow.setAmount('1'); await h.flush(); await h.flow.confirm(); await h.flush();
+  assert.equal(writes(h).find(call => call.action === 'prepare').input.amountAtomic, balanceAtomic);
+  assert.equal(h.signatures[0].amountAtomic, balanceAtomic);
+});
+
+test('crossed prepare UUID, amount or wallet acknowledgements cannot open any wallet prompt', async () => {
+  for (const patch of [{ paymentId: '22222222-2222-4222-8222-222222222222' }, { amountAtomic: '1000000' }, { walletAddress: otherWallet }]) {
+    const h = harness({ write: async action => { assert.equal(action, 'prepare'); return payment(patch); } });
+    try {
+      await review(h); await h.flow.confirm(); await h.flush();
+      assert.deepEqual(writes(h).map(call => call.action), ['prepare']); assert.equal(h.signatures.length, 0);
+      assert.equal(h.flow.errorKey, 'walletTransfer.invalidAuthorization'); assert.equal(h.flow.payment, null);
+    } finally { h.unmount(); }
+  }
+});
+
+test('a confirmed canonical payment arriving during a wallet prompt discards the late signature without reauthorization', async t => {
+  const history = deferred(), signatureResult = deferred();
+  const h = harness({ history: async () => history.promise, sign: async () => signatureResult.promise }); t.after(() => h.unmount());
+  await review(h); const pending = h.flow.confirm(); await h.flush(); assert.equal(h.signatures.length, 1);
+  history.resolve({ payments: [confirmed()] }); await h.flush(); assert.equal(h.flow.payment.status, 'confirmed');
+  signatureResult.resolve({ paymentId: id, signature }); await pending; await h.flush();
+  assert.equal(h.flow.payment.status, 'confirmed'); assert.equal(h.flow.recovery, null); assert.equal(h.flow.errorKey, '');
+  assert.deepEqual(writes(h).map(call => call.action), ['prepare']); assert.equal(h.signatures.length, 1);
+});
+
+test('a late prepared reply cannot reopen a signature after a terminal history update', async t => {
+  const history = deferred(), status = deferred();
+  const h = harness({ history: async () => history.promise, status: async () => status.promise }); t.after(() => h.unmount());
+  await review(h); const pending = h.flow.confirm(); await h.flush(); assert.equal(h.signatures.length, 0);
+  history.resolve({ payments: [confirmed()] }); await h.flush(); status.resolve(payment()); await pending; await h.flush();
+  assert.equal(h.flow.payment.status, 'confirmed'); assert.equal(h.flow.recovery, null);
+  assert.deepEqual(writes(h).map(call => call.action), ['prepare']); assert.equal(h.signatures.length, 0);
+});
+
+test('a changed SDK account discards an unresolved signature before any authorization is uploaded', async t => {
+  const signed = deferred(), h = harness({ sign: async () => signed.promise }); t.after(() => h.unmount());
+  await review(h); const pending = h.flow.confirm(); await h.flush(); assert.equal(h.signatures.length, 1);
+  await h.sdkAccount(otherWallet); signed.resolve({ paymentId: id, signature }); await pending; await h.flush();
+  assert.equal(h.flow.wallet, wallet); assert.equal(h.flow.connected, false);
+  assert.deepEqual(writes(h).map(call => call.action), ['prepare']); assert.equal(h.flow.payment.walletAddress, wallet);
+});
+
+test('crossed authorization amounts or wallets never replace the reviewed payment or reach submit', async () => {
+  for (const patch of [{ amountAtomic: '1000000' }, { walletAddress: otherWallet }]) {
+    const h = harness({ write: async action => {
+      if (action === 'prepare') return payment();
+      assert.equal(action, 'authorize'); return payment({ status: 'authorized', ...patch });
+    } });
+    try {
+      await review(h); await h.flow.confirm(); await h.flush();
+      assert.deepEqual(writes(h).map(call => call.action), ['prepare', 'authorize']);
+      assert.equal(h.flow.payment.amountAtomic, balanceAtomic); assert.equal(h.flow.payment.walletAddress, wallet);
+      assert.equal(h.flow.recovery.phase, 'ambiguous'); assert.equal(h.signatures.length, 1);
+      await h.flow.confirm(); await h.flush(); assert.equal(h.signatures.length, 1);
+      assert.equal(writes(h).some(call => call.action === 'submit'), false);
+    } finally { h.unmount(); }
+  }
+});
+
+test('an obsolete authorized status reply cannot submit after history already confirms the payment', async t => {
+  const history = deferred(), status = deferred(); let histories = 0;
+  const authorized = payment({ status: 'authorized' });
+  const h = harness({ history: async () => ++histories === 1 ? { payments: [authorized] } : history.promise,
+    status: async () => status.promise }); t.after(() => h.unmount());
+  await h.flush(); assert.equal(h.flow.payment.status, 'authorized');
+  h.flow.refresh(); await h.flush();
+  const continuation = h.flow.submitAuthorized(); await h.flush();
+  history.resolve({ payments: [confirmed()] }); await h.flush(); assert.equal(h.flow.payment.status, 'confirmed');
+  status.resolve(authorized); await continuation; await h.flush();
+  assert.equal(h.flow.payment.status, 'confirmed'); assert.equal(h.flow.recovery, null); assert.equal(h.flow.errorKey, '');
+  assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0); assert.equal(h.storage.size, 0);
 });

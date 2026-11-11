@@ -174,8 +174,13 @@ export function usePolygonRelay(reown) {
       if (result.payments.some(item => item.walletAddress !== wallet)) throw new Error("polygon_relay_wallet_changed");
       setHistory({ wallet, loading: false, payments: result.payments, error: "" });
       const marker = readRecovery(key, wallet); markerRef.current = marker; setRecovery(marker);
-      const current = selected.current, latest = current && result.payments.find(item => item.paymentId === current.paymentId);
-      if (latest) { adopt(latest, key); if (!terminal(current) && terminal(latest)) setRevision(number => number + 1); }
+      const current = selected.current, reviewed = previewRef.current;
+      const expectedId = current?.paymentId || reviewed?.requestId;
+      const latest = expectedId && result.payments.find(item => item.paymentId === expectedId);
+      if (latest) {
+        if (!current && (!reviewed || latest.walletAddress !== reviewed.walletAddress || latest.amountAtomic !== reviewed.amountAtomic)) throw new Error("polygon_relay_invalid_authorization");
+        adopt(latest, key); if (!terminal(current) && terminal(latest)) setRevision(number => number + 1);
+      }
       else if (!current && !previewRef.current) {
         const pending = result.payments.find(item => item.paymentId === marker?.paymentId) || result.payments.find(unresolved);
         if (pending) adopt(pending, key);
@@ -218,12 +223,17 @@ export function usePolygonRelay(reown) {
     const atomic = personalCompanyPaymentAmountAtomic(amount);
     if (!currentDisplay || !connected || !atomic || balance.wallet !== wallet || balance.balanceAtomic === null || BigInt(atomic) > BigInt(balance.balanceAtomic)) return;
     if (selected.current && unresolved(selected.current)) { setErrorKey("walletTransfer.pending"); setStage("status"); return; }
-    const value = begin(); if (!value) return;
+    const value = begin(); if (!value) return; value.signing = true;
+    const capturedSigner = signer.current.generation;
+    const assertReview = () => {
+      active(value);
+      if (signer.current.generation !== capturedSigner || !signer.current.connected) throw new DOMException("Aborted", "AbortError");
+    };
     try {
-      await enabled(value); await identity(value, reown.getCompanyPaymentProvider());
-      const key = await value.scope.wait(() => keyPromise); active(value);
+      await enabled(value); assertReview(); await identity(value, reown.getCompanyPaymentProvider()); assertReview();
+      const key = await value.scope.wait(() => keyPromise); assertReview();
       if (readRecovery(key, wallet)) throw new Error("polygon_relay_pending_exists");
-      const result = await value.scope.wait(() => readPersonalWalletBalances({ signal: value.scope.signal })); active(value);
+      const result = await value.scope.wait(() => readPersonalWalletBalances({ signal: value.scope.signal })); assertReview();
       const funds = result.walletAddress === wallet && result.balances.find(item => item.chainId === 137 && !item.error);
       if (!funds || funds.balanceAtomic === null) throw new Error("polygon_relay_balance_changed");
       if (funds.balanceAtomic !== balance.balanceAtomic) {
@@ -232,13 +242,18 @@ export function usePolygonRelay(reown) {
         throw new Error("polygon_relay_balance_changed");
       }
       if (selected.current && unresolved(selected.current)) throw new Error("polygon_relay_pending_exists");
-      const next = { requestId: crypto.randomUUID(), walletAddress: wallet, amountAtomic: atomic, reviewedBalanceAtomic: funds.balanceAtomic, ...POLYGON_COMPANY_PAYMENT };
+      const next = Object.freeze({ requestId: crypto.randomUUID(), walletAddress: wallet, amountAtomic: atomic, reviewedBalanceAtomic: funds.balanceAtomic, ...POLYGON_COMPANY_PAYMENT });
       previewRef.current = next; setPreview(next); setStage("review");
     } catch (failure) { if (live()) setErrorKey(polygonRelayErrorKey(failure)); } finally { finish(value); }
   }
 
   async function sendAuthorized(value, prepared, key) {
-    active(value); updateMarker(key, prepared, "submitting");
+    active(value);
+    const canonical = selected.current;
+    if (!canonical || !immutable(canonical, prepared)) throw new Error("polygon_relay_invalid_authorization");
+    if (terminal(canonical)) return;
+    if (canonical.status !== "authorized") throw new Error("polygon_relay_invalid_authorization");
+    updateMarker(key, canonical, "submitting");
     const sent = await value.scope.wait(() => writePolygonRelay("submit", { paymentId: prepared.paymentId }, { signal: value.scope.signal })); active(value);
     if (!immutable(prepared, sent)) throw new Error("polygon_relay_invalid_authorization");
     adopt(sent, key); if (terminal(sent)) setRevision(number => number + 1);
@@ -252,6 +267,10 @@ export function usePolygonRelay(reown) {
     try {
       const capturedSigner = signerGeneration, provider = reown.getCompanyPaymentProvider();
       const assertSigner = () => { active(value); if (signer.current.generation !== capturedSigner || !signer.current.connected || reown.getCompanyPaymentProvider() !== provider) throw new DOMException("Aborted", "AbortError"); };
+      const assertUnsigned = () => {
+        assertSigner();
+        if (selected.current?.paymentId === local.requestId && selected.current.status !== "prepared") throw new DOMException("Aborted", "AbortError");
+      };
       await enabled(value); await identity(value, provider); key = await value.scope.wait(() => keyPromise); assertSigner();
       if (!key) throw new Error("polygon_relay_recovery_unavailable");
       if (readRecovery(key, wallet)) throw new Error("polygon_relay_pending_exists");
@@ -259,21 +278,23 @@ export function usePolygonRelay(reown) {
       await locks.request(`mindbliss:polygon-relay:${wallet}`, { mode: "exclusive", ifAvailable: true }, async lock => {
         if (!lock || readRecovery(key, wallet)) throw new Error("polygon_relay_pending_exists"); assertSigner();
         prepared = await value.scope.wait(() => writePolygonRelay("prepare", { requestId: local.requestId, amountAtomic: local.amountAtomic }, { signal: value.scope.signal })); assertSigner();
-        if (prepared.walletAddress !== wallet || prepared.amountAtomic !== local.amountAtomic) throw new Error("polygon_relay_invalid_authorization");
+        if (!polygonRelayView(prepared) || prepared.paymentId !== local.requestId || prepared.walletAddress !== wallet
+          || prepared.amountAtomic !== local.amountAtomic) throw new Error("polygon_relay_invalid_authorization");
         const latest = await value.scope.wait(() => readPolygonRelayStatus(prepared.paymentId, { signal: value.scope.signal })); assertSigner();
         if (!immutable(prepared, latest)) throw new Error("polygon_relay_invalid_authorization");
-        adopt(latest, key); if (latest.status !== "prepared") return;
+        const canonical = adopt(latest, key); if (canonical.status !== "prepared") return;
+        assertUnsigned();
         const signed = await value.scope.wait(() => signPolygonRelay(prepared, { request(input) {
-          assertSigner();
+          assertUnsigned();
           if (input.method === "eth_signTypedData_v4") { if (prompt) throw new Error("polygon_relay_invalid_authorization"); updateMarker(key, prepared, "signing"); prompt = true; }
           return provider.request(input);
-        } }, wallet, assertSigner)); assertSigner();
+        } }, wallet, assertUnsigned)); assertUnsigned();
         if (signed.paymentId !== prepared.paymentId) throw new Error("polygon_relay_invalid_authorization");
         updateMarker(key, prepared, "authorizing"); authorizing = true;
         const authorized = await value.scope.wait(() => writePolygonRelay("authorize", signed, { signal: value.scope.signal })); assertSigner();
         if (!immutable(prepared, authorized)) throw new Error("polygon_relay_invalid_authorization");
-        adopt(authorized, key);
-        if (authorized.status === "authorized") { updateMarker(key, authorized, "authorized"); await sendAuthorized(value, authorized, key); }
+        const accepted = adopt(authorized, key);
+        if (accepted.status === "authorized") { updateMarker(key, accepted, "authorized"); await sendAuthorized(value, accepted, key); }
       });
     } catch (failure) {
       if (prepared && selected.current?.paymentId === prepared.paymentId && terminal(selected.current) && immutable(prepared, selected.current)) {
@@ -295,7 +316,7 @@ export function usePolygonRelay(reown) {
       await enabled(value); key = await value.scope.wait(() => keyPromise);
       const latest = await value.scope.wait(() => readPolygonRelayStatus(current.paymentId, { signal: value.scope.signal })); active(value);
       if (!immutable(current, latest)) throw new Error("polygon_relay_invalid_authorization");
-      adopt(latest, key); if (latest.status === "authorized") await sendAuthorized(value, latest, key);
+      const canonical = adopt(latest, key); if (canonical.status === "authorized") await sendAuthorized(value, canonical, key);
     } catch (failure) {
       if (readRecovery(key, wallet)) { try { updateMarker(key, current, "ambiguous"); } catch { /* keep prior marker */ } }
       if (live()) setErrorKey(polygonRelayErrorKey(failure));
@@ -363,8 +384,8 @@ export function usePolygonRelay(reown) {
     try {
       const key = await value.scope.wait(() => keyPromise); active(value);
       if (readRecovery(key, wallet)) throw new Error("polygon_relay_pending_exists");
-      const next = { requestId: current.paymentId, walletAddress: wallet, amountAtomic: current.amountAtomic,
-        reviewedBalanceAtomic: balance.balanceAtomic, ...POLYGON_COMPANY_PAYMENT };
+      const next = Object.freeze({ requestId: current.paymentId, walletAddress: wallet, amountAtomic: current.amountAtomic,
+        reviewedBalanceAtomic: balance.balanceAtomic, ...POLYGON_COMPANY_PAYMENT });
       previewRef.current = next; setPreview(next); setAmountState(formatPersonalCompanyPaymentAmount(current.amountAtomic)); setStage("review");
     } catch (failure) { if (live()) setErrorKey(polygonRelayErrorKey(failure)); } finally { finish(value); }
   }

@@ -139,6 +139,22 @@ test('Relay status signs the pathname expected by real backend middleware while 
     } });
   assert.equal(response.status, 200); assert.equal((await response.json()).paymentId, id);
 });
+
+test('both browser client and BFF reject valid but crossed prepare UUIDs or amounts and never retry the mutation', async () => {
+  for (const patch of [{ paymentId: '22222222-2222-4222-8222-222222222222' }, { amountAtomic: '1000000' }]) {
+    const crossed = payment(patch);
+    crossed.typedData.message.functionSignature = polygonRelayTransferCall(crossed.amountAtomic);
+    crossed.authorizationDigest = TypedDataEncoder.hash(crossed.typedData.domain, crossed.typedData.types, crossed.typedData.message);
+    assert.ok(polygonRelayView(crossed), 'the crossed reply must be valid independently of request correlation');
+    const input = { requestId: id, amountAtomic: '28433366' }; let upstream = 0, browser = 0;
+    const response = await handlePolygonRelay(request('prepare', input), 'prepare', { env,
+      serviceRequest: async () => { upstream++; return { ok: true, data: crossed }; } });
+    assert.equal(response.status, 502); assert.equal(upstream, 1);
+    await assert.rejects(writePolygonRelay('prepare', input, { fetchImpl: async () => { browser++; return Response.json(crossed); } }),
+      { message: 'polygon_relay_unavailable' });
+    assert.equal(browser, 1);
+  }
+});
 test('Transfer instructions and the no-expiry authorization disclosure exist in all supported languages', () => {
   const keys = Object.keys(walletTransferMessages.es.walletTransfer).sort();
   for (const locale of ['es', 'en', 'ar', 'zh']) {

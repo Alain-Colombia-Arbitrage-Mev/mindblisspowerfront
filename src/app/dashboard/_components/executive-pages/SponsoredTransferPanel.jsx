@@ -71,7 +71,9 @@ export function SponsoredTransferForm({ flow, network = "polygon" }) {
 export function SponsoredTransferReview({ flow, network = "polygon" }) {
   const { t } = useI18n(); const value = flow.preview, policy = networkPolicy(network);
   const valid = policy && value?.walletAddress === flow.wallet && (network === "solana" ? solanaAddress(value.walletAddress) && solanaAtomic(value.amountAtomic, false) : /^0x[0-9a-f]{40}$/.test(value.walletAddress) && personalCompanyPaymentAtomic(value.amountAtomic))
-    && value.recipientAddress === policy.recipientAddress;
+    && value.recipientAddress === policy.recipientAddress
+    && (network !== "polygon" || (value.chainId === LEGACY_POLYGON_COMPANY_PAYMENT.chainId
+      && value.tokenAddress === LEGACY_POLYGON_COMPANY_PAYMENT.tokenAddress && value.tokenDecimals === LEGACY_POLYGON_COMPANY_PAYMENT.tokenDecimals));
   return <section className={`executive-panel ${styles.panel}`} aria-label={t("companyPayment.reviewTitle")} aria-busy={flow.busy}>
     <header className={styles.heading}><ShieldCheck size={22} aria-hidden="true" /><div><h2>{t("companyPayment.reviewTitle")}</h2><p>{t("walletTransfer.confirmCopy")}</p></div></header>
     {valid ? <><div className={styles.reviewAmount}><span>{t("companyPayment.amountLabel")}</span><strong><bdi dir="ltr">{formatPersonalCompanyPaymentAmount(value.amountAtomic)} USDT</bdi></strong></div>
@@ -82,14 +84,15 @@ export function SponsoredTransferReview({ flow, network = "polygon" }) {
     {flow.errorKey ? <p className={styles.error} role="alert">{t(flow.errorKey)}</p> : null}
     {flow.errorKey === "walletTransfer.networkMismatch" ? <button type="button" className="executive-button" disabled={flow.busy} onClick={() => void flow.switchNetwork()}>{t("companyPayment.polygonSwitchNetwork")}</button> : null}
     <div className={styles.actions}><button className="executive-button" type="button" disabled={flow.busy} onClick={flow.cancelReview}>{t("walletTransfer.closeReview")}</button>
-      <button className={`executive-button primary ${styles.primary}`} type="button" disabled={!valid || flow.busy || !flow.capabilities?.transferEnabled} onClick={() => void flow.confirm()}>
+      <button className={`executive-button primary ${styles.primary}`} type="button" disabled={!valid || !flow.connected || flow.busy || !flow.capabilities?.transferEnabled}
+        onClick={() => { if (valid && flow.connected && !flow.busy && flow.capabilities?.transferEnabled) void flow.confirm(); }}>
         {flow.busy ? <Loader2 size={17} className="animate-spin" aria-hidden="true" /> : <ShieldCheck size={17} aria-hidden="true" />}{t(flow.busy ? "companyPayment.busyLabel" : "walletTransfer.confirm")}</button></div>
   </section>;
 }
 
 export function SponsoredTransferStatus({ flow, network = "polygon" }) {
   const { t } = useI18n(), value = network === "polygon" ? polygonRelayView(flow.payment) : solanaPaymentView(flow.payment);
-  if (!value) return null;
+  if (!value || value.walletAddress !== flow.wallet) return null;
   const confirmed = value.status === "confirmed", prepared = value.status === "prepared", authorized = value.status === "authorized", terminal = ["confirmed", "failed", "expired"].includes(value.status);
   const title = confirmed ? "confirmedTitle" : authorized ? "authorizedTitle" : value.status === "reconciliation_required" ? "reconciliationTitle" : value.status === "failed" ? "failedTitle" : value.status === "expired" ? "expiredTitle" : value.status === "ambiguous" ? "ambiguousTitle" : "pendingTitle";
   const copy = confirmed ? network === "polygon" ? "confirmedPolygon" : "confirmedSolana" : authorized ? "authorizedCopy" : value.status === "reconciliation_required" ? "reconciliationCopy" : value.status === "failed" ? "failedCopy" : value.status === "expired" ? "expiredCopy" : "pendingCopy";
