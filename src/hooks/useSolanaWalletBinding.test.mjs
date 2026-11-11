@@ -16,7 +16,7 @@ const deferred = () => { let resolve; const promise = new Promise(done => { reso
 
 function harness(overrides = {}) {
   const slots = [], effects = [], calls = [], signatures = [], opened = [];
-  let cursor = 0, dirty = true, current, session = { subject: 'owner-A', email: 'member@example.test' };
+  let cursor = 0, dirty = true, current, enabled = overrides.enabled ?? true, session = { subject: 'owner-A', email: 'member@example.test' };
   let account = { address: wallet, isConnected: true, status: 'connected', ...overrides.account };
   let appKitState = { initialized: true, loading: false, open: false, ...overrides.appKitState };
   const provider = { publicKey: new PublicKey(wallet), async signMessage(bytes) { signatures.push(bytes); return overrides.sign ? overrides.sign(bytes) : new Uint8Array(64).fill(7); },
@@ -55,7 +55,7 @@ function harness(overrides = {}) {
   new Function('require', 'module', 'exports', 'window', code)(id => {
     assert.ok(Object.hasOwn(mocks, id), `Unexpected binding dependency: ${id}`); return mocks[id];
   }, module, module.exports, browser);
-  const render = () => { cursor = 0; dirty = false; current = module.exports.useSolanaWalletBinding({ account, walletProvider: provider, appKitState, open, switchNetwork }); };
+  const render = () => { cursor = 0; dirty = false; current = module.exports.useSolanaWalletBinding({ account, walletProvider: provider, appKitState, open, switchNetwork, enabled }); };
   return {
     get flow() { return current; }, calls, signatures, opened, provider, browser,
     async flush() { for (let turn = 0, quiet = 0; turn < 40; turn++) {
@@ -63,12 +63,27 @@ function harness(overrides = {}) {
       if (dirty || effects.length) quiet = 0; else if (++quiet === 2) return current;
     } assert.fail('Solana binding did not settle'); },
     async session(next, flush = true) { session = next; dirty = true; if (!flush) { render(); return current; } return this.flush(); },
+    async enabled(next) { enabled = next; dirty = true; return this.flush(); },
     async wallet(nextAddress) { account = { ...account, address: nextAddress }; provider.publicKey = new PublicKey(nextAddress); dirty = true; return this.flush(); },
     async connection(nextAccount, state = {}) { account = { ...account, ...nextAccount }; appKitState = { ...appKitState, ...state }; dirty = true; return this.flush(); },
     unmount() { for (const cell of slots) cell?.cleanup?.(); },
   };
 }
 const mutations = h => h.calls.filter(call => ['challenge', 'confirm'].includes(call.action));
+
+test('a disabled namespace makes no automatic requests and cannot connect, link or sign', async t => {
+  const h = harness({ enabled: false }); t.after(() => h.unmount()); await h.flush();
+  assert.equal(h.flow.configured, false); assert.equal(h.flow.address, '');
+  assert.equal(h.flow.isConnected, false); assert.equal(h.flow.isLinked, false);
+  assert.equal(h.flow.linkStatus, 'unavailable'); assert.deepEqual(h.calls, []);
+  await assert.rejects(h.flow.connectWallet(), { message: 'unauthenticated' });
+  await assert.rejects(h.flow.linkWallet(), { message: 'unauthenticated' });
+  await assert.rejects(h.flow.refreshLink(), { message: 'unauthenticated' });
+  assert.equal(h.signatures.length, 0); assert.deepEqual(h.opened, []);
+  await h.enabled(true); assert.equal(h.calls.length, 1); assert.equal(h.calls[0].action, 'status');
+  await h.enabled(false); assert.equal(h.flow.address, ''); assert.equal(h.flow.isLinked, false);
+  assert.equal(h.calls.length, 1);
+});
 
 test('connected Solana initially reads only its own binding and never signs or links from an effect', async t => {
   const h = harness(); t.after(() => h.unmount()); await h.flush();

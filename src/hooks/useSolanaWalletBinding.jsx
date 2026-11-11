@@ -33,8 +33,9 @@ function signatureBase64(signature) {
 }
 
 /** A second, owner-bound namespace. Connection alone never links or transfers funds. */
-export function useSolanaWalletBinding({ account, walletProvider, appKitState, open, switchNetwork }) {
-  const sessionKey = personalWalletBalanceSessionKey(useMemberSession());
+export function useSolanaWalletBinding({ account, walletProvider, appKitState, open, switchNetwork, enabled = true }) {
+  const memberSession = useMemberSession();
+  const sessionKey = enabled ? personalWalletBalanceSessionKey(memberSession) : '';
   const currentAddress = address(account?.address);
   const ownerEpoch = useRef({ sessionKey, generation: 0 });
   if (ownerEpoch.current.sessionKey !== sessionKey) ownerEpoch.current = { sessionKey, generation: ownerEpoch.current.generation + 1 };
@@ -174,11 +175,11 @@ export function useSolanaWalletBinding({ account, walletProvider, appKitState, o
     return open({ view: providerReady ? "Account" : "Connect", namespace: "solana" });
   }, [live, open, providerReady]);
 
-  return useMemo(() => ({ namespace: "solana", configured: true, address: sessionKey ? currentAddress : "", isConnected: Boolean(sessionKey) && providerReady,
+  return useMemo(() => ({ namespace: "solana", configured: enabled, address: sessionKey ? currentAddress : "", isConnected: Boolean(sessionKey) && providerReady,
     linkedAddress: boundAddress, linkStatus: visible ? binding.status : sessionKey ? "loading" : "unavailable", linkError: visible ? verificationError || binding.error : "",
     isLinked: Boolean(sessionKey) && isLinked, isLinking: linking, isRestoring: connecting || connectionStatus === "restoring", connectionStatus,
     needsVerification: Boolean(sessionKey) && providerReady && visible && binding.status === "unlinked",
     connectWallet, openConnect: connectWallet, linkWallet, refreshLink, getProvider, switchNetwork: changeNetwork, openAccount,
-  }), [sessionKey, currentAddress, providerReady, boundAddress, visible, binding.status, binding.error, verificationError, isLinked, linking, connecting,
+  }), [enabled, sessionKey, currentAddress, providerReady, boundAddress, visible, binding.status, binding.error, verificationError, isLinked, linking, connecting,
     connectionStatus, connectWallet, linkWallet, refreshLink, getProvider, changeNetwork, openAccount]);
 }

@@ -67,11 +67,58 @@ test('logout and owner changes cancel old reads and late results cannot populate
 });
 
 test('returning from checkout refreshes visible balances once without wallet signatures', async () => {
-  const browser = new EventTarget(), document = Object.assign(new EventTarget(), { visibilityState: 'visible' }); let calls = 0;
-  const store = createPersonalWalletBalanceStore({ read: async () => { calls++; return value(undefined, String(calls * 1000000)); }, windowTarget: browser, documentTarget: document });
+  const browser = new EventTarget(), document = Object.assign(new EventTarget(), { visibilityState: 'visible' }); let calls = 0, time = 0;
+  const store = createPersonalWalletBalanceStore({ read: async () => { calls++; return value(undefined, String(calls * 1000000)); }, now: () => time, windowTarget: browser, documentTarget: document });
   const close = store.subscribe('member', () => {}); await store.refresh('member');
+  time = 6000;
   browser.dispatchEvent(new Event('focus')); browser.dispatchEvent(new Event('pageshow')); document.dispatchEvent(new Event('visibilitychange'));
   await new Promise(done => setTimeout(done, 300)); assert.equal(calls, 2); assert.equal(store.get('member').balanceAtomic, '2000000');
   document.visibilityState = 'hidden'; browser.dispatchEvent(new Event('focus'));
   await new Promise(done => setTimeout(done, 300)); assert.equal(calls, 2); close();
+});
+
+test('repeated focus events reuse a recent read instead of queueing a new lookup on each return', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
+  const browser = new EventTarget(), document = Object.assign(new EventTarget(), { visibilityState: 'visible' });
+  let calls = 0, time = 0;
+  const store = createPersonalWalletBalanceStore({ read: async () => { calls++; return value(); }, now: () => time,
+    windowTarget: browser, documentTarget: document });
+  const close = store.subscribe('member', () => {}); t.after(close);
+  await store.refresh('member', false);
+  for (let turn = 0; turn < 10; turn++) {
+    browser.dispatchEvent(new Event('focus')); document.dispatchEvent(new Event('visibilitychange'));
+    time += 300; t.mock.timers.tick(300); await new Promise(done => setImmediate(done));
+  }
+  assert.equal(calls, 1);
+  time = 6000; browser.dispatchEvent(new Event('pageshow')); t.mock.timers.tick(250);
+  await new Promise(done => setImmediate(done)); assert.equal(calls, 2);
+});
+
+test('focus during a pending read does not queue another read, but a confirmed balance change does', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
+  const browser = new EventTarget(), document = Object.assign(new EventTarget(), { visibilityState: 'visible' });
+  const pending = deferred(); let calls = 0;
+  const store = createPersonalWalletBalanceStore({ read: async () => ++calls === 1 ? pending.promise : value(),
+    windowTarget: browser, documentTarget: document });
+  const close = store.subscribe('member', () => {}); t.after(close);
+  const first = store.refresh('member', false); await Promise.resolve();
+  browser.dispatchEvent(new Event('focus')); t.mock.timers.tick(250);
+  pending.resolve(value()); await first; await new Promise(done => setImmediate(done));
+  assert.equal(calls, 1);
+  browser.dispatchEvent(new Event('vp:personal-wallet-balance-changed')); t.mock.timers.tick(250);
+  await new Promise(done => setImmediate(done)); assert.equal(calls, 2);
+});
+
+test('repeated focus after a failed read respects the automatic cooldown without replaying failed requests', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
+  const browser = new EventTarget(), document = Object.assign(new EventTarget(), { visibilityState: 'visible' });
+  let calls = 0, time = 0;
+  const store = createPersonalWalletBalanceStore({ read: async () => { calls++; throw Error('company_payment_rpc_unavailable'); },
+    now: () => time, retryDelays: [], windowTarget: browser, documentTarget: document });
+  const close = store.subscribe('member', () => {}); t.after(close); await store.refresh('member', false);
+  for (let turn = 0; turn < 10; turn++) {
+    browser.dispatchEvent(new Event('focus')); time += 300; t.mock.timers.tick(300);
+    await new Promise(done => setImmediate(done));
+  }
+  assert.equal(calls, 1);
 });

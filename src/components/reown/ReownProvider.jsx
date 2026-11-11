@@ -121,7 +121,9 @@ function ConfiguredReownProvider({ children }) {
   const solanaAccount = useAppKitAccount({ namespace: "solana" });
   const { walletProvider: solanaWalletProvider } = useAppKitProvider("solana");
   const switchSolanaNetwork = useCallback(() => switchAppKitNetwork(solana), [switchAppKitNetwork]);
-  const solanaWallet = useSolanaWalletBinding({ account: solanaAccount, walletProvider: solanaWalletProvider, appKitState, open, switchNetwork: switchSolanaNetwork });
+  // This portal uses Polygon. Do not look up the dormant Solana namespace on
+  // every wallet/Pagar visit; its independent binding stays unavailable here.
+  const solanaWallet = useSolanaWalletBinding({ account: solanaAccount, walletProvider: solanaWalletProvider, appKitState, open, switchNetwork: switchSolanaNetwork, enabled: false });
   const appKitTheme = useAppKitTheme();
   const memberSession = useMemberSession();
   const ownerKey = personalWalletBalanceSessionKey(memberSession);

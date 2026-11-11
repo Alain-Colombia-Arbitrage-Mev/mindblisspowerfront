@@ -4,9 +4,9 @@ import { useCallback, useEffect, useSyncExternalStore } from 'react';
 import { useMemberSession } from '@/lib/member-session-context';
 import { EMPTY_PERSONAL_BALANCE, personalWalletBalanceSessionKey, personalWalletBalanceStore as store } from '@/lib/personal-wallet-balance-store.mjs';
 
-export function usePersonalWalletBalance(expectedAddress = '', network = 'ethereum') {
+export function usePersonalWalletBalance(expectedAddress = '', network = 'ethereum', enabled = true) {
   const session = useMemberSession();
-  const key = personalWalletBalanceSessionKey(session);
+  const key = enabled ? personalWalletBalanceSessionKey(session) : '';
   const address = typeof expectedAddress === 'string' ? expectedAddress.toLowerCase() : '';
   const subscribe = useCallback(listener => store.subscribe(key, listener), [key]);
   const getSnapshot = useCallback(() => store.get(key, network), [key, network]);
@@ -18,6 +18,6 @@ export function usePersonalWalletBalance(expectedAddress = '', network = 'ethere
   const invalid = !['ethereum', 'polygon'].includes(network)
     || (address && (!/^0x[0-9a-f]{40}$/.test(address) || (value.walletAddress && address !== value.walletAddress)));
   if (invalid) return { ...EMPTY_PERSONAL_BALANCE, error: 'personal_wallet_balance_mismatch', refresh };
-  if (!key) return { ...EMPTY_PERSONAL_BALANCE, loading: session === null, refresh };
+  if (!key) return { ...EMPTY_PERSONAL_BALANCE, loading: enabled && session === null, refresh };
   return { ...value, refresh };
 }

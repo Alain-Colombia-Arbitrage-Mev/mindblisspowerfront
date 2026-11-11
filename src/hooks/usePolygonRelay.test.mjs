@@ -5,7 +5,7 @@ import { webcrypto } from 'node:crypto';
 import ts from 'typescript';
 import * as contract from '../lib/polygon-relay-contract.mjs';
 import * as amounts from '../lib/personal-company-payment-values.mjs';
-import { personalWalletBalanceSessionKey } from '../lib/personal-wallet-balance-store.mjs';
+import { createPersonalWalletBalanceStore, EMPTY_PERSONAL_BALANCE, personalWalletBalanceSessionKey } from '../lib/personal-wallet-balance-store.mjs';
 import { createReownFundingOperation } from '../lib/reown-funding-operation.mjs';
 import { FUNDING_UUID } from '../lib/wallet-funding-contract.mjs';
 import { isPolygonRelayChain } from '../lib/polygon-relay-chain.mjs';
@@ -45,7 +45,7 @@ function clock() {
 function harness(overrides = {}) {
   const slots = [], effects = [], calls = [], signatures = [], providerCalls = [], storage = overrides.storage || new Map(), digests = new Set();
   let cursor = 0, dirty = true, current, sourceWallet = wallet, connected = overrides.connected !== false;
-  let sdkAddress = sourceWallet;
+  let sdkAddress = sourceWallet, balanceTime = 0;
   let session = { subject: 'owner-A', email: 'member@example.test' };
   let selectedChain = Object.hasOwn(overrides, 'chainId') ? overrides.chainId : '0x89';
   const localStorage = { getItem: key => storage.get(key) ?? null, setItem: (key, value) => { if (overrides.storageFailure) throw Error('quota'); storage.set(key, value); }, removeItem: key => storage.delete(key) };
@@ -67,6 +67,10 @@ function harness(overrides = {}) {
       if (changed(cell.deps, deps)) { cell.value = callback(); cell.deps = deps; } return cell.value; },
     useEffect(callback, deps) { const index = cursor++, cell = slots[index] ??= {};
       if (changed(cell.deps, deps)) { cell.deps = deps; effects.push(() => { cell.cleanup?.(); cell.cleanup = callback(); }); } },
+    useSyncExternalStore(subscribe, getSnapshot) {
+      hooks.useEffect(() => subscribe(() => { dirty = true; }), [subscribe]);
+      return getSnapshot();
+    },
   };
   const client = {
     async readPolygonRelayCapabilities(options) { calls.push({ action: 'capabilities' }); return overrides.capabilities ? overrides.capabilities(options) : {
@@ -81,15 +85,36 @@ function harness(overrides = {}) {
       if (action === 'submit') return submitted(); return confirmed();
     },
   };
+  const readBalance = async options => {
+    calls.push({ action: 'balance' });
+    return overrides.balance ? overrides.balance(options) : { walletAddress: sourceWallet, balances: [
+      { chainId: 1, balanceAtomic: '10000000', nativeBalanceAtomic: '0' }, { chainId: 137, balanceAtomic, nativeBalanceAtomic: '0' }] };
+  };
+  const sharedBalances = overrides.balanceStore || createPersonalWalletBalanceStore({
+    read: async options => {
+      const value = await readBalance(options);
+      return { ...value, balances: value.balances.map(item => ({ ...item, network: item.chainId === 137 ? 'polygon' : 'ethereum',
+        observedAt: item.observedAt ?? '2026-11-11T12:00:00Z' })) };
+    }, now: () => balanceTime, windowTarget: browser, documentTarget: documentRef, retryDelays: [],
+  });
+  const balanceHooks = { exports: {} };
+  const balanceCode = ts.transpileModule(readFileSync(new URL('./usePersonalWalletBalance.jsx', import.meta.url), 'utf8'), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+  }).outputText;
+  new Function('require', 'module', 'exports', balanceCode)(name => {
+    if (name === 'react') return hooks;
+    if (name === '@/lib/member-session-context') return { useMemberSession: () => session };
+    if (name === '@/lib/personal-wallet-balance-store.mjs') return { EMPTY_PERSONAL_BALANCE, personalWalletBalanceSessionKey, personalWalletBalanceStore: sharedBalances };
+    assert.fail(`Unexpected shared balance dependency: ${name}`);
+  }, balanceHooks, balanceHooks.exports);
   const mocks = { react: hooks, '@/lib/member-session-context': { useMemberSession: () => session },
+    '@/hooks/usePersonalWalletBalance': balanceHooks.exports,
     '@/lib/wallet-funding-contract.mjs': { FUNDING_UUID },
     '@/lib/personal-wallet-balance-store.mjs': { personalWalletBalanceSessionKey }, '@/lib/personal-company-payment-values.mjs': amounts,
     '@/lib/polygon-relay-contract.mjs': contract, '@/lib/polygon-relay-client.mjs': client,
     '@/lib/polygon-relay-chain.mjs': { isPolygonRelayChain },
     '@/lib/reown-funding-operation.mjs': { createReownFundingOperation: options => createReownFundingOperation({ ...options, ...(overrides.timeoutMs ? { timeoutMs: overrides.timeoutMs } : {}) }) },
-    '@/lib/personal-wallet-balance.mjs': { async readPersonalWalletBalances(options) { calls.push({ action: 'balance' });
-      return overrides.balance ? overrides.balance(options) : { walletAddress: sourceWallet, balances: [
-        { chainId: 1, balanceAtomic: '10000000', nativeBalanceAtomic: '0' }, { chainId: 137, balanceAtomic, nativeBalanceAtomic: '0' }] }; } },
+    '@/lib/personal-wallet-balance.mjs': { readPersonalWalletBalances: readBalance },
     '@/lib/polygon-relay-signing.mjs': { async signPolygonRelay(dto, sdk, expectedWallet, assertActive) {
       signatures.push(dto); assertActive(); assert.equal(expectedWallet, dto.walletAddress);
       await sdk.request({ method: 'eth_signTypedData_v4', params: [expectedWallet, '{}'] });
@@ -106,7 +131,10 @@ function harness(overrides = {}) {
   } }, randomUUID: () => id }, { navigator: browserNavigator }, overrides.Date || Date,
   overrides.setTimeout || setTimeout, overrides.clearTimeout || clearTimeout);
   function render() { cursor = 0; dirty = false; current = module.exports.usePolygonRelay(reown()); }
-  return { get flow() { return current; }, calls, signatures, providerCalls, storage, browser, documentRef,
+  return { get flow() { return current; }, calls, signatures, providerCalls, storage, browser, documentRef, sharedBalances,
+    get ownerKey() { return personalWalletBalanceSessionKey(session); },
+    advanceBalanceTime(duration) { balanceTime += duration; },
+    async balanceEvents() { await new Promise(resolve => setTimeout(resolve, 275)); return this.flush(); },
     chain(value) { selectedChain = value; },
     async flush() { for (let turn = 0, quiet = 0; turn < 80; turn++) {
       if (dirty) render(); while (effects.length) effects.shift()(); await new Promise(resolve => setImmediate(resolve));
@@ -146,7 +174,7 @@ test('an interrupted binding lookup settles the balance spinner without acceptin
   }
 });
 
-test('focus and visibility bursts preserve the in-flight balance read and coalesce one follow-up without signing', async t => {
+test('focus and visibility bursts share the in-flight balance read without queuing a duplicate or signing', async t => {
   const pending = deferred(), signals = []; let reads = 0;
   const snapshot = amount => ({ walletAddress: wallet, balances: [{ chainId: 137, balanceAtomic: amount, nativeBalanceAtomic: '0' }] });
   const h = harness({ balance: async options => {
@@ -154,18 +182,62 @@ test('focus and visibility bursts preserve the in-flight balance read and coales
     return reads === 2 ? pending.promise : snapshot(reads === 1 ? balanceAtomic : '26000000');
   } }); t.after(() => h.unmount());
   await h.flush(); assert.equal(h.flow.balanceAtomic, balanceAtomic);
-  h.browser.dispatchEvent(new Event('focus')); await h.flush();
+  h.advanceBalanceTime(6000); h.browser.dispatchEvent(new Event('focus')); await h.balanceEvents();
   assert.equal(reads, 2); assert.equal(h.flow.loadingBalance, true); assert.equal(h.flow.refreshingBalance, true);
   for (let event = 0; event < 4; event++) {
     h.browser.dispatchEvent(new Event('focus')); h.browser.dispatchEvent(new Event('pageshow'));
     h.documentRef.dispatchEvent(new Event('visibilitychange')); await h.flush();
   }
-  assert.equal(reads, 2); assert.equal(signals[1].aborted, false);
+  await h.balanceEvents(); assert.equal(reads, 2); assert.equal(signals[1].aborted, false);
   assert.equal(h.flow.balanceAtomic, balanceAtomic);
   pending.resolve(snapshot('27000000')); await h.flush();
-  assert.equal(reads, 3); assert.equal(h.flow.balanceAtomic, '26000000');
+  assert.equal(reads, 2); assert.equal(h.flow.balanceAtomic, '27000000');
   assert.equal(h.flow.loadingBalance, false); assert.equal(h.flow.refreshingBalance, false);
-  assert.equal(h.flow.amount, '26'); assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
+  assert.equal(h.flow.amount, '27'); assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
+});
+
+test('sidebar, payment consumers and route remounts share one owner-bound passive balance read', async () => {
+  const first = harness(); let second, remounted; await first.flush();
+  const stopSidebar = first.sharedBalances.subscribe(first.ownerKey, () => {});
+  try {
+    second = harness({ balanceStore: first.sharedBalances }); await second.flush();
+    assert.equal(first.calls.filter(call => call.action === 'balance').length, 1);
+    assert.equal(second.calls.filter(call => call.action === 'balance').length, 0);
+    assert.equal(first.flow.balanceAtomic, balanceAtomic); assert.equal(second.flow.balanceAtomic, balanceAtomic);
+    first.unmount(); second.unmount();
+    remounted = harness({ balanceStore: first.sharedBalances }); await remounted.flush();
+    assert.equal(remounted.flow.balanceAtomic, balanceAtomic);
+    assert.equal(first.calls.filter(call => call.action === 'balance').length, 1, 'Sidebar keeps the same fresh owner snapshot across route remounts');
+    assert.equal(remounted.calls.filter(call => call.action === 'balance').length, 0);
+    for (const view of [first, second, remounted]) {
+      assert.deepEqual(writes(view), []); assert.equal(view.signatures.length, 0); assert.equal(view.providerCalls.length, 0);
+    }
+  } finally { first.unmount(); second?.unmount(); remounted?.unmount(); stopSidebar(); }
+});
+
+test('a different owner cannot inherit the shared balance snapshot even when a former subscriber remains', async t => {
+  let latest = balanceAtomic;
+  const h = harness({ balance: async () => ({ walletAddress: wallet, balances: [{ chainId: 137, balanceAtomic: latest, nativeBalanceAtomic: '0' }] }) });
+  await h.flush(); const former = h.ownerKey, stopFormer = h.sharedBalances.subscribe(former, () => {});
+  t.after(() => { h.unmount(); stopFormer(); }); latest = '5000000';
+  await h.session({ subject: 'owner-B', email: 'second@example.test' }, false);
+  assert.equal(h.flow.balanceAtomic, null, 'The new owner never sees the previous snapshot while its read is pending');
+  await h.flush(); assert.equal(h.flow.balanceAtomic, latest);
+  assert.equal(h.sharedBalances.get(former, 'polygon').balanceAtomic, balanceAtomic);
+  assert.equal(h.calls.filter(call => call.action === 'balance').length, 2);
+  assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
+});
+
+test('an unlinked member does not subscribe or request a passive balance from the payment form', async t => {
+  const h = harness({ reown: { linkedAddress: '', linkStatus: 'unlinked', isConnected: false, isLinked: false } });
+  t.after(() => h.unmount()); await h.flush();
+  for (let event = 0; event < 10; event++) {
+    h.browser.dispatchEvent(new Event('focus')); h.documentRef.dispatchEvent(new Event('visibilitychange'));
+    await h.session({ subject: 'owner-A', email: 'member@example.test' });
+  }
+  await h.balanceEvents();
+  assert.deepEqual(h.calls, []); assert.equal(h.flow.balanceAtomic, null);
+  assert.equal(h.signatures.length, 0); assert.equal(h.providerCalls.length, 0);
 });
 
 test('explicit refresh recovers a failed binding read without connecting, linking or signing a wallet', async t => {
@@ -210,7 +282,7 @@ test('returning to the tab refreshes the Polygon balance and unedited maximum wi
   latest = '27433366'; h.documentRef.visibilityState = 'hidden';
   h.browser.dispatchEvent(new Event('vp:personal-wallet-balance-changed')); await h.flush();
   assert.equal(h.flow.balanceAtomic, balanceAtomic);
-  h.documentRef.visibilityState = 'visible'; h.documentRef.dispatchEvent(new Event('visibilitychange')); await h.flush();
+  h.documentRef.visibilityState = 'visible'; h.documentRef.dispatchEvent(new Event('visibilitychange')); await h.balanceEvents();
   assert.equal(h.flow.balanceAtomic, '27433366'); assert.equal(h.flow.amount, '27.433366');
   assert.equal(h.flow.stage, 'form'); assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
 });
@@ -220,10 +292,10 @@ test('focus and balance events preserve edited amounts and the exact review whil
   const h = harness({ balance: async () => ({ walletAddress: wallet, balances: [{ chainId: 137, balanceAtomic: latest, nativeBalanceAtomic: '0' }] }) });
   t.after(() => h.unmount()); await h.flush(); h.flow.setAmount('1'); await h.flush();
   await h.flow.review(); await h.flush(); const preview = h.flow.preview;
-  latest = '27433366'; h.browser.dispatchEvent(new Event('focus')); await h.flush();
+  latest = '27433366'; h.advanceBalanceTime(6000); h.browser.dispatchEvent(new Event('focus')); await h.balanceEvents();
   assert.equal(h.flow.balanceAtomic, latest); assert.equal(h.flow.amount, '1'); assert.equal(h.flow.preview, preview); assert.equal(h.flow.stage, 'review');
   await h.flow.cancelReview(); await h.flush(); h.flow.setAmount('28.433366'); await h.flush();
-  latest = '26433366'; h.browser.dispatchEvent(new Event('vp:personal-wallet-balance-changed')); await h.flush();
+  latest = '26433366'; h.browser.dispatchEvent(new Event('vp:personal-wallet-balance-changed')); await h.balanceEvents();
   assert.equal(h.flow.balanceAtomic, latest); assert.equal(h.flow.amount, '28.433366', 'an edited amount must not silently shrink');
   // The same explicit Max action as the form uses the current Polygon snapshot.
   h.flow.setAmount(amounts.formatPersonalCompanyPaymentAmount(h.flow.balanceAtomic)); await h.flush();
@@ -240,7 +312,7 @@ test('a fresh balance discovered during Review updates the displayed maximum and
   assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
 });
 
-test('one partial Polygon RPC failure during review recovers with exactly one read-only retry', async t => {
+test('one partial Polygon RPC failure during review recovers with exactly one read-only retry', async () => {
   for (const partial of [[], [{ chainId: 1, balanceAtomic: '10000000', nativeBalanceAtomic: '0' }],
     [{ chainId: 137, balanceAtomic: null, nativeBalanceAtomic: null, error: 'company_payment_rpc_unavailable' }],
     [{ chainId: 137, balanceAtomic: null, nativeBalanceAtomic: '0' }]]) {
@@ -272,7 +344,7 @@ test('two partial failures report unavailable without inventing insufficient fun
   assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
 });
 
-test('only an exact chain RPC error retries; auth, rate limits and malformed response failures never do', async t => {
+test('only an exact chain RPC error retries; auth, rate limits and malformed response failures never do', async () => {
   for (const error of ['company_payment_rpc_unavailable', 'unauthenticated', 'polygon_relay_rate_limited', 'company_payment_unavailable']) {
     let reads = 0;
     const h = harness({ balance: async () => {
@@ -303,7 +375,7 @@ test('losing the live signer during a pending failed read prevents its retry and
   assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
 });
 
-test('a changed Polygon balance requires another review and only a genuinely excessive edited amount reports insufficient funds', async t => {
+test('a changed Polygon balance requires another review and only a genuinely excessive edited amount reports insufficient funds', async () => {
   for (const latest of ['30000000', '20000000', '500000']) {
     let reads = 0;
     const h = harness({ balance: async () => ({ walletAddress: wallet, balances: [{ chainId: 137,
@@ -337,7 +409,7 @@ test('a confirmed payment refreshes its balance before another maximum can be pr
   const h = harness({ history: async () => ({ payments: [submitted()] }), status: async () => submitted(),
     balance: async () => ({ walletAddress: wallet, balances: [{ chainId: 137, balanceAtomic: latest, nativeBalanceAtomic: '0' }] }),
     write: async action => { assert.equal(action, 'verify'); latest = '27433366'; return confirmed(); } });
-  t.after(() => h.unmount()); await h.flush(); await h.flow.verifyPayment(); await h.flush();
+  t.after(() => h.unmount()); await h.flush(); await h.flow.verifyPayment(); await h.balanceEvents();
   assert.equal(h.flow.payment.status, 'confirmed'); assert.equal(h.flow.balanceAtomic, '27433366');
   h.flow.newPayment(); await h.flush(); assert.equal(h.flow.amount, '27.433366');
   assert.deepEqual(writes(h).map(value => value.action), ['verify']); assert.equal(h.signatures.length, 0);
@@ -348,7 +420,7 @@ test('a late focus balance reply cannot overwrite the next owner snapshot', asyn
   const h = harness({ balance: async () => {
     reads++; if (reads === 2) return pending.promise;
     return { walletAddress: wallet, balances: [{ chainId: 137, balanceAtomic: reads === 1 ? balanceAtomic : '5000000', nativeBalanceAtomic: '0' }] };
-  } }); t.after(() => h.unmount()); await h.flush(); h.browser.dispatchEvent(new Event('focus')); await h.flush();
+  } }); t.after(() => h.unmount()); await h.flush(); h.advanceBalanceTime(6000); h.browser.dispatchEvent(new Event('focus')); await h.balanceEvents();
   await h.session({ subject: 'owner-B', email: 'second@example.test' });
   assert.equal(h.flow.balanceAtomic, '5000000'); assert.equal(h.flow.amount, '5');
   pending.resolve({ walletAddress: wallet, balances: [{ chainId: 137, balanceAtomic: '999000000', nativeBalanceAtomic: '0' }] }); await h.flush();
@@ -508,6 +580,42 @@ test('foreground polling verifies one operation at a time, clears terminal guard
   timers.tick(60_000); await h.flush(); assert.equal(checks, 1); assert.equal(h.signatures.length, 0);
 });
 
+test('pending receipt checks back off from twelve to thirty to sixty seconds without rearming on renders or authorizing payments', async t => {
+  const timers = clock(); let checks = 0;
+  class PollDate extends Date { static now() { return timers.now; } }
+  const h = harness({ Date: PollDate, setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout,
+    history: async () => ({ payments: [submitted()] }), status: async () => submitted(),
+    write: async action => { assert.equal(action, 'verify'); checks++; return submitted(); } }); t.after(() => h.unmount());
+  await h.flush(); timers.tick(11999); await h.flush(); assert.equal(checks, 0);
+  timers.tick(1); await h.flush(); assert.equal(checks, 1);
+  for (let index = 0; index < 100; index++) await h.session({ subject: 'owner-A', email: 'member@example.test' });
+  timers.tick(29999); await h.flush(); assert.equal(checks, 1);
+  timers.tick(1); await h.flush(); assert.equal(checks, 2);
+  timers.tick(59999); await h.flush(); assert.equal(checks, 2);
+  timers.tick(1); await h.flush(); assert.equal(checks, 3);
+  h.documentRef.visibilityState = 'hidden'; h.documentRef.dispatchEvent(new Event('visibilitychange'));
+  timers.tick(60000); await h.flush(); assert.equal(checks, 3);
+  h.documentRef.visibilityState = 'visible'; h.documentRef.dispatchEvent(new Event('visibilitychange'));
+  timers.tick(60000); await h.flush(); assert.equal(checks, 4, 'Returning does not reset the polling delay to twelve seconds');
+  timers.tick(15 * 60000); await h.flush(); assert.equal(checks, 4, 'The original per-payment fifteen-minute deadline remains binding');
+  assert.deepEqual(writes(h).map(call => call.action), Array(4).fill('verify'));
+  assert.equal(h.signatures.length, 0); assert.equal(h.providerCalls.length, 0);
+});
+
+test('reconciliation-required operations remain manual and never start automatic provider checks', async t => {
+  const timers = clock(), current = payment({ status: 'reconciliation_required', userOperationHash: hash }); let checks = 0;
+  class PollDate extends Date { static now() { return timers.now; } }
+  const h = harness({ Date: PollDate, setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout,
+    history: async () => ({ payments: [current] }), status: async () => current,
+    write: async action => { assert.equal(action, 'verify'); checks++; return current; } }); t.after(() => h.unmount());
+  await h.flush(); timers.tick(15 * 60000); await h.flush();
+  assert.equal(h.flow.payment.status, 'reconciliation_required'); assert.equal(checks, 0);
+  assert.deepEqual(writes(h), []); assert.equal(h.calls.some(call => call.action === 'status'), false);
+  await h.flow.verifyPayment(); await h.flush(); assert.equal(checks, 1);
+  timers.tick(60000); await h.flush(); assert.equal(checks, 1);
+  assert.equal(h.signatures.length, 0); assert.equal(h.providerCalls.length, 0);
+});
+
 test('foreign history and late previous-owner replies cannot reveal a payment or revive a signature', async t => {
   const gate = deferred(), h = harness({ history: async () => gate.promise }); t.after(() => h.unmount()); await h.flush();
   await h.session({ subject: 'owner-B', email: 'member@example.test' }); gate.resolve({ payments: [submitted({ walletAddress: otherWallet })] }); await h.flush();
@@ -560,7 +668,7 @@ test('invalid or coercible provider chain identities stop Review without prepari
 
 test('a wallet-wide lock excludes another tab before the first signature marker exists', async () => {
   const storage = new Map(), sharedLocks = locks(), prepared = deferred();
-  const a = harness({ storage, locks: sharedLocks, write: async (action, input) => action === 'prepare' ? prepared.promise
+  const a = harness({ storage, locks: sharedLocks, write: async action => action === 'prepare' ? prepared.promise
     : action === 'authorize' ? payment({ status: 'authorized' }) : submitted() });
   const b = harness({ storage, locks: sharedLocks });
   try {
