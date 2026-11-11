@@ -8,7 +8,6 @@ import {
   ArrowRight,
   ArrowUpRight,
   CreditCard,
-  Headphones,
   LifeBuoy,
   Plus,
   RefreshCw,
@@ -120,7 +119,6 @@ export default function OverviewDashboard() {
           <button className="vp-shell-icon vp-header-pill" type="button" onClick={load} disabled={summaryStatus === "loading" || networkStatus === "loading"} aria-label={t("dashboard.refreshOverview")} title={t("dashboard.refreshOverview")}>
             <RefreshCw size={16} /><span>{t("common.update")}</span>
           </button>
-          <Link className="vp-shell-icon" href="/dashboard/support" aria-label={t("pages.support")} title={t("pages.support")}><Headphones size={17} /></Link>
           <LanguageSwitcher compact />
           <ThemeToggle />
           <Link className="vp-shell-icon" href="/dashboard/profile" aria-label={t("pages.profile")} title={t("pages.profile")}><UserRound size={17} /></Link>
@@ -158,7 +156,6 @@ export default function OverviewDashboard() {
         <div><h2>{t("overview.syncing")}</h2><p>{t("overview.syncingCopy")}</p></div>
       </section> : null}
 
-      <p className="mb-overview-footnote">{t("overview.question")}</p>
       {reownLoaded ? <ReownRechargeDialog open={rechargeDialog.open} initialStep={rechargeDialog.step} onOpenChange={open => setRechargeDialog(current => ({ ...current, open }))} /> : null}
     </div>
   );

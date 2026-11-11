@@ -22,7 +22,7 @@ const routes = {
   activity: 'ActivityDashboardPage', ai: 'AiAdvisorDashboardPage', 'ai-analysis': 'AiAdvisorDashboardPage',
   auto: 'AutoModeDashboardPage', bonificaciones: 'BonusesDashboardPage', legal: 'LegalDashboardPage',
   products: 'ProductsDashboardPage', profile: 'ProfileDashboardPage', rank: 'RankDashboardPage',
-  ranks: 'RankDashboardPage', referrals: 'ReferralsDashboardPage', support: 'SupportDashboardPage',
+  ranks: 'RankDashboardPage', referrals: 'ReferralsDashboardPage',
   team: 'TeamDashboardPage', 'team-pro': 'TeamDashboardPage', payments: 'FinanceDashboardPage',
 };
 const iconStub = () => React.createElement('svg', { 'aria-hidden': 'true' });
@@ -124,6 +124,9 @@ test('server route entries import only their individual client page, not the com
     assert.match(source, new RegExp(`_components/executive-pages/${name}["']`), route);
     assert.doesNotMatch(source, /["'][^"']*ExecutiveDashboardPages["']/, route);
   }
+  const support = readFileSync(new URL('../../support/page.jsx', import.meta.url), 'utf8');
+  assert.match(support, /redirect\("\/dashboard"\)/);
+  assert.doesNotMatch(support, /SupportDashboardPage/);
   const profile = readFileSync(new URL('../../profile/page.jsx', import.meta.url), 'utf8');
   assert.match(profile, /betterAuthEnabled\(\) \? 'better-auth' : 'cognito'/);
 });

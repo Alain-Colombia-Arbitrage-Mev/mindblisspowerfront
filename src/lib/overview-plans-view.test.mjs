@@ -138,7 +138,7 @@ test("actual summary follows the Pen bento and omits the retired long-form secti
   assert.doesNotMatch(html, /ReownRechargeDialog/);
   assert.match(html, /Mis membresías/);
   assert.match(html, /Accesos rápidos/);
-  assert.match(html, /Abre Soporte para elegir un canal/);
+  assert.doesNotMatch(html, /Abre Soporte para elegir un canal|href="\/dashboard\/support"/);
   assert.doesNotMatch(html, /plans-slot|RecentSignupsCard|TopRanksCard|NOWPaymentsBalances|Centro de soporte/);
 });
 

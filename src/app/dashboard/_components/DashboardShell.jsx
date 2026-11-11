@@ -6,7 +6,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import PanelHeader from "@/components/panel/PanelHeader";
 import PanelSidebar from "@/components/panel/PanelSidebar";
 import NavigationDrawer from "@/components/panel/NavigationDrawer";
-import SupportWidget from "@/components/panel/SupportWidget";
 import DashboardWalletProvider from "@/components/reown/DashboardWalletProvider";
 import PostAuthWalletSetup, { usePostAuthWalletSetup } from "@/components/reown/PostAuthWalletSetup";
 import { memberPageKeysFor } from "@/lib/member-navigation.mjs";
@@ -179,7 +178,6 @@ export default function DashboardShell({ authMode: _authMode, children }) {
             </div>
           </main>
         </div>
-        <SupportWidget />
         </div>
     </MemberSessionContext.Provider>
   );

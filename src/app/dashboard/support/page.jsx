@@ -1,5 +1,5 @@
-import { SupportDashboardPage } from "../_components/executive-pages/SupportDashboardPage";
+import { redirect } from "next/navigation";
 
 export default function SupportPage() {
-  return <SupportDashboardPage />;
+  redirect("/dashboard");
 }

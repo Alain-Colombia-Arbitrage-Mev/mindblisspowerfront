@@ -52,7 +52,8 @@ test("actual member sidebar hides identity verification and new memberships whil
   }));
   assert.doesNotMatch(html, /\/dashboard\/kyc|Verificación de identidad|KYC|Identidad verificada|\/dashboard\/packages/);
   assert.doesNotMatch(html, /wallet-administrative|administrativeWallet|Wallet administrativa|wallet\.mindblisspower\.com/);
-  for (const href of ["/dashboard", "/dashboard/referrals", "/dashboard/support", "/dashboard/wallet-personal/requests",
+  assert.doesNotMatch(html, /href="\/dashboard\/support"|Centro de ayuda y soporte/);
+  for (const href of ["/dashboard", "/dashboard/referrals", "/dashboard/wallet-personal/requests",
     "/dashboard/payments", "/dashboard/profile", "/dashboard/rank", "/dashboard/network"]) {
     assert.ok(html.includes(`href="${href}"`), `missing retained destination ${href}`);
   }

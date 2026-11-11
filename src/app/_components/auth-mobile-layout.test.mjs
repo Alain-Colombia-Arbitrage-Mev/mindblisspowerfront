@@ -53,8 +53,8 @@ const loginMocks = {
 
 test('the real AuthShell renders the approved identity card and compact access landmarks', t => {
   t.mock.method(globalThis, 'fetch', () => assert.fail('rendering an auth shell cannot query or send an OTP'));
-  const AuthShell = compile('./AuthShell.jsx', { 'next/link': { default: link }, 'lucide-react': icons, './ThemeToggle': { default: () => null }, './AuthSupportWidget': { default: () => React.createElement('button', null, '¿Necesitas ayuda?') },
-    '@/i18n/LanguageSwitcher': { default: () => null }, './AuthLocalizedContent': {
+  const AuthShell = compile('./AuthShell.jsx', { 'next/link': { default: link }, 'lucide-react': icons, './ThemeToggle': { default: () => React.createElement('button', { 'aria-label': 'Cambiar tema' }) },
+    '@/i18n/LanguageSwitcher': { default: () => React.createElement('select', { 'aria-label': 'Idioma' }) }, './AuthLocalizedContent': {
       AuthIdentityCopy: ({ title, description }) => React.createElement('div', null, React.createElement('h1', null, title), React.createElement('p', null, description)),
       AuthLegal: () => null,
     } }).default;
@@ -74,7 +74,9 @@ test('the real AuthShell renders the approved identity card and compact access l
   assert.match(html, /<main\b/); assert.match(html, /auth-identity/);
   assert.match(html, /<form aria-label="Acceso seguro"/);
   assert.match(html, /loading="eager" decoding="async"/);
-  assert.match(html, /¿Necesitas ayuda\?/);
+  assert.match(html, /aria-label="Cambiar tema"/);
+  assert.match(html, /aria-label="Idioma"/);
+  assert.doesNotMatch(html, /¿Necesitas ayuda\?|auth-support|vp-support/);
 });
 
 test('mobile auth safe-area and keyboard styles are scoped, preserve zoom and do not hide form overflow', () => {
