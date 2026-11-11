@@ -100,14 +100,14 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
 
   return <form className="mb-onramp-simple" onSubmit={event => void submit(event).catch(() => {})} aria-label={t("walletPage.personalWalletLabel")}>
     <div className="mb-onramp-simple-main">
-      <div className={`${styles.formFields}${countryCode === "US" ? ` ${styles.implicitCurrency}` : ""}`}>
+      <div className={`${styles.formFields}${countryCode !== "MX" ? ` ${styles.implicitCurrency}` : ""}`}>
         <FundingCountryField id={id} value={countryCode} countries={PERSONAL_COUNTRIES} onChange={value => {
           const currency = value === "MX" ? mexicoCurrency.current : "USD";
           changeSelection(setCountryCode, value);
           if (currency !== sourceCurrencyCode) setAmount(String(currency === "MXN" ? PERSONAL_FUNDING_MINIMUM_MXN : PERSONAL_FUNDING_MINIMUM_USD));
           setSourceCurrencyCode(currency);
         }} busy={busy} />
-        {countryCode !== "US" ? <FundingCurrencyField id={id} country={countryCode} value={sourceCurrencyCode} onChange={value => {
+        {countryCode === "MX" ? <FundingCurrencyField id={id} country={countryCode} value={sourceCurrencyCode} onChange={value => {
           mexicoCurrency.current = value;
           changeSelection(setSourceCurrencyCode, value);
           setAmount(String(value === "USD" ? PERSONAL_FUNDING_MINIMUM_USD : PERSONAL_FUNDING_MINIMUM_MXN));

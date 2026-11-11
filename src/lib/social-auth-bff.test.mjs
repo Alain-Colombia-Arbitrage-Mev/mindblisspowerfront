@@ -35,6 +35,38 @@ test('social providers are explicit, deduplicated and fail closed', () => {
   assert.equal(betterAuthSocialProviderEnabled('google', env), true);
   assert.equal(betterAuthSocialProviderEnabled('github', env), false);
   assert.deepEqual(betterAuthSocialProviders({ ...env, AUTH_PROVIDER: 'cognito' }), []);
+  for (const configured of ['', undefined, '   ']) {
+    const disabled = { ...env, AUTH_SOCIAL_PROVIDERS: configured };
+    assert.deepEqual(betterAuthSocialProviders(disabled), []);
+    for (const provider of ['google', 'apple']) assert.equal(betterAuthSocialProviderEnabled(provider, disabled), false);
+  }
+});
+
+test('disabled Google and Apple starts and both callback methods never contact upstream or issue cookies', async () => {
+  const disabled = { ...env, AUTH_SOCIAL_PROVIDERS: '' };
+  let calls = 0;
+  const dependencies = { env: disabled, fetchImpl: async () => { calls++; assert.fail('disabled social auth reached upstream'); } };
+  for (const provider of ['google', 'apple']) {
+    const start = await proxyBetterAuthSocialStart(socialRequest(provider), dependencies);
+    assert.equal(start.status, 404);
+    assert.deepEqual(await start.json(), { error: 'provider_unavailable' });
+    assert.equal(start.headers.get('set-cookie'), null);
+    assert.equal(start.headers.get('location'), null);
+    assert.equal(start.headers.get('cache-control'), 'private, no-store');
+    for (const method of ['GET', 'POST']) {
+      const callback = new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/auth/callback/${provider}${method === 'GET' ? '?code=synthetic-code&state=synthetic-state' : ''}`, {
+        method,
+        headers: { cookie: 'better-auth.state=synthetic-state', ...(method === 'POST' ? { 'content-type': 'application/x-www-form-urlencoded' } : {}) },
+        ...(method === 'POST' ? { body: 'code=synthetic-code&state=synthetic-state' } : {}),
+      });
+      const response = await proxyBetterAuthSocialCallback(callback, provider, dependencies);
+      assert.equal(response.status, 302, `${provider}/${method}`);
+      assert.equal(response.headers.get('location'), `${env.AUTH_PUBLIC_ORIGIN}/login?auth=social-failed`);
+      assert.equal(response.headers.get('set-cookie'), null);
+      assert.equal(response.headers.get('cache-control'), 'private, no-store');
+    }
+  }
+  assert.equal(calls, 0);
 });
 
 test('social start rejects cross-origin, extra input and unavailable providers before transport', async () => {

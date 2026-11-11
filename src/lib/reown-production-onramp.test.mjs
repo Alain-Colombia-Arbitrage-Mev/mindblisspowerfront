@@ -29,16 +29,23 @@ test('Reown production retains merchant attribution and records only an initiate
 });
 
 test('personal checkout enforces its countries and excluded methods before constructing provider URLs', () => {
-  for (const countryCode of ['US', 'MX']) {
+  for (const countryCode of ['US', 'MX', 'CO']) {
     assert.equal(reownFundingSelection({ countryCode, paymentMethodType: 'CREDIT_DEBIT_CARD' }).countryCode, countryCode);
+    const url = new URL(buildReownProductionOnrampUrl({ ...input, countryCode }));
+    assert.equal(url.searchParams.get('countryCodeLocked'), countryCode);
+    assert.equal(url.searchParams.get('sourceCurrencyCodeLocked'), 'USD');
   }
-  for (const countryCode of ['CO', 'PA', 'CA', 'ES']) {
+  assert.equal(reownFundingSelection({ paymentMethodType: 'CREDIT_DEBIT_CARD' }, () => 'CO').countryCode, 'CO');
+  for (const sourceCurrencyCode of ['COP', 'MXN']) {
+    assert.throws(() => buildReownProductionOnrampUrl({ ...input, countryCode: 'CO', sourceCurrencyCode, paymentMethodType: 'SPEI', amount: 1000 }), { message: 'wallet_funding_valuation_unavailable' });
+  }
+  for (const countryCode of ['PA', 'CA', 'ES']) {
     assert.throws(() => buildReownProductionOnrampUrl({ ...input, countryCode }), { message: 'wallet_funding_invalid_country' });
   }
   for (const paymentMethodType of ['NETELLER', 'SKRILL']) {
     assert.throws(() => buildReownProductionOnrampUrl({ ...input, paymentMethodType }), { message: 'wallet_funding_method_unavailable' });
   }
-  for (const detected of ['CO', 'PA', '']) {
+  for (const detected of ['PA', '']) {
     assert.throws(() => reownFundingSelection({ paymentMethodType: 'CREDIT_DEBIT_CARD' }, () => detected), { message: 'wallet_funding_invalid_country' });
   }
   assert.throws(() => reownFundingSelection({ country: 'US', countryCode: 'MX', paymentMethodType: 'CREDIT_DEBIT_CARD' }), { message: 'invalid_request' });

@@ -13,7 +13,7 @@ export const PERSONAL_FUNDING_MAXIMUM_USD = PERSONAL_WALLET_MAXIMUM_USD;
 // A fixed Mindbliss amount in pesos, not a live USD conversion.
 export const PERSONAL_FUNDING_MINIMUM_MXN = 931;
 export const ADMINISTRATIVE_FUNDING_MINIMUM_USD = 50;
-export const PERSONAL_FUNDING_COUNTRIES = Object.freeze(['US', 'MX']);
+export const PERSONAL_FUNDING_COUNTRIES = Object.freeze(['US', 'MX', 'CO']);
 export const PERSONAL_FUNDING_BLOCKED_METHODS = Object.freeze(['NETELLER', 'SKRILL']);
 const STATUSES = new Set(['initiated', 'session_created', 'unavailable', 'failed']);
 export const WALLET_GATEWAY_FAILURE_REASONS = Object.freeze(['gateway_route_missing', 'gateway_service_unavailable',

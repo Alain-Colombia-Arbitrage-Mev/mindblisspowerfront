@@ -218,16 +218,20 @@ test('a dollar acknowledgement cannot relabel its requested amount as local fiat
 test('new personal funding allows only configured countries and excludes Neteller and Skrill before transport', async () => {
   const original = globalThis.fetch;
   const valid = { ...input, country: 'US', sourceCurrencyCode: 'USD', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' };
-  assert.deepEqual(PERSONAL_FUNDING_COUNTRIES, ['US', 'MX']);
+  assert.deepEqual(PERSONAL_FUNDING_COUNTRIES, ['US', 'MX', 'CO']);
   for (const country of PERSONAL_FUNDING_COUNTRIES) assert.ok(fundingInput({ ...valid, country }, 'personal'));
   try {
     globalThis.fetch = async () => assert.fail('an excluded country or method reached transport');
-    for (const changed of [{ country: 'CO' }, { country: 'PA' }, { country: 'ES' }, { paymentMethodType: 'NETELLER' }, { paymentMethodType: 'SKRILL' }]) {
+    for (const changed of [{ country: 'CA' }, { country: 'PA' }, { country: 'ES' }, { paymentMethodType: 'NETELLER' }, { paymentMethodType: 'SKRILL' }]) {
       await assert.rejects(createPersonalFundingIntent({ ...valid, ...changed }), { message: 'invalid_request' });
     }
-    await assert.rejects(readPersonalFundingOptions('CO'), { message: 'invalid_request' });
+    await assert.rejects(readPersonalFundingOptions('CA'), { message: 'invalid_request' });
+    for (const sourceCurrencyCode of ['COP', 'MXN']) {
+      await assert.rejects(createPersonalFundingIntent({ ...valid, country: 'CO', amount: 1000, sourceCurrencyCode,
+        paymentMethodType: 'SPEI' }), { message: 'wallet_funding_valuation_unavailable' });
+    }
   } finally { globalThis.fetch = original; }
-  for (const country of ['CO', 'PA']) {
+  for (const country of ['CA', 'PA']) {
     const response = await handleWalletFunding(get(`personal/options?country=${country}`), 'personal-options', {
       env, serviceRequest: async () => assert.fail('an excluded country reached the private API'),
     });
@@ -246,7 +250,7 @@ test('personal method filtering preserves valid routes while administrative coun
   const parsed = personalProductionOptions(personal);
   assert.deepEqual(parsed.paymentMethods, ['CREDIT_DEBIT_CARD']);
   assert.deepEqual(parsed.routes, [{ serviceProvider: 'SWAPPED', paymentMethods: [{ ...method('CREDIT_DEBIT_CARD'), minimumAmount: 30, minimumUsd: 30 }] }]);
-  assert.equal(personalProductionOptions({ ...personal, country: 'CO' }), null);
+  assert.equal(personalProductionOptions({ ...personal, country: 'CA' }), null);
   const admin = { ...options('administrative'), country: 'CO', sourceCurrencyCode: 'USD', serviceProvider: 'BANXA',
     paymentMethods: ['NETELLER', 'SKRILL'], routes: [{ serviceProvider: 'BANXA', paymentMethods: [method('NETELLER'), method('SKRILL')] }] };
   assert.deepEqual(administrativeSandboxOptions(admin), admin);

@@ -199,10 +199,10 @@ test('personal start and continuation reject ineligible country, method and curr
   const selections = [
     { input: { country: 'MX', sourceCurrencyCode: 'MXN', amount: 1000, paymentMethodType: 'CREDIT_DEBIT_CARD' }, code: 'wallet_funding_valuation_unavailable', category: 'valuation' },
     { input: { country: 'MX', sourceCurrencyCode: 'COP', amount: 1000, paymentMethodType: 'SPEI' }, code: 'wallet_funding_valuation_unavailable', category: 'valuation' },
-    { input: { country: 'CO', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' }, code: 'wallet_funding_invalid_country', category: 'method' },
+    { input: { country: 'CA', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' }, code: 'wallet_funding_invalid_country', category: 'method' },
     { input: { country: 'MX', amount: 100, paymentMethodType: 'SKRILL' }, code: 'wallet_funding_method_unavailable', category: 'method' },
     { input: { country: 'US', amount: 100, paymentMethodType: 'NETELLER' }, code: 'wallet_funding_method_unavailable', category: 'method' },
-    { input: { amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' }, detected: 'CO', code: 'wallet_funding_invalid_country', category: 'method' },
+    { input: { amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' }, detected: 'CA', code: 'wallet_funding_invalid_country', category: 'method' },
     { input: { amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' }, detected: 'PA', code: 'wallet_funding_invalid_country', category: 'method' },
     { input: { amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' }, detected: '', code: 'wallet_funding_invalid_country', category: 'method' },
   ];

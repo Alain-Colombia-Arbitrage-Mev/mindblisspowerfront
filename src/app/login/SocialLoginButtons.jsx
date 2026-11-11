@@ -20,6 +20,7 @@ function trustedAuthorizationUrl(provider, value) {
 
 export default function SocialLoginButtons({ enabledProviders = [] }) {
   const enabled = new Set(enabledProviders);
+  const visibleProviders = providers.filter(provider => enabled.has(provider.id));
   const [loadingProvider, setLoadingProvider] = useState('');
   const [error, setError] = useState('');
   const pending = useRef(false);
@@ -60,16 +61,16 @@ export default function SocialLoginButtons({ enabledProviders = [] }) {
     }
   }
 
+  if (!visibleProviders.length) return null;
+
   return (
     <section className="auth-social-login" aria-label="Acceso con una cuenta externa">
       <div className="auth-social-buttons">
-        {providers.map(provider => {
-          const available = enabled.has(provider.id);
+        {visibleProviders.map(provider => {
           const loading = loadingProvider === provider.id;
-          const label = available ? provider.label : `${provider.label} (próximamente)`;
           return (
             <button key={provider.id} type="button" className={`auth-social-button auth-social-button--${provider.id}`}
-              disabled={!available || Boolean(loadingProvider)} aria-label={label} title={available ? undefined : 'Próximamente disponible'}
+              disabled={Boolean(loadingProvider)} aria-label={provider.label}
               aria-busy={loading || undefined} onClick={() => start(provider)}>
               <span className="auth-social-icon">{loading ? <Loader2 size={20} aria-hidden="true" /> : <provider.Icon />}</span>
               <span>{loading ? 'Abriendo acceso…' : provider.label}</span>

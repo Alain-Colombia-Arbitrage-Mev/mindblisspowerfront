@@ -555,17 +555,28 @@ test('personal MXN discovery cancels USD responses and enforces the fixed 931 fl
   assert.deepEqual(find(tree, 'FundingMethodField').props.methods, [], 'old MXN methods disappear before USD lookup completes');
 });
 
-test('personal funding defaults to the requested US choice with implicit USD and permits only US or Mexico', async t => {
-  const personal = formHarness('PersonalFundingForm', { readPersonalFundingOptions: async country => ({ country, routes: [] }) }, 'CO');
+test('personal funding defaults to the requested US choice with implicit USD and permits US, Mexico and Colombia', async t => {
+  const calls = [];
+  const personal = formHarness('PersonalFundingForm', { readPersonalFundingOptions: async (country, { sourceCurrencyCode }) => {
+    calls.push({ country, sourceCurrencyCode }); return { country, routes: [] };
+  } }, 'CO');
   t.after(() => personal.unmount());
   personal.render(); const personalTree = personal.render();
   const field = find(personalTree, 'FundingCountryField');
   assert.equal(field.props.value, 'US', 'the explicit default is not overwritten by browser detection');
   assert.equal(find(personalTree, 'FundingCurrencyField'), undefined, 'USD does not need a redundant selector in the US');
   assert.equal(find(personalTree, 'FundingAmountField').props.sourceCurrencyCode, 'USD');
-  assert.deepEqual(field.props.countries.map(([code]) => code), ['US', 'MX']);
+  assert.deepEqual(field.props.countries.map(([code]) => code), ['US', 'MX', 'CO']);
   const html = renderToStaticMarkup(field.type(field.props));
-  assert.doesNotMatch(html, /value="(?:CO|PA|ES|GB|CR|DO|GT|UY)"/);
+  assert.doesNotMatch(html, /value="(?:PA|ES|GB|CR|DO|GT|UY)"/);
+  assert.match(html, /value="CO">Colombia</);
+  field.props.onChange('CO'); personal.render(); const colombia = personal.render();
+  assert.equal(find(colombia, 'FundingCountryField').props.value, 'CO');
+  assert.equal(find(colombia, 'FundingCurrencyField'), undefined, 'Colombia uses implicit USD');
+  assert.equal(find(colombia, 'FundingAmountField').props.sourceCurrencyCode, 'USD');
+  assert.equal(find(colombia, 'FundingAmountField').props.amount, '30');
+  assert.deepEqual(calls.at(-1), { country: 'CO', sourceCurrencyCode: 'USD' });
+  assert.deepEqual(personal.exports.fundingCurrencyChoices('CO'), ['USD']);
 });
 
 test('manual country changes cancel prior methods and remember the Mexican currency without relabelling amounts', async t => {
