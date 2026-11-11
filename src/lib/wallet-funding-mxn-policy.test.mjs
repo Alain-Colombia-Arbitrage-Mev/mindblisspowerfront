@@ -67,7 +67,7 @@ test('below-floor MXN attempts are rejected before browser transport or authenti
     globalThis.fetch = async () => assert.fail('below-floor amount reached transport');
     await assert.rejects(createPersonalFundingIntent(input(930.99)), { message: 'invalid_request' });
     const request = new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/wallet-funding/personal/intent`, { method: 'POST',
-      headers: { cookie: 'better-auth.session_token=synthetic', origin: env.AUTH_PUBLIC_ORIGIN, 'sec-fetch-site': 'same-origin', 'content-type': 'application/json' },
+      headers: { cookie: 'better-auth.session_token=synthetic', origin: env.AUTH_PUBLIC_ORIGIN, 'sec-fetch-site': 'same-origin', 'content-type': 'application/json', 'x-mindbliss-wallet-network': 'polygon' },
       body: JSON.stringify(input(930.99)) });
     const response = await handleWalletFunding(request, 'personal', { env, serviceRequest: async () => assert.fail('below-floor amount reached private backend') });
     assert.equal(response.status, 400);

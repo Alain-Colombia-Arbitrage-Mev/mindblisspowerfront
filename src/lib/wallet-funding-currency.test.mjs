@@ -19,6 +19,7 @@ const get = query => new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/wallet-fu
   { headers: { cookie: 'better-auth.session_token=synthetic' } });
 const post = body => new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/wallet-funding/personal/intent`, {
   method: 'POST', headers: { cookie: 'better-auth.session_token=synthetic', origin: env.AUTH_PUBLIC_ORIGIN,
+    'x-mindbliss-wallet-network': 'polygon',
     'content-type': 'application/json', 'sec-fetch-site': 'same-origin' }, body: JSON.stringify(body),
 });
 

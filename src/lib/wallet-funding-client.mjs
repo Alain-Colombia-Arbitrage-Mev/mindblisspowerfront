@@ -90,7 +90,9 @@ async function createFunding(input, kind, path, { signal } = {}) {
   if (!body) throw new Error('invalid_request');
   // SPEI uses the provider's MXN limits and is recorded as MXN, never USD.
   if (!fundingSourceSupported(body, kind)) throw new Error('wallet_funding_valuation_unavailable');
-  const data = fundingAcknowledgement(await request(path, { method: 'POST', signal, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }), kind);
+  const data = fundingAcknowledgement(await request(path, { method: 'POST', signal,
+    headers: { 'content-type': 'application/json', ...(kind === 'personal' ? { 'x-mindbliss-wallet-network': 'polygon' } : {}) },
+    body: JSON.stringify(body) }), kind);
   if (!data || data.requestedAmount !== body.amount || data.checkoutReference !== body.requestId
     || fundingCurrencyCode(data.sourceCurrencyCode) !== fundingCurrencyCode(body.sourceCurrencyCode)
     || (kind === 'personal' && (!('paymentMethodType' in data) || data.paymentMethodType !== body.paymentMethodType

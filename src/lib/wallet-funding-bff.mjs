@@ -87,6 +87,11 @@ export async function handleWalletFunding(request, action, {
   } else {
     const denied = memberMutationError(request, env);
     if (denied) return reply({ error: denied.error }, denied.status);
+    // An already-open tab may still construct Ethereum checkout URLs. Never
+    // persist a Polygon intent unless the current personal client opts in.
+    if (kind === 'personal' && request.headers.get('x-mindbliss-wallet-network') !== 'polygon') {
+      return reply({ error: 'wallet_funding_network_changed' }, 409);
+    }
     const length = request.headers.get('content-length');
     if (length !== null && (!/^\d+$/.test(length) || Number(length) > 2048)) return reply({ error: 'request_too_large' }, 413);
     try {

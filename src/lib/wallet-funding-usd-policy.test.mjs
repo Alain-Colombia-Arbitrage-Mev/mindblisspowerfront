@@ -120,6 +120,7 @@ test('the private BFF blocks old-range new writes before transport and admits on
   let calls = 0;
   const send = amount => handleWalletFunding(new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/wallet-funding/personal/intent`, {
     method: 'POST', headers: { cookie: 'better-auth.session_token=synthetic', origin: env.AUTH_PUBLIC_ORIGIN,
+      'x-mindbliss-wallet-network': 'polygon',
       'sec-fetch-site': 'same-origin', 'content-type': 'application/json' }, body: JSON.stringify(input(amount)),
   }), 'personal', { env, serviceRequest: async (_url, init) => { calls++; const amount = JSON.parse(init.body).amount;
     assert.ok(amount >= 30 && amount <= 15000); return { ok: true, data: ack(amount) }; } });

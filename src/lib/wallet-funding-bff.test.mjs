@@ -15,6 +15,7 @@ const ack = kind => ({ checkoutReference: requestId, walletKind: kind, environme
       destination: { address: input.walletAddress, asset: 'USDT', network: 'polygon', chainId: 137 } }) });
 const request = (body = input, headers = {}) => new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/wallet-funding/personal/intent`, {
   method: 'POST', headers: { cookie: 'better-auth.session_token=synthetic-session', origin: env.AUTH_PUBLIC_ORIGIN,
+    'x-mindbliss-wallet-network': 'polygon',
     'sec-fetch-site': 'same-origin', 'content-type': 'application/json', 'cf-connecting-ip': '198.51.100.10', ...headers }, body: JSON.stringify(body),
 });
 
