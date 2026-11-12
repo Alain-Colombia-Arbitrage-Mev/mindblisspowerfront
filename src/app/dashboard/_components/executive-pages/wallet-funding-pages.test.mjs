@@ -23,6 +23,7 @@ function load(filename, mocks) {
     if (Object.hasOwn(mocks, id)) return mocks[id];
     if (id === '@/lib/wallet-funding-contract.mjs') return { PERSONAL_FUNDING_COUNTRIES, PERSONAL_FUNDING_MINIMUM_USD, PERSONAL_FUNDING_MAXIMUM_USD, PERSONAL_FUNDING_MINIMUM_MXN, personalFundingMethod, validFundingAmount, validFundingSourceAmount, WALLET_GATEWAY_FAILURE_REASONS, FUNDING_UUID, fundingStatus };
     if (id === '@/components/wallet/PersonalWalletBalances') return { default: function PersonalWalletBalances() { return null; } };
+    if (id === './ResidenceImportantCard') return { default: function ResidenceImportantCard() { return null; } };
     if (id === '@/lib/member-session-context') return { useMemberSession: () => ({ subject: 'funding-owner', email: 'funding@example.test' }) };
     if (id === '@/lib/personal-wallet-balance-store.mjs') return { personalWalletBalanceSessionKey };
     if (id === '@/components/ui/popover') { const popover = require('@radix-ui/react-popover'); return { Popover: popover.Root, PopoverTrigger: popover.Trigger, PopoverContent: popover.Content }; }

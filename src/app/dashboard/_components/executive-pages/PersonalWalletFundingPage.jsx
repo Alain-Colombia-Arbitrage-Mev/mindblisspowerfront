@@ -12,6 +12,7 @@ import { useMemberSession } from "@/lib/member-session-context";
 import { personalWalletBalanceSessionKey } from "@/lib/personal-wallet-balance-store.mjs";
 import { PersonalFundingForm } from "./WalletFundingForm";
 import WalletFundingStatus from "./WalletFundingStatus";
+import ResidenceImportantCard from "./ResidenceImportantCard";
 import { WalletActionError, WalletAddress, WalletFundingScreen, walletFailureDiagnostic } from "./WalletFundingUI";
 import styles from "./wallet-funding.module.css";
 
@@ -153,6 +154,7 @@ export function PersonalWalletFunding() {
         <WalletActionError diagnostic={actionDiagnostic} message={actionError || (reown.onrampStatus === "error" ? personalOnrampError(reown.onrampError, t) : reown.linkError ? personalOnrampError(reown.linkError, t) : "")} />
       </section>
       <aside className={styles.details} aria-label={t("funding.destinationDetails")}>
+        <ResidenceImportantCard />
         {!setupRequired ? <PersonalWalletBalances expectedAddress={address} /> : null}
         <section className={styles.detailCard}>
           <div className={styles.stateHeading}>{!setupRequired ? <CheckCircle2 size={19} aria-hidden="true" /> : <ShieldCheck size={19} aria-hidden="true" />}
