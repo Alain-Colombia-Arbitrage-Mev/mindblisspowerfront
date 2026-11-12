@@ -23,8 +23,8 @@
 .formPanel :global(.mb-onramp-disclosure), .formPanel :global(.mb-onramp-amount-fieldset > small) { color: var(--vp-muted); font-size: 12px; line-height: 1.6; text-align: start; }
 .formPanel :global(.mb-onramp-amount-fieldset) { margin-bottom: 20px; }
 .formPanel :global(.mb-onramp-country-picker) { margin-bottom: 18px; }
-.formFields { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "country" "currency" "residency" "amount" "method"; gap: 20px; }
-.formFields.implicitCurrency { grid-template-areas: "country" "residency" "amount" "method"; }
+.formFields { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "country" "currency" "amount" "method"; gap: 20px; }
+.formFields.implicitCurrency { grid-template-areas: "country" "amount" "method"; }
 .formFields .countryField, .formFields .currencyField, .formFields .amountField { min-width: 0; margin: 0; }
 .countryField { grid-area: country; align-content: start; }
 .countryHeading { display: flex; align-items: center; gap: 4px; min-width: 0; }
@@ -37,11 +37,6 @@
 .residencyPopover p + p { margin-top: 10px; }
 .residencyPopover strong { color: var(--vp-text); font-weight: 600; }
 .currencyField { grid-area: currency; align-content: start; }
-.residencyHelp { grid-area: residency; display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 10px; min-width: 0; padding: 12px 14px; border: 1px solid var(--vp-border); border-radius: 12px; color: var(--vp-muted); background: var(--vp-surface-raised); font-size: 13px; line-height: 1.6; }
-.residencyHelp svg { margin-top: 2px; color: var(--vp-accent); }
-.residencyHelp p { margin: 0; }
-.residencyHelp p + p { margin-top: 6px; }
-.residencyHelp strong { color: var(--vp-text); font-weight: 600; }
 .amountField { grid-area: amount; }
 .quickAmounts { display: grid; grid-template-columns: repeat(auto-fit, minmax(76px, 1fr)); gap: 7px; }
 .quickAmounts button { min-width: 0; padding-inline: 8px; font-variant-numeric: tabular-nums; touch-action: manipulation; }
@@ -120,5 +115,5 @@
 @media (max-width: 1150px) { .flowLayout { grid-template-columns: minmax(0, 1fr); } .setupRequired .details { grid-row: 1; } }
 @media (max-width: 640px) { .destinations { grid-template-columns: minmax(0, 1fr); } .screen { gap: 18px; } .destination > a { width: 100%; } .sectionHeading { align-items: start; } .pageHeading { flex-direction: column; } .pageHeading h1 { font-size: 1.75rem; } .hint, .sectionHeading p, .destination p, .pageHeading span { font-size: 14px; } }
 @media (max-width: 430px) { .statusDetails > div { grid-template-columns: minmax(0, 1fr); gap: 5px; } .destinationReview input { font-size: 16px; } }
-@media (min-width: 700px) { .formFields { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: "country currency" "residency residency" "amount amount" "method method"; gap: 18px 20px; } .methodChoices { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media (min-width: 700px) { .formFields.implicitCurrency { grid-template-areas: "country country" "residency residency" "amount amount" "method method"; } }
+@media (min-width: 700px) { .formFields { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: "country currency" "amount amount" "method method"; gap: 18px 20px; } .methodChoices { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 700px) { .formFields.implicitCurrency { grid-template-areas: "country country" "amount amount" "method method"; } }

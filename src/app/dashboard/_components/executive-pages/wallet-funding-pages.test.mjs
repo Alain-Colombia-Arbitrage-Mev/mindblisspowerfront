@@ -878,7 +878,7 @@ test('clearing residence aborts and discards in-flight country methods without a
   }
 });
 
-test('residence help is an independent accessible popover beside the label with matching localized guidance and no payment effects', t => {
+test('residence help appears only in the accessible info popover without inline guidance, orphan descriptions or payment effects', t => {
   const popover = require('@radix-ui/react-popover');
   for (const locale of ['es', 'en', 'ar', 'zh']) {
     const never = () => assert.fail('Reading residence help cannot request methods or start checkout');
@@ -896,12 +896,19 @@ test('residence help is an independent accessible popover beside the label with 
     assert.ok(html.includes(translateMessage(locale, 'funding.residenceCountryInfo')));
     assert.match(html, /aria-haspopup="dialog"/); assert.match(html, /aria-expanded="false"/);
     assert.doesNotMatch(html, /role="dialog"/);
+    const closedForm = renderToStaticMarkup(tree);
+    assert.ok(!closedForm.includes(translateMessage(locale, 'funding.residenceCountryHelp')));
+    assert.ok(!closedForm.includes(translateMessage(locale, 'funding.residenceCountrySsn')));
+    assert.doesNotMatch(closedForm, /funding-test-residency-help/);
+    assert.equal(field.props.describedBy, undefined);
+    assert.equal(find(view, node => node?.type === 'select').props['aria-describedby'], undefined);
     const content = find(view, node => node?.type === popover.Content);
     assert.equal(content.props['aria-describedby'], 'funding-test-residency-popup-copy');
     const copy = renderToStaticMarkup(content.props.children);
+    assert.equal(content.props.children.props.id, content.props['aria-describedby']);
     assert.ok(copy.includes(translateMessage(locale, 'funding.residenceCountryHelp')));
     assert.ok(copy.includes(translateMessage(locale, 'funding.residenceCountrySsn')));
-    assert.equal(find(tree, node => node?.props?.id === field.props.describedBy)?.props.id, 'funding-test-residency-help');
+    assert.equal(field.props.value, '', 'Reading help cannot choose a country of residence');
     assert.equal(find(tree, 'FundingSubmit').props.disabled, true);
   }
 });
