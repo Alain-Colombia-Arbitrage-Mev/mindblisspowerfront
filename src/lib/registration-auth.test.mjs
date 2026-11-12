@@ -111,6 +111,30 @@ test('resend is explicit, purpose-bound and preserves server cooldown without hi
   assert.equal((await response.json()).retryAfter, 450);
 });
 
+test('only native confirmation503 preserves the retryable verification code without cookies or verification claims', async () => {
+  for (const [action, body, status] of [
+    ['confirm', { email, code: '001234' }, 503], ['confirm', { email, code: '001234' }, 500],
+    ['confirm', { email, code: '001234' }, 400], ['confirm', { email, resend: true }, 503], ['register', form, 503],
+  ]) {
+    let calls = 0;
+    const response = await handleRegistration(request(body), action, { env, fetchImpl: async () => {
+      calls++;
+      return Response.json({ code: 'EMAIL_VERIFICATION_UNAVAILABLE', message: 'Synthetic private transaction diagnostic',
+        status: true, token, user, emailVerified: true, needsLogin: true, userConfirmed: true, sessionEstablished: true }, {
+        status, headers: { 'set-cookie': `${sessionCookie}; Secure; HttpOnly`, 'set-auth-jwt': 'synthetic-private-jwt' },
+      });
+    } });
+    const result = await response.json();
+    assert.equal(calls, 1); assert.equal(response.headers.get('set-cookie'), null); assert.equal(response.headers.get('set-auth-jwt'), null);
+    assert.equal(response.headers.get('cache-control'), 'private, no-store');
+    assert.deepEqual(Object.keys(result).sort(), ['code', 'error']);
+    assert.doesNotMatch(JSON.stringify(result), /Synthetic|synthetic|emailVerified|userConfirmed|sessionEstablished|token|needsLogin/);
+    if (action === 'confirm' && body.resend !== true && status === 503) {
+      assert.equal(response.status, 503); assert.equal(result.code, 'EMAIL_VERIFICATION_UNAVAILABLE');
+    } else assert.notEqual(result.code, 'EMAIL_VERIFICATION_UNAVAILABLE');
+  }
+});
+
 test('client-supplied credentials are rejected before signup, including malformed and previously valid-looking passwords', async () => {
   for (const field of ['password', 'confirmPassword']) for (const value of [null, false, 123456, {}, [], '', 'attacker-known-password-123', 'x'.repeat(129)]) {
     const response = await handleRegistration(request({ ...form, [field]: value }), 'register', {

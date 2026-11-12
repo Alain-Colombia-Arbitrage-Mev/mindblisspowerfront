@@ -608,6 +608,65 @@ test('an unavailable verification result never turns a misleading OTP code into 
   harness.unmount();
 });
 
+test('a real retryable BFF verification503 preserves the code for one separate manual retry without recovery or another email', async t => {
+  const destinations = browser(t), browserPaths = [], nativePaths = [];
+  const env = { AUTH_PROVIDER: 'better-auth', NODE_ENV: 'production', AUTH_PUBLIC_ORIGIN: 'https://portal.example.test',
+    BETTER_AUTH_BACKEND_URL: 'https://auth.example.test', AUTH_BFF_SHARED_SECRET: 'synthetic-proxy-signature-secret-longer-than-32' };
+  const user = { id: 'synthetic-user', email: valid.email, emailVerified: true }, token = 'synthetic-private-native-session';
+  let failVerification = true, cooldownStarts = 0;
+  t.mock.method(globalThis, 'fetch', async (path, options) => {
+    browserPaths.push(path); assert.equal(path, '/api/auth/register/confirm');
+    assert.deepEqual(JSON.parse(options.body), { email: valid.email, code: '001234' });
+    return handleRegistration(new Request(`${env.AUTH_PUBLIC_ORIGIN}${path}`, { ...options,
+      headers: { ...options.headers, origin: env.AUTH_PUBLIC_ORIGIN, 'cf-connecting-ip': '192.0.2.10' } }), 'confirm', {
+      env, fetchImpl: async url => {
+        nativePaths.push(new URL(url).pathname);
+        if (url.endsWith('/get-session')) return Response.json({ user, session: { id: 'synthetic-session', token, userId: user.id, expiresAt: new Date(Date.now() + 60000).toISOString() } });
+        assert.ok(url.endsWith('/email-otp/verify-email'));
+        if (failVerification) return Response.json({ code: 'EMAIL_VERIFICATION_UNAVAILABLE', message: 'Synthetic private error' }, { status: 503 });
+        return Response.json({ status: true, token, user }, { headers: {
+          'set-cookie': '__Secure-better-auth.session_token=synthetic-session.signature; Secure; HttpOnly; Max-Age=604800',
+        } });
+      },
+    });
+  });
+  const cooldown = { active: true, label: 'Reenviar en 4:00', start() { cooldownStarts++; } };
+  const harness = view(cooldown), resume = { initialSearch: 'email=member%40example.test&resume=1' };
+  t.after(() => harness.unmount());
+  let tree = harness.render(resume); find(tree, node => node?.props?.id === 'code').props.onChange({ target: { value: '001234' } });
+  await submit(harness.render(resume)); tree = harness.render(resume);
+  assert.equal(find(tree, node => node?.props?.id === 'code').props.value, '001234');
+  assert.equal(find(tree, node => node?.props?.id === 'code').props.error, undefined);
+  assert.match(renderToStaticMarkup(tree), /fallo temporal.*mismo código.*todavía está vigente/);
+  assert.doesNotMatch(renderToStaticMarkup(tree), /Correo verificado correctamente|Sesión recuperada|Tu correo ya está verificado/);
+  assert.deepEqual(browserPaths, ['/api/auth/register/confirm']); assert.deepEqual(nativePaths, ['/api/auth/email-otp/verify-email']);
+  assert.deepEqual(destinations, []); assert.equal(cooldownStarts, 0);
+  harness.replayEffects(); for (let i = 0; i < 3; i++) harness.render(resume);
+  assert.equal(browserPaths.length, 1, 'Rerender and StrictMode replay cannot retry a valid proof or send another code');
+  failVerification = false; await submit(harness.render(resume)); tree = harness.render(resume);
+  assert.deepEqual(browserPaths, ['/api/auth/register/confirm', '/api/auth/register/confirm']);
+  assert.deepEqual(nativePaths, ['/api/auth/email-otp/verify-email', '/api/auth/email-otp/verify-email', '/api/auth/get-session']);
+  assert.deepEqual(destinations, ['/dashboard']); assert.equal(cooldownStarts, 0);
+  assert.match(renderToStaticMarkup(tree), /Correo verificado correctamente/);
+});
+
+test('forged verification claims on a transient failure cannot clear the code, recover a session or enter the dashboard', async t => {
+  const destinations = browser(t), paths = [];
+  t.mock.method(globalThis, 'fetch', async path => {
+    paths.push(path);
+    return Response.json({ code: 'EMAIL_VERIFICATION_UNAVAILABLE', ok: true, mode: 'better-auth', userConfirmed: true,
+      needsLogin: false, sessionEstablished: true, emailVerified: true, authenticated: true, subject: 'forged-subject' }, { status: 503 });
+  });
+  const harness = view(), resume = { initialSearch: 'email=member%40example.test&resume=1' };
+  t.after(() => harness.unmount());
+  let tree = harness.render(resume); find(tree, node => node?.props?.id === 'code').props.onChange({ target: { value: '001234' } });
+  await submit(harness.render(resume)); tree = harness.render(resume);
+  assert.equal(find(tree, node => node?.props?.id === 'code').props.value, '001234');
+  assert.match(renderToStaticMarkup(tree), /fallo temporal.*mismo código/);
+  assert.doesNotMatch(renderToStaticMarkup(tree), /Correo verificado correctamente|Sesión recuperada|Tu correo ya está verificado/);
+  assert.deepEqual(destinations, []); assert.deepEqual(paths, ['/api/auth/register/confirm']);
+});
+
 test('the confirmation helper explains the latest registration code purpose, lifetime, three-attempt limit and manual cooldown', () => {
   const harness = view(), tree = harness.render({ initialSearch: 'email=member%40example.test&resume=1' });
   const code = find(tree, node => node?.props?.id === 'code'), html = renderToStaticMarkup(tree);

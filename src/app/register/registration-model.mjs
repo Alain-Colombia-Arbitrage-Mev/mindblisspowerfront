@@ -111,6 +111,7 @@ export function registrationCodeFailure(status, code) {
 
 export function registrationFailure(status, action = 'register', code = '') {
   if (status === 429) return 'Alcanzaste un límite temporal. Espera el plazo indicado antes de volver a intentarlo y respeta el contador para solicitar otro código. No reintentaremos automáticamente.';
+  if (status === 503 && action === 'confirm' && code === 'EMAIL_VERIFICATION_UNAVAILABLE') return 'No pudimos completar la verificación por un fallo temporal. Vuelve a pulsar «Verificar correo» con el mismo código si todavía está vigente. No solicites otro código por este error; no reintentaremos automáticamente.';
   if (status >= 500 && action === 'confirm') return 'No pudimos confirmar el resultado de la verificación. Si el código ya fue utilizado, abre «Entrar de forma segura» y solicita un código de acceso. No reintentaremos automáticamente.';
   if (status >= 500) return 'El servicio de registro no está disponible en este momento. Intenta más tarde.';
   if (status === 409 && action === 'register' && code === 'ACCOUNT_EXISTS') return 'Ya existe un acceso con este correo. Usa «Entrar de forma segura» para iniciar sesión o crear/restablecer tu contraseña. Si dejaste un registro pendiente, usa «Ya solicité mi registro: verificar correo». No se enviará otro código automáticamente.';

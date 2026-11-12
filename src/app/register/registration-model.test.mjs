@@ -110,6 +110,16 @@ test('known registration OTP failures distinguish expiry, exhausted attempts and
   assert.doesNotMatch(registrationFailure(400, 'confirm', 'PRIVATE_DIAGNOSTIC'), /PRIVATE_DIAGNOSTIC/);
 });
 
+test('only the typed transient confirmation503 offers a manual retry of the same still-valid registration code', () => {
+  const message = registrationFailure(503, 'confirm', 'EMAIL_VERIFICATION_UNAVAILABLE');
+  assert.match(message, /fallo temporal/); assert.match(message, /Verificar correo.*mismo código.*todavía está vigente/);
+  assert.match(message, /No solicites otro código por este error/); assert.match(message, /no reintentaremos automáticamente/);
+  assert.doesNotMatch(message, /ya fue utilizado|correo ya está verificado|EMAIL_VERIFICATION_UNAVAILABLE/);
+  for (const status of [200, 400, 429, 500]) assert.doesNotMatch(registrationFailure(status, 'confirm', 'EMAIL_VERIFICATION_UNAVAILABLE'), /mismo código/);
+  for (const action of ['register', 'resend']) assert.doesNotMatch(registrationFailure(503, action, 'EMAIL_VERIFICATION_UNAVAILABLE'), /mismo código/);
+  assert.doesNotMatch(registrationFailure(503, 'confirm', 'EMAIL_VERIFICATION_UNAVAILABLE_EXTRA'), /mismo código/);
+});
+
 test('registration links and failures never imply network onboarding or expose provider details', () => {
   const href = registrationLoginUrl(' TEST@EXAMPLE.TEST ', 'ref?role=admin', 'R');
   assert.equal(new URL(href, 'https://example.test').pathname, '/login');

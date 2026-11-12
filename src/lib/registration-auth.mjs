@@ -44,7 +44,10 @@ async function upstreamResult(upstream, signal) {
 }
 
 function upstreamError(upstream, payload, pendingEmail = '') {
-  const code = typeof payload.code === 'string' && /^[A-Z_]{1,80}$/.test(payload.code) ? payload.code : '';
+  // This transaction-specific code is projected only by the exact 503 native
+  // confirmation branch below, never by signup, resend or another status.
+  const code = typeof payload.code === 'string' && /^[A-Z_]{1,80}$/.test(payload.code)
+    && payload.code !== 'EMAIL_VERIFICATION_UNAVAILABLE' ? payload.code : '';
   if (upstream.status === 503 && code === 'AUTH_EMAIL_DELIVERY_UNAVAILABLE') {
     const retryAfter = Math.max(300, authRetryAfterSeconds(upstream.headers.get('retry-after')));
     return reply({
@@ -145,6 +148,10 @@ export async function handleRegistration(request, action = 'register', dependenc
       body: resend ? { email, type: 'email-verification' } : { email, otp: code },
     }, transport);
     const data = await upstreamResult(upstream, request.signal);
+    if (!resend && upstream.status === 503 && data.code === 'EMAIL_VERIFICATION_UNAVAILABLE') return reply({
+      error: 'No pudimos completar la verificación por un fallo temporal. Reintenta manualmente con el mismo código si todavía está vigente.',
+      code: 'EMAIL_VERIFICATION_UNAVAILABLE',
+    }, 503);
     if (!upstream.ok) return upstreamError(upstream, data);
     if (upstream.status !== 200 || !/^application\/json(?:\s*;|$)/i.test(upstream.headers.get('content-type') || '')) throw new Error('invalid_verification_response');
     if (resend) {

@@ -221,7 +221,11 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
       const { response, payload } = await post('/api/auth/register/confirm', { email, code }, 'confirm', operation);
       if (!currentRequest(operation)) return;
       if (!response.ok || !registrationAcknowledged('confirm', payload)) {
-        if (registrationSessionRecoveryEligible(response.status, payload?.code) && await recoverCurrentSession(operation)) return;
+        // This closed native failure cannot establish a browser session.
+        // Keep the code for a manual retry if still valid; it is neither a
+        // consumed-code nor a browser-session recovery acknowledgement.
+        const retryableVerification = response.status === 503 && payload?.code === 'EMAIL_VERIFICATION_UNAVAILABLE';
+        if (!retryableVerification && registrationSessionRecoveryEligible(response.status, payload?.code) && await recoverCurrentSession(operation)) return;
         if (!currentRequest(operation)) return;
         if (registrationVerifiedWithoutSession(response.status, payload)) {
           setCode(''); setErrors({}); setNotice(''); setStep('verified-login'); return;
