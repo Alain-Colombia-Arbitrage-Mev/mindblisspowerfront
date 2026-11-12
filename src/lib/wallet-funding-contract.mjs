@@ -13,6 +13,8 @@ export const PERSONAL_FUNDING_MINIMUM_USD = PERSONAL_WALLET_MINIMUM_USD;
 export const PERSONAL_FUNDING_MAXIMUM_USD = PERSONAL_WALLET_MAXIMUM_USD;
 // A fixed Mindbliss amount in pesos, not a live USD conversion.
 export const PERSONAL_FUNDING_MINIMUM_MXN = 931;
+export const PERSONAL_FUNDING_MINIMUM_COP = 170_000;
+export const PERSONAL_FUNDING_MAXIMUM_COP = 4_000_000;
 export const ADMINISTRATIVE_FUNDING_MINIMUM_USD = 50;
 export const PERSONAL_FUNDING_COUNTRIES = Object.freeze(['US', 'MX', 'CO']);
 export const PERSONAL_FUNDING_BLOCKED_METHODS = Object.freeze(['PAYPAL', 'NETELLER', 'PAYSAFECARD', 'PAYSAFE_CARD', 'SKRILL', 'SKIRLL']);
@@ -59,15 +61,16 @@ function validFiatAmount(value) {
 export function validFundingSourceAmount(value, kind = 'personal', sourceCurrencyCode = 'USD') {
   if (sourceCurrencyCode === 'USD') return validFundingAmount(value, kind);
   return kind === 'personal' && validFiatAmount(value)
-    && ((sourceCurrencyCode === 'COP' && value >= 0.01) || (sourceCurrencyCode === 'MXN' && value >= PERSONAL_FUNDING_MINIMUM_MXN));
+    && ((sourceCurrencyCode === 'COP' && value >= PERSONAL_FUNDING_MINIMUM_COP && value <= PERSONAL_FUNDING_MAXIMUM_COP)
+      || (sourceCurrencyCode === 'MXN' && value >= PERSONAL_FUNDING_MINIMUM_MXN));
 }
 
 export function fundingSourceSupported(value, kind) {
   if (!value || typeof value !== 'object' || Array.isArray(value) || !['personal', 'administrative'].includes(kind)) return false;
   const currency = fundingCurrencyCode(value?.sourceCurrencyCode);
-  if (currency === 'USD') return kind !== 'personal' || value.paymentMethodType !== 'PSE';
+  if (currency === 'USD') return kind !== 'personal' || !['SPEI', 'PSE', 'LOCAL_BANK_TRANSFER'].includes(value.paymentMethodType);
   return kind === 'personal' && ((currency === 'MXN' && (value.country || value.countryCode) === 'MX' && value.paymentMethodType === 'SPEI')
-    || (currency === 'COP' && (value.country || value.countryCode) === 'CO' && value.paymentMethodType === 'PSE'));
+    || (currency === 'COP' && (value.country || value.countryCode) === 'CO' && ['PSE', 'LOCAL_BANK_TRANSFER'].includes(value.paymentMethodType)));
 }
 
 function requestedSource(value, kind, countryRequired = false) {
@@ -79,7 +82,7 @@ function requestedSource(value, kind, countryRequired = false) {
     && (currency !== 'USD' || (value.requestedAmount >= 20 && value.requestedAmount <= 25_000));
   if (!currency || !(historicalPersonal ? historicalAmount : validFundingSourceAmount(value.requestedAmount, kind, currency))) return null;
   if (currency !== 'USD' && (kind !== 'personal' || !(currency === 'MXN' ? value.paymentMethodType === 'SPEI'
-    && (!countryRequired || value.country === 'MX') : currency === 'COP' && value.paymentMethodType === 'PSE'
+    && (!countryRequired || value.country === 'MX') : currency === 'COP' && ['PSE', 'LOCAL_BANK_TRANSFER'].includes(value.paymentMethodType)
       && (!countryRequired || value.country === 'CO')))) return null;
   if (value.paymentMethodType !== undefined
     && (typeof value.paymentMethodType !== 'string' || !METHOD.test(value.paymentMethodType))) return null;
@@ -134,7 +137,7 @@ export function fundingAcknowledgement(value, kind) {
     || new Set(value.allowedProviders).size !== value.allowedProviders.length) return null;
   const currency = fundingCurrencyCode(value.sourceCurrencyCode);
   if (value.allowedProviders.some(provider => currency === 'COP' ? provider !== 'ONRAMPMONEY' : provider === 'ONRAMPMONEY')
-    || (currency === 'USD' && value.paymentMethodType === 'PSE')) return null;
+    || (currency === 'USD' && ['SPEI', 'PSE', 'LOCAL_BANK_TRANSFER'].includes(value.paymentMethodType))) return null;
   const destination = fundingDestination(value.destination, kind);
   if (!destination || destination.network !== 'polygon' || destination.chainId !== 137
     || value.destinationCurrencyCode !== PERSONAL_FUNDING_DESTINATION.destinationCurrencyCode) return null;
@@ -258,8 +261,8 @@ function fundingOptions(value, kind) {
     paymentMethods: route.paymentMethods.filter(method => personalFundingMethod(method.method)
       && fundingSourceSupported({ sourceCurrencyCode, country: value.country, paymentMethodType: method.method }, 'personal'))
       .map(method => {
-        const minimumAmount = Math.max(sourceCurrencyCode === 'MXN' ? PERSONAL_FUNDING_MINIMUM_MXN : sourceCurrencyCode === 'COP' ? 0.01 : PERSONAL_FUNDING_MINIMUM_USD, method.minimumAmount);
-        const maximumAmount = Math.min(sourceCurrencyCode === 'USD' ? PERSONAL_FUNDING_MAXIMUM_USD : 1_000_000_000, method.maximumAmount);
+        const minimumAmount = Math.max(sourceCurrencyCode === 'MXN' ? PERSONAL_FUNDING_MINIMUM_MXN : sourceCurrencyCode === 'COP' ? PERSONAL_FUNDING_MINIMUM_COP : PERSONAL_FUNDING_MINIMUM_USD, method.minimumAmount);
+        const maximumAmount = Math.min(sourceCurrencyCode === 'USD' ? PERSONAL_FUNDING_MAXIMUM_USD : sourceCurrencyCode === 'COP' ? PERSONAL_FUNDING_MAXIMUM_COP : 1_000_000_000, method.maximumAmount);
         return { ...method, minimumAmount, maximumAmount,
           ...(sourceCurrencyCode === 'USD' ? { minimumUsd: minimumAmount, maximumUsd: maximumAmount } : {}) };
       })

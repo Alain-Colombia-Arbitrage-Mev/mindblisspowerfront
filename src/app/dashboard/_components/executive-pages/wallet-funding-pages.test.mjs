@@ -6,7 +6,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 import { translateMessage } from '../../../../i18n/translate.mjs';
-import { PERSONAL_FUNDING_COUNTRIES, PERSONAL_FUNDING_MINIMUM_USD, PERSONAL_FUNDING_MAXIMUM_USD, PERSONAL_FUNDING_MINIMUM_MXN, personalFundingMethod, validFundingAmount, validFundingSourceAmount, WALLET_GATEWAY_FAILURE_REASONS, FUNDING_UUID, fundingStatus } from '../../../../lib/wallet-funding-contract.mjs';
+import { PERSONAL_FUNDING_COUNTRIES, PERSONAL_FUNDING_MINIMUM_USD, PERSONAL_FUNDING_MAXIMUM_USD, PERSONAL_FUNDING_MINIMUM_MXN, PERSONAL_FUNDING_MINIMUM_COP, PERSONAL_FUNDING_MAXIMUM_COP, personalFundingMethod, validFundingAmount, validFundingSourceAmount, WALLET_GATEWAY_FAILURE_REASONS, FUNDING_UUID, fundingStatus } from '../../../../lib/wallet-funding-contract.mjs';
 import { personalFundingFailure } from '../../../../lib/personal-funding-errors.mjs';
 import { personalWalletBalanceSessionKey } from '../../../../lib/personal-wallet-balance-store.mjs';
 
@@ -21,7 +21,7 @@ function load(filename, mocks) {
   const module = { exports: {} };
   new Function('require', 'module', 'exports', code)(id => {
     if (Object.hasOwn(mocks, id)) return mocks[id];
-    if (id === '@/lib/wallet-funding-contract.mjs') return { PERSONAL_FUNDING_COUNTRIES, PERSONAL_FUNDING_MINIMUM_USD, PERSONAL_FUNDING_MAXIMUM_USD, PERSONAL_FUNDING_MINIMUM_MXN, personalFundingMethod, validFundingAmount, validFundingSourceAmount, WALLET_GATEWAY_FAILURE_REASONS, FUNDING_UUID, fundingStatus };
+    if (id === '@/lib/wallet-funding-contract.mjs') return { PERSONAL_FUNDING_COUNTRIES, PERSONAL_FUNDING_MINIMUM_USD, PERSONAL_FUNDING_MAXIMUM_USD, PERSONAL_FUNDING_MINIMUM_MXN, PERSONAL_FUNDING_MINIMUM_COP, PERSONAL_FUNDING_MAXIMUM_COP, personalFundingMethod, validFundingAmount, validFundingSourceAmount, WALLET_GATEWAY_FAILURE_REASONS, FUNDING_UUID, fundingStatus };
     if (id === '@/components/wallet/PersonalWalletBalances') return { default: function PersonalWalletBalances() { return null; } };
     if (id === './ResidenceImportantCard') return { default: function ResidenceImportantCard() { return null; } };
     if (id === './WalletFundingTutorial') return { default: () => null };
@@ -56,13 +56,13 @@ function formHarness(name, api, detectedCountry = 'US') {
   const harness = componentHarness('WalletFundingForm.jsx', name, { 'lucide-react': icons, '@/i18n/LanguageProvider': i18n,
     '@/lib/browser-onramp-region.mjs': { browserOnrampRegion: () => detectedCountry },
     '@/lib/wallet-funding-client.mjs': { fundingRequestId: () => 'd8a4c010-cc33-44da-a297-8b3c6440f491', ...api },
-    '@/lib/wallet-funding-contract.mjs': { PERSONAL_FUNDING_COUNTRIES, PERSONAL_FUNDING_MINIMUM_USD, PERSONAL_FUNDING_MAXIMUM_USD, PERSONAL_FUNDING_MINIMUM_MXN, personalFundingMethod, validFundingAmount, validFundingSourceAmount },
+    '@/lib/wallet-funding-contract.mjs': { PERSONAL_FUNDING_COUNTRIES, PERSONAL_FUNDING_MINIMUM_USD, PERSONAL_FUNDING_MAXIMUM_USD, PERSONAL_FUNDING_MINIMUM_MXN, PERSONAL_FUNDING_MINIMUM_COP, PERSONAL_FUNDING_MAXIMUM_COP, personalFundingMethod, validFundingAmount, validFundingSourceAmount },
   });
   const render = harness.render;
   return { ...harness, render(props = {}) { return render({ destinationAddress: `0x${'1'.repeat(40)}`, ...props }); } };
 }
 
-const copOptions = (minimumAmount = 74321.5) => ({ country: 'CO', sourceCurrencyCode: 'COP', routes: [{ serviceProvider: 'ONRAMPMONEY',
+const copOptions = (minimumAmount = 243321.5) => ({ country: 'CO', sourceCurrencyCode: 'COP', routes: [{ serviceProvider: 'ONRAMPMONEY',
   paymentMethods: [{ method: 'PSE', currencyCode: 'COP', minimumAmount, maximumAmount: 1000000 }] }] });
 
 test('Colombia keeps USD and enables only PSE in COP with the live provider minimum and isolated currency memory', async t => {
@@ -80,26 +80,26 @@ test('Colombia keeps USD and enables only PSE in COP with the live provider mini
   selectFundingCountry(harness, props, 'CO'); await flush(); let tree = harness.render(props); tree = harness.render(props);
   assert.equal(find(tree, 'FundingCurrencyField').props.value, 'USD');
   find(tree, 'FundingCurrencyField').props.onChange('COP'); harness.render(props); await flush(); tree = harness.render(props); tree = harness.render(props);
-  assert.equal(find(tree, 'FundingAmountField').props.amount, '74321.5');
-  assert.equal(find(tree, 'FundingAmountField').props.minimumAmount, 74321.5);
+  assert.equal(find(tree, 'FundingAmountField').props.amount, '243321.5');
+  assert.equal(find(tree, 'FundingAmountField').props.minimumAmount, 243321.5);
   assert.deepEqual(find(tree, 'FundingMethodField').props.methods, ['PSE']);
   assert.equal(find(tree, 'FundingSubmit').props.disabled, false);
   assert.equal(harness.exports.paymentMethodLabel('PSE', key => translateMessage('es', key)), 'PSE · Onramp Money');
   assert.doesNotMatch(renderToStaticMarkup(find(tree, 'FundingAmountField')), /\bUSD\b|\bMXN\b/);
   tree.props.onSubmit({ preventDefault() {} }); await flush();
   assert.equal(submitted.length, 1);
-  assert.deepEqual({ ...submitted[0], requestId: undefined }, { requestId: undefined, countryCode: 'CO', sourceCurrencyCode: 'COP', amount: 74321.5, paymentMethodType: 'PSE' });
+  assert.deepEqual({ ...submitted[0], requestId: undefined }, { requestId: undefined, countryCode: 'CO', sourceCurrencyCode: 'COP', amount: 243321.5, paymentMethodType: 'PSE' });
   find(tree, 'FundingAmountField').props.onChange('100'); tree = harness.render(props); tree = harness.render(props);
   assert.equal(find(tree, 'FundingSubmit').props.disabled, true);
   find(tree, 'FundingMethodField').props.onUseMinimum(); tree = harness.render(props); tree = harness.render(props);
-  assert.equal(Number(find(tree, 'FundingAmountField').props.amount), 74321.5);
+  assert.equal(Number(find(tree, 'FundingAmountField').props.amount), 243321.5);
   selectFundingCountry(harness, props, 'MX'); await flush(); tree = harness.render(props); tree = harness.render(props);
   assert.equal(find(tree, 'FundingCurrencyField').props.value, 'USD');
   find(tree, 'FundingCurrencyField').props.onChange('MXN'); harness.render(props); await flush(); tree = harness.render(props); tree = harness.render(props);
   assert.equal(find(tree, 'FundingAmountField').props.amount, '931');
   selectFundingCountry(harness, props, 'CO'); await flush(); tree = harness.render(props); tree = harness.render(props);
   assert.equal(find(tree, 'FundingCurrencyField').props.value, 'COP');
-  assert.equal(Number(find(tree, 'FundingAmountField').props.amount), 74321.5);
+  assert.equal(Number(find(tree, 'FundingAmountField').props.amount), 243321.5);
   assert.ok(calls.some(call => call.country === 'CO' && call.sourceCurrencyCode === 'COP'));
   assert.equal(submitted.length, 1, 'Changing country/currency never starts another purchase');
 });
@@ -123,9 +123,55 @@ test('a stale COP lookup cannot replace USD and a provider minimum never overwri
   assert.equal(find(tree, 'FundingCurrencyField').props.value, 'USD');
   assert.equal(find(tree, 'FundingAmountField').props.amount, '100');
   find(tree, 'FundingCurrencyField').props.onChange('COP'); harness.render(props); tree = harness.render(props);
-  find(tree, 'FundingAmountField').props.onChange('200000'); resolveCop(copOptions()); await flush(); tree = harness.render(props); tree = harness.render(props);
-  assert.equal(find(tree, 'FundingAmountField').props.amount, '200000');
+  find(tree, 'FundingAmountField').props.onChange('300000'); resolveCop(copOptions()); await flush(); tree = harness.render(props); tree = harness.render(props);
+  assert.equal(find(tree, 'FundingAmountField').props.amount, '300000');
   assert.equal(find(tree, 'FundingSubmit').props.disabled, false);
+});
+
+test('COP offers both bank rails with PSE default and business caps without switching a chosen rail silently', async t => {
+  const calls = [], submitted = [];
+  const route = { country: 'CO', sourceCurrencyCode: 'COP', routes: [{ serviceProvider: 'ONRAMPMONEY', paymentMethods: [
+    { method: 'LOCAL_BANK_TRANSFER', currencyCode: 'COP', minimumAmount: 42300, maximumAmount: 59900000 },
+    { method: 'PSE', currencyCode: 'COP', minimumAmount: 250000, maximumAmount: 3000000 },
+  ] }] };
+  const harness = formHarness('PersonalFundingForm', { readPersonalFundingOptions: async (country, { sourceCurrencyCode }) => {
+    calls.push({ country, sourceCurrencyCode }); return sourceCurrencyCode === 'COP' ? route : { country, sourceCurrencyCode, routes: [] };
+  } });
+  t.after(() => harness.unmount());
+  const props = { onContinue: value => submitted.push(value) };
+  selectFundingCountry(harness, props, 'CO'); await flush(); let tree = harness.render(props);
+  find(tree, 'FundingCurrencyField').props.onChange('COP'); harness.render(props); await flush(); tree = harness.render(props); tree = harness.render(props);
+  assert.equal(find(tree, 'FundingAmountField').props.amount, '250000', 'PSE uses its own higher provider minimum');
+  assert.deepEqual(find(tree, 'FundingMethodField').props.methods, ['LOCAL_BANK_TRANSFER', 'PSE']);
+  assert.equal(find(tree, 'FundingMethodField').props.value, 'PSE', 'PSE wins the initial default even when the provider lists bank transfer first');
+  find(tree, 'FundingAmountField').props.onChange('200000'); tree = harness.render(props); tree = harness.render(props);
+  assert.deepEqual(find(tree, 'FundingMethodField').props.methods, ['LOCAL_BANK_TRANSFER']);
+  assert.equal(find(tree, 'FundingMethodField').props.value, '');
+  assert.equal(find(tree, 'FundingMethodField').props.selectionUnavailable, true);
+  assert.equal(find(tree, 'FundingSubmit').props.disabled, true, 'An explicit local-bank selection is required');
+  find(tree, 'FundingMethodField').props.onChange('LOCAL_BANK_TRANSFER'); tree = harness.render(props); tree = harness.render(props);
+  assert.equal(find(tree, 'FundingSubmit').props.disabled, false);
+  const amount = find(tree, 'FundingAmountField');
+  assert.equal(amount.props.minimumAmount, 170000); assert.equal(amount.props.maximumAmount, 4000000);
+  const markup = renderToStaticMarkup(amount);
+  assert.match(markup, /min="170000"/); assert.match(markup, /max="4000000"/);
+  for (const value of [170000, 200000, 500000, 1000000, 2000000, 4000000]) {
+    const label = new Intl.NumberFormat('es', { maximumFractionDigits: 2 }).format(value);
+    assert.ok(markup.includes(`>${label}</bdi>`), `Missing COP preset ${value}`);
+  }
+  for (const invalid of ['169999.99', '4000000.01']) {
+    find(tree, 'FundingAmountField').props.onChange(invalid); tree = harness.render(props); tree = harness.render(props);
+    assert.equal(find(tree, 'FundingSubmit').props.disabled, true);
+  }
+  find(tree, 'FundingAmountField').props.onChange('4000000'); tree = harness.render(props); tree = harness.render(props);
+  tree.props.onSubmit({ preventDefault() {} }); await flush();
+  assert.equal(submitted.length, 1); assert.equal(submitted[0].amount, 4000000);
+  assert.equal(submitted[0].paymentMethodType, 'LOCAL_BANK_TRANSFER'); assert.equal(submitted[0].sourceCurrencyCode, 'COP');
+  assert.equal(calls.filter(call => call.sourceCurrencyCode === 'COP').length, 1, 'Changing a bank rail does not repeat country discovery');
+  find(tree, 'FundingMethodField').props.onRetry(); harness.render(props); await flush(); tree = harness.render(props); tree = harness.render(props);
+  assert.equal(find(tree, 'FundingMethodField').props.value, 'LOCAL_BANK_TRANSFER', 'An explicit availability refresh preserves the chosen bank rail');
+  assert.equal(submitted.length, 1, 'Refreshing methods cannot repeat the funding write');
+  assert.equal(harness.exports.paymentMethodLabel('LOCAL_BANK_TRANSFER', key => translateMessage('es', key)), 'Transferencia bancaria local · Onramp Money');
 });
 
 function selectFundingCountry(harness, props, country) {

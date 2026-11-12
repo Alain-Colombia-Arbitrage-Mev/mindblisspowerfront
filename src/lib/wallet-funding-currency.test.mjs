@@ -137,7 +137,7 @@ test('SPEI records its actual MXN amount while other local mutations remain unav
     globalThis.fetch = async () => assert.fail('unvalued local amount reached transport');
     await assert.rejects(createAdministrativeSandboxSession({ ...input, serviceProvider: 'TRANSAK' }), { message: 'wallet_funding_valuation_unavailable' });
     for (const [kind, body] of [
-      ['personal', { ...input, sourceCurrencyCode: 'COP' }],
+      ['personal', { ...input, sourceCurrencyCode: 'COP', amount: 200000 }],
       ['personal', { ...input, country: 'US' }],
       ['personal', { ...input, paymentMethodType: 'CREDIT_DEBIT_CARD' }],
       ['administrative', { ...input, serviceProvider: 'TRANSAK' }],
@@ -286,7 +286,7 @@ test('new personal funding excludes prohibited and temporarily unavailable metho
     }
     await assert.rejects(readPersonalFundingOptions('CA'), { message: 'invalid_request' });
     for (const sourceCurrencyCode of ['COP', 'MXN']) {
-      await assert.rejects(createPersonalFundingIntent({ ...valid, country: 'CO', amount: 1000, sourceCurrencyCode,
+      await assert.rejects(createPersonalFundingIntent({ ...valid, country: 'CO', amount: sourceCurrencyCode === 'COP' ? 200000 : 1000, sourceCurrencyCode,
         paymentMethodType: 'SPEI' }), { message: 'wallet_funding_valuation_unavailable' });
     }
   } finally { globalThis.fetch = original; }

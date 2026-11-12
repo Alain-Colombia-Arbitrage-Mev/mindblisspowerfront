@@ -264,10 +264,10 @@ test('PSE handoff preserves a verified wallet and locks the actual COP amount wi
     createPersonalFundingIntent: async body => ({ checkoutReference: body.requestId, requestedAmount: body.amount,
       sourceCurrencyCode: body.sourceCurrencyCode, paymentMethodType: body.paymentMethodType, allowedProviders: ['ONRAMPMONEY'],
       destinationCurrencyCode: 'USDT_POLYGON', destination: { address: body.walletAddress, asset: 'USDT', network: 'polygon', chainId: 137 } }) });
-  const result = await runtime.scope.startOnramp({ ...runtime.input, country: 'CO', sourceCurrencyCode: 'COP', paymentMethodType: 'PSE', amount: 100000 });
+  const result = await runtime.scope.startOnramp({ ...runtime.input, country: 'CO', sourceCurrencyCode: 'COP', paymentMethodType: 'PSE', amount: 200000 });
   assert.equal(result.sourceCurrencyCode, 'COP'); assert.equal(result.minimumUsd, null);
   const url = runtime.events.find(value => value?.opened).opened;
-  assert.equal(url.searchParams.get('sourceAmountLocked'), '100000');
+  assert.equal(url.searchParams.get('sourceAmountLocked'), '200000');
   assert.equal(url.searchParams.get('sourceCurrencyCodeLocked'), 'COP');
   assert.equal(url.searchParams.get('countryCodeLocked'), 'CO');
   assert.equal(url.searchParams.get('paymentMethodTypeLocked'), 'PSE');

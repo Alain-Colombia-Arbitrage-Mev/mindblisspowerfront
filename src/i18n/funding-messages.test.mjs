@@ -66,6 +66,10 @@ test('PSE copy names COP and Onramp Money without claiming a fixed exchange rate
     assert.match(funding.personalPseLimits, /COP/);
     assert.match(funding.personalPseLimits, /Onramp Money/);
     assert.match(funding.personalCopAmountRange, /COP/);
+    assert.match(funding.personalCopAmountRange, /170[.,]000/);
+    assert.match(funding.personalCopAmountRange, /4[.,]000[.,]000/);
+    assert.match(funding.localBankTransfer, /Onramp Money/);
+    assert.notEqual(funding.localBankTransfer, funding.psePayment);
     assert.doesNotMatch(funding.personalPseLimits, /42[.,]?300|931/);
   }
 });
