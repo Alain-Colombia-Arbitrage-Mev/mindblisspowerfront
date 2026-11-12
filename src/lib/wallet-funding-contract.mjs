@@ -6,7 +6,7 @@ const COUNTRY = /^[A-Z]{2}$/;
 const CURRENCY = /^[A-Z]{3}$/;
 const METHOD = /^[A-Z0-9_]{2,40}$/;
 const PROVIDERS = new Set(['TRANSAK', 'BANXA']);
-export const PERSONAL_FUNDING_PROVIDERS = Object.freeze(['SWAPPED', 'MERCURYO', 'ONRAMPMONEY']);
+export const PERSONAL_FUNDING_PROVIDERS = Object.freeze(['SWAPPED', 'MERCURYO', 'ONRAMPMONEY', 'TOPPER']);
 export const PERSONAL_FUNDING_DESTINATION = Object.freeze({ destinationCurrencyCode: 'USDT_POLYGON', network: 'polygon', chainId: 137 });
 const PERSONAL_PROVIDERS = new Set(PERSONAL_FUNDING_PROVIDERS);
 export const PERSONAL_FUNDING_MINIMUM_USD = PERSONAL_WALLET_MINIMUM_USD;
@@ -17,7 +17,7 @@ export const PERSONAL_FUNDING_MINIMUM_COP = 170_000;
 export const PERSONAL_FUNDING_MAXIMUM_COP = 4_000_000;
 export const ADMINISTRATIVE_FUNDING_MINIMUM_USD = 50;
 export const PERSONAL_FUNDING_COUNTRIES = Object.freeze(['US', 'MX', 'CO']);
-export const PERSONAL_FUNDING_BLOCKED_METHODS = Object.freeze(['PAYPAL', 'NETELLER', 'PAYSAFECARD', 'PAYSAFE_CARD', 'SKRILL', 'SKIRLL']);
+export const PERSONAL_FUNDING_BLOCKED_METHODS = Object.freeze(['NETELLER', 'PAYSAFECARD', 'PAYSAFE_CARD', 'SKRILL', 'SKIRLL']);
 // Temporary integration gate: AstroPay can quote while hosted checkout has no usable payment method.
 export const PERSONAL_FUNDING_UNAVAILABLE_METHODS = Object.freeze(['ASTROPAY']);
 const STATUSES = new Set(['initiated', 'session_created', 'unavailable', 'failed']);
@@ -46,9 +46,12 @@ export function personalFundingMethod(value) {
 }
 
 /** Provider eligibility belongs to the exact country/currency route. */
-export function personalFundingProviders(country, sourceCurrencyCode = 'USD') {
-  if (country === 'CO' && sourceCurrencyCode === 'COP') return ['ONRAMPMONEY'];
-  return (sourceCurrencyCode === 'USD' && personalFundingCountry(country)) || (country === 'MX' && sourceCurrencyCode === 'MXN')
+export function personalFundingProviders(country, sourceCurrencyCode = 'USD', paymentMethodType = '') {
+  if (['VENMO', 'PAYPAL'].includes(paymentMethodType)) return country === 'US' && sourceCurrencyCode === 'USD' ? ['TOPPER'] : [];
+  if (country === 'CO' && sourceCurrencyCode === 'USD') return !paymentMethodType || ['CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY'].includes(paymentMethodType) ? ['SWAPPED'] : [];
+  if (country === 'US' && sourceCurrencyCode === 'USD') return !paymentMethodType || ['CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY'].includes(paymentMethodType)
+    ? ['SWAPPED', 'MERCURYO', 'TOPPER'] : ['SWAPPED', 'MERCURYO'];
+  return (sourceCurrencyCode === 'USD' && country === 'MX') || (country === 'MX' && sourceCurrencyCode === 'MXN')
     ? ['SWAPPED', 'MERCURYO'] : [];
 }
 
@@ -60,17 +63,18 @@ function validFiatAmount(value) {
 /** New SPEI requests use the fixed MXN floor plus provider limits, never a USD valuation. */
 export function validFundingSourceAmount(value, kind = 'personal', sourceCurrencyCode = 'USD') {
   if (sourceCurrencyCode === 'USD') return validFundingAmount(value, kind);
-  return kind === 'personal' && validFiatAmount(value)
-    && ((sourceCurrencyCode === 'COP' && value >= PERSONAL_FUNDING_MINIMUM_COP && value <= PERSONAL_FUNDING_MAXIMUM_COP)
-      || (sourceCurrencyCode === 'MXN' && value >= PERSONAL_FUNDING_MINIMUM_MXN));
+  return kind === 'personal' && validFiatAmount(value) && sourceCurrencyCode === 'MXN' && value >= PERSONAL_FUNDING_MINIMUM_MXN;
 }
 
 export function fundingSourceSupported(value, kind) {
   if (!value || typeof value !== 'object' || Array.isArray(value) || !['personal', 'administrative'].includes(kind)) return false;
   const currency = fundingCurrencyCode(value?.sourceCurrencyCode);
-  if (currency === 'USD') return kind !== 'personal' || !['SPEI', 'PSE', 'LOCAL_BANK_TRANSFER'].includes(value.paymentMethodType);
-  return kind === 'personal' && ((currency === 'MXN' && (value.country || value.countryCode) === 'MX' && value.paymentMethodType === 'SPEI')
-    || (currency === 'COP' && (value.country || value.countryCode) === 'CO' && ['PSE', 'LOCAL_BANK_TRANSFER'].includes(value.paymentMethodType)));
+  if (currency === 'USD') return kind !== 'personal' || ((value.country || value.countryCode) === 'CO'
+    ? ['CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY'].includes(value.paymentMethodType)
+    : !['SPEI', 'PSE', 'LOCAL_BANK_TRANSFER'].includes(value.paymentMethodType)
+      && (!['VENMO', 'PAYPAL'].includes(value.paymentMethodType) || (value.country || value.countryCode) === 'US'));
+  return kind === 'personal' && ((currency === 'MXN' && (value.country || value.countryCode) === 'MX'
+    && ['SPEI', 'CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY'].includes(value.paymentMethodType)));
 }
 
 function requestedSource(value, kind, countryRequired = false) {
@@ -81,9 +85,11 @@ function requestedSource(value, kind, countryRequired = false) {
   const historicalAmount = validFiatAmount(value.requestedAmount)
     && (currency !== 'USD' || (value.requestedAmount >= 20 && value.requestedAmount <= 25_000));
   if (!currency || !(historicalPersonal ? historicalAmount : validFundingSourceAmount(value.requestedAmount, kind, currency))) return null;
-  if (currency !== 'USD' && (kind !== 'personal' || !(currency === 'MXN' ? value.paymentMethodType === 'SPEI'
+  if (currency !== 'USD' && (kind !== 'personal' || !(currency === 'MXN' ? ['SPEI', 'CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY'].includes(value.paymentMethodType)
     && (!countryRequired || value.country === 'MX') : currency === 'COP' && ['PSE', 'LOCAL_BANK_TRANSFER'].includes(value.paymentMethodType)
       && (!countryRequired || value.country === 'CO')))) return null;
+  if ((value.paymentMethodType === 'VENMO' || (kind === 'personal' && value.paymentMethodType === 'PAYPAL'))
+    && (kind !== 'personal' || currency !== 'USD' || (countryRequired && value.country !== 'US'))) return null;
   if (value.paymentMethodType !== undefined
     && (typeof value.paymentMethodType !== 'string' || !METHOD.test(value.paymentMethodType))) return null;
   return { ...(value.sourceCurrencyCode !== undefined ? { sourceCurrencyCode: currency } : {}),
@@ -114,7 +120,7 @@ export function sandboxCheckoutUrl(value) {
   } catch { return null; }
 }
 
-export function fundingAcknowledgement(value, kind) {
+export function fundingAcknowledgement(value, kind, requestCountry = '') {
   if (!['personal', 'administrative'].includes(kind)) return null;
   const environment = kind === 'personal' ? 'production' : 'sandbox';
   const provider = kind === 'personal' ? 'reown' : 'meld';
@@ -132,10 +138,13 @@ export function fundingAcknowledgement(value, kind) {
     return { ...safe, checkoutUrl };
   }
   if (!personalFundingMethod(value.paymentMethodType) || !Array.isArray(value.allowedProviders)
-    || value.allowedProviders.length < 1 || value.allowedProviders.length > 2
+    || value.allowedProviders.length < 1 || value.allowedProviders.length > 3
     || value.allowedProviders.some(provider => !PERSONAL_PROVIDERS.has(provider))
     || new Set(value.allowedProviders).size !== value.allowedProviders.length) return null;
   const currency = fundingCurrencyCode(value.sourceCurrencyCode);
+  const contextualProviders = requestCountry ? personalFundingProviders(requestCountry, currency, value.paymentMethodType)
+    : currency === 'COP' ? [] : ['VENMO', 'PAYPAL'].includes(value.paymentMethodType) ? [] : ['SWAPPED', 'MERCURYO'];
+  if (value.allowedProviders.some(provider => !contextualProviders.includes(provider))) return null;
   if (value.allowedProviders.some(provider => currency === 'COP' ? provider !== 'ONRAMPMONEY' : provider === 'ONRAMPMONEY')
     || (currency === 'USD' && ['SPEI', 'PSE', 'LOCAL_BANK_TRANSFER'].includes(value.paymentMethodType))) return null;
   const destination = fundingDestination(value.destination, kind);
@@ -167,6 +176,8 @@ export function fundingHistory(value, kind) {
       || !COUNTRY.test(record.country || '') || !STATUSES.has(record.status) || record.provider !== provider
       || (kind === 'personal' && record.status !== 'initiated')
       || (source?.sourceCurrencyCode === 'COP' && (!destination || destination.network !== 'polygon' || destination.chainId !== 137))
+      || (source?.sourceCurrencyCode === 'MXN' && source.paymentMethodType !== 'SPEI' && (!destination || destination.network !== 'polygon' || destination.chainId !== 137))
+      || (kind === 'personal' && ['VENMO', 'PAYPAL'].includes(source?.paymentMethodType) && (!destination || destination.network !== 'polygon' || destination.chainId !== 137))
       || destination === null || typeof record.createdAt !== 'string' || record.createdAt.length > 64 || !Number.isFinite(Date.parse(record.createdAt))) return null;
     return { checkoutReference: record.checkoutReference, requestedAmount: record.requestedAmount, country: record.country,
       status: record.status, createdAt: record.createdAt, provider, ...source, ...(destination ? { destination } : {}) };
@@ -194,6 +205,8 @@ export function fundingStatus(value, kind) {
     || (kind === 'personal' && value.requestStatus !== 'initiated')
     || !destination
     || (source?.sourceCurrencyCode === 'COP' && (destination.network !== 'polygon' || destination.chainId !== 137))
+    || (source?.sourceCurrencyCode === 'MXN' && source.paymentMethodType !== 'SPEI' && (destination.network !== 'polygon' || destination.chainId !== 137))
+    || (kind === 'personal' && ['VENMO', 'PAYPAL'].includes(source?.paymentMethodType) && (destination.network !== 'polygon' || destination.chainId !== 137))
     || !confirmation || typeof confirmation !== 'object' || Array.isArray(confirmation)
     || confirmation.state !== 'unconfirmed' || confirmation.source !== 'none'
     || confirmation.testMode !== (kind === 'administrative')) return null;
@@ -228,7 +241,7 @@ function fundingOptions(value, kind) {
     || !Array.isArray(value.paymentMethods) || value.paymentMethods.length > 40
     || value.paymentMethods.some(method => typeof method !== 'string' || !METHOD.test(method))
     || new Set(value.paymentMethods).size !== value.paymentMethods.length
-    || !Array.isArray(value.routes) || value.routes.length > 2) return null;
+    || !Array.isArray(value.routes) || value.routes.length > (administrative ? 2 : personalFundingProviders(value.country, sourceCurrencyCode).length)) return null;
   const routes = value.routes.map(route => {
     if (!route || !providers.has(route.serviceProvider)
       || (!administrative && !personalFundingProviders(value.country, sourceCurrencyCode).includes(route.serviceProvider)) || !Array.isArray(route.paymentMethods)
@@ -259,6 +272,7 @@ function fundingOptions(value, kind) {
   if (methods.size !== value.paymentMethods.length || value.paymentMethods.some(method => !methods.has(method))) return null;
   const safeRoutes = administrative ? routes : routes.map(route => ({ ...route,
     paymentMethods: route.paymentMethods.filter(method => personalFundingMethod(method.method)
+      && (administrative || personalFundingProviders(value.country, sourceCurrencyCode, method.method).includes(route.serviceProvider))
       && fundingSourceSupported({ sourceCurrencyCode, country: value.country, paymentMethodType: method.method }, 'personal'))
       .map(method => {
         const minimumAmount = Math.max(sourceCurrencyCode === 'MXN' ? PERSONAL_FUNDING_MINIMUM_MXN : sourceCurrencyCode === 'COP' ? PERSONAL_FUNDING_MINIMUM_COP : PERSONAL_FUNDING_MINIMUM_USD, method.minimumAmount);

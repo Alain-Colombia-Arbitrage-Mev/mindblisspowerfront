@@ -17,17 +17,21 @@ function validPersonalFormAmount(amount, currency) {
   return validFundingSourceAmount(amount, "personal", currency) && (currency !== "USD" || amount >= PERSONAL_FORM_MINIMUM_USD);
 }
 
-function routeMethodSupported(route, item, sourceCurrencyCode) {
+function routeMethodSupported(route, item, sourceCurrencyCode, countryCode = "") {
+  if (route.serviceProvider === "TOPPER" && (countryCode !== "US" || sourceCurrencyCode !== "USD")) return false;
+  if (route.serviceProvider === "TOPPER" && !["VENMO", "PAYPAL", "CREDIT_DEBIT_CARD", "APPLE_PAY", "GOOGLE_PAY"].includes(item.method)) return false;
+  if (["VENMO", "PAYPAL"].includes(item.method) && (countryCode !== "US" || sourceCurrencyCode !== "USD" || route.serviceProvider !== "TOPPER")) return false;
+  if (countryCode === "CO" && (sourceCurrencyCode !== "USD" || route.serviceProvider !== "SWAPPED" || !["CREDIT_DEBIT_CARD", "APPLE_PAY", "GOOGLE_PAY"].includes(item.method))) return false;
   return personalFundingMethod(item.method) && (sourceCurrencyCode === "USD" ? !["PSE", "SPEI", "LOCAL_BANK_TRANSFER"].includes(item.method) && route.serviceProvider !== "ONRAMPMONEY"
-    : sourceCurrencyCode === "MXN" ? item.method === "SPEI"
+    : sourceCurrencyCode === "MXN" ? ["SPEI", "CREDIT_DEBIT_CARD", "APPLE_PAY", "GOOGLE_PAY"].includes(item.method)
       : sourceCurrencyCode === "COP" && ["PSE", "LOCAL_BANK_TRANSFER"].includes(item.method) && route.serviceProvider === "ONRAMPMONEY");
 }
 
-export function eligiblePaymentMethods(routes, amount, sourceCurrencyCode = "USD") {
+export function eligiblePaymentMethods(routes, amount, sourceCurrencyCode = "USD", countryCode = "") {
   if (!Array.isArray(routes) || !validPersonalFormAmount(amount, sourceCurrencyCode)) return [];
   const entered = Number.isFinite(amount) && amount > 0;
   return [...new Set(routes.flatMap(route => (route.paymentMethods || [])
-    .filter(item => { const limits = routeLimits(item, sourceCurrencyCode); return routeMethodSupported(route, item, sourceCurrencyCode) && limits && (!entered || (amount >= limits.minimumAmount && amount <= limits.maximumAmount)); })
+    .filter(item => { const limits = routeLimits(item, sourceCurrencyCode); return routeMethodSupported(route, item, sourceCurrencyCode, countryCode) && limits && (!entered || (amount >= limits.minimumAmount && amount <= limits.maximumAmount)); })
     .map(item => item.method)))];
 }
 
@@ -42,8 +46,8 @@ function routeLimits(item, sourceCurrencyCode) {
     ? { minimumAmount, maximumAmount } : null;
 }
 
-function lowestRouteMinimum(routes, sourceCurrencyCode = "USD") {
-  const limits = (routes || []).flatMap(route => (route.paymentMethods || []).filter(item => routeMethodSupported(route, item, sourceCurrencyCode)))
+function lowestRouteMinimum(routes, sourceCurrencyCode = "USD", countryCode = "") {
+  const limits = (routes || []).flatMap(route => (route.paymentMethods || []).filter(item => routeMethodSupported(route, item, sourceCurrencyCode, countryCode)))
     .map(item => routeLimits(item, sourceCurrencyCode)?.minimumAmount).filter(Number.isFinite);
   return limits.length ? Math.min(...limits) : null;
 }
@@ -59,7 +63,7 @@ export function selectedMethodLimits(routes, method, amount, sourceCurrencyCode 
 }
 
 // ISO currencies are choices to consult, not a claim that a provider supports a route.
-const LOCAL_CURRENCIES = { MX: "MXN", CO: "COP" };
+const LOCAL_CURRENCIES = { MX: "MXN" };
 const PERSONAL_COUNTRIES = PERSONAL_FUNDING_COUNTRIES.map(code => [code]);
 export function fundingCurrencyChoices(country) { return [...new Set(["USD", LOCAL_CURRENCIES[country]].filter(Boolean))]; }
 
@@ -78,14 +82,15 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
   const copDefaultPending = useRef(false);
   const methodContext = useRef("");
   const current = options.country === countryCode && (options.sourceCurrencyCode || "USD") === sourceCurrencyCode;
-  const methods = current && options.status === "ready" ? eligiblePaymentMethods(options.routes, Number(amount), sourceCurrencyCode) : [];
+  const methods = current && options.status === "ready" ? eligiblePaymentMethods(options.routes, Number(amount), sourceCurrencyCode, countryCode) : [];
   const methodsKey = methods.join(",");
-  const copLimits = current && sourceCurrencyCode === "COP" ? selectedMethodLimits(options.routes, method || "PSE", 0, "COP") : null;
-  const routeMinimum = current ? copLimits?.minimumAmount ?? lowestRouteMinimum(options.routes, sourceCurrencyCode) : null;
+  const selectedLimits = current && method ? selectedMethodLimits(options.routes, method, 0, sourceCurrencyCode) : null;
+  const copLimits = current && sourceCurrencyCode === "COP" ? selectedLimits : null;
+  const routeMinimum = current ? selectedLimits?.minimumAmount ?? selectedLimits?.minimumUsd ?? lowestRouteMinimum(options.routes, sourceCurrencyCode, countryCode) : null;
   const selectionUnavailable = Boolean(current && options.status === "ready" && method && !methods.includes(method));
   const parsedAmount = Number(amount);
   const validAmount = validPersonalFormAmount(parsedAmount, sourceCurrencyCode)
-    && (sourceCurrencyCode === "USD" || (countryCode === "MX" && method === "SPEI") || (countryCode === "CO" && ["PSE", "LOCAL_BANK_TRANSFER"].includes(method)));
+    && (sourceCurrencyCode === "USD" || (countryCode === "MX" && ["SPEI", "CREDIT_DEBIT_CARD", "APPLE_PAY", "GOOGLE_PAY"].includes(method)) || (countryCode === "CO" && ["PSE", "LOCAL_BANK_TRANSFER"].includes(method)));
   const valid = validAmount && PERSONAL_FUNDING_COUNTRIES.includes(countryCode) && methods.includes(method) && /^0x[0-9a-f]{40}$/i.test(destinationAddress);
 
   function changeSelection(update, value) {
@@ -95,7 +100,7 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
 
   useEffect(() => {
     const context = `${countryCode}:${sourceCurrencyCode}`;
-    if (sourceCurrencyCode !== "COP" || methodContext.current !== context) setMethod("");
+    if (methodContext.current !== context) setMethod("");
     methodContext.current = context;
     if (!countryCode) { setOptions(EMPTY_OPTIONS); return undefined; }
     const controller = new AbortController();
@@ -113,8 +118,8 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
     return () => controller.abort();
   }, [countryCode, sourceCurrencyCode, revision]);
 
-  useEffect(() => { setMethod(selected => methodsKey.split(",").includes(selected) || (sourceCurrencyCode === "COP" && selected) ? selected
-    : methodsKey.split(",").includes("CREDIT_DEBIT_CARD") ? "CREDIT_DEBIT_CARD" : methodsKey.split(",").includes("PSE") ? "PSE" : methodsKey.split(",")[0] || ""); }, [methodsKey, countryCode, amount, sourceCurrencyCode]);
+  useEffect(() => { setMethod(selected => selected || (sourceCurrencyCode === "MXN" && methodsKey.split(",").includes("SPEI") ? "SPEI"
+    : methodsKey.split(",").includes("CREDIT_DEBIT_CARD") ? "CREDIT_DEBIT_CARD" : methodsKey.split(",").includes("PSE") ? "PSE" : methodsKey.split(",")[0] || "")); }, [methodsKey, countryCode, amount, sourceCurrencyCode]);
 
   async function submit(event) {
     event.preventDefault();
@@ -148,10 +153,11 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
           countrySelected={Boolean(countryCode)} sourceCurrencyCode={sourceCurrencyCode} minimumUsd={routeMinimum}
           amountValid={validPersonalFormAmount(parsedAmount, sourceCurrencyCode)}
           onUseMinimum={routeMinimum !== null && Number(amount) < routeMinimum ? () => changeSelection(setAmount, (Math.ceil(routeMinimum * 100) / 100).toFixed(2)) : undefined}
-          limits={current ? selectedMethodLimits(options.routes, method, Number(amount), sourceCurrencyCode) : null} onChange={value => changeSelection(setMethod, value)} onRetry={() => setRevision(value => value + 1)} busy={busy} />
+          limits={selectedLimits} onChange={value => changeSelection(setMethod, value)} onRetry={() => setRevision(value => value + 1)} busy={busy} />
       </div>
       <FundingDestination address={destinationAddress} />
-      {sourceCurrencyCode === "MXN" ? <p className={styles.hint} role="status">{t("funding.personalSpeiMinimum")}</p> : null}
+      {sourceCurrencyCode === "MXN" ? <p className={styles.hint} role="status">{t("funding.personalMxnLimits")}</p> : null}
+      {countryCode === "CO" ? <p className={styles.hint} role="status">{t("funding.colombiaUsdOnly")}</p> : null}
       {sourceCurrencyCode === "COP" ? <p className={styles.hint} role="status">{t("funding.personalPseLimits")}</p> : null}
       {walletAction || <FundingSubmit disabled={disabled || !valid} busy={busy} />}
     </div>
@@ -276,7 +282,7 @@ export function FundingDestination({ address }) {
 }
 
 export function paymentMethodLabel(code, t) {
-  const brands = { ASTROPAY: "AstroPay", NETELLER: "Neteller", PAYSAFECARD: "PaysafeCard", SKRILL: "Skrill", PAYPAL: "PayPal", VENMO: "Venmo" };
+  const brands = { ASTROPAY: "AstroPay", NETELLER: "Neteller", PAYSAFECARD: "PaysafeCard", SKRILL: "Skrill" };
   if (Object.hasOwn(brands, code)) return brands[code];
   if (["CREDIT_DEBIT_CARD", "CARD", "VISA", "MASTERCARD"].includes(code)) return t("onramp.cardPayment");
   if (code === "APPLE_PAY") return "Apple Pay";
@@ -284,6 +290,8 @@ export function paymentMethodLabel(code, t) {
   if (code === "SPEI") return t("funding.speiPayment");
   if (code === "PSE") return t("funding.psePayment");
   if (code === "LOCAL_BANK_TRANSFER") return t("funding.localBankTransfer");
+  if (code === "VENMO") return t("funding.venmoPayment");
+  if (code === "PAYPAL") return t("funding.paypalPayment");
   if (["BANK_TRANSFER", "SEPA", "ACH"].includes(code)) return t("onramp.bankTransfer");
   return code.replaceAll("_", " ");
 }

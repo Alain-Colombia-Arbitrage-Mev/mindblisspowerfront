@@ -8,7 +8,7 @@ import { handleWalletFunding } from './wallet-funding-bff.mjs';
 const env = { AUTH_PROVIDER: 'better-auth', AUTH_BFF_SHARED_SECRET: 's'.repeat(32),
   AUTH_PUBLIC_ORIGIN: 'https://app.example.test', BETTER_AUTH_BACKEND_URL: 'https://auth.core.internal', NODE_ENV: 'production' };
 const requestId = 'd8a4c010-cc33-44da-a297-8b3c6440f491';
-const prohibitedPersonalMethods = ['PAYPAL', 'NETELLER', 'PAYSAFECARD', 'PAYSAFE_CARD', 'SKRILL', 'SKIRLL'];
+const prohibitedPersonalMethods = ['NETELLER', 'PAYSAFECARD', 'PAYSAFE_CARD', 'SKRILL', 'SKIRLL'];
 const unavailableIntegrationMethods = ['ASTROPAY'];
 const excludedNewPersonalMethods = [...prohibitedPersonalMethods, ...unavailableIntegrationMethods];
 const input = { requestId, walletAddress: `0x${'1'.repeat(40)}`, country: 'MX', amount: 1000,
@@ -65,7 +65,7 @@ test('personal discovery rejects unsupported country and currency pairs before e
   const original = globalThis.fetch;
   try {
     globalThis.fetch = async () => assert.fail('Unsupported country/currency reached browser transport');
-    for (const [country, sourceCurrencyCode] of [['US', 'MXN'], ['CO', 'MXN'], ['US', 'COP'], ['MX', 'COP'], ['US', 'EUR']]) {
+    for (const [country, sourceCurrencyCode] of [['US', 'MXN'], ['CO', 'MXN'], ['US', 'COP'], ['MX', 'COP'], ['CO', 'COP'], ['US', 'EUR']]) {
       const candidate = { ...options('personal'), country, sourceCurrencyCode, paymentMethods: [], routes: [] };
       assert.equal(personalProductionOptions(candidate), null);
       await assert.rejects(readPersonalFundingOptions(country, { sourceCurrencyCode }), { message: 'invalid_request' });
@@ -75,7 +75,7 @@ test('personal discovery rejects unsupported country and currency pairs before e
       assert.equal(response.status, 400);
       assert.deepEqual(await response.json(), { error: 'invalid_request' });
     }
-    for (const [country, sourceCurrencyCode] of [['US', 'USD'], ['MX', 'USD'], ['CO', 'USD'], ['MX', 'MXN'], ['CO', 'COP']]) {
+    for (const [country, sourceCurrencyCode] of [['US', 'USD'], ['MX', 'USD'], ['CO', 'USD'], ['MX', 'MXN']]) {
       const candidate = { ...options('personal'), country, sourceCurrencyCode, paymentMethods: [], routes: [] };
       assert.deepEqual(personalProductionOptions(candidate), candidate);
     }
@@ -137,9 +137,8 @@ test('SPEI records its actual MXN amount while other local mutations remain unav
     globalThis.fetch = async () => assert.fail('unvalued local amount reached transport');
     await assert.rejects(createAdministrativeSandboxSession({ ...input, serviceProvider: 'TRANSAK' }), { message: 'wallet_funding_valuation_unavailable' });
     for (const [kind, body] of [
-      ['personal', { ...input, sourceCurrencyCode: 'COP', amount: 200000 }],
       ['personal', { ...input, country: 'US' }],
-      ['personal', { ...input, paymentMethodType: 'CREDIT_DEBIT_CARD' }],
+      ['personal', { ...input, paymentMethodType: 'LOCAL_BANK_TRANSFER' }],
       ['administrative', { ...input, serviceProvider: 'TRANSAK' }],
     ]) {
       if (kind === 'personal') await assert.rejects(createPersonalFundingIntent(body), { message: 'wallet_funding_valuation_unavailable' });
@@ -182,7 +181,7 @@ test('SPEI history and immutable status retain MXN without valuing the request a
   delete status.createdAt;
   assert.deepEqual(fundingStatus(status, 'personal'), status);
   for (const patch of [{ sourceCurrencyCode: 'COP' }, { paymentMethodType: undefined },
-    { paymentMethodType: 'CREDIT_DEBIT_CARD' }, { country: 'US' }, { requestedAmount: 0 }, { requestedAmount: 148.666 }]) {
+    { paymentMethodType: 'LOCAL_BANK_TRANSFER' }, { country: 'US' }, { requestedAmount: 0 }, { requestedAmount: 148.666 }]) {
     assert.equal(fundingHistory({ ...history, records: [{ ...record, ...patch }] }, 'personal'), null);
     assert.equal(fundingStatus({ ...status, ...patch }, 'personal'), null);
   }
@@ -191,12 +190,12 @@ test('SPEI history and immutable status retain MXN without valuing the request a
     requestStatus: 'session_created', confirmation: { ...status.confirmation, testMode: true } }, 'administrative'), null);
 });
 
-test('personal local discovery exposes only SPEI in MXN without borrowing its limits for cards', () => {
+test('personal MXN discovery retains each permitted method and its own provider limits', () => {
   const local = options('personal');
-  const card = { ...local.routes[0].paymentMethods[0], method: 'CREDIT_DEBIT_CARD' };
+  const card = { ...local.routes[0].paymentMethods[0], method: 'CREDIT_DEBIT_CARD', minimumAmount: 1200, maximumAmount: 200000 };
   const candidate = { ...local, paymentMethods: ['SPEI', 'CREDIT_DEBIT_CARD'], routes: [
     { ...local.routes[0], paymentMethods: [...local.routes[0].paymentMethods, card] }] };
-  assert.deepEqual(personalProductionOptions(candidate), local);
+  assert.deepEqual(personalProductionOptions(candidate), candidate);
   assert.equal(personalProductionOptions({ ...candidate, country: 'US' }), null);
 });
 
@@ -285,7 +284,7 @@ test('new personal funding excludes prohibited and temporarily unavailable metho
         destination: { address: input.walletAddress, asset: 'USDT', network: 'polygon', chainId: 137 } }, 'personal'), null);
     }
     await assert.rejects(readPersonalFundingOptions('CA'), { message: 'invalid_request' });
-    for (const sourceCurrencyCode of ['COP', 'MXN']) {
+    for (const sourceCurrencyCode of ['MXN']) {
       await assert.rejects(createPersonalFundingIntent({ ...valid, country: 'CO', amount: sourceCurrencyCode === 'COP' ? 200000 : 1000, sourceCurrencyCode,
         paymentMethodType: 'SPEI' }), { message: 'wallet_funding_valuation_unavailable' });
     }

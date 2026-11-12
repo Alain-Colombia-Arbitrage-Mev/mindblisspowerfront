@@ -259,20 +259,26 @@ test('SPEI handoff forwards the actual MXN amount without claiming a USD valuati
   assert.equal(url.searchParams.get('paymentMethodTypeLocked'), 'SPEI');
 });
 
-test('PSE handoff preserves a verified wallet and locks the actual COP amount without another authentication', async () => {
-  const runtime = fundingRuntime({ open: () => assert.fail('Verified wallet asked to authenticate for PSE'),
-    createPersonalFundingIntent: async body => ({ checkoutReference: body.requestId, requestedAmount: body.amount,
-      sourceCurrencyCode: body.sourceCurrencyCode, paymentMethodType: body.paymentMethodType, allowedProviders: ['ONRAMPMONEY'],
-      destinationCurrencyCode: 'USDT_POLYGON', destination: { address: body.walletAddress, asset: 'USDT', network: 'polygon', chainId: 137 } }) });
-  const result = await runtime.scope.startOnramp({ ...runtime.input, country: 'CO', sourceCurrencyCode: 'COP', paymentMethodType: 'PSE', amount: 200000 });
-  assert.equal(result.sourceCurrencyCode, 'COP'); assert.equal(result.minimumUsd, null);
-  const url = runtime.events.find(value => value?.opened).opened;
-  assert.equal(url.searchParams.get('sourceAmountLocked'), '200000');
-  assert.equal(url.searchParams.get('sourceCurrencyCodeLocked'), 'COP');
-  assert.equal(url.searchParams.get('countryCodeLocked'), 'CO');
-  assert.equal(url.searchParams.get('paymentMethodTypeLocked'), 'PSE');
-  assert.equal(url.searchParams.get('destinationCurrencyCodeLocked'), 'USDT_POLYGON');
-  assert.equal(url.searchParams.get('walletAddressLocked'), runtime.address);
+test('US wallet methods and MXN cards hand off with exact source currency and no extra authentication', async () => {
+  for (const choice of [
+    { country: 'US', sourceCurrencyCode: 'USD', paymentMethodType: 'VENMO', amount: 100 },
+    { country: 'US', sourceCurrencyCode: 'USD', paymentMethodType: 'PAYPAL', amount: 50 },
+    ...['CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY'].map(paymentMethodType => ({ country: 'MX', sourceCurrencyCode: 'MXN', paymentMethodType, amount: 931 })),
+  ]) {
+    const runtime = fundingRuntime({ open: () => assert.fail('Verified wallet asked to authenticate again'),
+      createPersonalFundingIntent: async body => ({ checkoutReference: body.requestId, requestedAmount: body.amount,
+        sourceCurrencyCode: body.sourceCurrencyCode, paymentMethodType: body.paymentMethodType, allowedProviders: choice.country === 'US' ? ['TOPPER'] : ['SWAPPED'],
+        destinationCurrencyCode: 'USDT_POLYGON', destination: { address: body.walletAddress, asset: 'USDT', network: 'polygon', chainId: 137 } }) });
+    const result = await runtime.scope.startOnramp({ ...runtime.input, ...choice });
+    assert.equal(result.sourceCurrencyCode, choice.sourceCurrencyCode);
+    const url = runtime.events.find(value => value?.opened).opened;
+    assert.equal(url.searchParams.get('sourceAmountLocked'), String(choice.amount));
+    assert.equal(url.searchParams.get('sourceCurrencyCodeLocked'), choice.sourceCurrencyCode);
+    assert.equal(url.searchParams.get('countryCodeLocked'), choice.country);
+    assert.equal(url.searchParams.get('paymentMethodTypeLocked'), choice.paymentMethodType);
+    assert.equal(url.searchParams.get('destinationCurrencyCodeLocked'), 'USDT_POLYGON');
+    assert.equal(url.searchParams.get('walletAddressLocked'), runtime.address);
+  }
 });
 
 test('a changed checkout reference, amount, currency or method cannot open a provider', async () => {
@@ -291,10 +297,10 @@ test('a changed checkout reference, amount, currency or method cannot open a pro
 
 test('personal start and continuation reject ineligible country, method and currency before wallet effects', async () => {
   const selections = [
-    { input: { country: 'MX', sourceCurrencyCode: 'MXN', amount: 1000, paymentMethodType: 'CREDIT_DEBIT_CARD' }, code: 'wallet_funding_valuation_unavailable', category: 'valuation' },
+    { input: { country: 'MX', sourceCurrencyCode: 'MXN', amount: 1000, paymentMethodType: 'LOCAL_BANK_TRANSFER' }, code: 'wallet_funding_valuation_unavailable', category: 'valuation' },
     { input: { country: 'MX', sourceCurrencyCode: 'COP', amount: 1000, paymentMethodType: 'SPEI' }, code: 'wallet_funding_valuation_unavailable', category: 'valuation' },
     { input: { country: 'CA', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' }, code: 'wallet_funding_invalid_country', category: 'method' },
-    ...['PAYPAL', 'NETELLER', 'PAYSAFECARD', 'PAYSAFE_CARD', 'SKRILL', 'SKIRLL', 'ASTROPAY'].map(paymentMethodType => ({
+    ...['NETELLER', 'PAYSAFECARD', 'PAYSAFE_CARD', 'SKRILL', 'SKIRLL', 'ASTROPAY'].map(paymentMethodType => ({
       input: { country: 'US', amount: 100, paymentMethodType }, code: 'wallet_funding_method_unavailable', category: 'method' })),
     { input: { amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' }, code: 'wallet_funding_invalid_country', category: 'method' },
     { input: { countryCode: '', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' }, code: 'wallet_funding_invalid_country', category: 'method' },

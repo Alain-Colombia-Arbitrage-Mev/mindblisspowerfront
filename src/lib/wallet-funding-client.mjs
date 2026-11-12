@@ -92,7 +92,7 @@ async function createFunding(input, kind, path, { signal } = {}) {
   if (!fundingSourceSupported(body, kind)) throw new Error('wallet_funding_valuation_unavailable');
   const data = fundingAcknowledgement(await request(path, { method: 'POST', signal,
     headers: { 'content-type': 'application/json', ...(kind === 'personal' ? { 'x-mindbliss-wallet-network': 'polygon' } : {}) },
-    body: JSON.stringify(body) }), kind);
+    body: JSON.stringify(body) }), kind, body.country);
   if (!data || data.requestedAmount !== body.amount || data.checkoutReference !== body.requestId
     || fundingCurrencyCode(data.sourceCurrencyCode) !== fundingCurrencyCode(body.sourceCurrencyCode)
     || (kind === 'personal' && (!('paymentMethodType' in data) || data.paymentMethodType !== body.paymentMethodType

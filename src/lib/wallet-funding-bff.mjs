@@ -110,7 +110,7 @@ export async function handleWalletFunding(request, action, {
     const safe = statusRead ? fundingStatus(result.data, kind)
       : action === 'personal-options' ? personalProductionOptions(result.data)
       : action === 'options' ? administrativeSandboxOptions(result.data)
-      : action === 'history' ? fundingHistory(result.data, kind) : fundingAcknowledgement(result.data, kind);
+      : action === 'history' ? fundingHistory(result.data, kind) : fundingAcknowledgement(result.data, kind, body?.country || '');
     if (!safe) { diagnostic(action, 'response_contract', result.status || 200); return reply({ error: 'funding_unavailable', reason: 'invalid_gateway_response' }, 502); }
     if (requestedReference && (!('checkoutReference' in safe) || safe.checkoutReference !== requestedReference)) return reply({ error: 'funding_unavailable' }, 502);
     if (body && (!('requestedAmount' in safe) || !('checkoutReference' in safe) || safe.requestedAmount !== body.amount

@@ -30,8 +30,8 @@ export function buildReownProductionOnrampUrl({ providerUrl, address, projectId,
   if (!/^0x[0-9a-f]{40}$/i.test(address || '') || !/^[a-f0-9]{32}$/i.test(projectId || '')
     || !FUNDING_UUID.test(checkoutReference || '') || !/^[A-Z]{2}$/.test(countryCode || '')
     || !validFundingSourceAmount(amount, 'personal', sourceCurrencyCode) || !/^[A-Z0-9_]{2,40}$/.test(paymentMethodType || '')
-    || !Array.isArray(allowedProviders) || allowedProviders.length < 1 || allowedProviders.length > 2
-    || allowedProviders.some(provider => !personalFundingProviders(countryCode, sourceCurrencyCode).includes(provider))
+    || !Array.isArray(allowedProviders) || allowedProviders.length < 1 || allowedProviders.length > personalFundingProviders(countryCode, sourceCurrencyCode, paymentMethodType).length
+    || allowedProviders.some(provider => !personalFundingProviders(countryCode, sourceCurrencyCode, paymentMethodType).includes(provider))
     || new Set(allowedProviders).size !== allowedProviders.length) throw new Error('reown_context_invalid');
   if (url.searchParams.get('externalCustomerId') !== projectId) throw new Error('reown_provider_invalid');
   url.searchParams.set('walletAddress', address);

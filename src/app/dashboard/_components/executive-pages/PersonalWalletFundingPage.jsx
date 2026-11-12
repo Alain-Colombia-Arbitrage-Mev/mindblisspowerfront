@@ -195,6 +195,6 @@ export function personalOnrampError(code, t) {
     rejected: "recharge.providerRejected", connection: "recharge.providerConnection", link_unavailable: "funding.personalLinkFailed",
     unavailable: "funding.personalLinkFailed", identity: "funding.identityUnavailable", rate_limited: "funding.rateLimited",
     method: "funding.methodUnavailable", intent: "funding.requestRegistrationFailed", cancelled: "funding.requestCancelled", origin: "funding.sessionOriginFailed",
-    provider: "funding.checkoutUnavailable", valuation: "funding.speiTemporarilyUnavailable", connection_timeout: "funding.connectionTimeout", network_changed: "funding.networkChanged" };
+    provider: "funding.checkoutUnavailable", valuation: "funding.localCurrencyUnavailable", connection_timeout: "funding.connectionTimeout", network_changed: "funding.networkChanged" };
   return t(keys[code] || "funding.checkoutUnavailable");
 }

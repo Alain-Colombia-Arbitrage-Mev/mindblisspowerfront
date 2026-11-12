@@ -76,7 +76,7 @@ test('Swapped and Mercuryo keep independent route limits instead of sharing the 
   assert.equal(personalProductionOptions({ ...discovery, routes: [route('TOPPER', 10)] }), null);
 });
 
-test('a 100 USD native request retains the backend eligible-provider echo and does not authorize retired providers', async () => {
+test('a 100 USD native request retains its eligible-provider echo and admits Topper only for US residence', async () => {
   const original = globalThis.fetch;
   try {
     globalThis.fetch = async (path, init) => {
@@ -88,6 +88,11 @@ test('a 100 USD native request retains the backend eligible-provider echo and do
     assert.deepEqual(result.allowedProviders, ['SWAPPED']);
     assert.equal(result.requestedAmount, 100);
     globalThis.fetch = async () => Response.json({ ...ack('personal', 100), allowedProviders: ['TOPPER'] });
+    assert.deepEqual((await createPersonalFundingIntent(input('personal', 100))).allowedProviders, ['TOPPER']);
+    for (const country of ['CO', 'MX']) {
+      await assert.rejects(createPersonalFundingIntent({ ...input('personal', 100), country }), { message: 'funding_unavailable' });
+    }
+    globalThis.fetch = async () => Response.json({ ...ack('personal', 100), allowedProviders: ['BANXA'] });
     await assert.rejects(createPersonalFundingIntent(input('personal', 100)), { message: 'funding_unavailable' });
   } finally { globalThis.fetch = original; }
 });
@@ -103,6 +108,10 @@ test('production handoff enforces public personal limits without pretending URL 
   assert.equal(url.searchParams.has('serviceProvider'), false);
   assert.equal(url.searchParams.has('serviceProviders'), false);
   assert.throws(() => buildReownProductionOnrampUrl({ ...context, amount: 19.99 }), { message: 'reown_context_invalid' });
-  assert.throws(() => buildReownProductionOnrampUrl({ ...context, allowedProviders: ['TOPPER'] }), { message: 'reown_context_invalid' });
+  assert.ok(buildReownProductionOnrampUrl({ ...context, allowedProviders: ['TOPPER'] }));
+  for (const countryCode of ['CO', 'MX']) {
+    assert.throws(() => buildReownProductionOnrampUrl({ ...context, countryCode, allowedProviders: ['TOPPER'] }), { message: 'reown_context_invalid' });
+  }
+  assert.throws(() => buildReownProductionOnrampUrl({ ...context, allowedProviders: ['BANXA'] }), { message: 'reown_context_invalid' });
   assert.ok(buildReownProductionOnrampUrl({ ...context, amount: 128.04, allowedProviders: ['MERCURYO'] }));
 });

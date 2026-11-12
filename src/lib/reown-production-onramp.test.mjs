@@ -32,7 +32,7 @@ test('Reown production retains merchant attribution and records only an initiate
 test('personal checkout enforces its countries and excluded methods before constructing provider URLs', () => {
   for (const countryCode of ['US', 'MX', 'CO']) {
     assert.equal(reownFundingSelection({ countryCode, paymentMethodType: 'CREDIT_DEBIT_CARD' }).countryCode, countryCode);
-    const url = new URL(buildReownProductionOnrampUrl({ ...input, countryCode }));
+    const url = new URL(buildReownProductionOnrampUrl({ ...input, countryCode, allowedProviders: countryCode === 'CO' ? ['SWAPPED'] : input.allowedProviders }));
     assert.equal(url.searchParams.get('countryCodeLocked'), countryCode);
     assert.equal(url.searchParams.get('sourceCurrencyCodeLocked'), 'USD');
   }
@@ -41,9 +41,9 @@ test('personal checkout enforces its countries and excluded methods before const
     assert.throws(() => buildReownProductionOnrampUrl({ ...input, countryCode: 'CO', sourceCurrencyCode, paymentMethodType: 'SPEI', amount: 1000 }), { message: 'wallet_funding_valuation_unavailable' });
   }
   for (const countryCode of ['PA', 'CA', 'ES']) {
-    assert.throws(() => buildReownProductionOnrampUrl({ ...input, countryCode }), { message: 'wallet_funding_invalid_country' });
+    assert.throws(() => buildReownProductionOnrampUrl({ ...input, countryCode, allowedProviders: countryCode === 'CO' ? ['SWAPPED'] : input.allowedProviders }), { message: 'wallet_funding_invalid_country' });
   }
-  for (const paymentMethodType of ['PAYPAL', 'NETELLER', 'PAYSAFECARD', 'PAYSAFE_CARD', 'SKRILL', 'SKIRLL', 'ASTROPAY']) {
+  for (const paymentMethodType of ['NETELLER', 'PAYSAFECARD', 'PAYSAFE_CARD', 'SKRILL', 'SKIRLL', 'ASTROPAY']) {
     assert.throws(() => reownFundingSelection({ countryCode: 'US', paymentMethodType }), { message: 'wallet_funding_method_unavailable' });
     assert.throws(() => buildReownProductionOnrampUrl({ ...input, paymentMethodType }), { message: 'wallet_funding_method_unavailable' });
   }
@@ -69,7 +69,7 @@ test('missing or empty residence never uses browser hints or builds a checkout',
 test('production checkout cannot discard an explicit local currency and open it as dollars', () => {
   for (const sourceCurrencyCode of ['MXN', 'COP']) {
     assert.throws(() => reownFundingCurrency(sourceCurrencyCode), { message: 'wallet_funding_valuation_unavailable' });
-    assert.throws(() => buildReownProductionOnrampUrl({ ...input, sourceCurrencyCode }), { message: 'wallet_funding_valuation_unavailable' });
+    assert.throws(() => buildReownProductionOnrampUrl({ ...input, sourceCurrencyCode }), { message: sourceCurrencyCode === 'MXN' ? 'reown_context_invalid' : 'wallet_funding_valuation_unavailable' });
   }
   assert.equal(reownFundingCurrency(), 'USD');
   assert.equal(reownFundingCurrency('USD'), 'USD');
@@ -92,7 +92,7 @@ test('SPEI handoff locks the actual MXN amount and method without a fabricated U
   assert.equal(url.searchParams.get('paymentMethodTypeLocked'), 'SPEI');
   assert.equal(url.searchParams.get('destinationCurrencyCode'), 'USDT_POLYGON');
   assert.equal(url.searchParams.has('minimumUsd'), false);
-  for (const patch of [{ countryCode: 'US' }, { paymentMethodType: 'CREDIT_DEBIT_CARD' }, { sourceCurrencyCode: 'COP' }]) {
+  for (const patch of [{ countryCode: 'US' }, { paymentMethodType: 'LOCAL_BANK_TRANSFER' }, { sourceCurrencyCode: 'COP' }]) {
     assert.throws(() => buildReownProductionOnrampUrl({ ...input, ...selection, ...patch }), { message: 'wallet_funding_valuation_unavailable' });
   }
   for (const amount of [0, -1, 148.66, 930.99, '931', 931.001, Infinity, 1000000000.01]) {
