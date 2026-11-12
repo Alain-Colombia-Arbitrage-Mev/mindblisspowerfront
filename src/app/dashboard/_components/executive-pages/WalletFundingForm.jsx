@@ -10,8 +10,9 @@ import styles from "./wallet-funding.module.css";
 
 const EMPTY_OPTIONS = { status: "idle", country: "", sourceCurrencyCode: "USD", paymentMethods: [], routes: [] };
 // The small backend test amount is retained for existing records, not offered
-// by the public form. Provider floors may raise this displayed starting amount.
-const PERSONAL_FORM_MINIMUM_USD = Math.max(100, PERSONAL_FUNDING_MINIMUM_USD);
+// by the public form. Provider floors may raise its public minimum.
+const PERSONAL_FORM_MINIMUM_USD = Math.max(50, PERSONAL_FUNDING_MINIMUM_USD);
+const PERSONAL_FORM_DEFAULT_USD = 100;
 function validPersonalFormAmount(amount, currency) {
   return validFundingSourceAmount(amount, "personal", currency) && (currency !== "USD" || amount >= PERSONAL_FORM_MINIMUM_USD);
 }
@@ -61,7 +62,7 @@ export function fundingCurrencyChoices(country) { return [...new Set(["USD", LOC
 export function PersonalFundingForm({ disabled = false, busy = false, onContinue, onSelectionChange = undefined, destinationAddress = "", walletAction = null }) {
   const { t } = useI18n();
   const id = useId();
-  const [amount, setAmount] = useState(String(PERSONAL_FORM_MINIMUM_USD));
+  const [amount, setAmount] = useState(String(PERSONAL_FORM_DEFAULT_USD));
   const [countryCode, setCountryCode] = useState("");
   const [method, setMethod] = useState("");
   const [options, setOptions] = useState(EMPTY_OPTIONS);
@@ -111,13 +112,13 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
         <FundingCountryField id={id} value={countryCode} countries={PERSONAL_COUNTRIES} label={t("funding.residenceCountryLabel")} onChange={value => {
           const currency = value === "MX" ? mexicoCurrency.current : "USD";
           changeSelection(setCountryCode, value);
-          if (currency !== sourceCurrencyCode) setAmount(String(currency === "MXN" ? PERSONAL_FUNDING_MINIMUM_MXN : PERSONAL_FORM_MINIMUM_USD));
+          if (currency !== sourceCurrencyCode) setAmount(String(currency === "MXN" ? PERSONAL_FUNDING_MINIMUM_MXN : PERSONAL_FORM_DEFAULT_USD));
           setSourceCurrencyCode(currency);
         }} busy={busy} />
         {countryCode === "MX" ? <FundingCurrencyField id={id} country={countryCode} value={sourceCurrencyCode} onChange={value => {
           mexicoCurrency.current = value;
           changeSelection(setSourceCurrencyCode, value);
-          setAmount(String(value === "USD" ? PERSONAL_FORM_MINIMUM_USD : PERSONAL_FUNDING_MINIMUM_MXN));
+          setAmount(String(value === "USD" ? PERSONAL_FORM_DEFAULT_USD : PERSONAL_FUNDING_MINIMUM_MXN));
         }} busy={busy} /> : null}
         <FundingAmountField id={id} amount={amount} sourceCurrencyCode={sourceCurrencyCode} onChange={value => changeSelection(setAmount, value)} busy={busy} />
         <FundingMethodField id={id} value={methods.includes(method) ? method : ""} methods={methods} status={current ? options.status : "loading"}
@@ -148,7 +149,7 @@ function FundingAmountField({ id, amount, sourceCurrencyCode = "USD", onChange, 
   }
   return <fieldset className={`mb-onramp-amount-fieldset ${styles.amountField}`} disabled={busy}>
     <legend>{t("onramp.amountLabel")}</legend>
-    {usd ? <div className={`mb-onramp-quick-amounts ${styles.quickAmounts}`}>{[PERSONAL_FORM_MINIMUM_USD, 500, 1000, 2000, 5000, 10000, PERSONAL_FUNDING_MAXIMUM_USD].map(value => <button type="button" key={value}
+    {usd ? <div className={`mb-onramp-quick-amounts ${styles.quickAmounts}`}>{[PERSONAL_FORM_MINIMUM_USD, PERSONAL_FORM_DEFAULT_USD, 500, 1000, 2000, 5000, 10000, PERSONAL_FUNDING_MAXIMUM_USD].map(value => <button type="button" key={value}
       className={Number(amount) === value ? "active" : ""} aria-pressed={Number(amount) === value} onClick={() => onChange(String(value))}>
       {new Intl.NumberFormat(locale, { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value)}</button>)}</div> : null}
     <label className="mb-onramp-amount-input" htmlFor={`${id}-amount`}><span>{sourceCurrencyCode}</span><input id={`${id}-amount`} name="amount" autoComplete="off" type="number" min={String(usd ? PERSONAL_FORM_MINIMUM_USD : PERSONAL_FUNDING_MINIMUM_MXN)} max={usd ? String(PERSONAL_FUNDING_MAXIMUM_USD) : "1000000000"} step="0.01" inputMode="decimal"
@@ -156,7 +157,7 @@ function FundingAmountField({ id, amount, sourceCurrencyCode = "USD", onChange, 
     {usd ? <div className={styles.amountSliderGroup}>
       <label className="sr-only" htmlFor={`${id}-amount-slider`}>{t("funding.amountSlider")}</label>
       <input className={styles.amountSlider} id={`${id}-amount-slider`} name="amountSlider" type="range" dir="ltr" min={PERSONAL_FORM_MINIMUM_USD} max={PERSONAL_FUNDING_MAXIMUM_USD} step="any" value={sliderAmount}
-        onChange={event => setSliderAmount(Math.round(Number(event.target.value) / 100) * 100)} onKeyDown={sliderKeyDown} aria-valuetext={currency(sliderAmount)} aria-describedby={`${id}-usd-limits`} />
+        onChange={event => setSliderAmount(Math.round(Number(event.target.value) / 50) * 50)} onKeyDown={sliderKeyDown} aria-valuetext={currency(sliderAmount)} aria-describedby={`${id}-usd-limits`} />
       <div className={styles.sliderLimits} dir="ltr" aria-hidden="true"><span>{currency(PERSONAL_FORM_MINIMUM_USD)}</span><span>{currency(PERSONAL_FUNDING_MAXIMUM_USD)}</span></div>
       <small id={`${id}-usd-limits`} className="mb-onramp-disclosure">{t("funding.personalAmountLimits", { minimum: currency(PERSONAL_FORM_MINIMUM_USD), maximum: currency(PERSONAL_FUNDING_MAXIMUM_USD) })}</small>
     </div> : null}

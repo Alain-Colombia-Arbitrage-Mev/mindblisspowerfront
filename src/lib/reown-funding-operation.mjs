@@ -58,22 +58,23 @@ const sameAddress = (left, right) => typeof left === 'string' && typeof right ==
 /** The only successful link is an owned backend acknowledgement after a signature.
  * Connection alone never confirms ownership and never starts a funding intent.
  */
-export async function verifyReownWalletOwnership(operation, { address, requestLink, createSigner, onLinked }) {
-  const challenge = await operation.wait(() => requestLink('/api/member/wallet-link/challenge', { address }, { signal: operation.signal }));
+export async function verifyReownWalletOwnership(operation, { address, requestLink, createSigner, onLinked, assertCurrent = () => {} }) {
+  const current = effect => { assertCurrent(); return effect(); };
+  const challenge = await operation.wait(() => current(() => requestLink('/api/member/wallet-link/challenge', { address }, { signal: operation.signal })));
   if (challenge?.linked === true) {
     if (!sameAddress(challenge.address, address)) throw new Error('wallet_address_mismatch');
-    operation.run(() => onLinked(challenge.address));
+    operation.run(() => current(() => onLinked(challenge.address)));
     return challenge;
   }
   if (!sameAddress(challenge?.address, address) || typeof challenge?.message !== 'string' || !challenge.message.length
     || challenge.message.length > 4096 || !/^[0-9a-f-]{36}$/i.test(challenge?.challengeId || '')) throw new Error('wallet_challenge_invalid');
-  const signer = await operation.wait(createSigner);
-  if (!sameAddress(await operation.wait(() => signer.getAddress()), address)) throw new Error('wallet_address_mismatch');
-  const signature = await operation.wait(() => signer.signMessage(challenge.message));
-  const confirmed = await operation.wait(() => requestLink('/api/member/wallet-link/confirm', {
+  const signer = await operation.wait(() => current(createSigner));
+  if (!sameAddress(await operation.wait(() => current(() => signer.getAddress())), address)) throw new Error('wallet_address_mismatch');
+  const signature = await operation.wait(() => current(() => signer.signMessage(challenge.message)));
+  const confirmed = await operation.wait(() => current(() => requestLink('/api/member/wallet-link/confirm', {
     challengeId: challenge.challengeId, signature,
-  }, { signal: operation.signal }));
+  }, { signal: operation.signal })));
   if (confirmed?.linked !== true || !sameAddress(confirmed.address, address)) throw new Error('wallet_link_unconfirmed');
-  operation.run(() => onLinked(confirmed.address));
+  operation.run(() => current(() => onLinked(confirmed.address)));
   return confirmed;
 }

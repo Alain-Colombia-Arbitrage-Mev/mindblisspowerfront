@@ -203,6 +203,7 @@ function fundingOptions(value, kind) {
   if (!value || typeof value !== 'object' || Array.isArray(value) || value.walletKind !== kind
     || value.environment !== environment || value.provider !== provider || !COUNTRY.test(value.country || '') || !sourceCurrencyCode
     || (!administrative && !personalFundingCountry(value.country))
+    || (!administrative && sourceCurrencyCode !== 'USD' && !(value.country === 'MX' && sourceCurrencyCode === 'MXN'))
     || !Array.isArray(value.paymentMethods) || value.paymentMethods.length > 40
     || value.paymentMethods.some(method => typeof method !== 'string' || !METHOD.test(method))
     || new Set(value.paymentMethods).size !== value.paymentMethods.length

@@ -13,6 +13,9 @@ const read = relative => readFileSync(new URL(relative, import.meta.url), "utf8"
 function onrampCallback(name, scope) {
   scope.mounted ??= { current: true };
   scope.logoutStarted ??= { current: false };
+  scope.ownerKey ??= 'synthetic-owner';
+  scope.walletGeneration ??= 0;
+  scope.walletSnapshot ??= { current: { owner: scope.ownerKey, generation: scope.walletGeneration } };
   const source = ts.createSourceFile('ReownProvider.jsx', read('../components/reown/ReownProvider.jsx'),
     ts.ScriptTarget.Latest, true, ts.ScriptKind.JSX);
   let callback;

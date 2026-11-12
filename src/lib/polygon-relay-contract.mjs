@@ -10,11 +10,13 @@ const object = value => value && typeof value === 'object' && !Array.isArray(val
 const exact = (value, keys) => object(value) && Object.keys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key));
 const uuid = value => typeof value === 'string' && value === value.toLowerCase() && FUNDING_UUID.test(value);
 const date = value => typeof value === 'string' && value.length <= 64 && Number.isFinite(Date.parse(value));
-const hashOrNull = value => value === null || typeof value === 'string' && HASH.test(value);
+const address = value => typeof value === 'string' && ADDRESS.test(value);
+const hash = value => typeof value === 'string' && HASH.test(value);
+const hashOrNull = value => value === null || hash(value);
 export const polygonRelayTransferCall = amount => `0xa9059cbb${policy.recipientAddress.slice(2).padStart(64, '0')}${BigInt(amount).toString(16).padStart(64, '0')}`;
 export function polygonRelayInput(action, value) {
   if (action === 'prepare' && exact(value, ['requestId', 'amountAtomic']) && uuid(value.requestId) && personalCompanyPaymentAtomic(value.amountAtomic)) return { requestId: value.requestId, amountAtomic: value.amountAtomic };
-  if (action === 'authorize' && exact(value, ['paymentId', 'signature']) && uuid(value.paymentId) && /^0x[0-9a-f]{130}$/.test(value.signature)) return { paymentId: value.paymentId, signature: value.signature };
+  if (action === 'authorize' && exact(value, ['paymentId', 'signature']) && uuid(value.paymentId) && typeof value.signature === 'string' && /^0x[0-9a-f]{130}$/.test(value.signature)) return { paymentId: value.paymentId, signature: value.signature };
   if (['submit', 'verify', 'abandon'].includes(action) && exact(value, ['paymentId']) && uuid(value.paymentId)) return { paymentId: value.paymentId };
   return null;
 }
@@ -28,11 +30,12 @@ export function polygonRelayCapabilities(value) {
 export function polygonRelayView(value) {
   if (!object(value) || !uuid(value.paymentId) || value.walletKind !== 'personal' || value.executionMode !== 'polygon_native_meta_aa'
     || value.chainId !== 137 || value.tokenAddress !== policy.tokenAddress || value.tokenDecimals !== 6 || value.recipientAddress !== policy.recipientAddress
-    || !ADDRESS.test(value.walletAddress) || value.walletAddress === policy.recipientAddress || !personalCompanyPaymentAtomic(value.amountAtomic)
+    || !address(value.walletAddress) || value.walletAddress === policy.recipientAddress || !personalCompanyPaymentAtomic(value.amountAtomic)
     || !['prepared', 'authorized', 'broadcasting', 'ambiguous', 'submitted', 'confirmed', 'failed', 'expired', 'reconciliation_required'].includes(value.status)
-    || personalCompanyPaymentAtomic(value.authorizationNonce, true) === null || !HASH.test(value.authorizationDigest)
-    || value.authorizationHasOnchainExpiry !== false || !ADDRESS.test(value.relayerAddress) || value.relayerAddress === value.walletAddress
+    || personalCompanyPaymentAtomic(value.authorizationNonce, true) === null || !hash(value.authorizationDigest)
+    || value.authorizationHasOnchainExpiry !== false || !address(value.relayerAddress) || value.relayerAddress === value.walletAddress
     || value.entryPointAddress !== POLYGON_RELAY_ENTRY_POINT || !date(value.createdAt) || !date(value.expiresAt)
+    || Date.parse(value.expiresAt) <= Date.parse(value.createdAt)
     || !hashOrNull(value.userOperationHash) || !hashOrNull(value.transactionHash) || !hashOrNull(value.blockHash)
     || !(value.blockNumber === null || personalCompanyPaymentAtomic(value.blockNumber, true) !== null)
     || !Number.isSafeInteger(value.confirmations) || value.confirmations < 0 || value.requiredConfirmations !== 12
@@ -40,7 +43,10 @@ export function polygonRelayView(value) {
     || !(value.failureReason === null || ['transaction_reverted', 'user_operation_reverted', 'authorization_nonce_changed', 'sponsorship_rejected', 'operation_expired', 'preparation_expired', 'preparation_abandoned', 'transaction_mismatch'].includes(value.failureReason))) return null;
   if (value.status === 'confirmed' && (!value.userOperationHash || !value.transactionHash || !value.blockHash || value.blockNumber === null || value.confirmations < 12 || value.confirmedAt === null || value.failureReason !== null)) return null;
   if (value.status !== 'confirmed' && value.confirmedAt !== null) return null;
-  if (value.status === 'prepared' && (value.userOperationHash !== null || value.transactionHash !== null)) return null;
+  if (['prepared', 'authorized'].includes(value.status) && (value.userOperationHash !== null || value.transactionHash !== null
+    || value.blockHash !== null || value.blockNumber !== null || value.confirmations !== 0 || value.failureReason !== null)) return null;
+  if (['broadcasting', 'ambiguous', 'submitted'].includes(value.status) && (value.blockHash !== null || value.blockNumber !== null
+    || value.confirmations >= 12 || value.failureReason !== null)) return null;
   if (['ambiguous', 'submitted'].includes(value.status) && value.userOperationHash === null) return null;
   let typedData = null;
   if (value.typedData !== null) {

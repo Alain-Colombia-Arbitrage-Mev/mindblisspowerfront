@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import { createHash, createHmac } from 'node:crypto';
 import { Wallet, TypedDataEncoder } from 'ethers';
 import { LEGACY_POLYGON_COMPANY_PAYMENT as policy } from './personal-company-payment-values.mjs';
-import { POLYGON_RELAY_DOMAIN, POLYGON_RELAY_META_FIELDS, POLYGON_RELAY_ENTRY_POINT, polygonRelayTransferCall, polygonRelayView } from './polygon-relay-contract.mjs';
+import { POLYGON_RELAY_DOMAIN, POLYGON_RELAY_META_FIELDS, POLYGON_RELAY_ENTRY_POINT, polygonRelayTransferCall, polygonRelayView, polygonRelayInput } from './polygon-relay-contract.mjs';
 import { signPolygonRelay } from './polygon-relay-signing.mjs';
 import { isPolygonRelayChain } from './polygon-relay-chain.mjs';
 import { handlePolygonRelay } from './polygon-relay-bff.mjs';
-import { writePolygonRelay } from './polygon-relay-client.mjs';
+import { readPolygonRelayStatus, writePolygonRelay } from './polygon-relay-client.mjs';
 import { walletTransferMessages } from '../i18n/wallet-transfer-messages.js';
 import { translateMessage } from '../i18n/translate.mjs';
 
@@ -40,6 +40,63 @@ test('Polygon relay cannot display confirmation without UserOp and canonical rec
     { executionMode: 'direct' }, { chainId: 1 }, { membershipAssignment: 'active' }]) assert.equal(polygonRelayView({ ...confirmed, ...patch }), null);
   for (const patch of [{ amountAtomic: '1' }, { authorizationNonce: '2' }, { recipientAddress: address }, { authorizationHasOnchainExpiry: true },
     { entryPointAddress: address }]) assert.equal(polygonRelayView({ ...value, ...patch }), null);
+});
+test('Polygon relay identifiers and signatures are strings, never coerced arrays or objects', () => {
+  const value = payment({ typedData: null });
+  const coercionTrap = { toString() { assert.fail('untrusted identifiers must not be coerced'); } };
+  for (const field of ['walletAddress', 'relayerAddress', 'authorizationDigest', 'userOperationHash', 'transactionHash', 'blockHash']) {
+    const expected = field.endsWith('Address') ? address : hash;
+    for (const invalid of [[expected], coercionTrap, 1, true]) assert.equal(polygonRelayView({ ...value, [field]: invalid }), null, field);
+  }
+  const signature = `0x${'12'.repeat(65)}`;
+  assert.deepEqual(polygonRelayInput('authorize', { paymentId: id, signature }), { paymentId: id, signature });
+  for (const invalid of [[signature], coercionTrap, 1, true, null]) assert.equal(polygonRelayInput('authorize', { paymentId: id, signature: invalid }), null);
+});
+test('Polygon relay transient states cannot contain canonical receipt evidence or an inverted lifetime', () => {
+  const value = payment({ typedData: null });
+  for (const status of ['prepared', 'authorized', 'broadcasting', 'ambiguous', 'submitted']) {
+    const pending = { ...value, status, ...(['ambiguous', 'submitted'].includes(status) ? { userOperationHash: hash } : {}) };
+    assert.ok(polygonRelayView(pending), status);
+    for (const patch of [{ blockHash: hash }, { blockNumber: '90000000' }, { confirmations: 12 }, { failureReason: 'transaction_mismatch' }]) {
+      assert.equal(polygonRelayView({ ...pending, ...patch }), null, `${status} ${Object.keys(patch)[0]}`);
+    }
+    if (['prepared', 'authorized'].includes(status)) {
+      for (const patch of [{ userOperationHash: hash }, { transactionHash: hash }, { confirmations: 1 }]) assert.equal(polygonRelayView({ ...pending, ...patch }), null);
+    }
+  }
+  for (const expiresAt of [value.createdAt, new Date(Date.parse(value.createdAt) - 1).toISOString()]) {
+    assert.equal(polygonRelayView({ ...value, expiresAt }), null);
+  }
+  for (const status of ['ambiguous', 'submitted']) assert.ok(polygonRelayView({ ...value, status, userOperationHash: hash, confirmations: 11 }));
+  assert.ok(polygonRelayView({ ...value, status: 'confirmed', userOperationHash: hash, transactionHash: hash,
+    blockNumber: '90000000', blockHash: hash, confirmations: 12, confirmedAt: new Date().toISOString() }));
+  // A changed native nonce can require reconciliation with or without an included UserOperation.
+  for (const userOperationHash of [null, hash]) assert.ok(polygonRelayView({ ...value, status: 'reconciliation_required', userOperationHash,
+    blockNumber: '90000000', blockHash: hash, confirmations: 12, failureReason: 'authorization_nonce_changed' }));
+});
+test('BFF and browser reject malformed relay evidence once without granting a financial acknowledgement', async () => {
+  const base = payment({ status: 'confirmed', typedData: null, userOperationHash: hash, transactionHash: hash,
+    blockNumber: '90000000', blockHash: hash, confirmations: 12, confirmedAt: new Date().toISOString() });
+  const corrupt = [
+    ...['walletAddress', 'relayerAddress', 'authorizationDigest'].map(field => ({ ...base, [field]: [base[field]] })),
+    { ...base, expiresAt: base.createdAt },
+    { ...base, status: 'authorized', confirmedAt: null, userOperationHash: null, transactionHash: null },
+    { ...base, status: 'submitted', confirmedAt: null },
+  ];
+  for (const data of corrupt) {
+    let upstream = 0, browser = 0;
+    const response = await handlePolygonRelay(request(`status?paymentId=${id}`), 'status', { env,
+      serviceRequest: async () => { upstream++; return { ok: true, data }; } });
+    assert.equal(response.status, 502); assert.equal(response.headers.get('set-cookie'), null);
+    assert.deepEqual(await response.json(), { error: 'polygon_relay_unavailable' });
+    assert.equal(upstream, 1);
+    await assert.rejects(readPolygonRelayStatus(id, { fetchImpl: async () => { browser++; return Response.json(data); } }), { message: 'polygon_relay_unavailable' });
+    assert.equal(browser, 1);
+  }
+  let writes = 0;
+  await assert.rejects(writePolygonRelay('authorize', { paymentId: id, signature: [`0x${'12'.repeat(65)}`] },
+    { fetchImpl: async () => { writes++; assert.fail('invalid authorization reached the transport'); } }), { message: 'invalid_request' });
+  assert.equal(writes, 0);
 });
 test('Polygon authorization signs only the exact reviewed transfer from the bound EOA, with no RPC broadcast or SIWX', async () => {
   const value = payment(), calls = [];

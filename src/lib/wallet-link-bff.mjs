@@ -2,6 +2,7 @@ import { betterAuthConfig, betterAuthCookies } from './better-auth-bridge.mjs';
 import { coreFetch, runtimeEnvironment } from './cloudflare-runtime.mjs';
 import { memberMutationError } from './member-mutation-policy.mjs';
 import { boundedServiceRequest } from './private-service-request.mjs';
+import { readBoundedRequestJson } from './bounded-request-json.mjs';
 
 const MAX_REQUEST_BYTES = 4096;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -17,26 +18,6 @@ const safeErrors = new Set(['unauthenticated', 'invalid_origin', 'invalid_reques
   'wallet_signature_invalid', 'wallet_identity_unavailable', 'wallet_link_unavailable']);
 const headers = { 'Cache-Control': 'private, no-store' };
 const reply = (body, status = 200) => Response.json(body, { status, headers });
-
-async function boundedInput(request) {
-  const declared = request.headers.get('content-length');
-  if (declared !== null && (!/^\d+$/.test(declared) || Number(declared) > MAX_REQUEST_BYTES)) throw new RangeError('request_too_large');
-  const reader = request.body?.getReader();
-  if (!reader) throw new SyntaxError('invalid_json');
-  const chunks = []; let size = 0;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.byteLength;
-      if (size > MAX_REQUEST_BYTES) throw new RangeError('request_too_large');
-      chunks.push(value);
-    }
-  } finally { try { reader.releaseLock(); } catch { /* no-op */ } }
-  const bytes = new Uint8Array(size); let offset = 0;
-  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
-  return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
-}
 
 function validInput(action, value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -69,8 +50,11 @@ export async function handleWalletLink(request, action, {
 
   let body;
   if (route.method === 'POST') {
-    try { body = await boundedInput(request); }
-    catch (error) { return reply({ error: error instanceof RangeError ? 'request_too_large' : 'invalid_request' }, error instanceof RangeError ? 413 : 400); }
+    try { body = await readBoundedRequestJson(request, { maxBytes: MAX_REQUEST_BYTES }); }
+    catch (error) {
+      if (error?.message === 'request_body_unavailable') return reply({ error: 'wallet_link_unavailable', reason: 'gateway_transport_unavailable' }, 503);
+      return reply({ error: error instanceof RangeError ? 'request_too_large' : 'invalid_request' }, error instanceof RangeError ? 413 : 400);
+    }
     if (!validInput(action, body)) return reply({ error: 'invalid_request' }, 400);
   }
 

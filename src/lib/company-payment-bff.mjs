@@ -3,7 +3,7 @@ import { betterAuthConfig, betterAuthCookies, trustedAuthClientIp } from './bett
 import { coreFetch, runtimeEnvironment } from './cloudflare-runtime.mjs';
 import { memberMutationError } from './member-mutation-policy.mjs';
 import { boundedServiceRequest } from './private-service-request.mjs';
-import { browserRequestDeadline } from './browser-request-deadline.mjs';
+import { readBoundedRequestJson } from './bounded-request-json.mjs';
 import { companyPaymentHistory, companyPaymentInput, companyPaymentView } from './company-payment-contract.mjs';
 import { FUNDING_UUID } from './wallet-funding-contract.mjs';
 import { PERSONAL_COMPANY_PAYMENT } from './personal-company-payment-values.mjs';
@@ -18,26 +18,9 @@ const safeErrors = new Set(['unauthenticated', 'invalid_origin', 'invalid_reques
   'company_payment_forbidden', 'company_payment_hash_reused', 'company_payment_pending_exists', 'company_payment_rpc_unavailable',
   'company_payment_invalid_transition', 'company_payment_confirmation_conflict', 'company_payment_network_retired', 'company_payment_network_changed']);
 
-async function inputBody(request) {
-  const reader = request.body?.getReader();
-  if (!reader) throw new Error('invalid_request');
-  const deadline = browserRequestDeadline(request.signal, 8000);
-  const cancel = () => { try { void reader.cancel().catch(() => {}); } catch { /* bounded cleanup */ } };
-  deadline.signal.addEventListener('abort', cancel, { once: true });
-  let size = 0, raw = '';
-  const decoder = new TextDecoder('utf-8', { fatal: true });
-  try {
-    if (deadline.signal.aborted) throw new Error('invalid_request');
-    for (;;) {
-      const next = await reader.read();
-      if (deadline.signal.aborted) throw new Error('invalid_request');
-      if (next.done) break;
-      size += next.value.byteLength;
-      if (size > 2048) { cancel(); throw new Error('request_too_large'); }
-      raw += decoder.decode(next.value, { stream: true });
-    }
-    return JSON.parse(raw + decoder.decode());
-  } finally { deadline.dispose(); deadline.signal.removeEventListener('abort', cancel); reader.releaseLock(); }
+function bodyFailure(error) {
+  if (error?.message === 'request_body_unavailable') return reply({ error: 'company_payment_unavailable' }, 503);
+  return reply({ error: error?.message === 'request_too_large' ? 'request_too_large' : 'invalid_request' }, error?.message === 'request_too_large' ? 413 : 400);
 }
 
 /** Authenticated journal: browser observations and canonical server evidence stay distinct. */
@@ -57,8 +40,8 @@ export async function handleCompanyPaymentJournal(request, action, { env = runti
     if (url.search) return reply({ error: 'invalid_request' }, 400);
     const length = request.headers.get('content-length');
     if (length !== null && (!/^\d+$/.test(length) || Number(length) > 2048)) return reply({ error: 'request_too_large' }, 413);
-    try { body = companyPaymentEventInput(await inputBody(request)); }
-    catch (error) { return reply({ error: error?.message === 'request_too_large' ? 'request_too_large' : 'invalid_request' }, error?.message === 'request_too_large' ? 413 : 400); }
+    try { body = companyPaymentEventInput(await readBoundedRequestJson(request, { maxBytes: 2048, timeoutMs: 8000 })); }
+    catch (error) { return bodyFailure(error); }
     if (!body) return reply({ error: 'invalid_request' }, 400);
   } else {
     parsed = companyPaymentEventQuery(url.search, action === 'eventHistory' ? 'events' : 'activity');
@@ -98,8 +81,8 @@ export async function handleCompanyPayment(request, action, { env = runtimeEnvir
     if (url.search) return reply({ error: 'invalid_request' }, 400);
     const length = request.headers.get('content-length');
     if (length !== null && (!/^\d+$/.test(length) || Number(length) > 2048)) return reply({ error: 'request_too_large' }, 413);
-    try { body = companyPaymentInput(await inputBody(request), action); }
-    catch (error) { return reply({ error: error?.message === 'request_too_large' ? 'request_too_large' : 'invalid_request' }, error?.message === 'request_too_large' ? 413 : 400); }
+    try { body = companyPaymentInput(await readBoundedRequestJson(request, { maxBytes: 2048, timeoutMs: 8000 }), action); }
+    catch (error) { return bodyFailure(error); }
     if (!body) return reply({ error: 'invalid_request' }, 400);
   } else if (action === 'status') {
     paymentId = url.searchParams.get('paymentId');

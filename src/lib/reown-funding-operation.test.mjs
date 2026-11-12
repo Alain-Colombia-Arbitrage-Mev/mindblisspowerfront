@@ -89,3 +89,27 @@ test('ownership proof still requires the selected signer and an exact backend ac
     onLinked: () => assert.fail('wrong owner linked'),
   }), { message: 'wallet_address_mismatch' }); invalid.finish();
 });
+
+test('ownership rechecks the current SDK generation after every asynchronous stage without advancing an obsolete proof', async () => {
+  for (const stage of ['challenge', 'signer-address', 'signature', 'confirmation']) {
+    const gate = deferred(), started = deferred(), calls = [], operation = createReownFundingOperation();
+    let current = true;
+    const pending = verifyReownWalletOwnership(operation, { address,
+      assertCurrent() { if (!current) throw new Error('wallet_address_mismatch'); },
+      requestLink: async path => {
+        if (path.endsWith('/challenge')) { calls.push('challenge'); if (stage === 'challenge') { started.resolve(); return gate.promise; } return challenge; }
+        calls.push('confirm'); if (stage === 'confirmation') { started.resolve(); return gate.promise; } return { linked: true, address };
+      },
+      createSigner: async () => { calls.push('signer'); return {
+        getAddress: async () => { calls.push('address'); if (stage === 'signer-address') { started.resolve(); return gate.promise; } return address; },
+        signMessage: async () => { calls.push('sign'); if (stage === 'signature') { started.resolve(); return gate.promise; } return 'synthetic signature'; },
+      }; }, onLinked: () => calls.push('published'),
+    });
+    await started.promise; current = false;
+    gate.resolve(stage === 'challenge' ? challenge : stage === 'signer-address' ? address : stage === 'signature' ? 'synthetic signature' : { linked: true, address });
+    await assert.rejects(pending, { message: 'wallet_address_mismatch' }); operation.finish();
+    const expected = stage === 'challenge' ? ['challenge'] : stage === 'signer-address' ? ['challenge', 'signer', 'address']
+      : stage === 'signature' ? ['challenge', 'signer', 'address', 'sign'] : ['challenge', 'signer', 'address', 'sign', 'confirm'];
+    assert.deepEqual(calls, expected); await tick(); assert.deepEqual(calls, expected, 'No failed proof may retry itself');
+  }
+});

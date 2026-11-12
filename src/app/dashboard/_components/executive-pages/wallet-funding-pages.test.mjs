@@ -670,7 +670,7 @@ test('selected method limits reflect overlapping real routes and never invent a 
   const { selectedMethodLimits } = formHarness('PersonalFundingForm', {}).exports;
   const routes = [{ paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', minimumUsd: 10, maximumUsd: 1000 }] },
     { paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', minimumUsd: 100, maximumUsd: 2000 }] }];
-  assert.deepEqual(selectedMethodLimits(routes, 'CREDIT_DEBIT_CARD', 100), { minimumUsd: 100, maximumUsd: 2000 });
+  assert.deepEqual(selectedMethodLimits(routes, 'CREDIT_DEBIT_CARD', 100), { minimumUsd: 50, maximumUsd: 2000 });
   assert.equal(selectedMethodLimits(routes, 'PAYPAL', 100), null);
   assert.equal(selectedMethodLimits(routes, 'CREDIT_DEBIT_CARD', 2500), null);
 });
@@ -686,12 +686,14 @@ test('USD amount controls expose exact accessible limits, quick presets and a sl
   const range = () => findAll(amountField(), node => node?.type === 'input' && node.props.type === 'range')[0];
   const number = () => findAll(amountField(), node => node?.type === 'input' && node.props.type === 'number')[0];
   const presets = findAll(amountField(), node => node?.type === 'button');
-  assert.deepEqual(presets.map(button => button.props.children), [100, 500, 1000, 2000, 5000, 10000, 15000]
+  assert.deepEqual(presets.map(button => button.props.children), [50, 100, 500, 1000, 2000, 5000, 10000, 15000]
     .map(value => new Intl.NumberFormat('es', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value)));
   assert.ok(presets.every(button => button.props.type === 'button'));
+  assert.deepEqual(presets.filter(button => button.props['aria-pressed']).map(button => button.props.children),
+    [new Intl.NumberFormat('es', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(100)]);
   assert.equal(number().props.value, '100');
-  assert.equal(range().props.min, 100); assert.equal(range().props.max, 15000); assert.equal(range().props.step, 'any');
-  assert.equal(number().props.min, '100'); assert.equal(number().props.max, '15000'); assert.equal(number().props.step, '0.01');
+  assert.equal(range().props.min, 50); assert.equal(range().props.max, 15000); assert.equal(range().props.step, 'any');
+  assert.equal(number().props.min, '50'); assert.equal(number().props.max, '15000'); assert.equal(number().props.step, '0.01');
   assert.doesNotMatch(renderToStaticMarkup(amountField()), /\b30(?:[.,]00)?\s*(?:USD|US\$)|(?:\$|US\$)\s*30\b/);
   assert.ok(findAll(amountField(), node => node?.type === 'label').some(label => label.props.htmlFor === range().props.id));
   number().props.onChange({ target: { value: '1234.56' } }); harness.render(props); tree = harness.render(props);
@@ -700,11 +702,17 @@ test('USD amount controls expose exact accessible limits, quick presets and a sl
   harness.render(props); tree = harness.render(props); assert.equal(number().props.value, '1234.56');
   assert.equal(submitted.length, 0); assert.equal(selections.length, 2, 'only manual country and amount edits notify the page');
   range().props.onChange({ target: { value: '6033.82' } }); harness.render(props); tree = harness.render(props);
-  assert.equal(number().props.value, '6000');
+  assert.equal(number().props.value, '6050');
+  range().props.onChange({ target: { value: '50' } }); harness.render(props); tree = harness.render(props);
+  assert.equal(number().props.value, '50'); assert.equal(range().props.value, 50);
+  assert.equal(range().props['aria-valuetext'], new Intl.NumberFormat('es', { style: 'currency', currency: 'USD' }).format(50));
+  assert.equal(find(tree, 'FundingSubmit').props.disabled, false);
+  presets[0].props.onClick(); harness.render(props); tree = harness.render(props);
+  assert.equal(number().props.value, '50'); assert.equal(range().props.value, 50);
   presets.at(-1).props.onClick(); harness.render(props); tree = harness.render(props);
   assert.equal(number().props.value, '15000'); assert.equal(find(tree, 'FundingSubmit').props.disabled, false);
   assert.equal(submitted.length, 0, 'amount controls initiated a checkout');
-  for (const invalid of ['20', '29.99', '30', '99.99', '15000.01']) {
+  for (const invalid of ['20', '29.99', '30', '49.99', '15000.01']) {
     number().props.onChange({ target: { value: invalid } }); harness.render(props); tree = harness.render(props);
     assert.equal(number().props.value, invalid, 'the slider silently clamped the manual field');
     assert.equal(number().props['aria-invalid'], true); assert.equal(find(tree, 'FundingSubmit').props.disabled, true);
@@ -723,7 +731,7 @@ test('USD slider keyboard actions move useful increments and clamp boundaries wi
       assert.equal(prevented, true, key); assert.equal(find(tree, 'FundingAmountField').props.amount, String(expected), key);
     }
     key('ArrowRight', 200); key('ArrowUp', 300); key('PageUp', 1300); key('PageDown', 300); key('ArrowLeft', 200); key('ArrowDown', 100);
-    key('ArrowLeft', 100); key('End', 15000); key('ArrowUp', 15000); key('Home', 100);
+    key('ArrowLeft', 50); key('End', 15000); key('ArrowUp', 15000); key('Home', 50);
     range().props.onKeyDown({ key: 'Tab', preventDefault() { assert.fail('the slider trapped keyboard navigation'); } });
     assert.equal(range().props.dir, 'ltr', 'numeric slider direction must match its ArrowRight increment in every locale');
   } finally { harness.unmount(); }
@@ -985,7 +993,7 @@ test('personal history and status surfaces cannot mount or request an administra
   assert.equal(status.render({ walletKind: 'administrative', checkoutReference: statusReference }), null);
 });
 
-test('the public form starts at USD100, hides the small test amount and retains higher provider floors and submission deduplication', async t => {
+test('the public form starts at USD100, accepts USD50 and retains higher provider floors and submission deduplication', async t => {
   const submitted = [];
   let finish;
   const harness = formHarness('PersonalFundingForm', { readPersonalFundingOptions: async country => ({ country, sourceCurrencyCode: 'USD', routes: [
@@ -998,13 +1006,18 @@ test('the public form starts at USD100, hides the small test amount and retains 
   assert.equal(find(tree, 'FundingAmountField').props.amount, '100');
   assert.deepEqual(find(tree, 'FundingMethodField').props.methods, ['CREDIT_DEBIT_CARD']);
   assert.equal(find(tree, 'FundingSubmit').props.disabled, false);
-  find(tree, 'FundingAmountField').props.onChange('30'); harness.render(props); tree = harness.render(props);
-  assert.equal(find(tree, 'FundingSubmit').props.disabled, true);
-  tree.props.onSubmit({ preventDefault() {} }); await flush(); assert.equal(submitted.length, 0);
-  find(tree, 'FundingAmountField').props.onChange('100'); harness.render(props); tree = harness.render(props);
+  for (const amount of ['30', '49.99']) {
+    find(tree, 'FundingAmountField').props.onChange(amount); harness.render(props); tree = harness.render(props);
+    assert.equal(find(tree, 'FundingSubmit').props.disabled, true);
+    tree.props.onSubmit({ preventDefault() {} }); await flush(); assert.equal(submitted.length, 0);
+  }
+  find(tree, 'FundingAmountField').props.onChange('50'); harness.render(props); tree = harness.render(props);
+  assert.deepEqual(find(tree, 'FundingMethodField').props.methods, ['CREDIT_DEBIT_CARD']);
+  assert.deepEqual(find(tree, 'FundingMethodField').props.limits, { minimumUsd: 50, maximumUsd: 15000 });
+  assert.equal(find(tree, 'FundingSubmit').props.disabled, false);
   tree.props.onSubmit({ preventDefault() {} }); tree.props.onSubmit({ preventDefault() {} }); await flush();
   assert.equal(submitted.length, 1);
-  assert.equal(submitted[0].amount, 100);
+  assert.equal(submitted[0].amount, 50);
   finish(); await flush();
   find(tree, 'FundingAmountField').props.onChange('128.04'); harness.render(props); tree = harness.render(props);
   assert.deepEqual(find(tree, 'FundingMethodField').props.methods, ['CREDIT_DEBIT_CARD', 'APPLE_PAY']);

@@ -337,6 +337,17 @@ function ConfiguredReownProvider({ children }) {
   const connectionStatus = walletSwitching ? "restoring" : restoredStatus;
   connectionSnapshot.current = { status: sdkConnectionStatus, modalOpen: appKitState.open === true,
     disconnected: sdkConnectionStatus === "disconnected", address: currentAddress };
+  // Captured callbacks must not regain authority after SDK account A → B → A,
+  // a different owner, or a fresh candidate selection. This is an observation
+  // generation only; canonical backend binding still proves ownership.
+  const observedWallet = { owner: ownerKey, address: currentAddress, boundAddress, provider: walletProvider,
+    connected: account.isConnected === true, bindingStatus: binding.status, needsSelection: walletNeedsAccountSelection,
+    identityMismatch: walletIdentityMismatch, switching: walletSwitching };
+  const walletSnapshot = useRef({ ...observedWallet, generation: 0 });
+  if (Object.keys(observedWallet).some(key => walletSnapshot.current[key] !== observedWallet[key])) {
+    walletSnapshot.current = { ...observedWallet, generation: walletSnapshot.current.generation + 1 };
+  }
+  const walletGeneration = walletSnapshot.current.generation;
 
   useEffect(() => {
     if (sdkConnectionStatus !== "restoring") { setRestorationTimedOut(false); return undefined; }
@@ -395,12 +406,17 @@ function ConfiguredReownProvider({ children }) {
   }, [sdkConnectionStatus, appKitState.open, account.isConnected, account.status]);
 
   const linkWallet = useCallback((parentOperation) => {
-    if (!mounted.current || logoutStarted.current) return Promise.reject(new DOMException('Aborted', 'AbortError'));
+    if (!mounted.current || logoutStarted.current || walletSnapshot.current.owner !== ownerKey) return Promise.reject(new DOMException('Aborted', 'AbortError'));
+    if (walletSnapshot.current.generation !== walletGeneration) return Promise.reject(new Error("wallet_address_mismatch"));
     if (linking.current) return linking.current;
     const scope = parentOperation || beginOnrampOperation();
     linkingOperation.current = scope;
+    const assertCurrent = () => {
+      if (!mounted.current || logoutStarted.current || walletSnapshot.current.owner !== ownerKey) throw new DOMException("Aborted", "AbortError");
+      if (walletSnapshot.current.generation !== walletGeneration) throw new Error("wallet_address_mismatch");
+    };
     const operation = (async () => {
-      scope.assertActive();
+      scope.assertActive(); assertCurrent();
       setVerificationError("");
       if (walletIdentityMismatch || walletNeedsAccountSelection) throw new Error("wallet_address_mismatch");
       if (switchRequest.current) throw new Error("wallet_not_connected");
@@ -411,16 +427,17 @@ function ConfiguredReownProvider({ children }) {
       }
       setIsLinking(true);
       return await verifyReownWalletOwnership(scope, {
+        assertCurrent,
         address: currentAddress, requestLink: requestWalletLink,
         createSigner: () => new BrowserProvider(walletProvider).getSigner(),
         onLinked(address) {
-          if (!mounted.current) throw new DOMException("Aborted", "AbortError");
+          assertCurrent();
           setBinding({ status: "linked", address: getAddress(address), error: "" });
           window.dispatchEvent(new Event('vp:personal-wallet-linked'));
         },
       });
     })().catch(error => {
-      if (linkingOperation.current === scope && mounted.current) setVerificationError(personalFundingFailure(error, 'link'));
+      if (linkingOperation.current === scope && mounted.current && walletSnapshot.current.generation === walletGeneration) setVerificationError(personalFundingFailure(error, 'link'));
       throw error;
     }).finally(() => {
       if (linking.current === operation) {
@@ -434,7 +451,7 @@ function ConfiguredReownProvider({ children }) {
     });
     linking.current = operation;
     return operation;
-  }, [account.isConnected, beginOnrampOperation, binding.address, binding.status, currentAddress, walletIdentityMismatch, walletNeedsAccountSelection, walletProvider]);
+  }, [ownerKey, walletGeneration, account.isConnected, beginOnrampOperation, binding.address, binding.status, currentAddress, walletIdentityMismatch, walletNeedsAccountSelection, walletProvider]);
 
   const prepareWallet = useCallback(() => {
     if (!mounted.current || !ownerKey || latestOwner.current !== ownerKey) return Promise.reject(new DOMException("Aborted", "AbortError"));
@@ -652,11 +669,11 @@ function ConfiguredReownProvider({ children }) {
   );
 
   const getCompanyPaymentProvider = useCallback(() => {
-    if (!mounted.current || logoutStarted.current || latestOwner.current !== ownerKey || switchRequest.current || walletIdentityMismatch || account.isConnected !== true || !walletProvider || !currentAddress || !boundAddress || !sameAddress(currentAddress, boundAddress)) {
+    if (!mounted.current || logoutStarted.current || latestOwner.current !== ownerKey || walletSnapshot.current.generation !== walletGeneration || switchRequest.current || walletIdentityMismatch || account.isConnected !== true || !walletProvider || !currentAddress || !boundAddress || !sameAddress(currentAddress, boundAddress)) {
       throw new Error("personal_company_wallet_unavailable");
     }
     return walletProvider;
-  }, [ownerKey, account.isConnected, walletProvider, currentAddress, boundAddress, walletIdentityMismatch]);
+  }, [ownerKey, walletGeneration, account.isConnected, walletProvider, currentAddress, boundAddress, walletIdentityMismatch]);
   const switchCompanyPaymentNetwork = useCallback(async (chainId = 1) => {
     getCompanyPaymentProvider();
     if (![1, 137].includes(chainId)) throw new Error("personal_company_chain_changed");

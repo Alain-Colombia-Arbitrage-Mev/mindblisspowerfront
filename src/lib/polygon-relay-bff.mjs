@@ -3,7 +3,7 @@ import { betterAuthConfig, betterAuthCookies, trustedAuthClientIp } from './bett
 import { coreFetch, runtimeEnvironment } from './cloudflare-runtime.mjs';
 import { memberMutationError } from './member-mutation-policy.mjs';
 import { boundedServiceRequest } from './private-service-request.mjs';
-import { browserRequestDeadline } from './browser-request-deadline.mjs';
+import { readBoundedRequestJson } from './bounded-request-json.mjs';
 import { FUNDING_UUID } from './wallet-funding-contract.mjs';
 import { polygonRelayInput, polygonRelayView, polygonRelayHistory, polygonRelayCapabilities } from './polygon-relay-contract.mjs';
 import { isPersonalPortalOrigin } from './personal-portal-origin.mjs';
@@ -21,26 +21,6 @@ for (const code of ['signature_invalid', 'contract_changed', 'authorization_unav
 const legacyErrors = Object.freeze({ company_payment_pending_exists: 'polygon_relay_pending_exists',
   company_payment_insufficient_balance: 'polygon_relay_insufficient_balance', company_payment_request_already_used: 'polygon_relay_request_already_used',
   company_payment_rpc_unavailable: 'polygon_relay_rpc_unavailable' });
-async function body(request) {
-  const size = request.headers.get('content-length');
-  if (size !== null && (!/^\d+$/.test(size) || Number(size) > 4096)) throw new RangeError('request_too_large');
-  const reader = request.body?.getReader(); if (!reader) throw new Error('invalid_request');
-  const deadline = browserRequestDeadline(request.signal, 8000), decoder = new TextDecoder('utf-8', { fatal: true });
-  const cancel = () => { try { void reader.cancel().catch(() => {}); } catch { /* disposal */ } };
-  deadline.signal.addEventListener('abort', cancel, { once: true });
-  let bytes = 0, raw = '';
-  try {
-    for (;;) {
-      if (deadline.signal.aborted) throw new Error('invalid_request');
-      const next = await reader.read();
-      if (deadline.signal.aborted) throw new Error('invalid_request');
-      if (next.done) break;
-      bytes += next.value.byteLength; if (bytes > 4096) { cancel(); throw new RangeError('request_too_large'); }
-      raw += decoder.decode(next.value, { stream: true });
-    }
-    return JSON.parse(raw + decoder.decode());
-  } finally { deadline.dispose(); deadline.signal.removeEventListener('abort', cancel); reader.releaseLock(); }
-}
 /** This is a fixed transfer service, never a public Pimlico JSON-RPC proxy. */
 export async function handlePolygonRelay(request, action, { env = runtimeEnvironment(), fetchImpl = coreFetch, serviceRequest = boundedServiceRequest } = {}) {
   if (!['capabilities', 'prepare', 'authorize', 'submit', 'verify', 'abandon', 'status', 'history'].includes(action)) return reply({ error: 'invalid_request' }, 400);
@@ -54,8 +34,11 @@ export async function handlePolygonRelay(request, action, { env = runtimeEnviron
   if (method === 'POST') {
     const denied = memberMutationError(request, env); if (denied) return reply({ error: denied.error }, denied.status);
     if (url.search) return reply({ error: 'invalid_request' }, 400);
-    try { input = polygonRelayInput(action, await body(request)); }
-    catch (error) { return reply({ error: error instanceof RangeError ? 'request_too_large' : 'invalid_request' }, error instanceof RangeError ? 413 : 400); }
+    try { input = polygonRelayInput(action, await readBoundedRequestJson(request, { maxBytes: 4096, timeoutMs: 8000 })); }
+    catch (error) {
+      if (error?.message === 'request_body_unavailable') return reply({ error: 'polygon_relay_unavailable' }, 503);
+      return reply({ error: error?.message === 'request_too_large' ? 'request_too_large' : 'invalid_request' }, error?.message === 'request_too_large' ? 413 : 400);
+    }
     if (!input) return reply({ error: 'invalid_request' }, 400);
   } else if (action === 'status') {
     paymentId = url.searchParams.get('paymentId');

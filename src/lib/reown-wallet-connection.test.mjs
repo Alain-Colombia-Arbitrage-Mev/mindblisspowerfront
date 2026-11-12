@@ -162,7 +162,7 @@ test('another wrong embedded account stays a mismatch after choosing and a stall
 
 /** Exercise the actual provider callbacks with a synthetic SDK and session.
  * No browser storage, real wallet, provider RPC, email or signature is used. */
-function providerHarness(t, { bound = false, reset = async () => {}, proof = false, accountState = {}, readBinding } = {}) {
+function providerHarness(t, { bound = false, reset = async () => {}, proof = false, accountState = {}, readBinding, signProof } = {}) {
   const require = createRequire(import.meta.url), slots = [], queued = [], calls = [];
   const logoutListeners = new Set();
   let cursor = 0, dirty = true, unmounted = false, value;
@@ -200,7 +200,7 @@ function providerHarness(t, { bound = false, reset = async () => {}, proof = fal
     ethers: { getAddress: input => input.toLowerCase(), BrowserProvider: class {
       getSigner() { assert.equal(proof, true, 'No signature in connection tests'); return {
         getAddress: async () => account.address,
-        signMessage: async () => { calls.push('sign'); return `0x${'1'.repeat(130)}`; },
+        signMessage: async () => { calls.push('sign'); return signProof ? signProof() : `0x${'1'.repeat(130)}`; },
       }; }
     } },
     '@/lib/member-session-context': { useMemberSession: () => member }, '@/lib/browser-onramp-region.mjs': { browserOnrampRegion() { assert.fail('No funding region lookup'); } },
@@ -488,4 +488,49 @@ test('a captured disconnected-wallet connection callback cannot open the SDK aft
   const connect = h.value.connectWallet; h.logout();
   await assert.rejects(connect(), { name: 'AbortError' });
   assert.deepEqual(h.calls, ['disconnect']);
+});
+
+test('a captured signer callback cannot expose the former bound provider after the SDK account changes', async t => {
+  const h = providerHarness(t, { bound: true }); await h.flush();
+  const captured = h.value.getCompanyPaymentProvider;
+  assert.doesNotThrow(captured); await h.account({ address: other });
+  assert.equal(h.value.isLinked, false); assert.throws(h.value.getCompanyPaymentProvider, { message: 'personal_company_wallet_unavailable' });
+  assert.throws(captured, { message: 'personal_company_wallet_unavailable' });
+  await h.account({ address }); assert.equal(h.value.isLinked, true);
+  assert.throws(captured, { message: 'personal_company_wallet_unavailable' }); assert.doesNotThrow(h.value.getCompanyPaymentProvider);
+  assert.deepEqual(h.calls, []);
+});
+
+test('a captured proof callback cannot reuse a selected candidate after the SDK account changes away and back', async t => {
+  const h = providerHarness(t, { proof: true, accountState: { embeddedWalletInfo: undefined } }); await h.flush();
+  const choice = h.value.chooseWallet(); await h.flush();
+  await h.account({ isConnected: false, status: 'disconnected' });
+  await h.account({ isConnected: true, status: 'connected', address: other }); await choice; await h.flush();
+  const captured = h.value.linkWallet; assert.equal(h.value.walletNeedsAccountSelection, false);
+  await h.account({ address }); await h.account({ address: other });
+  assert.equal(h.value.walletNeedsAccountSelection, true); assert.equal(h.value.address, '');
+  await assert.rejects(captured(), { message: 'wallet_address_mismatch' }); await h.flush();
+  assert.deepEqual(h.calls, ['disconnect', 'open']); assert.equal(h.value.linkStatus, 'unlinked');
+});
+
+test('SDK account replacement during a pending ownership signature cannot confirm, publish or leak a stale error into the new candidate', async t => {
+  const signature = deferred(), started = deferred();
+  const h = providerHarness(t, { proof: true, accountState: { embeddedWalletInfo: undefined },
+    signProof() { started.resolve(); return signature.promise; } }); await h.flush();
+  const choice = h.value.chooseWallet(); await h.flush(); await h.account({ isConnected: false, status: 'disconnected' });
+  await h.account({ isConnected: true, status: 'connected', address: other }); await choice; await h.flush();
+  const proof = h.value.linkWallet(); await started.promise;
+  await h.account({ address }); signature.resolve(`0x${'1'.repeat(130)}`);
+  await assert.rejects(proof, { message: 'wallet_address_mismatch' }); await h.flush();
+  assert.deepEqual(h.calls, ['disconnect', 'open', 'challenge', 'sign']);
+  assert.equal(h.value.linkStatus, 'unlinked'); assert.equal(h.value.isLinked, false); assert.equal(h.value.linkError, '');
+});
+
+test('a captured signer callback remains obsolete across a member A → B → A transition', async t => {
+  const h = providerHarness(t, { bound: true }); await h.flush(); const captured = h.value.getCompanyPaymentProvider;
+  await h.member({ subject: 'owner-next', email: 'next@example.test' });
+  assert.throws(captured, { message: 'personal_company_wallet_unavailable' });
+  await h.member({ subject: 'owner-new', email: 'new@example.test' });
+  assert.throws(captured, { message: 'personal_company_wallet_unavailable' });
+  assert.deepEqual(h.calls, []);
 });

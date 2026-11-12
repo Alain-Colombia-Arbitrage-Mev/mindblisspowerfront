@@ -58,6 +58,27 @@ test('legacy dollar discovery upgrades explicitly to USD and rejects conflicting
   assert.equal(personalProductionOptions({ ...parsed, routes: [{ serviceProvider: 'MERCURYO', paymentMethods: [method] }] }), null);
 });
 
+test('personal discovery rejects unsupported country and currency pairs before either transport even with no routes', async () => {
+  const original = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => assert.fail('Unsupported country/currency reached browser transport');
+    for (const [country, sourceCurrencyCode] of [['US', 'MXN'], ['CO', 'MXN'], ['US', 'COP'], ['MX', 'COP'], ['CO', 'COP'], ['US', 'EUR']]) {
+      const candidate = { ...options('personal'), country, sourceCurrencyCode, paymentMethods: [], routes: [] };
+      assert.equal(personalProductionOptions(candidate), null);
+      await assert.rejects(readPersonalFundingOptions(country, { sourceCurrencyCode }), { message: 'invalid_request' });
+      const response = await handleWalletFunding(get(`personal/options?country=${country}&sourceCurrencyCode=${sourceCurrencyCode}`), 'personal-options', {
+        env, serviceRequest: async () => assert.fail('Unsupported country/currency reached private transport'),
+      });
+      assert.equal(response.status, 400);
+      assert.deepEqual(await response.json(), { error: 'invalid_request' });
+    }
+    for (const [country, sourceCurrencyCode] of [['US', 'USD'], ['MX', 'USD'], ['CO', 'USD'], ['MX', 'MXN']]) {
+      const candidate = { ...options('personal'), country, sourceCurrencyCode, paymentMethods: [], routes: [] };
+      assert.deepEqual(personalProductionOptions(candidate), candidate);
+    }
+  } finally { globalThis.fetch = original; }
+});
+
 test('currency-aware discovery forwards only its exact country, currency and provider context', async () => {
   const original = globalThis.fetch;
   const calls = [];
@@ -173,9 +194,7 @@ test('personal local discovery exposes only SPEI in MXN without borrowing its li
   const candidate = { ...local, paymentMethods: ['SPEI', 'CREDIT_DEBIT_CARD'], routes: [
     { ...local.routes[0], paymentMethods: [...local.routes[0].paymentMethods, card] }] };
   assert.deepEqual(personalProductionOptions(candidate), local);
-  const unsupportedCountry = personalProductionOptions({ ...candidate, country: 'US' });
-  assert.deepEqual(unsupportedCountry.paymentMethods, []);
-  assert.deepEqual(unsupportedCountry.routes, []);
+  assert.equal(personalProductionOptions({ ...candidate, country: 'US' }), null);
 });
 
 test('option BFF canonicalizes query currency and rejects duplicates and crossed responses', async () => {
@@ -210,6 +229,27 @@ test('safe provider authentication and valuation errors pass through without pri
     assert.equal(data.error, error);
     assert.equal(JSON.stringify(data).includes('private-'), false);
   }
+});
+
+test('personal provider throttling passes through the BFF once and the discovery client never retries it', async () => {
+  const original = globalThis.fetch;
+  let browserReads = 0, privateReads = 0;
+  try {
+    globalThis.fetch = async (path, init) => {
+      browserReads++;
+      const response = await handleWalletFunding(new Request(`${env.AUTH_PUBLIC_ORIGIN}${path}`, {
+        headers: { cookie: 'better-auth.session_token=synthetic' }, signal: init.signal,
+      }), 'personal-options', { env, serviceRequest: async () => {
+        privateReads++;
+        return { ok: false, status: 429, data: { error: 'wallet_funding_rate_limited', message: 'private-provider-message' } };
+      } });
+      assert.equal(response.status, 429);
+      assert.equal(JSON.stringify(await response.clone().json()).includes('private-'), false);
+      return response;
+    };
+    await assert.rejects(readPersonalFundingOptions('US'), { message: 'wallet_funding_rate_limited', status: 429 });
+    assert.equal(browserReads, 1); assert.equal(privateReads, 1);
+  } finally { globalThis.fetch = original; }
 });
 
 test('a dollar acknowledgement cannot relabel its requested amount as local fiat', () => {
