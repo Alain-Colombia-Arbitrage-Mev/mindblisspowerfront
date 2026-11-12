@@ -165,11 +165,11 @@ export function PersonalWalletFunding() {
         <PersonalFundingForm disabled={setupRequired} busy={busy} onContinue={openProvider} onSelectionChange={clearSelectedStatus} destinationAddress={address} walletAction={inlineWalletAction} />
         {busy ? <div className={styles.connectionPending} role="status"><p>{t(setupRequired && actionBusy ? "funding.activatingWallet" : "funding.connectionPending")}</p>{!actionBusy ? <button className="executive-button" type="button" onClick={cancelConnection}>{t("funding.cancelConnection")}</button> : null}</div> : null}
         <WalletActionError diagnostic={actionDiagnostic} message={actionError || (reown.onrampStatus === "error" ? personalOnrampError(reown.onrampError, t) : reown.linkError ? personalOnrampError(reown.linkError, t) : "")} />
+        <WalletFundingTutorial key={owner} ownerId={memberSession?.subject || ""} />
       </section>
       <aside className={styles.details} aria-label={t("funding.destinationDetails")}>
         <ResidenceImportantCard />
         {!setupRequired ? <PersonalWalletBalances expectedAddress={address} /> : null}
-        <WalletFundingTutorial key={owner} ownerId={memberSession?.subject || ""} />
         <section className={styles.detailCard}>
           <div className={styles.stateHeading}>{!setupRequired ? <CheckCircle2 size={19} aria-hidden="true" /> : <ShieldCheck size={19} aria-hidden="true" />}
             <h2>{t(setupRequired && actionBusy ? "funding.activatingWallet" : statusLabel)}</h2></div>
