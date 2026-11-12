@@ -63,13 +63,31 @@ export function polygonRelayErrorKey(failure) {
   return `walletTransfer.${keys[code] || "unavailable"}`;
 }
 
+function connectionErrorKey(failure) {
+  // Connection and initial ownership proof never imply an uncertain payment.
+  // Signed/submitted financial operations retain their ambiguous error path.
+  const timedOut = failure?.name !== "AbortError" && (failure?.name === "TimeoutError"
+    || ["reown_connection_timeout", "wallet_connection_timeout"].includes(failure?.message));
+  return timedOut ? "recharge.providerConnection" : polygonRelayErrorKey(failure);
+}
+
 /** Personal Polygon native-meta relay only. No signed authorization is cached or replayed. */
 export function usePolygonRelay(reown) {
   const sessionKey = personalWalletBalanceSessionKey(useMemberSession());
   const wallet = typeof reown.linkedAddress === "string" ? reown.linkedAddress.toLowerCase() : "";
   const verified = Boolean(sessionKey) && reown.linkStatus === "linked" && /^0x[0-9a-f]{40}$/.test(wallet);
+  const [activation, setActivation] = useState({ owner: "", generation: -1, phase: "", address: "", errorKey: "" });
+  const activationRequest = useRef(null), activationSnapshot = useRef(null);
+  const activationOwner = useRef({ key: sessionKey, generation: 0 });
+  if (activationOwner.current.key !== sessionKey) activationOwner.current = { key: sessionKey, generation: activationOwner.current.generation + 1 };
+  activationSnapshot.current = { sessionKey, wallet, verified };
+  const currentActivation = activation.owner === sessionKey && activation.generation === activationOwner.current.generation ? activation : null;
+  const activating = currentActivation?.phase === "pending";
+  const checkingActivation = currentActivation?.phase === "checking";
+  const awaitingActivation = currentActivation?.phase === "ready" && (!verified || currentActivation.address !== wallet);
+  const activationBlocked = activating || checkingActivation || awaitingActivation || currentActivation?.phase === "failed";
   const sharedBalance = usePersonalWalletBalance(wallet, "polygon", verified);
-  const connected = verified && reown.isConnected === true && reown.isLinked === true;
+  const connected = verified && reown.isConnected === true && reown.isLinked === true && !activationBlocked;
   const owner = useRef({ wallet, sessionKey, generation: 0 });
   if (owner.current.wallet !== wallet || owner.current.sessionKey !== sessionKey) owner.current = { wallet, sessionKey, generation: owner.current.generation + 1 };
   const generation = owner.current.generation;
@@ -91,7 +109,7 @@ export function usePolygonRelay(reown) {
   const live = useCallback(() => mounted.current && owner.current.generation === generation && Boolean(sessionKey), [generation, sessionKey]);
   const historySelection = useRef(0);
   const terminalNotifications = useRef(new Set());
-  const busyRef = useRef(busy), verifier = useRef(null), poll = useRef({ key: "", deadline: 0, attempts: 0 }); busyRef.current = busy;
+  const busyRef = useRef(busy), verifier = useRef(null), poll = useRef({ key: "", deadline: 0, attempts: 0 }); busyRef.current = busy || activating || checkingActivation;
   const adopt = useCallback((value, key = "") => {
     const safe = polygonRelayView(value);
     if (!safe || safe.walletAddress !== wallet || (selected.current?.paymentId === safe.paymentId && !immutable(selected.current, safe))) throw new Error("polygon_relay_invalid_authorization");
@@ -118,7 +136,12 @@ export function usePolygonRelay(reown) {
     return marker;
   }, [wallet, live]);
 
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false; operation.current?.scope.cancel(); }; }, []);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; operation.current?.scope.cancel(); activationRequest.current?.scope.cancel(); }; }, []);
+  useEffect(() => {
+    if (activationRequest.current && activationRequest.current.generation !== activationOwner.current.generation) {
+      activationRequest.current.scope.cancel(); activationRequest.current = null;
+    }
+  }, [sessionKey]);
   useEffect(() => {
     displayGeneration.current = generation; operation.current?.scope.cancel(); operation.current = null;
     selected.current = null; previewRef.current = null; markerRef.current = null; edited.current = false;
@@ -182,7 +205,7 @@ export function usePolygonRelay(reown) {
   }, [verified, wallet, live, adopt, keyPromise, revision]);
 
   const begin = () => {
-    if (!currentDisplay || !live() || operation.current) return null;
+    if (!currentDisplay || !live() || operation.current || activationRequest.current) return null;
     const scope = createReownFundingOperation(), next = { scope, signing: false }; operation.current = next; setBusy(true); setErrorKey(""); return next;
   };
   const finish = value => { value.scope.finish(); if (operation.current === value) {
@@ -369,29 +392,70 @@ export function usePolygonRelay(reown) {
   }, [verified, generation, wallet, live, payment?.paymentId, payment?.status, recovery?.phase]);
 
   async function connect() {
+    if (!currentDisplay || !live() || operation.current || activationRequest.current || reown.configured !== true) return;
+    if (reown.linkStatus === "unlinked") {
+      // Wallet activation has its own owner-scoped operation. Its successful
+      // canonical publication changes wallet generation and must not cancel
+      // itself or discard a financial record belonging to the former wallet.
+      if (selected.current || previewRef.current || markerRef.current) { setErrorKey("walletTransfer.pending"); return; }
+      const request = { owner: sessionKey, generation: activationOwner.current.generation, scope: createReownFundingOperation() };
+      activationRequest.current = request;
+      const current = () => mounted.current && activationSnapshot.current?.sessionKey === request.owner
+        && activationOwner.current.generation === request.generation && activationRequest.current === request;
+      setActivation({ owner: sessionKey, generation: request.generation, phase: "pending", address: "", errorKey: "" });
+      try {
+        const result = await request.scope.wait(() => reown.prepareWallet());
+        request.scope.assertActive();
+        if (!current()) return;
+        if (result?.linked !== true || typeof result.address !== "string" || !/^0x[0-9a-f]{40}$/i.test(result.address)) throw new Error("wallet_address_mismatch");
+        const address = result.address.toLowerCase(), canonical = activationSnapshot.current;
+        if (canonical.verified && canonical.wallet !== address) throw new Error("wallet_address_mismatch");
+        // ACKs do not assign addresses or authorize payment. The UI stays
+        // blocked until the same owner's canonical context matches this ACK.
+        setActivation({ owner: sessionKey, generation: request.generation, phase: "ready", address, errorKey: "" });
+      } catch (failure) {
+        if (current()) setActivation({ owner: sessionKey, generation: request.generation, phase: "failed", address: "", errorKey: connectionErrorKey(failure) });
+      } finally {
+        request.scope.finish();
+        if (activationRequest.current === request) activationRequest.current = null;
+      }
+      return;
+    }
+    // A linked account only restores its existing signer; never obtain another
+    // ownership proof or replace its bound wallet while resuming a payment.
+    if (!verified) return;
     const value = begin(); if (!value) return;
     try {
-      if (!reown.isConnected || (!reown.isLinked && reown.linkStatus === "linked")) await value.scope.wait(() => reown.connectWallet());
-      else if (!reown.isLinked && reown.linkStatus === "unlinked") await value.scope.wait(() => reown.linkWallet()); active(value);
+      if (!reown.isConnected || !reown.isLinked) await value.scope.wait(() => reown.connectWallet());
+      active(value);
+      setActivation({ owner: sessionKey, generation: activationOwner.current.generation, phase: "", address: "", errorKey: "" });
     } catch (failure) {
-      if (live()) {
-        // A wallet connection deadline cannot imply an uncertain payment. The
-        // financial flow retains its separate uncertain-submission handling.
-        const connectionTimedOut = failure?.name !== "AbortError" && (failure?.name === "TimeoutError"
-          || ["reown_connection_timeout", "wallet_connection_timeout"].includes(failure?.message));
-        setErrorKey(connectionTimedOut ? "recharge.providerConnection" : polygonRelayErrorKey(failure));
-      }
+      if (live()) setErrorKey(connectionErrorKey(failure));
     } finally { finish(value); }
   }
   async function refresh() {
-    if (!live() || operation.current) return;
+    if (!live() || operation.current || activationRequest.current) return;
     if (!verified && ["error", "unavailable"].includes(reown.linkStatus) && typeof reown.refreshLink === "function") {
-      const value = begin(); if (!value) return;
+      // This read may itself publish a new canonical wallet. Scope it to the
+      // session owner, so that publication cannot cancel its recovery result.
+      const request = { owner: sessionKey, generation: activationOwner.current.generation, scope: createReownFundingOperation() };
+      activationRequest.current = request;
+      const current = () => mounted.current && activationSnapshot.current?.sessionKey === request.owner
+        && activationOwner.current.generation === request.generation && activationRequest.current === request;
+      setActivation({ owner: sessionKey, generation: request.generation, phase: "checking", address: "", errorKey: "" });
       try {
-        await value.scope.wait(() => reown.refreshLink()); active(value);
-        setRevision(number => number + 1);
-      } catch (failure) { if (live() && !value.scope.signal.aborted) setErrorKey(polygonRelayErrorKey(failure)); }
-      finally { finish(value); }
+        const result = await request.scope.wait(() => reown.refreshLink()); request.scope.assertActive();
+        if (!current()) return;
+        if (result?.status === "unlinked") {
+          setActivation({ owner: sessionKey, generation: request.generation, phase: "", address: "", errorKey: "" });
+        } else if (result?.status === "linked" && typeof result.address === "string" && /^0x[0-9a-f]{40}$/i.test(result.address)) {
+          setActivation({ owner: sessionKey, generation: request.generation, phase: "ready", address: result.address.toLowerCase(), errorKey: "" });
+        } else throw new Error("polygon_relay_wallet_not_linked");
+      } catch (failure) {
+        if (current()) setActivation({ owner: sessionKey, generation: request.generation, phase: "failed", address: "", errorKey: connectionErrorKey(failure) });
+      } finally {
+        request.scope.finish(); if (activationRequest.current === request) activationRequest.current = null;
+      }
       return;
     }
     void sharedBalance.refresh();
@@ -449,15 +513,18 @@ export function usePolygonRelay(reown) {
       });
     } catch (failure) { if (live()) setErrorKey(polygonRelayErrorKey(failure)); } finally { finish(value); }
   }
-  return { wallet, verified, connected: currentDisplay && connected, restoring: currentDisplay && reown.isRestoring === true,
-    needsVerification: currentDisplay && reown.isConnected === true && reown.linkStatus === "unlinked", busy: currentDisplay && busy,
+  const walletState = reown.configured !== true ? "unavailable" : !sessionKey ? "checking" : activating ? "activating" : checkingActivation ? "checking"
+    : ["error", "unavailable"].includes(reown.linkStatus) ? "error" : reown.linkStatus === "loading" || awaitingActivation ? "checking"
+      : verified ? connected ? "ready" : "reconnect" : reown.linkStatus === "unlinked" ? "activate" : "checking";
+  return { wallet, verified, walletState, connected: currentDisplay && connected, restoring: currentDisplay && reown.isRestoring === true,
+    needsVerification: currentDisplay && reown.linkStatus === "unlinked", busy: currentDisplay && (busy || activating || checkingActivation),
     amount: currentDisplay ? amount : "", setAmount(value) { if (!live() || operation.current) return; edited.current = true; setAmountState(value); setErrorKey(""); },
     balanceAtomic: currentDisplay && balance.wallet === wallet ? balance.balanceAtomic : null, nativeBalanceAtomic: currentDisplay && balance.wallet === wallet ? balance.nativeBalanceAtomic : null,
     loadingBalance: !currentDisplay || balance.loading,
     refreshingBalance: currentDisplay && balance.wallet === wallet && balance.loading && balance.balanceAtomic !== null,
     history: currentDisplay && history.wallet === wallet ? history.payments : [], historyLoading: !currentDisplay || history.loading,
     capabilities: currentDisplay ? capabilities : { loading: true, transferEnabled: false }, transferEnabled: currentDisplay && capabilities.transferEnabled,
-    errorKey: currentDisplay ? errorKey || balance.error || history.error || capabilities.error : "", payment: currentDisplay ? payment : null,
+    errorKey: currentDisplay ? currentActivation?.errorKey || errorKey || balance.error || history.error || capabilities.error : "", payment: currentDisplay ? payment : null,
     preview: currentDisplay ? preview : null, recovery: currentDisplay ? recovery : null, stage: currentDisplay ? stage : "form",
     review, confirm, submitAuthorized, verifyPayment, connect, switchNetwork, newPayment, resume, abandon,
     async cancelReview() {

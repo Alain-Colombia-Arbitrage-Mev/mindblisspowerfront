@@ -53,7 +53,7 @@ function harness(overrides = {}) {
   const provider = { request(input) { providerCalls.push(input); return Promise.resolve(input.method === 'eth_chainId' ? selectedChain
     : input.method === 'eth_accounts' ? [sdkAddress] : signature); } };
   const getProvider = () => provider;
-  const reown = () => ({ linkedAddress: sourceWallet, address: sdkAddress, linkStatus: 'linked', isConnected: connected, isLinked: connected && sdkAddress === sourceWallet,
+  const reown = () => ({ configured: true, linkedAddress: sourceWallet, address: sdkAddress, linkStatus: 'linked', isConnected: connected, isLinked: connected && sdkAddress === sourceWallet,
     getCompanyPaymentProvider: getProvider, connectWallet: async () => calls.push({ action: 'connect' }),
     linkWallet: async () => calls.push({ action: 'link' }), switchCompanyPaymentNetwork: async chainId => calls.push({ action: 'switch', chainId }), ...overrides.reown });
   const changed = (a, b) => !a || !b || a.length !== b.length || a.some((value, index) => !Object.is(value, b[index]));
@@ -240,9 +240,156 @@ test('an unlinked member does not subscribe or request a passive balance from th
   assert.equal(h.signatures.length, 0); assert.equal(h.providerCalls.length, 0);
 });
 
+test('Pagar activates an unlinked wallet once only after a click and survives its own canonical publication before the ACK', async () => {
+  for (const initiallyConnected of [false, true]) {
+    const pending = deferred(); let preparations = 0;
+    const reown = { linkedAddress: '', linkStatus: 'unlinked', address: initiallyConnected ? wallet : '', isConnected: initiallyConnected, isLinked: false,
+      prepareWallet() { preparations++; return pending.promise; },
+      connectWallet() { assert.fail('Initial activation must not stop after connection'); },
+      linkWallet() { assert.fail('The composed activation owns its single proof'); } };
+    const h = harness({ reown });
+    try {
+      await h.flush(); assert.equal(h.flow.walletState, 'activate'); assert.deepEqual(h.calls, []); assert.equal(preparations, 0);
+      const first = h.flow.connect(), duplicate = h.flow.connect(); await h.flush();
+      assert.equal(preparations, 1); assert.equal(h.flow.busy, true); assert.equal(h.flow.walletState, 'activating');
+      assert.equal(h.flow.connected, false); assert.deepEqual(h.calls, []);
+      Object.assign(reown, { linkedAddress: wallet, linkStatus: 'linked', address: wallet, isConnected: true, isLinked: true });
+      await h.connection(true);
+      assert.equal(h.flow.wallet, wallet); assert.equal(h.flow.connected, false); assert.equal(h.flow.busy, true);
+      pending.resolve({ linked: true, address: wallet }); await Promise.all([first, duplicate]); await h.flush();
+      assert.equal(h.flow.walletState, 'ready'); assert.equal(h.flow.connected, true); assert.equal(h.flow.busy, false); assert.equal(h.flow.errorKey, '');
+      for (let render = 0; render < 10; render++) await h.connection(true);
+      assert.equal(preparations, 1); assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0); assert.equal(h.providerCalls.length, 0);
+      assert.equal(h.flow.payment, null); assert.equal(h.flow.preview, null); assert.equal(h.storage.size, 0);
+    } finally { h.unmount(); }
+  }
+});
+
+test('an activation ACK never assigns a wallet and remains gated until the same canonical address arrives', async t => {
+  let preparations = 0;
+  const reown = { linkedAddress: '', linkStatus: 'unlinked', isConnected: false, isLinked: false,
+    async prepareWallet() { preparations++; return { linked: true, address: wallet }; } };
+  const h = harness({ reown }); t.after(() => h.unmount()); await h.flush();
+  await h.flow.connect(); await h.flush();
+  assert.equal(h.flow.wallet, ''); assert.equal(h.flow.verified, false); assert.equal(h.flow.connected, false); assert.equal(h.flow.walletState, 'checking');
+  assert.deepEqual(h.calls, []);
+  Object.assign(reown, { linkedAddress: otherWallet, address: otherWallet, linkStatus: 'linked', isConnected: true, isLinked: true });
+  await h.connection(true);
+  assert.equal(h.flow.connected, false); assert.equal(h.flow.walletState, 'checking');
+  await h.flow.review(); await h.flush(); assert.deepEqual(writes(h), []);
+  Object.assign(reown, { linkedAddress: wallet, address: wallet }); await h.connection(true);
+  assert.equal(h.flow.connected, true); assert.equal(h.flow.walletState, 'ready'); assert.equal(preparations, 1);
+  assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0); assert.equal(h.providerCalls.length, 0);
+});
+
+test('a canonical lookup failure after the activation ACK remains manually retryable without another activation or proof', async t => {
+  let preparations = 0, checks = 0;
+  const reown = { linkedAddress: '', linkStatus: 'unlinked', isConnected: false, isLinked: false,
+    async prepareWallet() { preparations++; return { linked: true, address: wallet }; },
+    async refreshLink() { checks++; Object.assign(reown, { linkedAddress: wallet, address: wallet, linkStatus: 'linked', isConnected: true, isLinked: true }); return { status: 'linked', address: wallet }; },
+    connectWallet() { assert.fail('Canonical recovery is a status read'); }, linkWallet() { assert.fail('A proved wallet needs no new proof'); } };
+  const h = harness({ reown }); t.after(() => h.unmount()); await h.flush(); await h.flow.connect(); await h.flush();
+  assert.equal(h.flow.walletState, 'checking'); reown.linkStatus = 'error'; await h.connection(false);
+  assert.equal(h.flow.walletState, 'error'); assert.equal(h.flow.connected, false);
+  await h.flow.refresh(); await h.flush();
+  assert.equal(h.flow.walletState, 'ready'); assert.equal(h.flow.connected, true); assert.equal(preparations, 1); assert.equal(checks, 1);
+  assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0); assert.equal(h.providerCalls.length, 0);
+});
+
+test('an explicit canonical-unlinked recovery discards an old activation ACK and offers another manual activation without a loop', async t => {
+  let preparations = 0, checks = 0;
+  const reown = { linkedAddress: '', linkStatus: 'unlinked', isConnected: false, isLinked: false,
+    async prepareWallet() { preparations++; return { linked: true, address: wallet }; },
+    async refreshLink() { checks++; reown.linkStatus = 'unlinked'; return { status: 'unlinked' }; } };
+  const h = harness({ reown }); t.after(() => h.unmount()); await h.flush(); await h.flow.connect(); await h.flush();
+  assert.equal(h.flow.walletState, 'checking'); reown.linkStatus = 'error'; await h.connection(false);
+  assert.equal(h.flow.walletState, 'error'); await h.flow.refresh(); await h.flush();
+  assert.equal(h.flow.walletState, 'activate'); assert.equal(h.flow.busy, false); assert.equal(h.flow.connected, false);
+  assert.equal(preparations, 1); assert.equal(checks, 1); assert.deepEqual(writes(h), []);
+  await h.flow.connect(); await h.flush(); assert.equal(preparations, 2); assert.equal(checks, 1);
+  assert.equal(h.flow.walletState, 'checking'); assert.equal(h.flow.verified, false);
+  assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0); assert.equal(h.providerCalls.length, 0);
+});
+
+test('cancelled, malformed and mismatched activation replies leave Pagar blocked and available for an explicit retry', async () => {
+  for (const failure of ['rejected', 'malformed', 'wrong-wallet']) {
+    const pending = deferred(); let preparations = 0;
+    const reown = { linkedAddress: '', linkStatus: 'unlinked', isConnected: false, isLinked: false,
+      prepareWallet() { preparations++; return pending.promise; } };
+    const h = harness({ reown });
+    try {
+      await h.flush(); const result = h.flow.connect(); await h.flush();
+      if (failure === 'rejected') pending.reject(Object.assign(new Error('Synthetic rejection'), { code: 4001 }));
+      else if (failure === 'malformed') pending.resolve({ linked: true, address: 'invalid-address' });
+      else {
+        Object.assign(reown, { linkedAddress: otherWallet, address: otherWallet, linkStatus: 'linked', isConnected: true, isLinked: true });
+        await h.connection(true); pending.resolve({ linked: true, address: wallet });
+      }
+      await result; await h.flush();
+      assert.equal(h.flow.busy, false); assert.equal(h.flow.connected, false);
+      assert.equal(h.flow.walletState, failure === 'wrong-wallet' ? 'reconnect' : 'activate');
+      assert.equal(h.flow.errorKey, failure === 'rejected' ? 'walletTransfer.rejected' : 'walletTransfer.walletMismatch');
+      await h.flow.review(); await h.flush();
+      assert.equal(preparations, 1); assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0); assert.equal(h.providerCalls.length, 0);
+    } finally { h.unmount(); }
+  }
+});
+
+test('a changed session owner or unmount cancels activation and ignores its late proof ACK without financial work', async () => {
+  for (const change of ['owner', 'owner-roundtrip', 'unmount']) {
+    const pending = deferred();
+    const h = harness({ reown: { linkedAddress: '', linkStatus: 'unlinked', isConnected: false, isLinked: false, prepareWallet: () => pending.promise } });
+    try {
+      await h.flush(); const result = h.flow.connect(); await h.flush();
+      if (change === 'unmount') h.unmount();
+      else {
+        await h.session({ subject: 'owner-B', email: 'second@example.test' });
+        if (change === 'owner-roundtrip') await h.session({ subject: 'owner-A', email: 'member@example.test' });
+      }
+      pending.resolve({ linked: true, address: wallet }); await result;
+      if (change !== 'unmount') {
+        await h.flush(); assert.equal(h.flow.connected, false); assert.equal(h.flow.wallet, ''); assert.equal(h.flow.busy, false);
+        assert.equal(h.flow.errorKey, ''); assert.equal(h.flow.walletState, 'activate');
+      }
+      assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0); assert.equal(h.providerCalls.length, 0); assert.equal(h.storage.size, 0);
+    } finally { h.unmount(); }
+  }
+});
+
+test('unknown, loading, failed and unavailable binding states never activate or reconnect without an authoritative unlinked result', async () => {
+  for (const [configured, linkStatus, expected] of [[false, 'unlinked', 'unavailable'], [undefined, 'unlinked', 'unavailable'],
+    [true, 'loading', 'checking'], [true, 'error', 'error'], [true, 'unavailable', 'error'], [true, 'unexpected', 'checking']]) {
+    const h = harness({ reown: { configured, linkStatus, linkedAddress: '', isConnected: false, isLinked: false,
+      prepareWallet() { assert.fail('Only authoritative unlinked state can activate'); }, connectWallet() { assert.fail('Unknown accounts cannot reconnect'); } } });
+    try {
+      await h.flush(); assert.equal(h.flow.walletState, expected); await h.flow.connect(); await h.flush();
+      assert.deepEqual(h.calls, []); assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0); assert.equal(h.providerCalls.length, 0);
+    } finally { h.unmount(); }
+  }
+});
+
+test('an existing preparation or review blocks new activation but linked-wallet reconnection preserves that exact financial state', async () => {
+  for (const existing of ['prepared', 'review']) {
+    let connections = 0; const prepared = payment();
+    const reown = { async connectWallet() { connections++; }, prepareWallet() { assert.fail('A pending financial record cannot start wallet activation'); },
+      linkWallet() { assert.fail('Existing bound payments never request new ownership proof'); } };
+    const h = harness({ reown, ...(existing === 'prepared' ? { history: async () => ({ walletKind: 'personal', payments: [prepared] }) } : {}) });
+    try {
+      await h.flush(); if (existing === 'review') await review(h);
+      const originalPayment = h.flow.payment, originalPreview = h.flow.preview, originalStage = h.flow.stage;
+      reown.linkStatus = 'unlinked'; await h.connection(false); await h.flow.connect(); await h.flush();
+      assert.equal(h.flow.errorKey, 'walletTransfer.pending'); assert.equal(connections, 0);
+      assert.deepEqual(h.flow.payment, originalPayment); assert.deepEqual(h.flow.preview, originalPreview); assert.equal(h.flow.stage, originalStage);
+      reown.linkStatus = 'linked'; await h.connection(false); await h.flow.connect(); await h.flush();
+      assert.equal(connections, 1); assert.deepEqual(h.flow.payment, originalPayment); assert.deepEqual(h.flow.preview, originalPreview);
+      assert.equal(h.flow.stage, originalStage); assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
+    } finally { h.unmount(); }
+  }
+});
+
 test('explicit refresh recovers a failed binding read without connecting, linking or signing a wallet', async t => {
   let lookups = 0;
-  const reown = { linkStatus: 'error', async refreshLink() { lookups++; reown.linkStatus = 'linked'; } };
+  const reown = { linkStatus: 'error', async refreshLink() { lookups++; reown.linkStatus = 'linked'; return { status: 'linked', address: wallet }; } };
   const h = harness({ reown }); t.after(() => h.unmount());
   await h.flush(); assert.equal(h.flow.verified, false); assert.equal(h.flow.loadingBalance, false);
   assert.equal(h.calls.filter(call => call.action === 'balance').length, 0);

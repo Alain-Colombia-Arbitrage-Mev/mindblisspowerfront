@@ -74,6 +74,47 @@ test('Unavailable sponsorship, insufficient funds and disconnected wallet never 
   }
 });
 
+test('unactivated Pagar exposes one explicit activation CTA in every locale without reviewing or paying', () => {
+  for (locale of ['es', 'en', 'ar', 'zh']) {
+    const state = flow({ connected: false, verified: false, walletState: 'activate', balanceAtomic: null,
+      capabilities: { loading: false, transferEnabled: false } });
+    let tree = SponsoredTransferForm({ flow: state }), html = renderToStaticMarkup(tree);
+    const action = all(tree, node => node?.type === 'button' && node.props.className?.includes('primary'))[0];
+    assert.ok(html.includes(translateMessage(locale, 'funding.activateWalletCopy')));
+    assert.ok(renderToStaticMarkup(action).includes(translateMessage(locale, 'funding.activateWallet')));
+    assert.ok(!html.includes(translateMessage(locale, 'companyPayment.verifyWallet')));
+    assert.ok(!html.includes(translateMessage(locale, 'companyPayment.reconnectCopy')));
+    assertMerchantPresentation(html); assert.equal(action.props.type, 'button'); assert.equal(action.props.disabled, false);
+    assert.deepEqual(state.calls, []); tree.props.onSubmit({ preventDefault() {} }); assert.deepEqual(state.calls, []);
+    action.props.onClick(); assert.deepEqual(state.calls, ['connect']);
+    state.busy = true; state.walletState = 'activating'; tree = SponsoredTransferForm({ flow: state });
+    const pending = all(tree, node => node?.type === 'button' && node.props.className?.includes('primary'))[0];
+    assert.ok(renderToStaticMarkup(pending).includes(translateMessage(locale, 'funding.activatingWallet')));
+    assert.equal(pending.props.disabled, true); pending.props.onClick(); assert.deepEqual(state.calls, ['connect']);
+  }
+  locale = 'es';
+});
+
+test('Pagar distinguishes canonical lookup, failed lookup, configuration and reconnect states with guarded explicit actions', () => {
+  for (locale of ['es', 'en', 'ar', 'zh']) {
+    for (const [walletState, key, disabled, expected] of [
+      ['checking', 'walletPage.checking', true, []], ['error', 'walletPage.retryCheck', false, ['refresh']],
+      ['unavailable', 'funding.activateWallet', true, []], ['unexpected', 'walletPage.checking', true, []],
+      ['reconnect', 'companyPayment.reconnect', false, ['connect']],
+    ]) {
+      const state = flow({ connected: false, verified: walletState === 'reconnect', walletState, balanceAtomic: null });
+      state.refresh = () => state.calls.push('refresh');
+      const tree = SponsoredTransferForm({ flow: state }), action = all(tree, node => node?.type === 'button' && node.props.className?.includes('primary'))[0];
+      assert.ok(renderToStaticMarkup(action).includes(translateMessage(locale, key)), walletState);
+      assert.equal(action.props.type, 'button'); assert.equal(Boolean(action.props.disabled), disabled);
+      assert.deepEqual(state.calls, []); action.props.onClick(); assert.deepEqual(state.calls, expected);
+      tree.props.onSubmit({ preventDefault() {} }); assert.deepEqual(state.calls, expected);
+      if (walletState === 'reconnect') assert.ok(!renderToStaticMarkup(tree).includes(translateMessage(locale, 'funding.activateWalletCopy')));
+    }
+  }
+  locale = 'es';
+});
+
 test('initial sponsorship checks are distinct from unavailable coverage and do not claim a failure before verification', () => {
   for (locale of ['es', 'en', 'ar', 'zh']) {
     for (const transferEnabled of [false, true]) {
