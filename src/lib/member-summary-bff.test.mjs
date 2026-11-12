@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import ts from 'typescript';
+import { readMemberJson, validMemberSummary } from './member-read.mjs';
 
 const rawToken = 'synthetic-verified-token';
 const email = 'synthetic-member@example.test';
@@ -104,8 +105,33 @@ test('summary genuinely absent or invalid identity remains 401, never a successf
   }
 });
 
-test('summary preserves real upstream authorization and infrastructure errors without exposing provider payloads', async () => {
-  for (const [upstreamStatus, error] of [[401, 'invalid_id_token'], [403, 'account_suspended'], [503, 'authentication_unavailable']]) {
+test('summary does not describe an upstream authentication rejection as loss of its locally verified session', async () => {
+  for (const error of ['invalid_id_token', 'id_token_required', 'private-auth-rejection', undefined]) {
+    const setup = fixture({ upstreamStatus: 401, upstreamBody: { error, private: 'not-public', wallet_balance_usd: '9999' },
+      upstreamHeaders: { 'retry-after': '30', 'set-cookie': 'private-cookie', location: 'https://untrusted.example.test' } });
+    const response = await setup.get();
+    assert.equal(response.status, 503); privateResponse(response);
+    assert.deepEqual(await response.json(), { error: 'authentication_unavailable' });
+    assert.equal(response.headers.get('retry-after'), null);
+    assert.deepEqual(setup.calls, { cookies: 1, verify: 1, upstream: 1 });
+  }
+});
+
+test('a client reading an upstream-rejected summary receives a temporary handoff error without retrying or requesting another sign-in', async () => {
+  const setup = fixture({ upstreamStatus: 401, upstreamBody: { error: 'invalid_id_token' } });
+  let requests = 0;
+  await assert.rejects(readMemberJson('/api/payments/me?fresh=1', { validate: validMemberSummary, fetchImpl: () => {
+    requests++; return setup.get();
+  } }), error => {
+    assert.equal(error.status, 503); assert.equal(error.code, 'authentication_unavailable');
+    assert.doesNotMatch(error.message, /iniciar sesi|OTP|c[oó]digo|expired/i);
+    return true;
+  });
+  assert.equal(requests, 1); assert.deepEqual(setup.calls, { cookies: 1, verify: 1, upstream: 1 });
+});
+
+test('summary preserves real upstream access restrictions and infrastructure errors without exposing provider payloads', async () => {
+  for (const [upstreamStatus, error] of [[403, 'account_suspended'], [503, 'authentication_unavailable']]) {
     const setup = fixture({ upstreamStatus, upstreamBody: { error, private: 'not-public' },
       upstreamHeaders: { 'set-cookie': 'private-cookie', location: 'https://untrusted.example.test' } });
     const response = await setup.get();
