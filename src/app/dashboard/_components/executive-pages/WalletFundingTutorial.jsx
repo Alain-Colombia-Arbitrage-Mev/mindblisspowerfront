@@ -61,7 +61,9 @@ export default function WalletFundingTutorial({ ownerId = "" }) {
             <p className={styles.soundHint}>{t("walletTutorial.soundHint")}</p>
           </div>
           <footer className={styles.dialogFooter}>
-            <Dialog.Close asChild><button type="button" className="executive-button primary">{t("walletTutorial.close")}</button></Dialog.Close>
+            <Dialog.Close asChild><button type="button" className="executive-button primary">
+              <X size={28} strokeWidth={2.5} aria-hidden="true" />{t("walletTutorial.close")}
+            </button></Dialog.Close>
           </footer>
         </Dialog.Content>
       </Dialog.Portal> : null}

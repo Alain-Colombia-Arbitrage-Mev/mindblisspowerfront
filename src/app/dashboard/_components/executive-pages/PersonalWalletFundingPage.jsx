@@ -167,9 +167,9 @@ export function PersonalWalletFunding() {
         <WalletActionError diagnostic={actionDiagnostic} message={actionError || (reown.onrampStatus === "error" ? personalOnrampError(reown.onrampError, t) : reown.linkError ? personalOnrampError(reown.linkError, t) : "")} />
       </section>
       <aside className={styles.details} aria-label={t("funding.destinationDetails")}>
-        <WalletFundingTutorial key={owner} ownerId={memberSession?.subject || ""} />
         <ResidenceImportantCard />
         {!setupRequired ? <PersonalWalletBalances expectedAddress={address} /> : null}
+        <WalletFundingTutorial key={owner} ownerId={memberSession?.subject || ""} />
         <section className={styles.detailCard}>
           <div className={styles.stateHeading}>{!setupRequired ? <CheckCircle2 size={19} aria-hidden="true" /> : <ShieldCheck size={19} aria-hidden="true" />}
             <h2>{t(setupRequired && actionBusy ? "funding.activatingWallet" : statusLabel)}</h2></div>

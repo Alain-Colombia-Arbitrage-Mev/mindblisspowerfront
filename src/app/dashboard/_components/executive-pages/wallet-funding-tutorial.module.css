@@ -2,6 +2,7 @@
   display: grid;
   min-width: 0;
   gap: 14px;
+  margin-top: 16px;
   padding: 18px;
   border: 1px solid var(--vp-border);
   border-radius: 18px;
@@ -26,8 +27,9 @@
 .dialogBody { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .dialog .video { max-height: max(72px, calc(100svh - 280px)); }
 .soundHint { margin: 12px 0 0; color: var(--vp-muted); font-size: 12px; line-height: 1.5; }
-.dialogFooter { display: flex; flex: none; justify-content: flex-end; }
-.dialogFooter button { min-height: 44px; }
+.dialogFooter { display: flex; flex: none; justify-content: center; }
+.dialogFooter button { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; padding: 10px 24px; }
+.dialogFooter button svg { flex: none; }
 .mediaError { margin-top: 12px; padding: 12px; border: 1px solid var(--vp-border); border-radius: 10px; color: var(--vp-muted); background: var(--vp-surface-raised); font-size: 13px; line-height: 1.5; }
 .mediaError p { margin: 0; }
 .recoveryActions { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; }
