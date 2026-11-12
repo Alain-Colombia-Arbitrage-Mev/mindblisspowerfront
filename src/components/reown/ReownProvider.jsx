@@ -336,8 +336,8 @@ function ConfiguredReownProvider({ children }) {
     status: account.status, isConnected: account.isConnected, currentAddress, boundAddress, walletProvider, identityMismatch: walletIdentityMismatch });
   const restoredStatus = sdkConnectionStatus === "restoring" && restorationTimedOut ? "disconnected" : sdkConnectionStatus;
   const connectionStatus = walletSwitching ? "restoring" : restoredStatus;
-  connectionSnapshot.current = { status: sdkConnectionStatus, modalOpen: appKitState.open === true,
-    disconnected: sdkConnectionStatus === "disconnected", address: currentAddress };
+  connectionSnapshot.current = { status: restoredStatus, modalOpen: appKitState.open === true,
+    disconnected: restoredStatus === "disconnected", address: currentAddress };
   // Captured callbacks must not regain authority after SDK account A → B → A,
   // a different owner, or a fresh candidate selection. This is an observation
   // generation only; canonical backend binding still proves ownership.
@@ -416,7 +416,7 @@ function ConfiguredReownProvider({ children }) {
   useEffect(() => {
     connectionRequest.current?.update(connectionSnapshot.current);
     switchRequest.current?.update(connectionSnapshot.current);
-  }, [sdkConnectionStatus, appKitState.open, account.isConnected, account.status]);
+  }, [restoredStatus, appKitState.open, account.isConnected, account.status]);
 
   const linkWallet = useCallback((parentOperation) => {
     if (!mounted.current || logoutStarted.current || walletSnapshot.current.owner !== ownerKey) return Promise.reject(new DOMException('Aborted', 'AbortError'));

@@ -28,6 +28,25 @@ function sourceCallback(path, name, sdk = false) {
   return found.getText(source);
 }
 const providerCallback = (name, scope) => vm.runInNewContext(`(${sourceCallback('../components/reown/ReownProvider.jsx', name)})`, scope);
+function observation({ timedOut = false, switching = false, onUpdate = () => {} } = {}) {
+  const source = ts.createSourceFile('provider.jsx', readFileSync(new URL('../components/reown/ReownProvider.jsx', import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.JSX);
+  const scope = { sdkConnectionStatus: 'restoring', restorationTimedOut: timedOut, walletSwitching: switching,
+    currentAddress: '', appKitState: { open: false }, account: { isConnected: false, status: 'reconnecting' },
+    connectionSnapshot: { current: null }, connectionRequest: { current: { update: onUpdate } }, switchRequest: { current: null } };
+  let dependencyNode, effectNode;
+  const visit = node => {
+    if (ts.isVariableDeclaration(node) && ['restoredStatus', 'connectionStatus'].includes(node.name.getText(source))) scope[node.name.getText(source)] = vm.runInNewContext(node.initializer.getText(source), scope);
+    if (ts.isBinaryExpression(node) && node.left.getText(source) === 'connectionSnapshot.current') vm.runInNewContext(node.getText(source), scope);
+    if (ts.isCallExpression(node) && node.expression.getText(source) === 'useEffect' && node.arguments[0]?.getText(source).includes('connectionRequest.current?.update(connectionSnapshot.current)')) {
+      effectNode = node.arguments[0]; dependencyNode = node.arguments[1];
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source); assert.ok(effectNode); assert.ok(dependencyNode);
+  return { snapshot: scope.connectionSnapshot.current, visibleStatus: scope.connectionStatus,
+    dependencies: vm.runInNewContext(dependencyNode.getText(source), scope),
+    update: vm.runInNewContext(`(${effectNode.getText(source)})`, scope) };
+}
 
 /** Actual installed controller and public disconnect hook, with the installed
  * SDK's disconnect policy and synthetic adapters. No wallet, storage or network. */
@@ -104,6 +123,31 @@ test('real provider recovery resets hidden shared AUTH before Connect, without d
   assert.deepEqual(h.calls, ['open']); assert.equal(h.native.calls.length, 1);
   assert.equal(ConnectionController.getConnections('solana')[0]?.connectorId, 'unrelated-injected');
   h.finish(); assert.deepEqual(await pending, { connected: true });
+});
+
+test('a timed-out SDK restoration uses the disconnected observation for explicit recovery even while the recovery UI is busy', async t => {
+  const before = observation();
+  assert.equal(before.snapshot.status, 'restoring'); assert.equal(before.snapshot.disconnected, false);
+  for (const switching of [false, true]) {
+    const h = recovery(t), after = observation({ timedOut: true, switching });
+    assert.equal(after.visibleStatus, switching ? 'restoring' : 'disconnected');
+    assert.equal(after.snapshot.status, 'disconnected'); assert.equal(after.snapshot.disconnected, true);
+    assert.deepEqual(h.native.calls, []); assert.deepEqual(h.calls, [], 'a timeout alone must not connect or authenticate');
+    h.scope.connectionSnapshot.current = after.snapshot;
+    const pending = h.connect(); await tick(); await tick();
+    assert.equal(ConnectionController.hasAnyConnection(AUTH), false); assert.deepEqual(h.calls, ['open']);
+    assert.equal(h.native.calls.length, 1); h.finish(); await pending;
+  }
+});
+
+test('the restoration deadline updates existing connection requests even when the raw SDK status never changes', () => {
+  const updates = [], first = observation({ onUpdate: snapshot => updates.push(snapshot.status) });
+  first.update();
+  const timedOut = observation({ timedOut: true, onUpdate: snapshot => updates.push(snapshot.status) });
+  const changed = first.dependencies.some((value, index) => value !== timedOut.dependencies[index]);
+  assert.equal(changed, true, 'the effective restoration timeout must be a React effect dependency');
+  if (changed) timedOut.update();
+  assert.deepEqual(updates, ['restoring', 'disconnected']);
 });
 
 test('explicit recovery shares one pending cleanup and cannot open Connect if cleanup fails', async t => {
