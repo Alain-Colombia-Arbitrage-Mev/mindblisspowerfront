@@ -57,3 +57,15 @@ test('personal wallet customer copy uses wallet terminology instead of the integ
     assert.match(funding.personalProviderNote, /Mercuryo/);
   }
 });
+
+test('PSE copy names COP and Onramp Money without claiming a fixed exchange rate', () => {
+  for (const locale of SUPPORTED_LOCALES) {
+    const funding = fundingMessages[locale].funding;
+    assert.match(funding.psePayment, /PSE.*Onramp Money/);
+    assert.match(funding.personalPseLimits, /PSE/);
+    assert.match(funding.personalPseLimits, /COP/);
+    assert.match(funding.personalPseLimits, /Onramp Money/);
+    assert.match(funding.personalCopAmountRange, /COP/);
+    assert.doesNotMatch(funding.personalPseLimits, /42[.,]?300|931/);
+  }
+});

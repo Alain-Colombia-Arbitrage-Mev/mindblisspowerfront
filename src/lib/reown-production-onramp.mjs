@@ -1,4 +1,4 @@
-import { FUNDING_UUID, PERSONAL_FUNDING_PROVIDERS, validFundingSourceAmount, fundingCurrencyCode, fundingSourceSupported, personalFundingCountry, personalFundingMethod } from './wallet-funding-contract.mjs';
+import { FUNDING_UUID, personalFundingProviders, validFundingSourceAmount, fundingCurrencyCode, fundingSourceSupported, personalFundingCountry, personalFundingMethod } from './wallet-funding-contract.mjs';
 import { PERSONAL_WALLET_MELD_ASSET } from './personal-wallet.mjs';
 
 /** Validate before linking, selecting a provider or creating a personal intent. */
@@ -31,7 +31,7 @@ export function buildReownProductionOnrampUrl({ providerUrl, address, projectId,
     || !FUNDING_UUID.test(checkoutReference || '') || !/^[A-Z]{2}$/.test(countryCode || '')
     || !validFundingSourceAmount(amount, 'personal', sourceCurrencyCode) || !/^[A-Z0-9_]{2,40}$/.test(paymentMethodType || '')
     || !Array.isArray(allowedProviders) || allowedProviders.length < 1 || allowedProviders.length > 2
-    || allowedProviders.some(provider => !PERSONAL_FUNDING_PROVIDERS.includes(provider))
+    || allowedProviders.some(provider => !personalFundingProviders(countryCode, sourceCurrencyCode).includes(provider))
     || new Set(allowedProviders).size !== allowedProviders.length) throw new Error('reown_context_invalid');
   if (url.searchParams.get('externalCustomerId') !== projectId) throw new Error('reown_provider_invalid');
   url.searchParams.set('walletAddress', address);

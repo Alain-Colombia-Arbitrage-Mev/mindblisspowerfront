@@ -259,6 +259,22 @@ test('SPEI handoff forwards the actual MXN amount without claiming a USD valuati
   assert.equal(url.searchParams.get('paymentMethodTypeLocked'), 'SPEI');
 });
 
+test('PSE handoff preserves a verified wallet and locks the actual COP amount without another authentication', async () => {
+  const runtime = fundingRuntime({ open: () => assert.fail('Verified wallet asked to authenticate for PSE'),
+    createPersonalFundingIntent: async body => ({ checkoutReference: body.requestId, requestedAmount: body.amount,
+      sourceCurrencyCode: body.sourceCurrencyCode, paymentMethodType: body.paymentMethodType, allowedProviders: ['ONRAMPMONEY'],
+      destinationCurrencyCode: 'USDT_POLYGON', destination: { address: body.walletAddress, asset: 'USDT', network: 'polygon', chainId: 137 } }) });
+  const result = await runtime.scope.startOnramp({ ...runtime.input, country: 'CO', sourceCurrencyCode: 'COP', paymentMethodType: 'PSE', amount: 100000 });
+  assert.equal(result.sourceCurrencyCode, 'COP'); assert.equal(result.minimumUsd, null);
+  const url = runtime.events.find(value => value?.opened).opened;
+  assert.equal(url.searchParams.get('sourceAmountLocked'), '100000');
+  assert.equal(url.searchParams.get('sourceCurrencyCodeLocked'), 'COP');
+  assert.equal(url.searchParams.get('countryCodeLocked'), 'CO');
+  assert.equal(url.searchParams.get('paymentMethodTypeLocked'), 'PSE');
+  assert.equal(url.searchParams.get('destinationCurrencyCodeLocked'), 'USDT_POLYGON');
+  assert.equal(url.searchParams.get('walletAddressLocked'), runtime.address);
+});
+
 test('a changed checkout reference, amount, currency or method cannot open a provider', async () => {
   for (const change of [{ checkoutReference: '11111111-1111-4111-8111-111111111111' }, { requestedAmount: 101 },
     { sourceCurrencyCode: 'MXN' }, { paymentMethodType: 'APPLE_PAY' }, { destinationCurrencyCode: 'USDT' },

@@ -65,7 +65,7 @@ test('personal discovery rejects unsupported country and currency pairs before e
   const original = globalThis.fetch;
   try {
     globalThis.fetch = async () => assert.fail('Unsupported country/currency reached browser transport');
-    for (const [country, sourceCurrencyCode] of [['US', 'MXN'], ['CO', 'MXN'], ['US', 'COP'], ['MX', 'COP'], ['CO', 'COP'], ['US', 'EUR']]) {
+    for (const [country, sourceCurrencyCode] of [['US', 'MXN'], ['CO', 'MXN'], ['US', 'COP'], ['MX', 'COP'], ['US', 'EUR']]) {
       const candidate = { ...options('personal'), country, sourceCurrencyCode, paymentMethods: [], routes: [] };
       assert.equal(personalProductionOptions(candidate), null);
       await assert.rejects(readPersonalFundingOptions(country, { sourceCurrencyCode }), { message: 'invalid_request' });
@@ -75,7 +75,7 @@ test('personal discovery rejects unsupported country and currency pairs before e
       assert.equal(response.status, 400);
       assert.deepEqual(await response.json(), { error: 'invalid_request' });
     }
-    for (const [country, sourceCurrencyCode] of [['US', 'USD'], ['MX', 'USD'], ['CO', 'USD'], ['MX', 'MXN']]) {
+    for (const [country, sourceCurrencyCode] of [['US', 'USD'], ['MX', 'USD'], ['CO', 'USD'], ['MX', 'MXN'], ['CO', 'COP']]) {
       const candidate = { ...options('personal'), country, sourceCurrencyCode, paymentMethods: [], routes: [] };
       assert.deepEqual(personalProductionOptions(candidate), candidate);
     }
