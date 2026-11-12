@@ -13,6 +13,8 @@ const read = relative => readFileSync(new URL(relative, import.meta.url), "utf8"
 function onrampCallback(name, scope) {
   scope.mounted ??= { current: true };
   scope.logoutStarted ??= { current: false };
+  scope.ConnectionController ??= { hasAnyConnection: () => false };
+  scope.ReownConstantsUtil ??= { CONNECTOR_ID: { AUTH: 'AUTH' } };
   scope.ownerKey ??= 'synthetic-owner';
   scope.walletGeneration ??= 0;
   scope.walletSnapshot ??= { current: { owner: scope.ownerKey, generation: scope.walletGeneration } };
@@ -276,8 +278,8 @@ test('personal start and continuation reject ineligible country, method and curr
     { input: { country: 'MX', sourceCurrencyCode: 'MXN', amount: 1000, paymentMethodType: 'CREDIT_DEBIT_CARD' }, code: 'wallet_funding_valuation_unavailable', category: 'valuation' },
     { input: { country: 'MX', sourceCurrencyCode: 'COP', amount: 1000, paymentMethodType: 'SPEI' }, code: 'wallet_funding_valuation_unavailable', category: 'valuation' },
     { input: { country: 'CA', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' }, code: 'wallet_funding_invalid_country', category: 'method' },
-    { input: { country: 'MX', amount: 100, paymentMethodType: 'SKRILL' }, code: 'wallet_funding_method_unavailable', category: 'method' },
-    { input: { country: 'US', amount: 100, paymentMethodType: 'NETELLER' }, code: 'wallet_funding_method_unavailable', category: 'method' },
+    ...['PAYPAL', 'NETELLER', 'PAYSAFECARD', 'PAYSAFE_CARD', 'SKRILL', 'SKIRLL', 'ASTROPAY'].map(paymentMethodType => ({
+      input: { country: 'US', amount: 100, paymentMethodType }, code: 'wallet_funding_method_unavailable', category: 'method' })),
     { input: { amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' }, code: 'wallet_funding_invalid_country', category: 'method' },
     { input: { countryCode: '', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' }, code: 'wallet_funding_invalid_country', category: 'method' },
     { input: { country: '', countryCode: '', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' }, code: 'wallet_funding_invalid_country', category: 'method' },
@@ -383,7 +385,8 @@ test("Reown creates separate EVM and Solana wallets while retaining native membe
   assert.match(provider, /const boundReady = Boolean\(boundAddress\)/);
   assert.match(provider, /walletAddress: verifiedAddress/);
   assert.match(provider, /if \(boundReady \|\| connectionReady\) return runOnramp\(selection\)/);
-  assert.match(provider, /scope\.wait\(\(\) => disconnect\(\{ namespace: "eip155" \}\)\)/);
+  assert.match(provider, /scope\.wait\(\(\) => disconnect\(ConnectionController\.hasAnyConnection\(ReownConstantsUtil\.CONNECTOR_ID\.AUTH\)/);
+  assert.match(provider, /\? \{ id: ReownConstantsUtil\.CONNECTOR_ID\.AUTH \} : \{ namespace: "eip155" \}\)\)/);
   assert.match(provider, /error: "connection_timeout"/);
   assert.match(provider, /void runOnramp\(\)\.catch/);
   assert.match(provider, /verifyReownWalletOwnership\(scope/);
@@ -400,6 +403,7 @@ test("Reown creates separate EVM and Solana wallets while retaining native membe
 test("all Reown packages use the same pinned release", () => {
   const pkg = JSON.parse(read("../../package.json"));
   assert.equal(pkg.dependencies["@reown/appkit"], "1.8.24");
+  assert.equal(pkg.dependencies["@reown/appkit-common"], "1.8.24");
   assert.equal(pkg.dependencies["@reown/appkit-adapter-ethers"], "1.8.24");
   assert.equal(pkg.dependencies["@reown/appkit-adapter-solana"], "1.8.24");
   assert.equal(pkg.dependencies["@reown/appkit-controllers"], "1.8.24");

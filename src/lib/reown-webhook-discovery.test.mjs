@@ -71,6 +71,73 @@ test('body deadline and caller cancellation also bound streams that never resolv
   assert.equal((await discoverReownWebhook(aborted, options(logger))).status, 503);
 });
 
+test('invalid UTF-8 and producer failure cancel the remaining stream once without waiting for cancellation', { timeout: 1000 }, async () => {
+  for (const mode of ['invalid-utf8', 'producer-failure']) {
+    let reads = 0, cancels = 0, releases = 0;
+    const input = { url: target, method: 'POST', headers: new Headers({ 'content-type': 'application/json' }),
+      signal: new AbortController().signal, body: { getReader: () => ({
+        read() { reads++; return mode === 'invalid-utf8' ? Promise.resolve({ done: false, value: new Uint8Array([0xff]) }) : Promise.reject(new Error('private producer failure')); },
+        cancel() { cancels++; return new Promise(() => {}); }, releaseLock() { releases++; },
+      }) } };
+    const response = await discoverReownWebhook(input, options(() => assert.fail('failed ingestion must not emit diagnostics')));
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { error: 'reown_webhook_verification_pending' });
+    assert.equal(response.headers.get('cache-control'), 'private, no-store');
+    assert.deepEqual({ reads, cancels, releases }, { reads: 1, cancels: 1, releases: 1 });
+  }
+});
+
+test('aborted discovery never acquires a reader or starts a read in a queued microtask', async () => {
+  for (const alreadyAborted of [true, false]) {
+    const controller = new AbortController();
+    let readers = 0, reads = 0, cancels = 0, releases = 0;
+    if (alreadyAborted) controller.abort();
+    const input = { url: target, method: 'POST', headers: new Headers({ 'content-type': 'application/json' }), signal: controller.signal,
+      body: { getReader() { readers++; return {
+        read() { reads++; return new Promise(() => {}); }, cancel() { cancels++; return new Promise(() => {}); }, releaseLock() { releases++; },
+      }; } } };
+    const pending = discoverReownWebhook(input, options(() => assert.fail('aborted ingestion must not emit diagnostics')));
+    if (!alreadyAborted) controller.abort();
+    const response = await pending;
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { error: 'reown_webhook_verification_pending' });
+    assert.deepEqual({ readers, reads, cancels, releases }, alreadyAborted
+      ? { readers: 0, reads: 0, cancels: 0, releases: 0 } : { readers: 1, reads: 0, cancels: 1, releases: 1 });
+  }
+});
+
+test('discovery deadline cancels a stalled reader once and discards valid late JSON without diagnostics', { timeout: 1000 }, async () => {
+  let resume, reads = 0, cancels = 0, releases = 0, logged = 0;
+  const input = { url: target, method: 'POST', headers: new Headers({ 'content-type': 'application/json' }), signal: new AbortController().signal,
+    body: { getReader: () => ({
+      read() { reads++; return new Promise(resolve => { resume = resolve; }); },
+      cancel() { cancels++; return new Promise(() => {}); }, releaseLock() { releases++; throw new Error('synthetic pending reader'); },
+    }) } };
+  const response = await discoverReownWebhook(input, { ...options(() => logged++), timeoutMs: 5 });
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: 'reown_webhook_verification_pending' });
+  assert.deepEqual({ reads, cancels, releases, logged }, { reads: 1, cancels: 1, releases: 1, logged: 0 });
+  resume({ done: false, value: new TextEncoder().encode('{"type":"private-late-event","data":{}}') });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual({ reads, cancels, releases, logged }, { reads: 1, cancels: 1, releases: 1, logged: 0 });
+});
+
+test('valid split UTF-8 diagnostics retain their exact byte count and field names while remaining quarantined', async () => {
+  const encoded = new TextEncoder().encode('{"data":{"metadata":"Señor"}}');
+  const split = encoded.indexOf(0xc3) + 1, entries = [];
+  const stream = new ReadableStream({ start(controller) {
+    controller.enqueue(encoded.slice(0, split)); controller.enqueue(encoded.slice(split)); controller.close();
+  } });
+  const input = new Request(target, { method: 'POST', headers: { 'content-type': 'application/json' }, body: stream, duplex: 'half' });
+  const response = await discoverReownWebhook(input, options(entry => entries.push(entry)));
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: 'reown_webhook_verification_pending' });
+  assert.equal(entries.length, 1); assert.equal(entries[0].bodyBytes, encoded.byteLength);
+  assert.deepEqual(entries[0].bodyFields, ['data']); assert.deepEqual(entries[0].dataFields, ['metadata']);
+  assert.equal(entries[0].mode, 'quarantined'); assert.doesNotMatch(JSON.stringify(entries), /Señor/);
+});
+
 test('diagnostic rate limits fail closed and reset only after the isolate-local window', async () => {
   __resetRateLimit();
   let logged = 0;

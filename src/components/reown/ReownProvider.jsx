@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createAppKit, useAppKit, useAppKitAccount, useAppKitProvider, useAppKitState, useAppKitTheme, useAppKitNetwork, useDisconnect } from "@reown/appkit/react";
 import { EthersAdapter } from "@reown/appkit-adapter-ethers";
 import { SolanaAdapter } from "@reown/appkit-adapter-solana/react";
-import { OnRampController } from "@reown/appkit-controllers";
+import { ConnectionController, OnRampController } from "@reown/appkit-controllers";
+import { ConstantsUtil as ReownConstantsUtil } from "@reown/appkit-common";
 import { mainnet, polygon, solana } from "@reown/appkit/networks";
 import { BrowserProvider, getAddress } from "ethers";
 import { useMemberSession } from "@/lib/member-session-context";
@@ -356,19 +357,30 @@ function ConfiguredReownProvider({ children }) {
   }, [sdkConnectionStatus]);
 
   const chooseWallet = useCallback(() => {
+    if (!ownerKey || latestOwner.current !== ownerKey || !mounted.current || logoutStarted.current) return Promise.reject(new DOMException("Aborted", "AbortError"));
     if (switchRequest.current) return switchRequest.current.promise;
-    if (!ownerKey || latestOwner.current !== ownerKey || !mounted.current) return Promise.reject(new DOMException("Aborted", "AbortError"));
     // This action must never set onrampIntent or invoke a funding/payment flow.
     connectionRequest.current?.cancel();
     selectedCandidate.current = null;
     onrampIntent.current = false; onrampSelection.current = null;
     const funding = onrampOperation.current; funding?.cancel(); linkingOperation.current?.cancel();
     const valid = () => {
-      if (!mounted.current || latestOwner.current !== ownerKey) throw new DOMException("Aborted", "AbortError");
+      if (!mounted.current || latestOwner.current !== ownerKey || logoutStarted.current) throw new DOMException("Aborted", "AbortError");
     };
     setWalletSwitching(true); setConnectionBusy(true); setVerificationError("");
     const request = createReownWalletSwitchRequest({ initialState: connectionSnapshot.current,
-      disconnect: () => { valid(); return connectionSnapshot.current.disconnected ? Promise.resolve() : disconnect({ namespace: "eip155" }); },
+      disconnect: async () => {
+        valid();
+        // Email/social share one AUTH session across adapters. A dormant
+        // namespace can otherwise disable Connect while EVM is disconnected.
+        if (ConnectionController.hasAnyConnection(ReownConstantsUtil.CONNECTOR_ID.AUTH)) {
+          await disconnect({ id: ReownConstantsUtil.CONNECTOR_ID.AUTH });
+          valid();
+          if (ConnectionController.hasAnyConnection(ReownConstantsUtil.CONNECTOR_ID.AUTH)) throw new Error("wallet_not_connected");
+          return;
+        }
+        return connectionSnapshot.current.disconnected ? Promise.resolve() : disconnect({ namespace: "eip155" });
+      },
       open: () => { valid(); return open({ view: "Connect", namespace: "eip155" }); },
       onSettled(error) {
         if (switchRequest.current !== request) return;
@@ -389,7 +401,8 @@ function ConfiguredReownProvider({ children }) {
   const connectWallet = useCallback(() => {
     if (!mounted.current || logoutStarted.current) return Promise.reject(new DOMException('Aborted', 'AbortError'));
     if (switchRequest.current) return switchRequest.current.promise;
-    if (walletIdentityMismatch || walletNeedsAccountSelection) return chooseWallet();
+    if (walletIdentityMismatch || walletNeedsAccountSelection
+      || (connectionSnapshot.current.disconnected && ConnectionController.hasAnyConnection(ReownConstantsUtil.CONNECTOR_ID.AUTH))) return chooseWallet();
     if (connectionSnapshot.current.status === "connected") return Promise.resolve({ connected: true });
     if (connectionRequest.current) return connectionRequest.current.promise;
     setConnectionBusy(true);
@@ -630,7 +643,10 @@ function ConfiguredReownProvider({ children }) {
     connectModalSeen.current = false;
     setOnrampState({ status: "connecting", error: "" });
     try {
-      await scope.wait(() => disconnect({ namespace: "eip155" }));
+      await scope.wait(() => disconnect(ConnectionController.hasAnyConnection(ReownConstantsUtil.CONNECTOR_ID.AUTH)
+        ? { id: ReownConstantsUtil.CONNECTOR_ID.AUTH } : { namespace: "eip155" }));
+      scope.assertActive();
+      if (ConnectionController.hasAnyConnection(ReownConstantsUtil.CONNECTOR_ID.AUTH)) throw new Error("wallet_not_connected");
       await openConnect(scope);
       scope.assertActive();
       return { pending: true };

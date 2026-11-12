@@ -1,13 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { personalProductionOptions, administrativeSandboxOptions, fundingAcknowledgement, fundingInput, fundingHistory, fundingStatus,
-  PERSONAL_FUNDING_COUNTRIES } from './wallet-funding-contract.mjs';
+  PERSONAL_FUNDING_COUNTRIES, PERSONAL_FUNDING_BLOCKED_METHODS, PERSONAL_FUNDING_UNAVAILABLE_METHODS } from './wallet-funding-contract.mjs';
 import { readAdministrativeSandboxOptions, readPersonalFundingOptions, createPersonalFundingIntent, createAdministrativeSandboxSession } from './wallet-funding-client.mjs';
 import { handleWalletFunding } from './wallet-funding-bff.mjs';
 
 const env = { AUTH_PROVIDER: 'better-auth', AUTH_BFF_SHARED_SECRET: 's'.repeat(32),
   AUTH_PUBLIC_ORIGIN: 'https://app.example.test', BETTER_AUTH_BACKEND_URL: 'https://auth.core.internal', NODE_ENV: 'production' };
 const requestId = 'd8a4c010-cc33-44da-a297-8b3c6440f491';
+const prohibitedPersonalMethods = ['PAYPAL', 'NETELLER', 'PAYSAFECARD', 'PAYSAFE_CARD', 'SKRILL', 'SKIRLL'];
+const unavailableIntegrationMethods = ['ASTROPAY'];
+const excludedNewPersonalMethods = [...prohibitedPersonalMethods, ...unavailableIntegrationMethods];
 const input = { requestId, walletAddress: `0x${'1'.repeat(40)}`, country: 'MX', amount: 1000,
   sourceCurrencyCode: 'MXN', paymentMethodType: 'SPEI' };
 const options = kind => ({ walletKind: kind, environment: kind === 'personal' ? 'production' : 'sandbox',
@@ -259,15 +262,27 @@ test('a dollar acknowledgement cannot relabel its requested amount as local fiat
   assert.equal(fundingAcknowledgement(value, 'personal'), null);
 });
 
-test('new personal funding allows only configured countries and excludes Neteller and Skrill before transport', async () => {
+test('new personal funding excludes prohibited and temporarily unavailable methods before either transport', async () => {
   const original = globalThis.fetch;
   const valid = { ...input, country: 'US', sourceCurrencyCode: 'USD', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' };
   assert.deepEqual(PERSONAL_FUNDING_COUNTRIES, ['US', 'MX', 'CO']);
+  assert.deepEqual(PERSONAL_FUNDING_BLOCKED_METHODS, prohibitedPersonalMethods);
+  assert.deepEqual(PERSONAL_FUNDING_UNAVAILABLE_METHODS, unavailableIntegrationMethods);
   for (const country of PERSONAL_FUNDING_COUNTRIES) assert.ok(fundingInput({ ...valid, country }, 'personal'));
   try {
     globalThis.fetch = async () => assert.fail('an excluded country or method reached transport');
-    for (const changed of [{ country: 'CA' }, { country: 'PA' }, { country: 'ES' }, { paymentMethodType: 'NETELLER' }, { paymentMethodType: 'SKRILL' }]) {
+    for (const changed of [{ country: 'CA' }, { country: 'PA' }, { country: 'ES' }, ...excludedNewPersonalMethods.map(paymentMethodType => ({ paymentMethodType }))]) {
       await assert.rejects(createPersonalFundingIntent({ ...valid, ...changed }), { message: 'invalid_request' });
+    }
+    for (const paymentMethodType of excludedNewPersonalMethods) {
+      const response = await handleWalletFunding(post({ ...valid, paymentMethodType }), 'personal', {
+        env, serviceRequest: async () => assert.fail('A prohibited personal method reached private transport'),
+      });
+      assert.equal(response.status, 400);
+      assert.equal(fundingAcknowledgement({ checkoutReference: requestId, walletKind: 'personal', environment: 'production', provider: 'reown',
+        status: 'initiated', requestedAmount: 100, sourceCurrencyCode: 'USD', createdAt: '2026-11-10T15:00:00Z',
+        paymentMethodType, allowedProviders: ['SWAPPED'], destinationCurrencyCode: 'USDT_POLYGON',
+        destination: { address: input.walletAddress, asset: 'USDT', network: 'polygon', chainId: 137 } }, 'personal'), null);
     }
     await assert.rejects(readPersonalFundingOptions('CA'), { message: 'invalid_request' });
     for (const sourceCurrencyCode of ['COP', 'MXN']) {
@@ -287,29 +302,31 @@ test('personal method filtering preserves valid routes while administrative coun
   const method = name => ({ method: name, currencyCode: 'USD', minimumAmount: 10, maximumAmount: 1000,
     minimumUsd: 10, maximumUsd: 1000 });
   const personal = { ...options('personal'), country: 'US', sourceCurrencyCode: 'USD',
-    paymentMethods: ['NETELLER', 'CREDIT_DEBIT_CARD', 'SKRILL'], routes: [
-      { serviceProvider: 'MERCURYO', paymentMethods: [method('NETELLER')] },
-      { serviceProvider: 'SWAPPED', paymentMethods: [method('CREDIT_DEBIT_CARD'), method('SKRILL')] },
+    paymentMethods: [...excludedNewPersonalMethods, 'CREDIT_DEBIT_CARD'], routes: [
+      { serviceProvider: 'MERCURYO', paymentMethods: excludedNewPersonalMethods.map(method) },
+      { serviceProvider: 'SWAPPED', paymentMethods: [method('CREDIT_DEBIT_CARD'), ...excludedNewPersonalMethods.map(method)] },
     ] };
   const parsed = personalProductionOptions(personal);
   assert.deepEqual(parsed.paymentMethods, ['CREDIT_DEBIT_CARD']);
   assert.deepEqual(parsed.routes, [{ serviceProvider: 'SWAPPED', paymentMethods: [{ ...method('CREDIT_DEBIT_CARD'), minimumAmount: 30, minimumUsd: 30 }] }]);
   assert.equal(personalProductionOptions({ ...personal, country: 'CA' }), null);
   const admin = { ...options('administrative'), country: 'CO', sourceCurrencyCode: 'USD', serviceProvider: 'BANXA',
-    paymentMethods: ['NETELLER', 'SKRILL'], routes: [{ serviceProvider: 'BANXA', paymentMethods: [method('NETELLER'), method('SKRILL')] }] };
+    paymentMethods: excludedNewPersonalMethods, routes: [{ serviceProvider: 'BANXA', paymentMethods: excludedNewPersonalMethods.map(method) }] };
   assert.deepEqual(administrativeSandboxOptions(admin), admin);
   assert.ok(fundingInput({ ...input, country: 'CO', amount: 100, sourceCurrencyCode: 'USD', paymentMethodType: 'SKRILL', serviceProvider: 'BANXA' }, 'administrative'));
 });
 
-test('previous personal Colombia and Skrill requests remain readable after new funding restrictions', () => {
-  const record = { checkoutReference: requestId, requestedAmount: 100, country: 'CO', status: 'initiated',
-    createdAt: '2026-11-10T15:00:00Z', provider: 'reown', paymentMethodType: 'SKRILL' };
-  const history = fundingHistory({ walletKind: 'personal', environment: 'production', settlement: 'unconfirmed', records: [record] }, 'personal');
-  assert.equal(history.records[0].country, 'CO');
-  const status = fundingStatus({ checkoutReference: requestId, walletKind: 'personal', environment: 'production', provider: 'reown',
-    country: 'CO', requestedAmount: 100, requestStatus: 'initiated', paymentMethodType: 'SKRILL',
-    destination: { address: input.walletAddress, asset: 'USDT', network: 'polygon', chainId: 137 },
-    confirmation: { state: 'unconfirmed', source: 'none', testMode: false } }, 'personal');
-  assert.equal(status.country, 'CO');
-  assert.equal(status.confirmation.state, 'unconfirmed');
+test('historical prohibited and unavailable personal methods stay readable after new funding restrictions', () => {
+  for (const paymentMethodType of excludedNewPersonalMethods) {
+    const record = { checkoutReference: requestId, requestedAmount: 100, country: 'CO', status: 'initiated',
+      createdAt: '2026-11-10T15:00:00Z', provider: 'reown', paymentMethodType };
+    const history = fundingHistory({ walletKind: 'personal', environment: 'production', settlement: 'unconfirmed', records: [record] }, 'personal');
+    assert.equal(history.records[0].country, 'CO');
+    const status = fundingStatus({ checkoutReference: requestId, walletKind: 'personal', environment: 'production', provider: 'reown',
+      country: 'CO', requestedAmount: 100, requestStatus: 'initiated', paymentMethodType,
+      destination: { address: input.walletAddress, asset: 'USDT', network: 'polygon', chainId: 137 },
+      confirmation: { state: 'unconfirmed', source: 'none', testMode: false } }, 'personal');
+    assert.equal(status.country, 'CO');
+    assert.equal(status.confirmation.state, 'unconfirmed');
+  }
 });

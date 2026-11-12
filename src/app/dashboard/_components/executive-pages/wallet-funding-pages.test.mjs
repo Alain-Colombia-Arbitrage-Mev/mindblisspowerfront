@@ -631,10 +631,13 @@ test('a history status action selects the exact request for a read without chang
   assert.doesNotMatch(renderToStaticMarkup(tree), /Recarga confirmada/);
 });
 
-test('all returned production methods remain visible and selectable, including PayPal and Venmo, without a card-only filter', async t => {
+test('personal funding excludes forbidden methods and temporarily unavailable AstroPay while retaining card and Venmo', async t => {
   if (typeof navigator === 'undefined') { Object.defineProperty(globalThis, 'navigator', { value: { language: 'es-CO', languages: ['es-CO'] }, configurable: true }); t.after(() => { delete globalThis.navigator; }); }
-  const countries = { CO: ['CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY', 'ASTROPAY', 'NETELLER', 'PAYSAFECARD', 'SKRILL'],
-    US: ['CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY', 'PAYPAL', 'VENMO'] };
+  const blocked = ['PAYPAL', 'NETELLER', 'PAYSAFECARD', 'PAYSAFE_CARD', 'SKRILL', 'SKIRLL'];
+  const temporarilyUnavailable = ['ASTROPAY'];
+  const allowed = { CO: ['CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY'],
+    US: ['CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY', 'VENMO'] };
+  const countries = Object.fromEntries(Object.entries(allowed).map(([country, methods]) => [country, [...methods, ...blocked, ...temporarilyUnavailable]]));
   const submitted = [];
   const harness = formHarness('PersonalFundingForm', { readPersonalFundingOptions: async country => ({ country, paymentMethods: countries[country],
     routes: [{ serviceProvider: 'SWAPPED', paymentMethods: countries[country].map(method => ({ method, minimumUsd: 20, maximumUsd: 1000 })) }] }),
@@ -645,25 +648,42 @@ test('all returned production methods remain visible and selectable, including P
   selectFundingCountry(harness, props, 'US'); await flush(); harness.render(props); let tree = harness.render(props);
   let field = find(tree, 'FundingMethodField');
   let view = field.type(field.props);
-  assert.deepEqual(findAll(view, node => node?.type === 'input' && node.props.type === 'radio').map(node => node.props.value), countries.US);
-  assert.match(renderToStaticMarkup(view), /5 opciones de pago/);
+  assert.deepEqual(findAll(view, node => node?.type === 'input' && node.props.type === 'radio').map(node => node.props.value), allowed.US);
+  assert.match(renderToStaticMarkup(view), /4 opciones de pago/);
   assert.doesNotMatch(renderToStaticMarkup(view), /PSE/);
   const group = React.Children.toArray(tree.props.children.props.children)[0];
   assert.deepEqual(React.Children.toArray(group.props.children).map(node => node.type.name).filter(Boolean), ['FundingCountryField', 'FundingAmountField', 'FundingMethodField']);
+  find(tree, 'FundingCountryField').props.onChange('CO');
+  harness.render(props); await flush(); harness.render(props); tree = harness.render(props);
+  field = find(tree, 'FundingMethodField'); view = field.type(field.props);
+  assert.deepEqual(findAll(view, node => node?.type === 'input' && node.props.type === 'radio').map(node => node.props.value), allowed.CO);
+  assert.match(renderToStaticMarkup(view), /3 opciones de pago/);
+  assert.doesNotMatch(renderToStaticMarkup(view), /AstroPay|PayPal|Neteller|Paysafe|Skrill|Skirll|Venmo/i);
   find(tree, 'FundingCountryField').props.onChange('US');
   harness.render(props); await flush(); harness.render(props); tree = harness.render(props);
   field = find(tree, 'FundingMethodField'); view = field.type(field.props);
   const radios = findAll(view, node => node?.type === 'input' && node.props.type === 'radio');
-  assert.deepEqual(radios.map(node => node.props.value), countries.US);
+  assert.deepEqual(radios.map(node => node.props.value), allowed.US);
   const html = renderToStaticMarkup(view);
-  assert.match(html, /PayPal/); assert.match(html, /Venmo/); assert.match(html, /5 opciones de pago/);
+  assert.doesNotMatch(html, /AstroPay|PayPal|Neteller|Paysafe|Skrill|Skirll/i); assert.match(html, /Venmo/); assert.match(html, /4 opciones de pago/);
   assert.equal((html.match(/Límites:/g) || []).length, 1, 'selected-method limits appear once');
   assert.equal((html.match(/El proveedor confirma disponibilidad y comisiones antes de pagar/g) || []).length, 1, 'coverage options do not promise checkout availability or final fees');
-  radios.find(node => node.props.value === 'PAYPAL').props.onChange();
+  for (const method of [...blocked, ...temporarilyUnavailable]) {
+    field.props.onChange(method); tree = harness.render(props);
+    assert.equal(find(tree, 'FundingSubmit').props.disabled, true);
+    tree.props.onSubmit({ preventDefault() {} }); await flush();
+    assert.equal(submitted.length, 0, `${method} cannot initiate personal funding even through a stale selection handler`);
+  }
+  radios.find(node => node.props.value === 'VENMO').props.onChange();
   tree = harness.render(props);
   tree.props.onSubmit({ preventDefault() {} }); await flush();
-  assert.equal(submitted[0].paymentMethodType, 'PAYPAL');
+  assert.equal(submitted[0].paymentMethodType, 'VENMO');
   assert.equal(submitted[0].countryCode, 'US');
+  radios.find(node => node.props.value === 'CREDIT_DEBIT_CARD').props.onChange();
+  tree = harness.render(props);
+  tree.props.onSubmit({ preventDefault() {} }); await flush();
+  assert.equal(submitted.length, 2);
+  assert.equal(submitted[1].paymentMethodType, 'CREDIT_DEBIT_CARD');
 });
 
 test('selected method limits reflect overlapping real routes and never invent a minimum for an unavailable amount', () => {
@@ -794,6 +814,7 @@ test('personal MXN discovery cancels USD responses and enforces the fixed 931 fl
   }
   latest.resolve({ country: 'MX', sourceCurrencyCode: 'MXN', routes: [{ paymentMethods: [
     { method: 'SPEI', currencyCode: 'MXN', minimumAmount: 150, maximumAmount: 100000 },
+    { method: 'ASTROPAY', currencyCode: 'MXN', minimumAmount: 150, maximumAmount: 100000 },
     { method: 'CREDIT_DEBIT_CARD', currencyCode: 'MXN', minimumAmount: 100, maximumAmount: 100000 },
     { method: 'PAYPAL', currencyCode: 'USD', minimumAmount: 50, maximumAmount: 5000 },
   ] }] });
@@ -802,6 +823,12 @@ test('personal MXN discovery cancels USD responses and enforces the fixed 931 fl
   assert.deepEqual(method.props.methods, ['SPEI']);
   assert.deepEqual(method.props.limits, { minimumAmount: 931, maximumAmount: 100000 });
   assert.match(renderToStaticMarkup(method.type(method.props)), /SPEI.*transferencia bancaria/);
+  assert.doesNotMatch(renderToStaticMarkup(method.type(method.props)), /AstroPay/i);
+  method.props.onChange('ASTROPAY'); harness.render(props); tree = harness.render(props);
+  assert.equal(find(tree, 'FundingSubmit').props.disabled, true);
+  tree.props.onSubmit({ preventDefault() {} }); await flush();
+  assert.equal(submitted.length, 0, 'an unavailable rail cannot replace the valid SPEI selection');
+  find(tree, 'FundingMethodField').props.onChange('SPEI'); harness.render(props); tree = harness.render(props);
   assert.equal(find(tree, 'FundingAmountField').props.amount, '931', 'the fixed MXN minimum does not depend on a currency conversion');
   assert.equal(find(tree, 'FundingSubmit').props.disabled, false);
   find(tree, 'FundingAmountField').props.onChange('930.99');

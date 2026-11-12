@@ -196,7 +196,8 @@ function providerHarness(t, { bound = false, reset = async () => {}, proof = fal
       useAppKitState: () => sdk, useAppKitTheme: () => ({ setThemeMode() {}, setThemeVariables() {} }), useAppKitNetwork: () => ({ switchNetwork() { assert.fail('No payment network switch'); } }),
       useDisconnect: () => ({ disconnect }) },
     '@reown/appkit-adapter-ethers': { EthersAdapter: class {} }, '@reown/appkit-adapter-solana/react': { SolanaAdapter: class {} },
-    '@reown/appkit-controllers': { OnRampController: { state: { providers: [] } } }, '@reown/appkit/networks': { mainnet: {}, polygon: {}, solana: {} },
+    '@reown/appkit-controllers': { OnRampController: { state: { providers: [] } }, ConnectionController: { hasAnyConnection: () => false } },
+    '@reown/appkit-common': { ConstantsUtil: { CONNECTOR_ID: { AUTH: 'AUTH' } } }, '@reown/appkit/networks': { mainnet: {}, polygon: {}, solana: {} },
     ethers: { getAddress: input => input.toLowerCase(), BrowserProvider: class {
       getSigner() { assert.equal(proof, true, 'No signature in connection tests'); return {
         getAddress: async () => account.address,

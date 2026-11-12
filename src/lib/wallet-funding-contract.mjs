@@ -15,7 +15,9 @@ export const PERSONAL_FUNDING_MAXIMUM_USD = PERSONAL_WALLET_MAXIMUM_USD;
 export const PERSONAL_FUNDING_MINIMUM_MXN = 931;
 export const ADMINISTRATIVE_FUNDING_MINIMUM_USD = 50;
 export const PERSONAL_FUNDING_COUNTRIES = Object.freeze(['US', 'MX', 'CO']);
-export const PERSONAL_FUNDING_BLOCKED_METHODS = Object.freeze(['NETELLER', 'SKRILL']);
+export const PERSONAL_FUNDING_BLOCKED_METHODS = Object.freeze(['PAYPAL', 'NETELLER', 'PAYSAFECARD', 'PAYSAFE_CARD', 'SKRILL', 'SKIRLL']);
+// Temporary integration gate: AstroPay can quote while hosted checkout has no usable payment method.
+export const PERSONAL_FUNDING_UNAVAILABLE_METHODS = Object.freeze(['ASTROPAY']);
 const STATUSES = new Set(['initiated', 'session_created', 'unavailable', 'failed']);
 export const WALLET_GATEWAY_FAILURE_REASONS = Object.freeze(['gateway_route_missing', 'gateway_service_unavailable',
   'gateway_rejected', 'invalid_gateway_response', 'gateway_transport_unavailable']);
@@ -37,7 +39,8 @@ export function personalFundingCountry(value) {
 }
 
 export function personalFundingMethod(value) {
-  return typeof value === 'string' && METHOD.test(value) && !PERSONAL_FUNDING_BLOCKED_METHODS.includes(value);
+  return typeof value === 'string' && METHOD.test(value) && !PERSONAL_FUNDING_BLOCKED_METHODS.includes(value)
+    && !PERSONAL_FUNDING_UNAVAILABLE_METHODS.includes(value);
 }
 
 function validFiatAmount(value) {

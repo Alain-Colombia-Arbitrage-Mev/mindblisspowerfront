@@ -43,12 +43,17 @@ function metadata(request, body, bytes, now) {
 }
 
 async function bodyMetadata(request, timeoutMs) {
+  if (request.signal?.aborted) throw invalid();
   const reader = request.body?.getReader();
   if (!reader) throw invalid();
   const deadline = browserRequestDeadline(request.signal, timeoutMs);
   const decoder = new TextDecoder('utf-8', { fatal: true });
-  let raw = '', bytes = 0;
-  const stop = () => { try { void reader.cancel().catch(() => {}); } catch { /* no payload diagnostics */ } };
+  let raw = '', bytes = 0, stopped = false;
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    try { void Promise.resolve(reader.cancel()).catch(() => {}); } catch { /* no payload diagnostics */ }
+  };
   deadline.signal.addEventListener('abort', stop, { once: true });
   /** @returns {Promise<ReadableStreamReadResult<Uint8Array>>} */
   const read = () => new Promise((resolve, reject) => {
@@ -57,7 +62,10 @@ async function bodyMetadata(request, timeoutMs) {
     const abort = () => finish(reject, invalid());
     if (deadline.signal.aborted) return abort();
     deadline.signal.addEventListener('abort', abort, { once: true });
-    Promise.resolve().then(() => reader.read()).then(value => finish(resolve, value), () => finish(reject, invalid()));
+    Promise.resolve().then(() => {
+      if (deadline.signal.aborted) throw invalid();
+      return reader.read();
+    }).then(value => finish(resolve, value), () => finish(reject, invalid()));
   });
   try {
     for (;;) {
@@ -70,6 +78,9 @@ async function bodyMetadata(request, timeoutMs) {
     }
     const body = JSON.parse(raw + decoder.decode());
     return { body, bytes };
+  } catch (error) {
+    stop();
+    throw error;
   } finally {
     deadline.signal.removeEventListener('abort', stop); deadline.dispose();
     try { reader.releaseLock(); } catch { /* a timed-out read may still be settling */ }

@@ -43,7 +43,8 @@ test('personal checkout enforces its countries and excluded methods before const
   for (const countryCode of ['PA', 'CA', 'ES']) {
     assert.throws(() => buildReownProductionOnrampUrl({ ...input, countryCode }), { message: 'wallet_funding_invalid_country' });
   }
-  for (const paymentMethodType of ['NETELLER', 'SKRILL']) {
+  for (const paymentMethodType of ['PAYPAL', 'NETELLER', 'PAYSAFECARD', 'PAYSAFE_CARD', 'SKRILL', 'SKIRLL', 'ASTROPAY']) {
+    assert.throws(() => reownFundingSelection({ countryCode: 'US', paymentMethodType }), { message: 'wallet_funding_method_unavailable' });
     assert.throws(() => buildReownProductionOnrampUrl({ ...input, paymentMethodType }), { message: 'wallet_funding_method_unavailable' });
   }
   assert.throws(() => reownFundingSelection({ country: 'US', countryCode: 'MX', paymentMethodType: 'CREDIT_DEBIT_CARD' }), { message: 'invalid_request' });
