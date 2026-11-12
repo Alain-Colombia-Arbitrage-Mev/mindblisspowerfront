@@ -706,11 +706,12 @@ test('USD amount controls expose exact accessible limits, quick presets and a sl
   const range = () => findAll(amountField(), node => node?.type === 'input' && node.props.type === 'range')[0];
   const number = () => findAll(amountField(), node => node?.type === 'input' && node.props.type === 'number')[0];
   const presets = findAll(amountField(), node => node?.type === 'button');
-  assert.deepEqual(presets.map(button => button.props.children), [50, 100, 500, 1000, 2000, 5000, 10000, 15000]
-    .map(value => new Intl.NumberFormat('es', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value)));
+  assert.deepEqual(presets.map(button => button.props.children.props.children), [50, 100, 500, 1000, 2000, 5000, 10000, 15000]
+    .map(value => new Intl.NumberFormat('es', { maximumFractionDigits: 0 }).format(value)));
+  assert.deepEqual(presets.map(button => button.props['aria-label']), [50, 100, 500, 1000, 2000, 5000, 10000, 15000]
+    .map(value => new Intl.NumberFormat('es', { style: 'currency', currency: 'USD' }).format(value)));
   assert.ok(presets.every(button => button.props.type === 'button'));
-  assert.deepEqual(presets.filter(button => button.props['aria-pressed']).map(button => button.props.children),
-    [new Intl.NumberFormat('es', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(100)]);
+  assert.deepEqual(presets.filter(button => button.props['aria-pressed']).map(button => button.props.children.props.children), ['100']);
   assert.equal(number().props.value, '100');
   assert.equal(range().props.min, 50); assert.equal(range().props.max, 15000); assert.equal(range().props.step, 'any');
   assert.equal(number().props.min, '50'); assert.equal(number().props.max, '15000'); assert.equal(number().props.step, '0.01');

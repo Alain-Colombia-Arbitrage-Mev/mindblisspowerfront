@@ -423,7 +423,7 @@ test("personal portal renders only its personal wallet and preserves native memb
  assert.doesNotMatch(sidebar,/AdministrativeWallet|wallet-administrative/);
  assert.doesNotMatch(funding,/MELD|administrative|ReownProvider|FundingForm|useState|useEffect/);
  assert.match(retired,/notFound\(\)/);assert.doesNotMatch(retired,/AdministrativeWalletFundingPage|runtimeEnvironment/);
- assert.match(personal,/reown\.startOnramp\(\{ walletAddress: reown\.linkedAddress, \.\.\.input \}\)/);
+ assert.match(personal,/reown\.startOnramp\(\{ \.\.\.input, walletAddress: reown\.linkedAddress \}\)/);
  assert.doesNotMatch(personal,/Administrative|startAdministrative|SandboxFunding/);
  assert.match(policy,/MINDBLISS_ONRAMP_FEE_BPS = 100/);assert.match(policy,/PERSONAL_WALLET_ASSET = "USDT"/);
  assert.match(policy,/PERSONAL_WALLET_MINIMUM_USD = 30/);

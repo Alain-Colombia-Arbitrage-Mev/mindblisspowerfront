@@ -123,6 +123,7 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
         <FundingAmountField id={id} amount={amount} sourceCurrencyCode={sourceCurrencyCode} onChange={value => changeSelection(setAmount, value)} busy={busy} />
         <FundingMethodField id={id} value={methods.includes(method) ? method : ""} methods={methods} status={current ? options.status : "loading"}
           countrySelected={Boolean(countryCode)} sourceCurrencyCode={sourceCurrencyCode} minimumUsd={routeMinimum}
+          amountValid={validPersonalFormAmount(parsedAmount, sourceCurrencyCode)}
           onUseMinimum={routeMinimum !== null && Number(amount) < routeMinimum ? () => changeSelection(setAmount, (Math.ceil(routeMinimum * 100) / 100).toFixed(2)) : undefined}
           limits={current ? selectedMethodLimits(options.routes, method, Number(amount), sourceCurrencyCode) : null} onChange={value => changeSelection(setMethod, value)} onRetry={() => setRevision(value => value + 1)} busy={busy} />
       </div>
@@ -148,11 +149,11 @@ function FundingAmountField({ id, amount, sourceCurrencyCode = "USD", onChange, 
     setSliderAmount(next);
   }
   return <fieldset className={`mb-onramp-amount-fieldset ${styles.amountField}`} disabled={busy}>
-    <legend>{t("onramp.amountLabel")}</legend>
+    <legend className={styles.amountLegend}>{t("onramp.amountLabel")}<span className={styles.amountCurrency}>{sourceCurrencyCode}</span></legend>
     {usd ? <div className={`mb-onramp-quick-amounts ${styles.quickAmounts}`}>{[PERSONAL_FORM_MINIMUM_USD, PERSONAL_FORM_DEFAULT_USD, 500, 1000, 2000, 5000, 10000, PERSONAL_FUNDING_MAXIMUM_USD].map(value => <button type="button" key={value}
-      className={Number(amount) === value ? "active" : ""} aria-pressed={Number(amount) === value} onClick={() => onChange(String(value))}>
-      {new Intl.NumberFormat(locale, { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value)}</button>)}</div> : null}
-    <label className="mb-onramp-amount-input" htmlFor={`${id}-amount`}><span>{sourceCurrencyCode}</span><input id={`${id}-amount`} name="amount" autoComplete="off" type="number" min={String(usd ? PERSONAL_FORM_MINIMUM_USD : PERSONAL_FUNDING_MINIMUM_MXN)} max={usd ? String(PERSONAL_FUNDING_MAXIMUM_USD) : "1000000000"} step="0.01" inputMode="decimal"
+      className={Number(amount) === value ? "active" : ""} aria-label={currency(value)} aria-pressed={Number(amount) === value} onClick={() => onChange(String(value))}>
+      <bdi>{new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(value)}</bdi></button>)}</div> : null}
+    <label className={`mb-onramp-amount-input ${styles.amountInput}`} htmlFor={`${id}-amount`}><span>{sourceCurrencyCode}</span><input id={`${id}-amount`} name="amount" autoComplete="off" type="number" min={String(usd ? PERSONAL_FORM_MINIMUM_USD : PERSONAL_FUNDING_MINIMUM_MXN)} max={usd ? String(PERSONAL_FUNDING_MAXIMUM_USD) : "1000000000"} step="0.01" inputMode="decimal"
       value={amount} onChange={event => onChange(event.target.value)} aria-label={t("onramp.amountLabel")} aria-invalid={invalid || undefined} aria-describedby={[usd ? `${id}-usd-limits` : "", invalid ? `${id}-amount-hint` : ""].filter(Boolean).join(" ") || undefined} required /></label>
     {usd ? <div className={styles.amountSliderGroup}>
       <label className="sr-only" htmlFor={`${id}-amount-slider`}>{t("funding.amountSlider")}</label>
@@ -199,12 +200,12 @@ function FundingCountryField({ id, value, onChange, busy, label = "", countries 
     </select></div>;
 }
 
-function FundingMethodField({ id, value, methods, status, countrySelected, sourceCurrencyCode = "USD", minimumUsd, limits, onChange, onRetry, onUseMinimum = undefined, busy, partialAvailability = false }) {
+function FundingMethodField({ id, value, methods, status, countrySelected, sourceCurrencyCode = "USD", minimumUsd, limits, onChange, onRetry, onUseMinimum = undefined, busy, partialAvailability = false, amountValid = true }) {
   const { t, locale } = useI18n();
   const ready = countrySelected && status === "ready";
-  const unavailable = countrySelected && (status === "error" || (ready && !methods.length));
+  const unavailable = countrySelected && (status === "error" || (ready && amountValid && !methods.length));
   const currency = number => new Intl.NumberFormat(locale, { style: "currency", currency: sourceCurrencyCode, maximumFractionDigits: 2 }).format(number);
-  return <fieldset className={styles.methodField} disabled={busy} aria-describedby={`${id}-methods-state`}>
+  return <fieldset className={styles.methodField} disabled={busy} aria-busy={countrySelected && status === "loading"} aria-describedby={`${id}-methods-state`}>
     <legend>{t("onramp.paymentMethodLabel")}{ready && methods.length ? <span className={styles.methodCount}>{t("funding.methodCount", { count: new Intl.NumberFormat(locale).format(methods.length) })}</span> : null}</legend>
     {methods.length ? <div className={styles.methodChoices}>{methods.map(method => {
       const Icon = ["CREDIT_DEBIT_CARD", "CARD", "VISA", "MASTERCARD"].includes(method) ? CreditCard
@@ -216,10 +217,11 @@ function FundingMethodField({ id, value, methods, status, countrySelected, sourc
     })}</div> : null}
     <div id={`${id}-methods-state`} role="status" className="mb-onramp-disclosure">
       {unavailable ? <><p>{t(status === "error" ? "funding.methodsLoadFailed" : "funding.methodsForAmountUnavailable")}</p>{status === "error" ? <button className="executive-button" type="button" onClick={onRetry} disabled={busy}><RefreshCw size={14} aria-hidden="true" />{t("walletPage.retry")}</button> : null}</>
-        : !countrySelected ? t("funding.chooseCountryFirst") : status === "loading" ? t("walletPage.checkingAvailability") : null}
+        : !countrySelected ? t("funding.chooseCountryFirst") : status === "loading" ? <span className={styles.methodLoading}><Loader2 className="animate-spin" size={15} aria-hidden="true" />{t("walletPage.checkingAvailability")}</span>
+          : ready && !amountValid ? t(sourceCurrencyCode === "USD" ? "funding.personalAmountRange" : "funding.personalMxnAmountRange") : null}
       {ready && partialAvailability && methods.length ? <><p>{t("funding.methodsPartiallyLoaded")}</p><button className="executive-button" type="button" onClick={onRetry} disabled={busy}><RefreshCw size={14} aria-hidden="true" />{t("walletPage.retry")}</button></> : null}
       {ready && limits ? t("funding.methodRange", { minimum: currency(limits.minimumAmount ?? limits.minimumUsd), maximum: currency(limits.maximumAmount ?? limits.maximumUsd) })
-        : ready && !methods.length && minimumUsd !== null ? <p>{t("funding.providerMinimum", { amount: currency(minimumUsd) })}</p> : null}
+        : ready && amountValid && !methods.length && minimumUsd !== null ? <p>{t("funding.providerMinimum", { amount: currency(minimumUsd) })}</p> : null}
       {ready && !methods.length && onUseMinimum ? <button className="executive-button" type="button" onClick={onUseMinimum} disabled={busy}>{t("funding.useProviderMinimum", { amount: currency(minimumUsd) })}</button> : null}
       {ready && methods.length ? <p>{t("funding.providerFinalReview")}</p> : null}
     </div>

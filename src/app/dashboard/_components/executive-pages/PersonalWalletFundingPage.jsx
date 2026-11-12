@@ -42,15 +42,17 @@ export function PersonalWalletFunding() {
   const [actionDiagnostic, setActionDiagnostic] = useState("");
   const [copyError, setCopyError] = useState("");
   const [actionBusy, setActionBusy] = useState(false);
+  const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [walletRecovery, setWalletRecovery] = useState({ phase: "", address: "" });
   const [selectedReference, setSelectedReference] = useState("");
   const [selectedGeneration, setSelectedGeneration] = useState(-1);
   const [statusFocusKey, setStatusFocusKey] = useState(0);
   const clearSelectedStatus = useCallback(() => {
+    if (!mounted.current || !owner || epoch.current.generation !== generation || action.current) return;
     setSelectedReference(""); setStatusFocusKey(0);
     setActionError(""); setActionDiagnostic("");
     reown.clearOnrampError?.();
-  }, [reown.clearOnrampError]);
+  }, [generation, owner, reown.clearOnrampError]);
   const state = personalWalletState(reown);
   const verified = state === "verified";
   const walletCheckRequired = walletRecovery.phase === "check";
@@ -59,20 +61,20 @@ export function PersonalWalletFunding() {
   const setupRequired = !verified || walletCheckRequired || activationRequired || awaitingBinding;
   const displayState = verified && setupRequired ? (walletCheckRequired || awaitingBinding ? "checking" : "connected") : state;
   const address = !setupRequired ? reown.linkedAddress : "";
-  const busy = actionBusy || ["connecting", "linking", "opening"].includes(reown.onrampStatus);
+  const busy = actionBusy || checkoutBusy || ["connecting", "linking", "opening"].includes(reown.onrampStatus);
   const live = () => mounted.current && Boolean(owner) && epoch.current.generation === generation;
   useEffect(() => {
     mounted.current = true;
     return () => { mounted.current = false; action.current = null; };
   }, []);
   useEffect(() => {
-    action.current = null; setActionBusy(false); setWalletRecovery({ phase: "", address: "" });
+    action.current = null; setActionBusy(false); setCheckoutBusy(false); setWalletRecovery({ phase: "", address: "" });
     setActionError(""); setActionDiagnostic(""); setCopyError(""); setSelectedReference(""); setSelectedGeneration(-1); setStatusFocusKey(0);
   }, [owner, generation]);
 
   async function walletAction(change = false) {
     if (action.current || !live()) return;
-    const request = { owner }; action.current = request;
+    const request = { owner, kind: "wallet" }; action.current = request;
     const current = () => live() && action.current === request;
     setActionBusy(true); setActionError(""); setActionDiagnostic("");
     try {
@@ -108,23 +110,32 @@ export function PersonalWalletFunding() {
   }
 
   async function openProvider(input) {
-    if (!live() || setupRequired || action.current) return { requiresWalletVerification: true };
+    if (!live() || setupRequired) return { requiresWalletVerification: true };
+    if (action.current) return { pending: true };
+    const request = { owner, kind: "checkout" }; action.current = request;
+    const current = () => live() && action.current === request;
+    setCheckoutBusy(true);
     setActionError(""); setActionDiagnostic("");
-    let result;
-    try { result = await reown.startOnramp({ walletAddress: reown.linkedAddress, ...input }); }
+    try {
+      const result = await reown.startOnramp({ ...input, walletAddress: reown.linkedAddress });
+      if (!current()) return result;
+      if (result && typeof result === "object" && "requiresWalletVerification" in result && result.requiresWalletVerification === true) { setWalletRecovery({ phase: "check", address: "" }); return result; }
+      if (result && typeof result === "object" && "opened" in result && result.opened === true && "checkoutReference" in result
+        && typeof result.checkoutReference === "string" && FUNDING_UUID.test(result.checkoutReference)) { setSelectedReference(result.checkoutReference); setSelectedGeneration(generation); setStatusFocusKey(0); }
+      return result;
+    }
     catch (error) {
-      if (live() && ["wallet_not_linked", "wallet_funding_wallet_not_linked"].includes(error?.message)) setWalletRecovery({ phase: "check", address: "" });
+      if (current() && ["wallet_not_linked", "wallet_funding_wallet_not_linked"].includes(error?.message)) setWalletRecovery({ phase: "check", address: "" });
       throw error;
     }
-    if (!live()) return result;
-    if (result && typeof result === "object" && "requiresWalletVerification" in result && result.requiresWalletVerification === true) { setWalletRecovery({ phase: "check", address: "" }); return result; }
-    if (result && typeof result === "object" && "opened" in result && result.opened === true && "checkoutReference" in result
-      && typeof result.checkoutReference === "string" && FUNDING_UUID.test(result.checkoutReference)) { setSelectedReference(result.checkoutReference); setSelectedGeneration(generation); setStatusFocusKey(0); }
-    return result;
+    finally { if (action.current === request) { action.current = null; if (live()) setCheckoutBusy(false); } }
   }
 
   function cancelConnection() {
+    if (!live() || action.current?.kind === "wallet") return;
+    action.current = null;
     reown.cancelOnramp();
+    setCheckoutBusy(false);
     setActionBusy(false);
     setActionDiagnostic("");
     setActionError(t("funding.requestCancelled"));
