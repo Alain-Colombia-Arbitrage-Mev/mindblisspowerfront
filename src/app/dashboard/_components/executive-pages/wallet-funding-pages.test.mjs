@@ -8,6 +8,7 @@ import ts from 'typescript';
 import { translateMessage } from '../../../../i18n/translate.mjs';
 import { PERSONAL_FUNDING_COUNTRIES, PERSONAL_FUNDING_MINIMUM_USD, PERSONAL_FUNDING_MAXIMUM_USD, PERSONAL_FUNDING_MINIMUM_MXN, personalFundingMethod, validFundingAmount, validFundingSourceAmount, WALLET_GATEWAY_FAILURE_REASONS, FUNDING_UUID, fundingStatus } from '../../../../lib/wallet-funding-contract.mjs';
 import { personalFundingFailure } from '../../../../lib/personal-funding-errors.mjs';
+import { personalWalletBalanceSessionKey } from '../../../../lib/personal-wallet-balance-store.mjs';
 
 const require = createRequire(import.meta.url);
 const icons = new Proxy({}, { get: () => () => null });
@@ -22,6 +23,8 @@ function load(filename, mocks) {
     if (Object.hasOwn(mocks, id)) return mocks[id];
     if (id === '@/lib/wallet-funding-contract.mjs') return { PERSONAL_FUNDING_COUNTRIES, PERSONAL_FUNDING_MINIMUM_USD, PERSONAL_FUNDING_MAXIMUM_USD, PERSONAL_FUNDING_MINIMUM_MXN, personalFundingMethod, validFundingAmount, validFundingSourceAmount, WALLET_GATEWAY_FAILURE_REASONS, FUNDING_UUID, fundingStatus };
     if (id === '@/components/wallet/PersonalWalletBalances') return { default: function PersonalWalletBalances() { return null; } };
+    if (id === '@/lib/member-session-context') return { useMemberSession: () => ({ subject: 'funding-owner', email: 'funding@example.test' }) };
+    if (id === '@/lib/personal-wallet-balance-store.mjs') return { personalWalletBalanceSessionKey };
     if (id === 'next/link') return { default: ({ href, children, ...props }) => React.createElement('a', { href, ...props }, children) };
     if (id.endsWith('.module.css')) return styles;
     if (id === 'react/jsx-runtime' || id === 'react') return require(id);
@@ -54,6 +57,17 @@ function formHarness(name, api, detectedCountry = 'US') {
   });
   const render = harness.render;
   return { ...harness, render(props = {}) { return render({ destinationAddress: `0x${'1'.repeat(40)}`, ...props }); } };
+}
+
+function personalPageHarness(reown, { locale = 'es', session = () => ({ subject: 'funding-owner', email: 'funding@example.test' }) } = {}) {
+  const shared = load('WalletFundingUI.jsx', { 'lucide-react': icons, '@/i18n/LanguageProvider': i18n });
+  function PersonalFundingForm() { return null; }
+  return componentHarness('PersonalWalletFundingPage.jsx', 'PersonalWalletFunding', {
+    'lucide-react': icons, '@/i18n/LanguageProvider': { useI18n: () => ({ locale, t: (key, values) => translateMessage(locale, key, values) }) },
+    '@/components/reown/ReownContext': { useReownWallet: () => reown }, '@/lib/member-session-context': { useMemberSession: session },
+    '@/lib/personal-funding-errors.mjs': { personalFundingFailure }, './WalletFundingForm': { PersonalFundingForm },
+    './WalletFundingStatus': { default: () => null }, './WalletFundingUI': shared,
+  });
 }
 
 function find(node, name) {
@@ -183,6 +197,166 @@ test('connected activation stays busy until canonical linkage and never offers a
   assert.deepEqual(calls, ['activate']);
 });
 
+test('the recharge form exposes an explicit inline activation in all locales and cannot open checkout before linkage', async t => {
+  for (const locale of ['es', 'en', 'ar', 'zh']) {
+    const calls = [], reown = { configured: true, linkStatus: 'unlinked', linkedAddress: '', address: '', isConnected: false,
+      onrampStatus: 'idle', async prepareWallet() { calls.push('activate'); return { linked: true, address: personalStatus.destination.address }; },
+      async startOnramp() { assert.fail('An unverified form cannot open checkout'); } };
+    const page = personalPageHarness(reown, { locale }), form = formHarness('PersonalFundingForm', { readPersonalFundingOptions: async country => ({ country, routes: [] }) });
+    t.after(() => { page.unmount(); form.unmount(); });
+    const props = find(page.render(), 'PersonalFundingForm').props, tree = form.render(props);
+    const activate = find(tree, node => node?.type === 'button' && node.props.children?.some?.(child => child === translateMessage(locale, 'funding.activateWallet')));
+    assert.ok(activate); assert.equal(activate.props.type, 'button'); assert.equal(activate.props.disabled, false);
+    assert.ok(renderToStaticMarkup(tree).includes(translateMessage(locale, 'funding.activateWalletCopy')));
+    assert.equal(find(tree, 'FundingSubmit'), undefined, 'The disabled recharge button is replaced by the action that resolves its prerequisite');
+    await tree.props.onSubmit({ preventDefault() {} }); await flush(); assert.deepEqual(calls, []);
+    await props.onContinue({ amount: 30, countryCode: 'US', sourceCurrencyCode: 'USD', paymentMethodType: 'CREDIT_DEBIT_CARD' });
+    assert.deepEqual(calls, []);
+  }
+});
+
+test('inline and sidebar activation coalesce and preserve Mexico, pesos, amount and SPEI until a separate recharge click', async t => {
+  let complete; const pending = new Promise(resolve => { complete = resolve; }), calls = [];
+  const reown = { configured: true, linkStatus: 'unlinked', linkedAddress: '', address: '', isConnected: false, onrampStatus: 'idle',
+    prepareWallet() { calls.push('activate'); return pending; },
+    async startOnramp(input) { calls.push(['checkout', input]); return { opened: true, checkoutReference: statusReference }; } };
+  const page = personalPageHarness(reown), form = formHarness('PersonalFundingForm', { readPersonalFundingOptions: async (country, { sourceCurrencyCode }) => ({ country, sourceCurrencyCode,
+    routes: [{ paymentMethods: [{ method: sourceCurrencyCode === 'MXN' ? 'SPEI' : 'CREDIT_DEBIT_CARD', currencyCode: sourceCurrencyCode, minimumAmount: sourceCurrencyCode === 'MXN' ? 931 : 30, maximumAmount: 50000 }] }] }) });
+  t.after(() => { page.unmount(); form.unmount(); });
+  const render = () => { const parent = page.render(); return { parent, tree: form.render(find(parent, 'PersonalFundingForm').props) }; };
+  let view = render(); find(view.tree, 'FundingCountryField').props.onChange('MX'); view = render();
+  find(view.tree, 'FundingCurrencyField').props.onChange('MXN'); render(); await flush(); render(); view = render();
+  find(view.tree, 'FundingAmountField').props.onChange('1234.56'); render(); view = render();
+  assert.equal(find(view.tree, 'FundingMethodField').props.value, 'SPEI');
+  const inline = find(view.tree, node => node?.type === 'button' && node.props.children?.some?.(child => child === translateMessage('es', 'funding.activateWallet')));
+  const sidebar = find(view.parent, node => node?.type === 'button' && renderToStaticMarkup(node).includes(translateMessage('es', 'funding.activateWallet')));
+  inline.props.onClick(); sidebar.props.onClick(); render(); assert.deepEqual(calls, ['activate']);
+  reown.linkStatus = 'linked'; reown.linkedAddress = personalStatus.destination.address; reown.address = reown.linkedAddress; reown.isConnected = true;
+  complete({ linked: true, address: reown.linkedAddress }); await flush(); view = render(); render(); view = render();
+  assert.equal(find(view.tree, 'FundingCountryField').props.value, 'MX');
+  assert.equal(find(view.tree, 'FundingCurrencyField').props.value, 'MXN');
+  assert.equal(find(view.tree, 'FundingAmountField').props.amount, '1234.56');
+  assert.equal(find(view.tree, 'FundingMethodField').props.value, 'SPEI');
+  assert.equal(find(view.tree, 'FundingSubmit').props.disabled, false); assert.deepEqual(calls, ['activate']);
+  await view.tree.props.onSubmit({ preventDefault() {} }); await flush();
+  assert.equal(calls.length, 2); assert.equal(calls[1][0], 'checkout');
+  assert.equal(calls[1][1].walletAddress, reown.linkedAddress); assert.equal(calls[1][1].amount, 1234.56);
+  assert.equal(calls[1][1].countryCode, 'MX'); assert.equal(calls[1][1].sourceCurrencyCode, 'MXN'); assert.equal(calls[1][1].paymentMethodType, 'SPEI');
+});
+
+test('cancelled inline activation keeps the form available for retry without a purchase', async t => {
+  const reown = { configured: true, linkStatus: 'unlinked', linkedAddress: '', address: '', isConnected: true, onrampStatus: 'idle',
+    async prepareWallet() { throw new Error('User rejected wallet activation'); }, async startOnramp() { assert.fail('Cancellation cannot buy'); } };
+  const page = personalPageHarness(reown); t.after(() => page.unmount());
+  let props = find(page.render(), 'PersonalFundingForm').props;
+  find(props.walletAction, node => node?.type === 'button').props.onClick(); await flush();
+  const tree = page.render(); props = find(tree, 'PersonalFundingForm').props;
+  assert.equal(props.disabled, true); assert.equal(props.busy, false); assert.equal(props.destinationAddress, '');
+  assert.equal(find(props.walletAction, node => node?.type === 'button').props.disabled, false);
+  assert.ok(renderToStaticMarkup(tree).includes(translateMessage('es', 'recharge.providerRejected')));
+});
+
+test('a stale owner or unmounted activation cannot publish another wallet or open checkout', async () => {
+  for (const outcome of ['owner-changed', 'unmounted']) {
+    let complete, member = { subject: 'owner-A', email: 'one@example.test' };
+    const pending = new Promise(resolve => { complete = resolve; });
+    const reown = { configured: true, linkStatus: 'unlinked', linkedAddress: '', address: '', isConnected: false, onrampStatus: 'idle',
+      prepareWallet: () => pending, async startOnramp() { assert.fail('A stale owner cannot buy'); } };
+    const page = personalPageHarness(reown, { session: () => member });
+    const props = find(page.render(), 'PersonalFundingForm').props;
+    find(props.walletAction, node => node?.type === 'button').props.onClick();
+    if (outcome === 'owner-changed') { member = { subject: 'owner-B', email: 'two@example.test' }; page.render(); }
+    else page.unmount();
+    const before = JSON.stringify(page.state);
+    complete({ linked: true, address: `0x${'9'.repeat(40)}` }); await flush();
+    assert.equal(JSON.stringify(page.state), before);
+    await props.onContinue({ amount: 30, countryCode: 'US', sourceCurrencyCode: 'USD', paymentMethodType: 'CREDIT_DEBIT_CARD' });
+    if (outcome === 'owner-changed') {
+      const current = find(page.render(), 'PersonalFundingForm').props;
+      assert.equal(current.disabled, true); assert.equal(current.destinationAddress, '');
+    }
+    page.unmount();
+  }
+});
+
+test('a backend verification hint requires an explicit canonical recheck and never re-proves an already linked wallet', async t => {
+  const calls = [], reown = { configured: true, linkStatus: 'linked', linkedAddress: personalStatus.destination.address,
+    address: '', isConnected: false, onrampStatus: 'idle', onrampError: '',
+    async startOnramp() { calls.push('checkout'); reown.onrampStatus = 'error'; reown.onrampError = 'link_unavailable'; return { requiresWalletVerification: true }; },
+    async refreshLink() { calls.push('check'); return { status: 'linked', address: reown.linkedAddress }; },
+    clearOnrampError() { calls.push('clear'); reown.onrampStatus = 'idle'; reown.onrampError = ''; },
+    async prepareWallet() { assert.fail('A canonical linked wallet must never re-prove ownership'); },
+    async connectWallet() { assert.fail('Address-locked onramp does not require an unlocked SDK signer'); },
+    async linkWallet() { assert.fail('No fresh proof for linked wallets'); } };
+  const page = personalPageHarness(reown); t.after(() => page.unmount());
+  let props = find(page.render(), 'PersonalFundingForm').props;
+  assert.equal(props.walletAction, null); assert.equal(props.disabled, false);
+  await props.onContinue({ amount: 30, countryCode: 'US', sourceCurrencyCode: 'USD', paymentMethodType: 'CREDIT_DEBIT_CARD' });
+  props = find(page.render(), 'PersonalFundingForm').props; assert.equal(props.disabled, true);
+  const check = find(props.walletAction, node => node?.type === 'button');
+  assert.ok(renderToStaticMarkup(check).includes(translateMessage('es', 'walletPage.retryCheck')));
+  check.props.onClick(); check.props.onClick(); await flush();
+  props = find(page.render(), 'PersonalFundingForm').props;
+  assert.deepEqual(calls, ['checkout', 'check', 'clear']);
+  assert.equal(props.walletAction, null); assert.equal(props.disabled, false); assert.equal(reown.onrampError, '');
+});
+
+test('canonical unlinked recovery activates on the next click despite stale linked context and never resumes checkout automatically', async t => {
+  for (const failure of ['rejected', 'malformed']) {
+    const calls = [], preparations = [], assignedAddress = `0x${'2'.repeat(40)}`;
+    let checkCount = 0;
+    const reown = { configured: true, linkStatus: 'linked', linkedAddress: personalStatus.destination.address,
+      address: '', isConnected: false, onrampStatus: 'idle',
+      async startOnramp(input) { calls.push(input); return calls.length === 1 ? { requiresWalletVerification: true } : { opened: true, checkoutReference: statusReference }; },
+      async refreshLink() { checkCount++; return { status: 'unlinked' }; },
+      prepareWallet() { return new Promise((resolve, reject) => preparations.push({ resolve, reject })); },
+      async connectWallet() { assert.fail('Unlinked recovery must activate, not merely reconnect'); },
+      async linkWallet() { assert.fail('Activation owns its single proof flow'); }, clearOnrampError() {} };
+    const page = personalPageHarness(reown), form = formHarness('PersonalFundingForm', {
+      readPersonalFundingOptions: async (country, { sourceCurrencyCode }) => ({ country, sourceCurrencyCode, routes: [{ paymentMethods: [{
+        method: sourceCurrencyCode === 'MXN' ? 'SPEI' : 'CREDIT_DEBIT_CARD', currencyCode: sourceCurrencyCode,
+        minimumAmount: sourceCurrencyCode === 'MXN' ? 931 : 30, maximumAmount: 50000 }] }] }),
+    });
+    t.after(() => { page.unmount(); form.unmount(); });
+    const render = () => { const parent = page.render(), props = find(parent, 'PersonalFundingForm').props; return { parent, props, tree: form.render(props) }; };
+    const activation = view => find(view.props.walletAction, node => node?.type === 'button');
+    const assertGated = view => {
+      assert.equal(view.props.disabled, true); assert.equal(view.props.destinationAddress, '');
+      assert.equal(find(view.tree, 'FundingSubmit'), undefined);
+      assert.ok(!renderToStaticMarkup(view.parent).includes(translateMessage('es', 'funding.walletVerified')));
+      assert.equal(find(view.parent, 'PersonalWalletBalances'), undefined);
+    };
+    let view = render(); find(view.tree, 'FundingCountryField').props.onChange('MX'); view = render();
+    find(view.tree, 'FundingCurrencyField').props.onChange('MXN'); render(); await flush(); render(); view = render();
+    find(view.tree, 'FundingAmountField').props.onChange('1234.56'); render(); view = render();
+    await view.tree.props.onSubmit({ preventDefault() {} }); await flush(); view = render(); assertGated(view);
+    activation(view).props.onClick(); await flush(); view = render(); assertGated(view);
+    assert.equal(checkCount, 1); assert.equal(reown.linkStatus, 'linked', 'The stale provider context deliberately stays linked');
+    assert.ok(renderToStaticMarkup(activation(view)).includes(translateMessage('es', 'funding.activateWallet')));
+    activation(view).props.onClick(); activation(view).props.onClick(); view = render(); assertGated(view);
+    assert.equal(checkCount, 1, 'The second explicit action cannot loop through status reads'); assert.equal(preparations.length, 1);
+    if (failure === 'rejected') preparations[0].reject(new Error('User rejected wallet activation'));
+    else preparations[0].resolve({ linked: true, address: 'invalid-address' });
+    await flush(); view = render(); assertGated(view);
+    assert.equal(activation(view).props.disabled, false, 'Failed activation remains retryable without trusting stale linkage');
+    await view.props.onContinue({ amount: 1234.56, countryCode: 'MX', sourceCurrencyCode: 'MXN', paymentMethodType: 'SPEI' });
+    await view.tree.props.onSubmit({ preventDefault() {} }); await flush(); assert.equal(calls.length, 1);
+    activation(view).props.onClick(); view = render(); assertGated(view); assert.equal(preparations.length, 2);
+    preparations[1].resolve({ linked: true, address: assignedAddress }); await flush(); view = render(); assertGated(view);
+    assert.equal(activation(view).props.disabled, true, 'A successful proof ACK waits for the same canonical address in context');
+    reown.linkedAddress = assignedAddress; view = render(); render(); view = render();
+    assert.equal(view.props.disabled, false); assert.equal(view.props.destinationAddress, assignedAddress);
+    assert.equal(find(view.parent, 'PersonalWalletBalances').props.expectedAddress, assignedAddress);
+    assert.equal(find(view.tree, 'FundingCountryField').props.value, 'MX'); assert.equal(find(view.tree, 'FundingCurrencyField').props.value, 'MXN');
+    assert.equal(find(view.tree, 'FundingAmountField').props.amount, '1234.56'); assert.equal(find(view.tree, 'FundingMethodField').props.value, 'SPEI');
+    assert.equal(find(view.tree, 'FundingSubmit').props.disabled, false); assert.equal(calls.length, 1);
+    await view.tree.props.onSubmit({ preventDefault() {} }); await flush();
+    assert.equal(calls.length, 2); assert.equal(calls[1].walletAddress, assignedAddress); assert.equal(calls[1].amount, 1234.56);
+    assert.equal(calls[1].paymentMethodType, 'SPEI'); assert.equal(checkCount, 1);
+    page.unmount(); form.unmount();
+  }
+});
+
 test('personal countries discard canceled responses, respect route limits and submit only the selected production method', async t => {
   if (typeof navigator === 'undefined') { Object.defineProperty(globalThis, 'navigator', { value: { language: 'es-CO', languages: ['es-CO'] }, configurable: true }); t.after(() => { delete globalThis.navigator; }); }
   const calls = [], submitted = [];
@@ -251,7 +425,7 @@ test('narrow wallet layouts prioritize funding after assignment and constrain lo
   const shell = readFileSync(new URL('../../../../components/panel/panel-shell.css', import.meta.url), 'utf8');
   assert.match(styles, /\.setupRequired \.details\s*\{\s*grid-row:\s*1/);
   assert.doesNotMatch(styles, /(?:^|[;}])\s*\.details\s*\{\s*grid-row:\s*1/);
-  assert.match(personal, /!verified \? ` \$\{styles\.setupRequired\}`/);
+  assert.match(personal, /setupRequired \? ` \$\{styles\.setupRequired\}`/);
   assert.match(header, /className="vp-panel-title"/);
   assert.match(header, /<h1 title=\{title\}>\{title\}<\/h1>/);
   assert.match(shell, /\.vp-panel-title\s*\{[^}]*min-width:\s*0;[^}]*overflow:\s*hidden/s);

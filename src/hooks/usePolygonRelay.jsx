@@ -373,7 +373,15 @@ export function usePolygonRelay(reown) {
     try {
       if (!reown.isConnected || (!reown.isLinked && reown.linkStatus === "linked")) await value.scope.wait(() => reown.connectWallet());
       else if (!reown.isLinked && reown.linkStatus === "unlinked") await value.scope.wait(() => reown.linkWallet()); active(value);
-    } catch (failure) { if (live()) setErrorKey(polygonRelayErrorKey(failure)); } finally { finish(value); }
+    } catch (failure) {
+      if (live()) {
+        // A wallet connection deadline cannot imply an uncertain payment. The
+        // financial flow retains its separate uncertain-submission handling.
+        const connectionTimedOut = failure?.name !== "AbortError" && (failure?.name === "TimeoutError"
+          || ["reown_connection_timeout", "wallet_connection_timeout"].includes(failure?.message));
+        setErrorKey(connectionTimedOut ? "recharge.providerConnection" : polygonRelayErrorKey(failure));
+      }
+    } finally { finish(value); }
   }
   async function refresh() {
     if (!live() || operation.current) return;

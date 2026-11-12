@@ -253,6 +253,47 @@ test('explicit refresh recovers a failed binding read without connecting, linkin
   assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
 });
 
+test('wallet connection deadlines report reconnection trouble without claiming an uncertain payment or ending the app session', async () => {
+  for (const source of ['scope', 'sdk', 'native']) {
+    const late = deferred(); let connections = 0;
+    const h = harness({ connected: false, timeoutMs: 100, reown: { connectWallet() {
+      connections++;
+      if (source === 'scope') return late.promise;
+      throw source === 'sdk' ? Object.assign(new Error('wallet_connection_timeout'), { name: 'TimeoutError' })
+        : new DOMException('Synthetic connection deadline', 'TimeoutError');
+    } } });
+    try {
+      await h.flush(); await h.flow.connect(); await h.flush();
+      assert.equal(connections, 1); assert.equal(h.flow.errorKey, 'recharge.providerConnection');
+      assert.equal(h.flow.verified, true, 'The canonical wallet binding and app session are still valid');
+      assert.equal(h.flow.busy, false); assert.equal(h.flow.stage, 'form');
+      assert.equal(h.flow.payment, null); assert.equal(h.flow.preview, null); assert.equal(h.flow.recovery, null);
+      assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0); assert.equal(h.providerCalls.length, 0);
+      assert.equal(h.storage.size, 0);
+      late.resolve({ connected: true }); await h.flush();
+      assert.equal(h.flow.errorKey, 'recharge.providerConnection'); assert.equal(h.flow.payment, null);
+    } finally { h.unmount(); }
+  }
+});
+
+test('a submit deadline after a signed authorization remains ambiguous and cannot turn into a reconnect-only message', async t => {
+  const late = deferred();
+  const h = harness({ timeoutMs: 100, write: async (action, input) => {
+    if (action === 'prepare') return payment({ paymentId: input.requestId });
+    if (action === 'authorize') return payment({ status: 'authorized' });
+    assert.equal(action, 'submit'); return late.promise;
+  } }); t.after(() => h.unmount());
+  await review(h); await h.flow.confirm(); await h.flush();
+  assert.equal(h.flow.errorKey, 'walletTransfer.ambiguous'); assert.equal(h.flow.busy, false);
+  assert.equal(h.flow.recovery.phase, 'ambiguous'); assert.equal(h.flow.payment.paymentId, id);
+  assert.equal(h.signatures.length, 1);
+  assert.deepEqual(writes(h).map(call => call.action), ['prepare', 'authorize', 'submit']);
+  await h.flow.confirm(); await h.flush();
+  assert.equal(h.signatures.length, 1); assert.equal(writes(h).filter(call => call.action === 'submit').length, 1);
+  late.resolve(submitted()); await h.flush();
+  assert.equal(h.flow.errorKey, 'walletTransfer.ambiguous'); assert.equal(h.flow.recovery.phase, 'ambiguous');
+});
+
 test('verification can fence an expired broadcasting lease before an operation hash exists without resubmitting', async t => {
   const broadcasting = payment({ status: 'broadcasting', userOperationHash: null });
   const h = harness({ history: async () => ({ walletKind: 'personal', payments: [broadcasting] }),

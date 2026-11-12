@@ -51,7 +51,7 @@ const PERSONAL_COUNTRIES = PERSONAL_FUNDING_COUNTRIES.map(code => [code]);
 export function fundingCurrencyChoices(country) { return [...new Set(["USD", LOCAL_CURRENCIES[country]].filter(Boolean))]; }
 
 /** Personal state and availability never consume the administrative options endpoint. */
-export function PersonalFundingForm({ disabled = false, busy = false, onContinue, onSelectionChange = undefined, destinationAddress = "" }) {
+export function PersonalFundingForm({ disabled = false, busy = false, onContinue, onSelectionChange = undefined, destinationAddress = "", walletAction = null }) {
   const { t } = useI18n();
   const id = useId();
   const [amount, setAmount] = useState(String(PERSONAL_FUNDING_MINIMUM_USD));
@@ -120,7 +120,7 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
       </div>
       <FundingDestination address={destinationAddress} />
       {sourceCurrencyCode === "MXN" ? <p className={styles.hint} role="status">{t("funding.personalSpeiMinimum")}</p> : null}
-      <FundingSubmit disabled={disabled || !valid} busy={busy} />
+      {walletAction || <FundingSubmit disabled={disabled || !valid} busy={busy} />}
     </div>
   </form>;
 }
