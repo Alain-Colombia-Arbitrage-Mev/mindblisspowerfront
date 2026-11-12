@@ -166,6 +166,8 @@ test('one AppKit instance configures Ethereum and Solana adapters with explicitl
   assert.equal(config.adapters.length, 2); assert.ok(config.adapters[0] instanceof EthersAdapter); assert.ok(config.adapters[1] instanceof SolanaAdapter);
   assert.equal(config.networks.length, 3); assert.equal(config.networks[0], mainnet); assert.equal(config.networks[1], polygon); assert.equal(config.networks[2], solana);
   assert.equal(config.defaultNetwork, polygon); assert.equal(config.defaultAccountTypes.eip155, 'eoa'); assert.equal(config.defaultAccountTypes.solana, 'eoa');
+  assert.equal(config.features.analytics, true);
+  assert.equal(config.features.reownAuthentication, false);
   const rootMetadata = personalWalletMetadata('https://mindblisspower.com');
   const rootConfig = vm.runInNewContext(`(${calls[0].arguments[0].getText(source)})`, {
     EthersAdapter, SolanaAdapter, mainnet, polygon, solana, projectId: 'a'.repeat(32), initialWalletTheme: 'light', themeVariables: () => ({}),
@@ -345,7 +347,7 @@ test("Reown creates separate EVM and Solana wallets while retaining native membe
   assert.match(provider, /email: true/);
   assert.match(provider, /socials: \["google", "apple"\]/);
   assert.match(provider, /emailShowWallets: false/);
-  assert.match(provider, /analytics: false/);
+  assert.match(provider, /analytics: true/);
   assert.match(provider, /onramp: false/);
   assert.match(provider, /allowUnsupportedChain: false/);
   assert.match(provider, /buildReownProductionOnrampUrl/);

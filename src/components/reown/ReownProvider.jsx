@@ -91,7 +91,7 @@ if (configured && walletMetadata) {
       email: true,
       socials: ["google", "apple"],
       emailShowWallets: false,
-      analytics: false,
+      analytics: true,
       swaps: false,
       send: false,
       receive: false,
