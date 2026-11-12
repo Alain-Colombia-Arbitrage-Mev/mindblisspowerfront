@@ -385,8 +385,8 @@ test("Reown creates separate EVM and Solana wallets while retaining native membe
   assert.match(provider, /const boundReady = Boolean\(boundAddress\)/);
   assert.match(provider, /walletAddress: verifiedAddress/);
   assert.match(provider, /if \(boundReady \|\| connectionReady\) return runOnramp\(selection\)/);
-  assert.match(provider, /scope\.wait\(\(\) => disconnect\(ConnectionController\.hasAnyConnection\(ReownConstantsUtil\.CONNECTOR_ID\.AUTH\)/);
-  assert.match(provider, /\? \{ id: ReownConstantsUtil\.CONNECTOR_ID\.AUTH \} : \{ namespace: "eip155" \}\)\)/);
+  assert.match(provider, /scope\.wait\(\(\) => ConnectionController\.hasAnyConnection\(ReownConstantsUtil\.CONNECTOR_ID\.AUTH\)/);
+  assert.match(provider, /\? disconnectSharedAuthWallet\(disconnect\) : disconnect\(\{ namespace: "eip155" \}\)\)/);
   assert.match(provider, /error: "connection_timeout"/);
   assert.match(provider, /void runOnramp\(\)\.catch/);
   assert.match(provider, /verifyReownWalletOwnership\(scope/);

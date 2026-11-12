@@ -6,7 +6,7 @@ import ts from 'typescript';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ConstantsUtil as ReownConstantsUtil } from '@reown/appkit-common';
-import { ConnectionController } from '@reown/appkit-controllers';
+import { ConnectionController, OptionsController } from '@reown/appkit-controllers';
 import { useDisconnect } from '@reown/appkit-controllers/react';
 import { createReownWalletSwitchRequest } from './reown-wallet-connection.mjs';
 
@@ -16,12 +16,13 @@ function sourceCallback(path, name, sdk = false) {
   const source = ts.createSourceFile(path, readFileSync(new URL(path, import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.JSX);
   let found;
   const visit = node => {
-    if (sdk && name === 'disconnectConnector' && ts.isMethodDeclaration(node) && node.name.getText(source) === name) found = node;
+    if (sdk && name !== 'disconnect' && ts.isMethodDeclaration(node) && node.name.getText(source) === name) found = node;
     else if (sdk && name === 'disconnect' && ts.isMethodDeclaration(node) && node.name.getText(source) === 'createClients') {
       const property = node.body.statements.find(statement => ts.isExpressionStatement(statement)
         && ts.isBinaryExpression(statement.expression) && statement.expression.left.getText(source) === 'this.connectionControllerClient');
       found = property.expression.right.properties.find(property => property.name?.getText(source) === name).initializer;
-    } else if (!sdk && ts.isVariableDeclaration(node) && node.name.getText(source) === name && ts.isCallExpression(node.initializer)) found = node.initializer.arguments[0];
+    } else if (!sdk && ts.isFunctionDeclaration(node) && node.name?.getText(source) === name) found = node;
+    else if (!sdk && ts.isVariableDeclaration(node) && node.name.getText(source) === name && ts.isCallExpression(node.initializer)) found = node.initializer.arguments[0];
     if (!found) ts.forEachChild(node, visit);
   };
   visit(source); assert.ok(found, `Missing production callback ${name}`);
@@ -50,17 +51,19 @@ function observation({ timedOut = false, switching = false, onUpdate = () => {} 
 
 /** Actual installed controller and public disconnect hook, with the installed
  * SDK's disconnect policy and synthetic adapters. No wallet, storage or network. */
-function sdk(t, { reject = false, delay, orphaned = false } = {}) {
+function sdk(t, { reject = false, delay, orphaned = false, initialReconnect = true, skipCleanup = false } = {}) {
   const previous = new Map(ConnectionController.state.connections), previousClient = ConnectionController.state._client;
-  const calls = [];
+  const previousReconnect = OptionsController.state.enableReconnect, calls = [], optionWrites = [];
+  OptionsController.setOptions({ enableReconnect: initialReconnect });
   ConnectionController.setConnections([], 'eip155');
   ConnectionController.setConnections([{ connectorId: AUTH, accounts: [] }, { connectorId: 'unrelated-injected', accounts: [] }], 'solana');
-  t.after(() => { ConnectionController.state.connections = previous; ConnectionController.state._client = previousClient; });
+  t.after(() => { ConnectionController.state.connections = previous; ConnectionController.state._client = previousClient;
+    OptionsController.setOptions({ enableReconnect: previousReconnect }); });
   const scope = {
     ConstantsUtil: ReownConstantsUtil,
     ChainController: { state: { activeChain: 'eip155', chains: new Map([['eip155', { accountState: {} }],
       ['solana', { accountState: orphaned ? {} : { caipAddress: 'solana:synthetic:account' } }]]) } },
-    OptionsController: { state: { enableReconnect: true } },
+    OptionsController,
     ConnectorController: { getConnectorId: namespace => ConnectionController.getConnections(namespace)[0]?.connectorId, setFilterByNamespace() {} },
     ConnectionController: { resetWcConnection() {}, syncStorageConnections() {} },
     SendController: { resetSend() {} }, SIWXUtil: { getSIWX: () => undefined },
@@ -69,11 +72,12 @@ function sdk(t, { reject = false, delay, orphaned = false } = {}) {
   };
   const factory = vm.runInNewContext(`(function () { return (${sourceCallback('../../node_modules/@reown/appkit/dist/esm/src/client/appkit-base-client.js', 'disconnect', true)}); })`, scope);
   const adapterReset = vm.runInNewContext(`({${sourceCallback('../../node_modules/@reown/appkit/dist/esm/src/client/appkit-base-client.js', 'disconnectConnector', true)}}).disconnectConnector`, scope);
+  const updateOptions = vm.runInNewContext(`({${sourceCallback('../../node_modules/@reown/appkit/dist/esm/src/client/appkit-base-client.js', 'updateOptions', true)}}).updateOptions`, scope);
   const client = { setLoading() {}, onDisconnectNamespace() {}, getAdapter(namespace) { return { async disconnect({ id }) {
-    calls.push({ namespace, id }); if (delay) await delay;
+    calls.push({ namespace, id, reconnectAtGuard: OptionsController.state.enableReconnect }); if (delay) await delay;
     if (reject) throw new Error('synthetic cleanup failure');
     const existing = ConnectionController.getConnections(namespace), removed = existing.filter(connection => !id || connection.connectorId === id);
-    ConnectionController.setConnections(existing.filter(connection => id && connection.connectorId !== id), namespace);
+    if (!skipCleanup) ConnectionController.setConnections(existing.filter(connection => id && connection.connectorId !== id), namespace);
     return { connections: removed };
   } }; } };
   client.disconnectConnector = adapterReset.bind(client);
@@ -82,11 +86,11 @@ function sdk(t, { reject = false, delay, orphaned = false } = {}) {
   let disconnect;
   function DisconnectProbe() { disconnect = useDisconnect().disconnect; return null; }
   renderToStaticMarkup(createElement(DisconnectProbe));
-  return { calls, disconnect };
+  return { calls, disconnect, optionWrites, appKit: { updateOptions(options) { optionWrites.push(options.enableReconnect); updateOptions(options); } } };
 }
 function recovery(t, options = {}) {
   const native = sdk(t, options), calls = [], ref = current => ({ current });
-  const scope = { ConnectionController, ReownConstantsUtil, createReownWalletSwitchRequest, DOMException,
+  const scope = { ConnectionController, OptionsController, ReownConstantsUtil, appKitInstance: native.appKit, createReownWalletSwitchRequest, DOMException,
     ownerKey: 'synthetic-owner', latestOwner: ref('synthetic-owner'), mounted: ref(true), logoutStarted: ref(false),
     connectionSnapshot: ref({ status: 'disconnected', disconnected: true, modalOpen: false, address: '' }),
     switchRequest: ref(null), connectionRequest: ref(null), selectedCandidate: ref(null), onrampIntent: ref(false),
@@ -97,6 +101,7 @@ function recovery(t, options = {}) {
     disconnect: native.disconnect, open: async () => { calls.push('open'); assert.equal(ConnectionController.hasAnyConnection(AUTH), false); },
     createReownWalletConnectionRequest: () => assert.fail('A stale shared AUTH connection must reset before opening Connect'),
   };
+  scope.disconnectSharedAuthWallet = providerCallback('disconnectSharedAuthWallet', scope);
   scope.chooseWallet = providerCallback('chooseWallet', scope);
   const connect = providerCallback('connectWallet', scope);
   t.after(() => scope.switchRequest.current?.cancel());
@@ -112,7 +117,7 @@ test('the installed SDK disables auth widgets for a hidden Solana AUTH session e
   assert.equal(ConnectionController.hasAnyConnection(AUTH), true);
   await native.disconnect({ id: AUTH });
   assert.equal(ConnectionController.hasAnyConnection(AUTH), false);
-  assert.deepEqual(native.calls.map(call => ({ ...call })), [{ namespace: 'solana', id: AUTH }]);
+  assert.deepEqual(native.calls.map(call => ({ ...call })), [{ namespace: 'solana', id: AUTH, reconnectAtGuard: true }]);
   assert.equal(ConnectionController.getConnections('solana')[0]?.connectorId, 'unrelated-injected');
 });
 
@@ -120,7 +125,9 @@ test('real provider recovery resets hidden shared AUTH before Connect, without d
   const h = recovery(t), pending = h.connect();
   await tick(); await tick();
   assert.equal(ConnectionController.hasAnyConnection(AUTH), false);
-  assert.deepEqual(h.calls, ['open']); assert.equal(h.native.calls.length, 1);
+  assert.deepEqual(h.calls, ['open']); assert.equal(h.native.calls.length, 2);
+  assert.ok(h.native.calls.every(call => call.id === AUTH && call.reconnectAtGuard === false));
+  assert.deepEqual(h.native.optionWrites, [false, true]); assert.equal(OptionsController.state.enableReconnect, true);
   assert.equal(ConnectionController.getConnections('solana')[0]?.connectorId, 'unrelated-injected');
   h.finish(); assert.deepEqual(await pending, { connected: true });
 });
@@ -136,7 +143,7 @@ test('a timed-out SDK restoration uses the disconnected observation for explicit
     h.scope.connectionSnapshot.current = after.snapshot;
     const pending = h.connect(); await tick(); await tick();
     assert.equal(ConnectionController.hasAnyConnection(AUTH), false); assert.deepEqual(h.calls, ['open']);
-    assert.equal(h.native.calls.length, 1); h.finish(); await pending;
+    assert.equal(h.native.calls.length, 2); h.finish(); await pending;
   }
 });
 
@@ -154,19 +161,63 @@ test('explicit recovery shares one pending cleanup and cannot open Connect if cl
   let release;
   const gate = new Promise(resolve => { release = resolve; });
   const h = recovery(t, { delay: gate }), first = h.choose(), second = h.choose();
-  assert.equal(first, second); await tick(); assert.equal(h.native.calls.length, 1); assert.deepEqual(h.calls, []);
+  assert.equal(first, second); await tick(); assert.equal(h.native.calls.length, 2); assert.deepEqual(h.calls, []);
+  assert.equal(OptionsController.state.enableReconnect, true, 'the option must already be restored while adapters are pending');
   release(); await tick(); await tick(); h.finish(); await first;
   assert.deepEqual(h.calls, ['open']);
   const failed = recovery(t, { reject: true });
   await assert.rejects(failed.choose(), { message: 'Failed to disconnect' });
   assert.deepEqual(failed.calls, []); assert.equal(ConnectionController.hasAnyConnection(AUTH), true);
+  assert.equal(OptionsController.state.enableReconnect, true); assert.deepEqual(failed.native.optionWrites, [false, true]);
 });
 
-test('an orphaned SDK AUTH entry cannot reopen another disabled Connect view when the SDK reports reset without clearing it', async t => {
+test('the public options bracket clears orphaned AUTH despite missing caipAddress and preserves unrelated wallets', async t => {
   const h = recovery(t, { orphaned: true });
+  const pending = h.choose(); await tick(); await tick();
+  assert.equal(ConnectionController.hasAnyConnection(AUTH), false); assert.deepEqual(h.calls, ['open']);
+  assert.ok(h.native.calls.every(call => call.reconnectAtGuard === false && call.id === AUTH));
+  assert.equal(ConnectionController.getConnections('solana')[0]?.connectorId, 'unrelated-injected');
+  assert.deepEqual(h.native.optionWrites, [false, true]); assert.equal(OptionsController.state.enableReconnect, true);
+  h.finish(); await pending;
+});
+
+test('a provider acknowledgement without actual AUTH cleanup cannot open another disabled Connect view', async t => {
+  const h = recovery(t, { orphaned: true, skipCleanup: true });
   await assert.rejects(h.choose(), { message: 'wallet_not_connected' });
-  assert.deepEqual(h.native.calls, []); assert.deepEqual(h.calls, []);
+  assert.equal(h.native.calls.length, 2); assert.deepEqual(h.calls, []);
   assert.equal(ConnectionController.hasAnyConnection(AUTH), true);
+  assert.equal(OptionsController.state.enableReconnect, true);
+});
+
+test('synchronous disconnect failure restores the prior option and never opens Connect', async t => {
+  const h = recovery(t, { orphaned: true });
+  h.scope.disconnect = () => { throw new Error('synthetic synchronous reset failure'); };
+  await assert.rejects(h.choose(), { message: 'synthetic synchronous reset failure' });
+  assert.equal(OptionsController.state.enableReconnect, true); assert.deepEqual(h.native.optionWrites, [false, true]);
+  assert.deepEqual(h.native.calls, []); assert.deepEqual(h.calls, []);
+});
+
+test('a previously disabled reconnect option is restored exactly after explicit AUTH cleanup', async t => {
+  const h = recovery(t, { orphaned: true, initialReconnect: false });
+  const pending = h.choose(); await tick(); await tick();
+  assert.equal(OptionsController.state.enableReconnect, false); assert.deepEqual(h.native.optionWrites, [false, false]);
+  assert.deepEqual(h.calls, ['open']); h.finish(); await pending;
+});
+
+test('a hung or late SDK cleanup restores options immediately and cannot reopen auth after owner ABA or logout', async t => {
+  for (const boundary of ['owner-aba', 'logout']) {
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    const h = recovery(t, { orphaned: true, delay: gate }), pending = h.choose(), cancelled = assert.rejects(pending, { name: 'AbortError' });
+    await tick(); assert.equal(OptionsController.state.enableReconnect, true);
+    assert.deepEqual(h.native.optionWrites, [false, true]); assert.deepEqual(h.calls, []);
+    if (boundary === 'owner-aba') h.scope.latestOwner.current = 'other-owner';
+    else h.scope.logoutStarted.current = true;
+    h.scope.switchRequest.current.cancel(); await cancelled;
+    if (boundary === 'owner-aba') h.scope.latestOwner.current = h.scope.ownerKey;
+    release(); await tick(); await tick();
+    assert.equal(OptionsController.state.enableReconnect, true); assert.deepEqual(h.calls, []);
+  }
 });
 
 test('normal connected EVM and closed owner/logout boundaries never reset another SDK session', async t => {

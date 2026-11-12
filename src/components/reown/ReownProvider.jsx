@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createAppKit, useAppKit, useAppKitAccount, useAppKitProvider, useAppKitState, useAppKitTheme, useAppKitNetwork, useDisconnect } from "@reown/appkit/react";
 import { EthersAdapter } from "@reown/appkit-adapter-ethers";
 import { SolanaAdapter } from "@reown/appkit-adapter-solana/react";
-import { ConnectionController, OnRampController } from "@reown/appkit-controllers";
+import { ConnectionController, OnRampController, OptionsController } from "@reown/appkit-controllers";
 import { ConstantsUtil as ReownConstantsUtil } from "@reown/appkit-common";
 import { mainnet, polygon, solana } from "@reown/appkit/networks";
 import { BrowserProvider, getAddress } from "ethers";
@@ -27,6 +27,7 @@ const projectId = process.env.NEXT_PUBLIC_REOWN_PROJECT_ID?.trim() || "";
 const walletMetadata = personalWalletMetadata(typeof window === "undefined" ? "https://app.mindblisspower.com" : window.location.origin);
 const configured = /^[a-f0-9]{32}$/i.test(projectId) && Boolean(walletMetadata);
 const initialWalletTheme = typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+let appKitInstance;
 
 const unavailable = Object.freeze({
   configured: false,
@@ -63,7 +64,7 @@ const unavailable = Object.freeze({
 });
 
 if (configured && walletMetadata) {
-  createAppKit({
+  appKitInstance = createAppKit({
     adapters: [new EthersAdapter(), new SolanaAdapter()],
     projectId,
     networks: [mainnet, polygon, solana],
@@ -96,6 +97,21 @@ if (configured && walletMetadata) {
     themeMode: initialWalletTheme,
     themeVariables: themeVariables(initialWalletTheme),
   });
+}
+
+function disconnectSharedAuthWallet(disconnect) {
+  if (!appKitInstance) throw new Error("reown_unavailable");
+  const previousReconnect = OptionsController.state.enableReconnect;
+  let pending;
+  try {
+    // AppKit 1.8.24 checks this synchronously when dispatching each adapter's
+    // reset. Restore before awaiting so a hung provider cannot disable reconnect.
+    appKitInstance.updateOptions({ enableReconnect: false });
+    pending = disconnect({ id: ReownConstantsUtil.CONNECTOR_ID.AUTH });
+  } finally {
+    appKitInstance.updateOptions({ enableReconnect: previousReconnect });
+  }
+  return pending;
 }
 
 export default function ReownProvider({ children }) {
@@ -374,7 +390,7 @@ function ConfiguredReownProvider({ children }) {
         // Email/social share one AUTH session across adapters. A dormant
         // namespace can otherwise disable Connect while EVM is disconnected.
         if (ConnectionController.hasAnyConnection(ReownConstantsUtil.CONNECTOR_ID.AUTH)) {
-          await disconnect({ id: ReownConstantsUtil.CONNECTOR_ID.AUTH });
+          await disconnectSharedAuthWallet(disconnect);
           valid();
           if (ConnectionController.hasAnyConnection(ReownConstantsUtil.CONNECTOR_ID.AUTH)) throw new Error("wallet_not_connected");
           return;
@@ -643,8 +659,8 @@ function ConfiguredReownProvider({ children }) {
     connectModalSeen.current = false;
     setOnrampState({ status: "connecting", error: "" });
     try {
-      await scope.wait(() => disconnect(ConnectionController.hasAnyConnection(ReownConstantsUtil.CONNECTOR_ID.AUTH)
-        ? { id: ReownConstantsUtil.CONNECTOR_ID.AUTH } : { namespace: "eip155" }));
+      await scope.wait(() => ConnectionController.hasAnyConnection(ReownConstantsUtil.CONNECTOR_ID.AUTH)
+        ? disconnectSharedAuthWallet(disconnect) : disconnect({ namespace: "eip155" }));
       scope.assertActive();
       if (ConnectionController.hasAnyConnection(ReownConstantsUtil.CONNECTOR_ID.AUTH)) throw new Error("wallet_not_connected");
       await openConnect(scope);
