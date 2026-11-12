@@ -27,8 +27,17 @@
 .formFields.implicitCurrency { grid-template-areas: "country" "residency" "amount" "method"; }
 .formFields .countryField, .formFields .currencyField, .formFields .amountField { min-width: 0; margin: 0; }
 .countryField { grid-area: country; align-content: start; }
+.countryHeading { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.countryHeading > label { color: var(--vp-muted); font-size: 13px; font-weight: 700; line-height: 1.4; }
+.residencyInfoButton { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; color: var(--vp-link); background: transparent; cursor: pointer; touch-action: manipulation; }
+.residencyInfoButton:hover, .residencyInfoButton[data-state="open"] { color: var(--vp-accent); background: var(--vp-accent-muted); }
+.residencyInfoButton:focus-visible { outline: 2px solid var(--vp-accent); outline-offset: 2px; }
+.residencyPopover { z-index: 100; width: min(360px, calc(100vw - 32px)); max-width: var(--radix-popover-content-available-width); max-height: var(--radix-popover-content-available-height); overflow-y: auto; padding: 16px; border: 1px solid var(--vp-border); border-radius: 14px; color: var(--vp-muted); background: var(--vp-surface-raised); box-shadow: 0 12px 32px rgb(0 0 0 / .15); font-size: 13px; line-height: 1.65; overflow-wrap: anywhere; }
+.residencyPopover p { margin: 0; }
+.residencyPopover p + p { margin-top: 10px; }
+.residencyPopover strong { color: var(--vp-text); font-weight: 600; }
 .currencyField { grid-area: currency; align-content: start; }
-.residencyHelp { grid-area: residency; display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 10px; min-width: 0; padding: 12px 14px; border: 1px solid var(--vp-line); border-radius: 12px; color: var(--vp-muted); background: var(--vp-surface-raised); font-size: 13px; line-height: 1.6; }
+.residencyHelp { grid-area: residency; display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 10px; min-width: 0; padding: 12px 14px; border: 1px solid var(--vp-border); border-radius: 12px; color: var(--vp-muted); background: var(--vp-surface-raised); font-size: 13px; line-height: 1.6; }
 .residencyHelp svg { margin-top: 2px; color: var(--vp-accent); }
 .residencyHelp p { margin: 0; }
 .residencyHelp p + p { margin-top: 6px; }

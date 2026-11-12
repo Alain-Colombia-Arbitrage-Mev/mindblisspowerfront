@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { useI18n } from "@/i18n/LanguageProvider";
 import { readWalletFundingStatus } from "@/lib/wallet-funding-client.mjs";
 import { fundingStatus, FUNDING_UUID } from "@/lib/wallet-funding-contract.mjs";
+import { useMemberSession } from "@/lib/member-session-context";
+import { personalWalletBalanceSessionKey } from "@/lib/personal-wallet-balance-store.mjs";
 import styles from "./wallet-funding.module.css";
 
 /** Current native API deliberately accepts no paid/confirmed response. */
@@ -20,43 +22,49 @@ export function currentFundingView(value, walletKind, checkoutReference) {
 
 export default function WalletFundingStatus({ walletKind, checkoutReference, focusKey = 0 }) {
   const { t } = useI18n();
+  const owner = personalWalletBalanceSessionKey(useMemberSession());
+  const epoch = useRef({ owner, generation: 0 }), mounted = useRef(false);
+  if (epoch.current.owner !== owner) epoch.current = { owner, generation: epoch.current.generation + 1 };
+  const generation = epoch.current.generation;
   const [revision, setRevision] = useState(0);
   const [state, setState] = useState({ key: "", loading: true, view: null, error: "" });
   const card = useRef(null);
-  const key = `${walletKind}:${checkoutReference}`;
+  const key = `${generation}:${walletKind}:${checkoutReference}`;
   const current = state.key === key;
   const loading = !current || state.loading;
+  const active = () => mounted.current && Boolean(owner) && epoch.current.generation === generation;
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
-    if (!FUNDING_UUID.test(checkoutReference || "") || walletKind !== "personal") return undefined;
+    if (!owner || epoch.current.generation !== generation || !FUNDING_UUID.test(checkoutReference || "") || walletKind !== "personal") return undefined;
     const controller = new AbortController();
     setState({ key, loading: true, view: null, error: "" });
     readWalletFundingStatus(walletKind, checkoutReference, { signal: controller.signal }).then(data => {
-      if (controller.signal.aborted) return;
+      if (!active() || controller.signal.aborted) return;
       const view = currentFundingView(data, walletKind, checkoutReference);
       if (!view) throw Error("funding_unavailable");
       setState({ key, loading: false, view, error: "" });
     }).catch(error => {
-      if (!controller.signal.aborted) setState({ key, loading: false, view: null,
+      if (active() && !controller.signal.aborted) setState({ key, loading: false, view: null,
         error: error?.message === "wallet_funding_not_found" ? "funding.statusNotFound" : error?.message === "unauthenticated" ? "recharge.providerSession" : "funding.statusUnavailable" });
     });
     return () => controller.abort();
-  }, [walletKind, checkoutReference, key, revision, focusKey]);
+  }, [owner, walletKind, checkoutReference, key, revision, focusKey]);
 
   useEffect(() => {
-    if (!focusKey || !card.current) return;
+    if (!active() || !focusKey || !card.current) return;
     card.current.focus({ preventScroll: true });
     const reduced = typeof window.matchMedia !== "function" || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     card.current.scrollIntoView({ block: "start", behavior: reduced ? "auto" : "smooth" });
-  }, [checkoutReference, focusKey]);
+  }, [owner, generation, checkoutReference, focusKey]);
 
-  if (!FUNDING_UUID.test(checkoutReference || "") || walletKind !== "personal") return null;
+  if (!owner || !FUNDING_UUID.test(checkoutReference || "") || walletKind !== "personal") return null;
   return <section ref={card} tabIndex={-1} id={`${walletKind}-funding-status`} className={`executive-panel ${styles.statusPanel}`} aria-label={t("funding.statusTitle")} aria-busy={loading}>
     <div aria-live="polite">
       {loading ? <><h2 className={styles.statusHeading}><Loader2 size={20} className="animate-spin" aria-hidden="true" />{t("funding.statusTitle")}</h2><p className={styles.hint}>{t("funding.statusLoading")}</p></>
         : state.error ? <><h2 className={styles.statusHeading}><Info size={20} aria-hidden="true" />{t("funding.statusTitle")}</h2><p className={styles.hint} role="alert">{t(state.error)}</p></>
           : <WalletFundingStatusView view={state.view} />}
     </div>
-    <button className="executive-button" type="button" disabled={loading} onClick={() => setRevision(value => value + 1)}>
+    <button className="executive-button" type="button" disabled={loading} onClick={() => { if (active()) setRevision(value => value + 1); }}>
       <RefreshCw size={16} aria-hidden="true" />{t("funding.statusRefresh")}
     </button>
   </section>;

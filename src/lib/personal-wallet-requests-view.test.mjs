@@ -8,6 +8,7 @@ import ts from 'typescript';
 import { translateMessage } from '../i18n/translate.mjs';
 import { matchesRoute, memberPageFor, memberPageKeysFor } from './member-navigation.mjs';
 import { FUNDING_UUID } from './wallet-funding-contract.mjs';
+import { personalWalletBalanceSessionKey } from './personal-wallet-balance-store.mjs';
 
 const require = createRequire(import.meta.url);
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
@@ -27,6 +28,8 @@ function moduleAt(relative, locale = 'es', overrides = {}) {
       if (id === '@/i18n/LanguageProvider') return { useI18n: () => ({ locale, dir: locale === 'ar' ? 'rtl' : 'ltr', t: (key, values) => translateMessage(locale, key, values) }) };
       if (id === '@/lib/member-navigation.mjs') return { matchesRoute };
       if (id === '@/lib/wallet-funding-contract.mjs') return { FUNDING_UUID };
+      if (id === '@/lib/member-session-context') return { useMemberSession: () => ({ subject: 'requests-view-owner', email: 'member@example.test' }) };
+      if (id === '@/lib/personal-wallet-balance-store.mjs') return { personalWalletBalanceSessionKey };
       if (id === '@/lib/wallet-funding-client.mjs') return {
         readWalletFundingHistory: () => assert.fail('server render fetched funding history'), readWalletFundingStatus: () => assert.fail('server render fetched status'),
       };
@@ -73,21 +76,33 @@ test('the separate requests page renders real personal history without wallet SD
 });
 
 test('selecting a request opens only its owned personal status and rejects malformed or administrative selectors', () => {
-  const states = []; let cursor = 0;
+  const states = [], refs = [], effects = [], queued = [];
+  let stateCursor = 0, refCursor = 0, effectCursor = 0;
+  const hooks = { ...React,
+    useState(initial) { const index = stateCursor++; if (!(index in states)) states[index] = typeof initial === 'function' ? initial() : initial;
+      return [states[index], value => { states[index] = typeof value === 'function' ? value(states[index]) : value; }]; },
+    useRef(initial) { const index = refCursor++; return refs[index] ??= { current: initial }; },
+    useEffect(effect, dependencies) { const index = effectCursor++, previous = effects[index];
+      if (!previous || dependencies.some((value, i) => !Object.is(value, previous.dependencies[i]))) queued.push(() => {
+        previous?.cleanup?.(); effects[index] = { dependencies, cleanup: effect() };
+      }); },
+  };
   const { default: Page } = moduleAt('../app/dashboard/_components/executive-pages/PersonalWalletRequestsPage.jsx', 'es', {
-    react: { ...React, useState(initial) { const index = cursor++; if (!(index in states)) states[index] = initial; return [states[index], value => { states[index] = typeof value === 'function' ? value(states[index]) : value; }]; } },
+    react: hooks,
   });
-  const render = () => { cursor = 0; return Page(); };
-  const first = render();
-  const history = React.Children.toArray(first.props.children)[0].props.children;
-  assert.equal(history.props.walletKind, 'personal');
-  history.props.onSelectRequest('administrative:other'); history.props.onSelectRequest(null);
-  assert.equal(states[0], '');
-  const reference = '11111111-1111-4111-8111-111111111111';
-  history.props.onSelectRequest(reference);
-  const status = React.Children.toArray(render().props.children)[1];
-  assert.equal(status.props.walletKind, 'personal'); assert.equal(status.props.checkoutReference, reference); assert.equal(status.props.focusKey, 1);
-  history.props.onSelectRequest(reference); assert.equal(states[1], 2);
+  const render = () => { stateCursor = 0; refCursor = 0; effectCursor = 0; const tree = Page(); while (queued.length) queued.shift()(); return tree; };
+  const selectedStatus = tree => React.Children.toArray(tree.props.children)[1];
+  try {
+    const first = render(), history = React.Children.toArray(first.props.children)[0].props.children;
+    assert.equal(history.props.walletKind, 'personal');
+    history.props.onSelectRequest('administrative:other'); history.props.onSelectRequest(null);
+    assert.equal(selectedStatus(render()), undefined);
+    const reference = '11111111-1111-4111-8111-111111111111';
+    history.props.onSelectRequest(reference);
+    const status = selectedStatus(render());
+    assert.equal(status.props.walletKind, 'personal'); assert.equal(status.props.checkoutReference, reference); assert.equal(status.props.focusKey, 1);
+    history.props.onSelectRequest(reference); assert.equal(selectedStatus(render()).props.focusKey, 2);
+  } finally { for (const effect of effects) effect?.cleanup?.(); }
 });
 
 test('the wallet form and active overview no longer embed request history or promote new memberships; retained records remain routable', () => {

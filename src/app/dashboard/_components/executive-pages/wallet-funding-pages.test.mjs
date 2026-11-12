@@ -25,6 +25,7 @@ function load(filename, mocks) {
     if (id === '@/components/wallet/PersonalWalletBalances') return { default: function PersonalWalletBalances() { return null; } };
     if (id === '@/lib/member-session-context') return { useMemberSession: () => ({ subject: 'funding-owner', email: 'funding@example.test' }) };
     if (id === '@/lib/personal-wallet-balance-store.mjs') return { personalWalletBalanceSessionKey };
+    if (id === '@/components/ui/popover') { const popover = require('@radix-ui/react-popover'); return { Popover: popover.Root, PopoverTrigger: popover.Trigger, PopoverContent: popover.Content }; }
     if (id === 'next/link') return { default: ({ href, children, ...props }) => React.createElement('a', { href, ...props }, children) };
     if (id.endsWith('.module.css')) return styles;
     if (id === 'react/jsx-runtime' || id === 'react') return require(id);
@@ -874,6 +875,34 @@ test('clearing residence aborts and discards in-flight country methods without a
     selectFundingCountry(harness, props, 'MX'); assert.equal(calls.length, 2); assert.equal(calls[1].country, 'MX');
     assert.equal(calls[1].sourceCurrencyCode, 'USD'); assert.equal(calls.some(call => !call.country), false);
     assert.deepEqual(submitted, []);
+  }
+});
+
+test('residence help is an independent accessible popover beside the label with matching localized guidance and no payment effects', t => {
+  const popover = require('@radix-ui/react-popover');
+  for (const locale of ['es', 'en', 'ar', 'zh']) {
+    const never = () => assert.fail('Reading residence help cannot request methods or start checkout');
+    const harness = componentHarness('WalletFundingForm.jsx', 'PersonalFundingForm', {
+      'lucide-react': icons,
+      '@/i18n/LanguageProvider': { useI18n: () => ({ locale, t: (key, values) => translateMessage(locale, key, values) }) },
+      '@/lib/wallet-funding-client.mjs': { readPersonalFundingOptions: never, fundingRequestId: never },
+    });
+    t.after(() => harness.unmount());
+    const tree = harness.render({ onContinue: never }), field = find(tree, 'FundingCountryField');
+    const view = field.type(field.props), html = renderToStaticMarkup(view);
+    assert.match(html, /<label for="funding-test-country">/);
+    assert.ok(html.includes(translateMessage(locale, 'funding.residenceCountryLabel')));
+    assert.match(html, /<\/label><button[^>]*type="button"[^>]*aria-label=/);
+    assert.ok(html.includes(translateMessage(locale, 'funding.residenceCountryInfo')));
+    assert.match(html, /aria-haspopup="dialog"/); assert.match(html, /aria-expanded="false"/);
+    assert.doesNotMatch(html, /role="dialog"/);
+    const content = find(view, node => node?.type === popover.Content);
+    assert.equal(content.props['aria-describedby'], 'funding-test-residency-popup-copy');
+    const copy = renderToStaticMarkup(content.props.children);
+    assert.ok(copy.includes(translateMessage(locale, 'funding.residenceCountryHelp')));
+    assert.ok(copy.includes(translateMessage(locale, 'funding.residenceCountrySsn')));
+    assert.equal(find(tree, node => node?.props?.id === field.props.describedBy)?.props.id, 'funding-test-residency-help');
+    assert.equal(find(tree, 'FundingSubmit').props.disabled, true);
   }
 });
 

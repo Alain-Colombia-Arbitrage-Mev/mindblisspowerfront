@@ -3,6 +3,7 @@
 import { CreditCard, Info, Landmark, Loader2, RefreshCw, ShieldCheck, Smartphone, WalletCards } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useI18n } from "@/i18n/LanguageProvider";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { fundingRequestId, readPersonalFundingOptions } from "@/lib/wallet-funding-client.mjs";
 import { PERSONAL_FUNDING_COUNTRIES, PERSONAL_FUNDING_MINIMUM_USD, PERSONAL_FUNDING_MAXIMUM_USD, PERSONAL_FUNDING_MINIMUM_MXN, personalFundingMethod, validFundingSourceAmount } from "@/lib/wallet-funding-contract.mjs";
 import styles from "./wallet-funding.module.css";
@@ -178,10 +179,26 @@ function FundingCurrencyField({ id, country, value, onChange, busy }) {
 function FundingCountryField({ id, value, onChange, busy, label = "", describedBy = undefined, countries = PERSONAL_COUNTRIES }) {
   const { t, locale } = useI18n();
   function countryName(code) { try { return new Intl.DisplayNames([locale], { type: "region" }).of(code) || code; } catch { return code; } }
-  return <label className={`mb-onramp-country-picker ${styles.countryField}`} htmlFor={`${id}-country`}><span>{label || t("onramp.countryLabel")}</span>
+  return <div className={`mb-onramp-country-picker ${styles.countryField}`}>
+    <div className={styles.countryHeading}>
+      <label htmlFor={`${id}-country`}>{label || t("onramp.countryLabel")}</label>
+      <Popover>
+        <PopoverTrigger asChild>
+          <button className={styles.residencyInfoButton} type="button" aria-label={t("funding.residenceCountryInfo")}>
+            <Info size={18} aria-hidden="true" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent className={styles.residencyPopover} align="start" sideOffset={8} collisionPadding={16}
+          aria-label={t("funding.residenceCountryInfo")} aria-describedby={`${id}-residency-popup-copy`} onOpenAutoFocus={event => event.preventDefault()}>
+          <div id={`${id}-residency-popup-copy`}>
+            <p>{t("funding.residenceCountryHelp")}</p><p><strong>{t("funding.residenceCountrySsn")}</strong></p>
+          </div>
+        </PopoverContent>
+      </Popover>
+    </div>
     <select id={`${id}-country`} value={value} onChange={event => onChange(event.target.value)} aria-describedby={describedBy} autoComplete="off" disabled={busy} required>
       <option value="">{t("funding.countryPrompt")}</option>{countries.map(([code]) => <option value={code} key={code}>{countryName(code)}</option>)}
-    </select></label>;
+    </select></div>;
 }
 
 function FundingMethodField({ id, value, methods, status, countrySelected, sourceCurrencyCode = "USD", minimumUsd, limits, onChange, onRetry, onUseMinimum = undefined, busy, partialAvailability = false }) {

@@ -33,7 +33,9 @@ export function PersonalWalletFunding() {
   const { t } = useI18n();
   const reown = useReownWallet();
   const owner = personalWalletBalanceSessionKey(useMemberSession());
-  const latestOwner = useRef(owner); latestOwner.current = owner;
+  const epoch = useRef({ owner, generation: 0 });
+  if (epoch.current.owner !== owner) epoch.current = { owner, generation: epoch.current.generation + 1 };
+  const generation = epoch.current.generation;
   const mounted = useRef(false), action = useRef(null);
   const [actionError, setActionError] = useState("");
   const [actionDiagnostic, setActionDiagnostic] = useState("");
@@ -41,6 +43,7 @@ export function PersonalWalletFunding() {
   const [actionBusy, setActionBusy] = useState(false);
   const [walletRecovery, setWalletRecovery] = useState({ phase: "", address: "" });
   const [selectedReference, setSelectedReference] = useState("");
+  const [selectedGeneration, setSelectedGeneration] = useState(-1);
   const [statusFocusKey, setStatusFocusKey] = useState(0);
   const clearSelectedStatus = useCallback(() => {
     setSelectedReference(""); setStatusFocusKey(0);
@@ -56,15 +59,15 @@ export function PersonalWalletFunding() {
   const displayState = verified && setupRequired ? (walletCheckRequired || awaitingBinding ? "checking" : "connected") : state;
   const address = !setupRequired ? reown.linkedAddress : "";
   const busy = actionBusy || ["connecting", "linking", "opening"].includes(reown.onrampStatus);
-  const live = () => mounted.current && Boolean(owner) && latestOwner.current === owner;
+  const live = () => mounted.current && Boolean(owner) && epoch.current.generation === generation;
   useEffect(() => {
     mounted.current = true;
     return () => { mounted.current = false; action.current = null; };
   }, []);
   useEffect(() => {
     action.current = null; setActionBusy(false); setWalletRecovery({ phase: "", address: "" });
-    setActionError(""); setActionDiagnostic(""); setCopyError(""); setSelectedReference(""); setStatusFocusKey(0);
-  }, [owner]);
+    setActionError(""); setActionDiagnostic(""); setCopyError(""); setSelectedReference(""); setSelectedGeneration(-1); setStatusFocusKey(0);
+  }, [owner, generation]);
 
   async function walletAction(change = false) {
     if (action.current || !live()) return;
@@ -115,7 +118,7 @@ export function PersonalWalletFunding() {
     if (!live()) return result;
     if (result && typeof result === "object" && "requiresWalletVerification" in result && result.requiresWalletVerification === true) { setWalletRecovery({ phase: "check", address: "" }); return result; }
     if (result && typeof result === "object" && "opened" in result && result.opened === true && "checkoutReference" in result
-      && typeof result.checkoutReference === "string" && FUNDING_UUID.test(result.checkoutReference)) { setSelectedReference(result.checkoutReference); setStatusFocusKey(0); }
+      && typeof result.checkoutReference === "string" && FUNDING_UUID.test(result.checkoutReference)) { setSelectedReference(result.checkoutReference); setSelectedGeneration(generation); setStatusFocusKey(0); }
     return result;
   }
 
@@ -167,7 +170,7 @@ export function PersonalWalletFunding() {
         </section>
       </aside>
     </div>
-    {selectedReference ? <WalletFundingStatus walletKind="personal" checkoutReference={selectedReference} focusKey={statusFocusKey} /> : null}
+    {owner && selectedGeneration === generation && selectedReference ? <WalletFundingStatus walletKind="personal" checkoutReference={selectedReference} focusKey={statusFocusKey} /> : null}
   </WalletFundingScreen>;
 }
 
