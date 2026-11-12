@@ -329,11 +329,10 @@ test('actual provider cancels an old owner selection and ignores late reset comp
   await tick(); assert.deepEqual(h.calls, ['disconnect']);
 });
 
-test('a first wallet with no existing SDK connection opens initial auth once without calling disconnect on an unattached adapter', async t => {
-  const h = providerHarness(t, { accountState: { isConnected: false, status: 'disconnected', address: undefined, embeddedWalletInfo: undefined },
-    reset: () => assert.fail('Cannot disconnect an unattached adapter') });
+test('a first wallet with no existing SDK connection safely delegates its reset before opening initial auth once', async t => {
+  const h = providerHarness(t, { accountState: { isConnected: false, status: 'disconnected', address: undefined, embeddedWalletInfo: undefined } });
   await h.flush(); const choice = h.value.connectWallet(); await h.flush();
-  assert.deepEqual(h.calls, ['open']); assert.equal(h.value.isConnected, false);
+  assert.deepEqual(h.calls, ['disconnect', 'open']); assert.equal(h.value.isConnected, false);
   await h.account({ isConnected: true, status: 'connected', address: other, embeddedWalletInfo: { user: { email: 'new@example.test' } } });
   await choice; await h.flush(); assert.equal(h.value.address, other); assert.equal(h.value.isLinked, false);
 });

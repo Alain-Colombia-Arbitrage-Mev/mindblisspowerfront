@@ -395,7 +395,9 @@ function ConfiguredReownProvider({ children }) {
           if (ConnectionController.hasAnyConnection(ReownConstantsUtil.CONNECTOR_ID.AUTH)) throw new Error("wallet_not_connected");
           return;
         }
-        return connectionSnapshot.current.disconnected ? Promise.resolve() : disconnect({ namespace: "eip155" });
+        // A disconnected UI snapshot cannot prove the SDK has no cached EVM
+        // account. Let its namespace reset decide whether any adapter is active.
+        return disconnect({ namespace: "eip155" });
       },
       open: () => { valid(); return open({ view: "Connect", namespace: "eip155" }); },
       onSettled(error) {
@@ -418,7 +420,7 @@ function ConfiguredReownProvider({ children }) {
     if (!mounted.current || logoutStarted.current) return Promise.reject(new DOMException('Aborted', 'AbortError'));
     if (switchRequest.current) return switchRequest.current.promise;
     if (walletIdentityMismatch || walletNeedsAccountSelection
-      || (connectionSnapshot.current.disconnected && ConnectionController.hasAnyConnection(ReownConstantsUtil.CONNECTOR_ID.AUTH))) return chooseWallet();
+      || (connectionSnapshot.current.disconnected && (boundAddress || ConnectionController.hasAnyConnection(ReownConstantsUtil.CONNECTOR_ID.AUTH)))) return chooseWallet();
     if (connectionSnapshot.current.status === "connected") return Promise.resolve({ connected: true });
     if (connectionRequest.current) return connectionRequest.current.promise;
     setConnectionBusy(true);
@@ -427,7 +429,7 @@ function ConfiguredReownProvider({ children }) {
       onSettled() { if (connectionRequest.current === request) connectionRequest.current = null; if (mounted.current) setConnectionBusy(false); } });
     connectionRequest.current = request;
     return request.promise;
-  }, [chooseWallet, open, walletIdentityMismatch, walletNeedsAccountSelection]);
+  }, [boundAddress, chooseWallet, open, walletIdentityMismatch, walletNeedsAccountSelection]);
 
   useEffect(() => {
     connectionRequest.current?.update(connectionSnapshot.current);

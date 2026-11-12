@@ -51,17 +51,17 @@ function observation({ timedOut = false, switching = false, onUpdate = () => {} 
 
 /** Actual installed controller and public disconnect hook, with the installed
  * SDK's disconnect policy and synthetic adapters. No wallet, storage or network. */
-function sdk(t, { reject = false, delay, orphaned = false, initialReconnect = true, skipCleanup = false } = {}) {
+function sdk(t, { reject = false, delay, orphaned = false, initialReconnect = true, skipCleanup = false, hiddenAuth = true, legacyEvmActive = false } = {}) {
   const previous = new Map(ConnectionController.state.connections), previousClient = ConnectionController.state._client;
   const previousReconnect = OptionsController.state.enableReconnect, calls = [], optionWrites = [];
   OptionsController.setOptions({ enableReconnect: initialReconnect });
   ConnectionController.setConnections([], 'eip155');
-  ConnectionController.setConnections([{ connectorId: AUTH, accounts: [] }, { connectorId: 'unrelated-injected', accounts: [] }], 'solana');
+  ConnectionController.setConnections([...(hiddenAuth ? [{ connectorId: AUTH, accounts: [] }] : []), { connectorId: 'unrelated-injected', accounts: [] }], 'solana');
   t.after(() => { ConnectionController.state.connections = previous; ConnectionController.state._client = previousClient;
     OptionsController.setOptions({ enableReconnect: previousReconnect }); });
   const scope = {
     ConstantsUtil: ReownConstantsUtil,
-    ChainController: { state: { activeChain: 'eip155', chains: new Map([['eip155', { accountState: {} }],
+    ChainController: { state: { activeChain: 'eip155', chains: new Map([['eip155', { accountState: legacyEvmActive ? { caipAddress: `eip155:137:0x${'2'.repeat(40)}` } : {} }],
       ['solana', { accountState: orphaned ? {} : { caipAddress: 'solana:synthetic:account' } }]]) } },
     OptionsController,
     ConnectorController: { getConnectorId: namespace => ConnectionController.getConnections(namespace)[0]?.connectorId, setFilterByNamespace() {} },
@@ -77,7 +77,10 @@ function sdk(t, { reject = false, delay, orphaned = false, initialReconnect = tr
     calls.push({ namespace, id, reconnectAtGuard: OptionsController.state.enableReconnect }); if (delay) await delay;
     if (reject) throw new Error('synthetic cleanup failure');
     const existing = ConnectionController.getConnections(namespace), removed = existing.filter(connection => !id || connection.connectorId === id);
-    if (!skipCleanup) ConnectionController.setConnections(existing.filter(connection => id && connection.connectorId !== id), namespace);
+    if (!skipCleanup) {
+      ConnectionController.setConnections(existing.filter(connection => id && connection.connectorId !== id), namespace);
+      scope.ChainController.state.chains.get(namespace).accountState = {};
+    }
     return { connections: removed };
   } }; } };
   client.disconnectConnector = adapterReset.bind(client);
@@ -86,7 +89,8 @@ function sdk(t, { reject = false, delay, orphaned = false, initialReconnect = tr
   let disconnect;
   function DisconnectProbe() { disconnect = useDisconnect().disconnect; return null; }
   renderToStaticMarkup(createElement(DisconnectProbe));
-  return { calls, disconnect, optionWrites, appKit: { updateOptions(options) { optionWrites.push(options.enableReconnect); updateOptions(options); } } };
+  return { calls, disconnect, optionWrites, hasLegacyEvmAccount: () => Boolean(scope.ChainController.state.chains.get('eip155').accountState.caipAddress),
+    appKit: { updateOptions(options) { optionWrites.push(options.enableReconnect); updateOptions(options); } } };
 }
 function recovery(t, options = {}) {
   const native = sdk(t, options), calls = [], ref = current => ({ current });
@@ -96,9 +100,11 @@ function recovery(t, options = {}) {
     switchRequest: ref(null), connectionRequest: ref(null), selectedCandidate: ref(null), onrampIntent: ref(false),
     onrampSelection: ref(null), onrampOperation: ref(null), linkingOperation: ref(null),
     walletIdentityMismatch: false, walletNeedsAccountSelection: false,
+    boundAddress: '',
     setWalletSwitching() {}, setConnectionBusy() {}, setVerificationError() {}, setSelectionRevision() {},
     isAddress: value => typeof value === 'string' && /^0x[0-9a-f]{40}$/.test(value),
-    disconnect: native.disconnect, open: async () => { calls.push('open'); assert.equal(ConnectionController.hasAnyConnection(AUTH), false); },
+    disconnect: native.disconnect, open: async () => { calls.push('open'); assert.equal(ConnectionController.hasAnyConnection(AUTH), false);
+      assert.equal(native.hasLegacyEvmAccount(), false, 'a cached foreign SDK account must be disconnected before Connect'); },
     createReownWalletConnectionRequest: () => assert.fail('A stale shared AUTH connection must reset before opening Connect'),
   };
   scope.disconnectSharedAuthWallet = providerCallback('disconnectSharedAuthWallet', scope);
@@ -130,6 +136,25 @@ test('real provider recovery resets hidden shared AUTH before Connect, without d
   assert.deepEqual(h.native.optionWrites, [false, true]); assert.equal(OptionsController.state.enableReconnect, true);
   assert.equal(ConnectionController.getConnections('solana')[0]?.connectorId, 'unrelated-injected');
   h.finish(); assert.deepEqual(await pending, { connected: true });
+});
+
+test('a bound disconnected wallet resets a cached foreign EVM account even when the AUTH connection map is empty', async t => {
+  const h = recovery(t, { hiddenAuth: false, legacyEvmActive: true });
+  h.scope.boundAddress = `0x${'1'.repeat(40)}`;
+  assert.equal(ConnectionController.hasAnyConnection(AUTH), false); assert.equal(h.native.hasLegacyEvmAccount(), true);
+  const pending = h.connect(); await tick(); await tick();
+  assert.deepEqual(h.native.calls.map(call => ({ ...call })), [{ namespace: 'eip155', id: undefined, reconnectAtGuard: true }]);
+  assert.equal(h.native.hasLegacyEvmAccount(), false); assert.deepEqual(h.calls, ['open']);
+  assert.deepEqual(h.native.optionWrites, []); assert.equal(ConnectionController.getConnections('solana')[0]?.connectorId, 'unrelated-injected');
+  h.finish(); await pending;
+});
+
+test('a new unlinked wallet delegates a safe empty SDK reset and opens Connect without calling an unattached adapter', async t => {
+  const h = recovery(t, { hiddenAuth: false });
+  h.scope.walletNeedsAccountSelection = true;
+  const pending = h.connect(); await tick(); await tick();
+  assert.deepEqual(h.native.calls, []); assert.deepEqual(h.calls, ['open']); assert.deepEqual(h.native.optionWrites, []);
+  h.finish(); await pending;
 });
 
 test('a timed-out SDK restoration uses the disconnected observation for explicit recovery even while the recovery UI is busy', async t => {
@@ -222,6 +247,7 @@ test('a hung or late SDK cleanup restores options immediately and cannot reopen 
 
 test('normal connected EVM and closed owner/logout boundaries never reset another SDK session', async t => {
   const h = recovery(t);
+  h.scope.boundAddress = `0x${'1'.repeat(40)}`;
   h.scope.connectionSnapshot.current = { status: 'connected', disconnected: false, address: `0x${'1'.repeat(40)}` };
   assert.equal((await h.connect()).connected, true); assert.deepEqual(h.native.calls, []); assert.deepEqual(h.calls, []);
   for (const boundary of ['owner', 'unmounted', 'logout']) {
