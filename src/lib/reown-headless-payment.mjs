@@ -71,6 +71,19 @@ export function createHeadlessPaymentConnection({ read, onState, reset, requestE
     publish({ ...empty(), phase: 'connecting', email: typeof value.email === 'string' ? value.email : '', resendAt });
     request.promise = (async () => {
       let selected = current(request);
+      const restoringAddress = address(selected.linkedAddress);
+      if (selected.linkStatus === 'linked' && selected.isConnected === true && restoringAddress
+        && address(selected.address) === restoringAddress && selected.providerReady !== true) {
+        // AppKit may restore the account before its signing provider. Keep the
+        // matching session while it finishes; the existing deadline and parent
+        // abort still apply. A changed identity needs a new explicit action.
+        selected = await observe(request, value => {
+          if (value.linkStatus !== 'linked' || address(value.linkedAddress) !== restoringAddress
+            || address(value.address) !== restoringAddress || value.isConnected !== true) throw new Error('wallet_address_mismatch');
+          return value.providerReady === true;
+        });
+        return prepare ? { linked: true, address: selected.linkedAddress } : { connected: true };
+      }
       if (!(ready(selected) && selected.candidate === true)) {
         await request.scope.wait(() => reset(request.scope)); current(request);
         await observe(request, value => value.isConnected !== true);

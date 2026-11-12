@@ -12,9 +12,9 @@ const request = (body = "{}", origin = env.AUTH_PUBLIC_ORIGIN) => new Request(`$
   method: "POST", headers: { origin, 'cf-connecting-ip': '192.0.2.10', cookie: `${cookie}; vp_id_token=other; unrelated=private` }, body,
 });
 
-test('email delivery gets a bounded cold-start budget, while reads and code redemption remain short', async () => {
-  for (const path of ['/sign-up/email', '/email-otp/send-verification-otp', '/send-verification-email', '/email-otp/request-password-reset']) assert.equal(betterAuthTimeoutMs(path), 20000);
-  for (const path of ['/get-session', '/token', '/jwks', '/sign-in/email-otp', '/email-otp/verify-email', '/sign-in/email']) assert.equal(betterAuthTimeoutMs(path), 8000);
+test('delivery and atomic registration verification have a bounded cold-start budget while reads and sign-in remain short', async () => {
+  for (const path of ['/sign-up/email', '/email-otp/send-verification-otp', '/send-verification-email', '/email-otp/request-password-reset', '/email-otp/verify-email']) assert.equal(betterAuthTimeoutMs(path), 20000);
+  for (const path of ['/get-session', '/token', '/jwks', '/sign-in/email-otp', '/sign-in/email']) assert.equal(betterAuthTimeoutMs(path), 8000);
   const cancelled = new AbortController(); cancelled.abort(); let calls = 0;
   await fetchBetterAuth('/email-otp/send-verification-otp', { method: 'POST', body: { email: 'synthetic@example.test', type: 'sign-in' }, signal: cancelled.signal }, {
     env, clientIp: '192.0.2.10', fetchImpl: async (_url, options) => { calls++; assert.equal(options.signal.aborted, true); return Response.json({ success: true }); },

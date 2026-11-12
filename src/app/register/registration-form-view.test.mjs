@@ -784,7 +784,7 @@ test('registration send and confirmation retain their deadlines without adding a
   tree = harness.render(props);
   find(tree, node => node?.props?.id === 'code').props.onChange({ target: { value: '001234' } });
   await submit(harness.render(props));
-  assert.deepEqual(deadlines, [30000, 30000, 20000]);
+  assert.deepEqual(deadlines, [30000, 30000, 35000]);
   assert.deepEqual(paths, ['/api/auth/register', '/api/auth/register/confirm', '/api/auth/register/confirm']);
   assert.equal(emailOtp.otpTimeoutMs('confirm'), 12000);
   assert.deepEqual(destinations, ['/dashboard']);

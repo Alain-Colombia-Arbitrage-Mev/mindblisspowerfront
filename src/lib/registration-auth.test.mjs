@@ -97,6 +97,38 @@ test('confirmation validates a new native session for the OTP owner before expos
   assert.doesNotMatch(JSON.stringify(body), /synthetic|token|emailVerified|personId|admin|redirectTo/);
 });
 
+test('a native registration commit after the former 8s deadline still proves its new session without replaying the OTP', async () => {
+  const paths = [];
+  let committed = false;
+  const response = await handleRegistration(request({ email, code: '001234' }), 'confirm', {
+    env, fetchImpl: async (url, options) => {
+      paths.push(new URL(url).pathname);
+      if (url.endsWith('/get-session')) {
+        assert.equal(committed, true);
+        assert.equal(options.headers.cookie, sessionCookie);
+        return Response.json(canonical());
+      }
+      // Real abortable transport timing reproduces the consumed-code failure:
+      // the native transaction can commit even if its HTTP caller has timed out.
+      return new Promise((resolve, reject) => {
+        const aborted = () => reject(options.signal.reason);
+        options.signal.addEventListener('abort', aborted, { once: true });
+        setTimeout(() => {
+          committed = true;
+          options.signal.removeEventListener('abort', aborted);
+          resolve(verifiedResponse());
+        }, 8300);
+      });
+    },
+  });
+  assert.equal(committed, true);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: false, sessionEstablished: true });
+  assert.deepEqual(paths, ['/api/auth/email-otp/verify-email', '/api/auth/get-session']);
+  assert.equal(response.headers.getSetCookie().filter(value => value.startsWith('__Secure-better-auth.session_token=')).length, 1);
+  assert.equal(response.headers.get('set-auth-jwt'), null);
+});
+
 test('resend is explicit, purpose-bound and preserves server cooldown without hidden retries', async () => {
   let calls = 0;
   const response = await handleRegistration(request({ email: 'member@example.test', resend: true }), 'confirm', { env, fetchImpl: async (url, options) => {

@@ -2,11 +2,11 @@ import { referralLinkCode } from '../../lib/referral-links.mjs';
 import { parseAuthRetryAfter } from '../../lib/auth-retry-after.mjs';
 
 export const REGISTRATION_RESEND_SECONDS = 300;
-// Registration confirmation includes native OTP verification and a separate
-// private session proof. Login's shorter OTP exchange deadline is unchanged.
+// Cover the native verification's 20s budget and the separate 8s private session
+// proof with a small transport margin. Login's shorter exchange is unchanged.
 export function registrationTimeoutMs(action) {
   if (action === 'send') return 30000;
-  if (action === 'confirm') return 20000;
+  if (action === 'confirm') return 35000;
   throw new Error('invalid_registration_action');
 }
 const REGISTRATION_PREFILL_KEY = 'mindbliss.registration-prefill.v1';

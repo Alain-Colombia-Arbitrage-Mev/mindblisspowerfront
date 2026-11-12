@@ -42,6 +42,65 @@ test('a live matching canonical wallet skips picker, disconnect, email and owner
   assert.deepEqual(h.calls, []);
 });
 
+test('a canonical connected account waits for its late provider without resetting or asking to authenticate again', async () => {
+  for (const prepare of [false, true]) {
+    const h = harness();
+    Object.assign(h.snapshot, { linkedAddress: address, linkStatus: 'linked', address, isConnected: true, providerReady: false });
+    const pending = h.controller.start(prepare); await tick();
+    assert.equal(h.controller.state.phase, 'connecting'); assert.deepEqual(h.calls, []);
+    h.snapshot.providerReady = true; h.notify();
+    assert.deepEqual(await pending, prepare ? { linked: true, address } : { connected: true });
+    assert.equal(h.controller.state.phase, 'idle'); assert.deepEqual(h.calls, []);
+    assert.ok(h.states.every(state => state.phase !== 'choosing' && state.phase !== 'verifying'));
+  }
+});
+
+test('waiting for a restored provider uses the existing deadline and a later ready session can be reused without authentication', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const h = harness({ timeoutMs: 5000 });
+  Object.assign(h.snapshot, { linkedAddress: address, linkStatus: 'linked', address, isConnected: true, providerReady: false });
+  const pending = h.controller.start(false), rejected = assert.rejects(pending, { name: 'TimeoutError' });
+  await tick(); t.mock.timers.tick(5001); await rejected;
+  assert.deepEqual(h.calls, []); assert.equal(h.snapshot.isConnected, true);
+  assert.equal(h.controller.state.error, 'timeout');
+  h.snapshot.providerReady = true; h.notify();
+  assert.deepEqual(await h.controller.start(false), { connected: true }); assert.deepEqual(h.calls, []);
+  t.mock.timers.reset();
+});
+
+test('cancel or a parent abort stops a provider wait and its late provider cannot revive activation', async () => {
+  for (const viaParent of [false, true]) {
+    const h = harness(), parent = new AbortController();
+    Object.assign(h.snapshot, { linkedAddress: address, linkStatus: 'linked', address, isConnected: true, providerReady: false });
+    const pending = h.controller.start(true, { signal: parent.signal }), rejected = assert.rejects(pending, { name: 'AbortError' });
+    await tick(); if (viaParent) parent.abort(); else h.controller.cancel(); await rejected;
+    h.snapshot.providerReady = true; h.notify(); await tick();
+    assert.deepEqual(h.calls.filter(call => call !== 'cleanup'), []);
+    assert.ok(h.states.every(state => state.phase !== 'choosing' && state.phase !== 'verifying'));
+  }
+});
+
+test('a provider wait loses authority across owner A to B to A without resetting either session', async () => {
+  const h = harness();
+  Object.assign(h.snapshot, { linkedAddress: address, linkStatus: 'linked', address, isConnected: true, providerReady: false });
+  const pending = h.controller.start(true), rejected = assert.rejects(pending, { name: 'AbortError' }); await tick();
+  h.snapshot.owner = 'B'; h.snapshot.generation++; h.notify(); h.snapshot.owner = 'A'; h.snapshot.generation++; h.notify();
+  await rejected; h.snapshot.providerReady = true; h.notify(); await tick();
+  assert.deepEqual(h.calls, []);
+  assert.deepEqual(await h.controller.start(false), { connected: true }); assert.deepEqual(h.calls, []);
+});
+
+test('a changed bound address, SDK address, binding or connection fails a provider wait before any authentication or ownership proof', async () => {
+  for (const patch of [{ linkedAddress: other }, { address: other }, { linkStatus: 'unlinked' }, { isConnected: false }]) {
+    const h = harness();
+    Object.assign(h.snapshot, { linkedAddress: address, linkStatus: 'linked', address, isConnected: true, providerReady: false });
+    const pending = h.controller.start(true), rejected = assert.rejects(pending, { message: 'wallet_address_mismatch' }); await tick();
+    Object.assign(h.snapshot, patch, { providerReady: true }); h.notify(); await rejected;
+    assert.deepEqual(h.calls, []); assert.equal(h.controller.state.error, 'mismatch');
+    assert.ok(h.states.every(state => state.phase !== 'choosing' && state.phase !== 'verifying'));
+  }
+});
+
 test('email activation sends once per manual action, retains code errors and links only after explicit valid OTP', async () => {
   let bad = true;
   const h = harness({ verifyEmail: async otp => { h.calls.push(['otp', otp]); if (bad) throw new Error('Invalid OTP'); h.connected(); } });

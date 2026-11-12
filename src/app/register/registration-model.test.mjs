@@ -62,7 +62,7 @@ test('OTP resend cooldown cannot be shortened below the 300-second security budg
 
 test('registration confirmation covers native verification plus private session proof without changing delivery deadlines', () => {
   assert.equal(registrationTimeoutMs('send'), 30000);
-  assert.equal(registrationTimeoutMs('confirm'), 20000);
+  assert.equal(registrationTimeoutMs('confirm'), 35000);
   for (const action of ['login', 'resend', '', undefined]) assert.throws(() => registrationTimeoutMs(action), /invalid_registration_action/);
   assert.match(registrationFailure(503, 'confirm'), /resultado de la verificación/);
   assert.match(registrationFailure(503, 'confirm'), /Entrar de forma segura/);
