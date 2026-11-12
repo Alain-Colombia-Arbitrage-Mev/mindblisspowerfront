@@ -170,7 +170,8 @@ test('one AppKit instance configures Ethereum and Solana adapters with explicitl
   assert.equal(config.networks.length, 3); assert.equal(config.networks[0], mainnet); assert.equal(config.networks[1], polygon); assert.equal(config.networks[2], solana);
   assert.equal(config.defaultNetwork, polygon); assert.equal(config.defaultAccountTypes.eip155, 'eoa'); assert.equal(config.defaultAccountTypes.solana, 'eoa');
   assert.equal(config.features.analytics, true);
-  assert.equal(config.features.reownAuthentication, false);
+  assert.equal(config.features.reownAuthentication, true);
+  assert.equal(Object.hasOwn(config, 'siwx'), false, 'the official Cloud authentication must not be replaced by a custom verifier');
   const rootMetadata = personalWalletMetadata('https://mindblisspower.com');
   const rootConfig = vm.runInNewContext(`(${calls[0].arguments[0].getText(source)})`, {
     EthersAdapter, SolanaAdapter, mainnet, polygon, solana, projectId: 'a'.repeat(32), initialWalletTheme: 'light', themeVariables: () => ({}),

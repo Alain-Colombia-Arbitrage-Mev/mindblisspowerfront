@@ -78,9 +78,9 @@ if (configured && walletMetadata) {
     allowUnsupportedChain: false,
     allWallets: "SHOW",
     features: {
-      // The project's cloud setting must also be OFF. Better Auth and our
-      // owner-bound wallet proof remain the application's authentication gates.
-      reownAuthentication: false,
+      // Match the enabled Cloud project: Reown may request its SIWX signature.
+      // Better Auth grants the app session; our owner-bound proof still binds the wallet.
+      reownAuthentication: true,
       email: true,
       socials: ["google", "apple"],
       emailShowWallets: false,
