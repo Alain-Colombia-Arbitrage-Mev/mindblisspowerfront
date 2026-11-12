@@ -36,7 +36,7 @@ export const messages = {
     recharge: {
       welcomeEyebrow: "Tu primera recarga", welcomeTitle: "Todo empieza con\ntu primera recarga.", welcomeCopy: "Añade saldo y deja tu wallet lista para elegir tu próxima membresía.",
       stepMethod: "Elige tu método", stepReview: "Revisa importe, activo y red", stepConfirm: "Confirma la recarga", start: "Hacer mi primera recarga", notNow: "Ahora no",
-      methodsEyebrow: "Recarga a tu manera", methodsTitle: "Tu wallet está lista.\nHaz tu primera recarga.", methodsCopy: "Elige una opción. Antes de enviar, confirma el activo, la red y el importe.",
+      methodsEyebrow: "Recarga a tu manera", methodsTitle: "Tu wallet está lista.\nHaz tu primera recarga.", methodsCopy: "Confirma el activo, la red y el importe antes de continuar.",
       buyTitle: "Recargar fondos", buyCopy: "Añade fondos con moneda local a la wallet que elijas y revisa la opción disponible.", buyAction: "Recargar fondos",
       receiveTitle: "Recibir desde otra wallet", receiveCopy: "Revisa cómo configurar tu wallet y verifica siempre el activo y la red.", receiveAction: "Ver cómo recibir", providerUnavailable: "No pudimos abrir el proveedor de compra. Intenta nuevamente.", providerConfiguration: "La conexión con tu billetera no está disponible. Contacta a soporte si el problema continúa.", providerConnection: "La wallet tardó demasiado en reconectarse. Intenta nuevamente.", providerMismatch: "Esta cuenta ya tiene otra wallet vinculada. Reconecta la wallet original para continuar.", providerSession: "Tu sesión expiró. Inicia sesión nuevamente antes de recargar.", providerRejected: "La firma de la wallet fue cancelada. Apruébala para continuar.", reconnectWallet: "Reconectar wallet vinculada", connecting: "Conectando de forma segura…", later: "Lo haré después",
       reminderEyebrow: "Tu wallet · Primera recarga", balanceAvailable: "Saldo disponible", reminderTitle: "¿Tu primera recarga?\nEmpieza por aquí.", reminderCopy: "Añade saldo para tu próxima membresía.\nEn el siguiente paso eliges cómo recargar.", recharge: "Recargar mi wallet", continue: "Seguir explorando",
@@ -124,7 +124,7 @@ export const messages = {
     recharge: {
       welcomeEyebrow: "Your first top-up", welcomeTitle: "Everything starts with\nyour first top-up.", welcomeCopy: "Add funds and get your wallet ready for your next membership.",
       stepMethod: "Choose your method", stepReview: "Review amount, asset and network", stepConfirm: "Confirm the top-up", start: "Make my first top-up", notNow: "Not now",
-      methodsEyebrow: "Top up your way", methodsTitle: "Your wallet is ready.\nMake your first top-up.", methodsCopy: "Choose an option. Before sending, confirm the asset, network and amount.",
+      methodsEyebrow: "Top up your way", methodsTitle: "Your wallet is ready.\nMake your first top-up.", methodsCopy: "Confirm the asset, network and amount before continuing.",
       buyTitle: "Add funds", buyCopy: "Add funds with local currency to the wallet you choose and review the available option.", buyAction: "Add funds",
       receiveTitle: "Receive from another wallet", receiveCopy: "Review how to configure your wallet and always verify the asset and network.", receiveAction: "See how to receive", providerUnavailable: "We could not open the purchase provider. Please try again.", providerConfiguration: "The wallet connection is unavailable. Contact support if the problem continues.", providerConnection: "The wallet took too long to reconnect. Please try again.", providerMismatch: "This account already has another wallet linked. Reconnect the original wallet to continue.", providerSession: "Your session expired. Sign in again before adding funds.", providerRejected: "The wallet signature was cancelled. Approve it to continue.", reconnectWallet: "Reconnect linked wallet", connecting: "Connecting securely…", later: "I'll do it later",
       reminderEyebrow: "Your wallet · First top-up", balanceAvailable: "Available balance", reminderTitle: "Your first top-up?\nStart here.", reminderCopy: "Add funds for your next membership.\nOn the next step, choose how to top up.", recharge: "Top up my wallet", continue: "Keep exploring",
@@ -212,7 +212,7 @@ export const messages = {
     recharge: {
       welcomeEyebrow: "شحنك الأول", welcomeTitle: "كل شيء يبدأ\nبشحنك الأول.", welcomeCopy: "أضف رصيداً وجهّز محفظتك لاختيار عضويتك التالية.",
       stepMethod: "اختر الطريقة", stepReview: "راجع المبلغ والأصل والشبكة", stepConfirm: "أكّد الشحن", start: "إجراء أول شحن", notNow: "ليس الآن",
-      methodsEyebrow: "اشحن بطريقتك", methodsTitle: "محفظتك جاهزة.\nابدأ شحنك الأول.", methodsCopy: "اختر خياراً، وتأكد من الأصل والشبكة والمبلغ قبل الإرسال.",
+      methodsEyebrow: "اشحن بطريقتك", methodsTitle: "محفظتك جاهزة.\nابدأ شحنك الأول.", methodsCopy: "تأكد من الأصل والشبكة والمبلغ قبل المتابعة.",
       buyTitle: "إضافة أموال", buyCopy: "أضف الأموال بعملتك المحلية إلى المحفظة التي تختارها وراجع الخيار المتاح.", buyAction: "إضافة أموال",
       receiveTitle: "الاستقبال من محفظة أخرى", receiveCopy: "راجع إعداد المحفظة وتأكد دائماً من الأصل والشبكة.", receiveAction: "طريقة الاستقبال", providerUnavailable: "تعذر فتح مزود الشراء. حاول مرة أخرى.", providerConfiguration: "الاتصال بمحفظتك غير متاح. تواصل مع الدعم إذا استمرت المشكلة.", providerConnection: "استغرقت إعادة اتصال المحفظة وقتاً طويلاً. حاول مرة أخرى.", providerMismatch: "يوجد لهذه الحساب محفظة أخرى مرتبطة. أعد توصيل المحفظة الأصلية للمتابعة.", providerSession: "انتهت جلستك. سجّل الدخول مرة أخرى قبل إضافة الرصيد.", providerRejected: "تم إلغاء توقيع المحفظة. وافق عليه للمتابعة.", reconnectWallet: "إعادة توصيل المحفظة المرتبطة", connecting: "جارٍ الاتصال بأمان…", later: "سأفعل ذلك لاحقاً",
       reminderEyebrow: "محفظتك · الشحن الأول", balanceAvailable: "الرصيد المتاح", reminderTitle: "هل هذا شحنك الأول؟\nابدأ من هنا.", reminderCopy: "أضف رصيداً لعضويتك التالية.\nفي الخطوة التالية تختار طريقة الشحن.", recharge: "شحن محفظتي", continue: "متابعة الاستكشاف",
@@ -300,7 +300,7 @@ export const messages = {
     recharge: {
       welcomeEyebrow: "首次充值", welcomeTitle: "一切从你的\n首次充值开始。", welcomeCopy: "添加余额，准备好钱包以选择下一项会员方案。",
       stepMethod: "选择充值方式", stepReview: "确认金额、资产和网络", stepConfirm: "确认充值", start: "开始首次充值", notNow: "暂时不要",
-      methodsEyebrow: "按你的方式充值", methodsTitle: "钱包已准备好。\n开始首次充值。", methodsCopy: "选择一个选项。发送前请确认资产、网络和金额。",
+      methodsEyebrow: "按你的方式充值", methodsTitle: "钱包已准备好。\n开始首次充值。", methodsCopy: "继续前请确认资产、网络和金额。",
       buyTitle: "充值资金", buyCopy: "使用本地货币为所选钱包充值，并查看可用选项。", buyAction: "充值资金",
       receiveTitle: "从其他钱包接收", receiveCopy: "查看钱包配置方式，并始终核对资产和网络。", receiveAction: "查看接收方式", providerUnavailable: "无法打开购买服务商，请重试。", providerConfiguration: "钱包连接暂不可用。如果问题持续，请联系支持。", providerConnection: "钱包重新连接超时，请重试。", providerMismatch: "此账户已关联另一个钱包。请重新连接原钱包以继续。", providerSession: "你的会话已过期。充值前请重新登录。", providerRejected: "钱包签名已取消。请批准签名以继续。", reconnectWallet: "重新连接已关联钱包", connecting: "正在安全连接…", later: "稍后再做",
       reminderEyebrow: "你的钱包 · 首次充值", balanceAvailable: "可用余额", reminderTitle: "第一次充值？\n从这里开始。", reminderCopy: "为下一项会员方案添加余额。\n下一步选择充值方式。", recharge: "为钱包充值", continue: "继续浏览",

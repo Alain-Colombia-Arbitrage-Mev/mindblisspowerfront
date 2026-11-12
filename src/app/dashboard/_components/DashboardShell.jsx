@@ -10,7 +10,7 @@ import DashboardWalletProvider from "@/components/reown/DashboardWalletProvider"
 import PostAuthWalletSetup, { usePostAuthWalletSetup } from "@/components/reown/PostAuthWalletSetup";
 import { memberPageKeysFor } from "@/lib/member-navigation.mjs";
 import { MemberSessionContext } from "@/lib/member-session-context";
-import { browserReferralChoice, chooseBrowserReferral, pendingVerifiedReferral, readVerifiedReferral, retryVerifiedReferral } from '@/lib/referral-sync.mjs';
+import { REFERRAL_REQUEST_TIMEOUT_MS, browserReferralChoice, chooseBrowserReferral, pendingVerifiedReferral, readVerifiedReferral, retryVerifiedReferral } from '@/lib/referral-sync.mjs';
 import { useI18n } from "@/i18n/LanguageProvider";
 import "@/components/panel/panel-shell.css";
 
@@ -67,7 +67,7 @@ export default function DashboardShell({ authMode: _authMode, children }) {
           view.timer = null;
           if (!cancelled && referralView.current === view && view.email === recipient && view.revision === revision)
             checkReferral(recipient, false);
-        }, 5000);
+        }, REFERRAL_REQUEST_TIMEOUT_MS);
       });
     };
     const loadSession = () => {

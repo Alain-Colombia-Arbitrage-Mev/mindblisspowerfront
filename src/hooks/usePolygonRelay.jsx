@@ -5,7 +5,7 @@ import { useMemberSession } from "@/lib/member-session-context";
 import { usePersonalWalletBalance } from "@/hooks/usePersonalWalletBalance";
 import { personalWalletBalanceSessionKey } from "@/lib/personal-wallet-balance-store.mjs";
 import { readPersonalWalletBalances } from "@/lib/personal-wallet-balance.mjs";
-import { personalCompanyPaymentAmountAtomic, formatPersonalCompanyPaymentAmount, POLYGON_COMPANY_PAYMENT } from "@/lib/personal-company-payment-values.mjs";
+import { personalCompanyPaymentAtomic, personalCompanyPaymentAmountAtomic, formatPersonalCompanyPaymentAmount, POLYGON_COMPANY_PAYMENT } from "@/lib/personal-company-payment-values.mjs";
 import { readPolygonRelayCapabilities, readPolygonRelayHistory, readPolygonRelayStatus, writePolygonRelay } from "@/lib/polygon-relay-client.mjs";
 import { polygonRelayView } from "@/lib/polygon-relay-contract.mjs";
 import { signPolygonRelay } from "@/lib/polygon-relay-signing.mjs";
@@ -16,6 +16,9 @@ import { FUNDING_UUID } from "@/lib/wallet-funding-contract.mjs";
 const terminal = value => ["confirmed", "failed", "expired"].includes(value?.status);
 const proofStates = new Set(["broadcasting", "ambiguous", "submitted", "reconciliation_required"]);
 const receiptPollDelays = [12_000, 30_000, 60_000];
+// A verified zero balance is valid account data, not an amount to pay. Keep an
+// untouched form empty instead of immediately flagging an auto-filled zero.
+const initialPaymentAmount = value => personalCompanyPaymentAtomic(value) !== null ? formatPersonalCompanyPaymentAmount(value) : "";
 const immutable = (left, right) => ["paymentId", "walletAddress", "executionMode", "chainId", "tokenAddress", "recipientAddress", "amountAtomic",
   "authorizationNonce", "authorizationDigest", "relayerAddress", "entryPointAddress"].every(key => left?.[key] === right?.[key]);
 const unresolved = value => value && !terminal(value);
@@ -172,7 +175,7 @@ export function usePolygonRelay(reown) {
         error: polygonRelayErrorKey(new Error(sharedBalance.walletAddress && sharedBalance.walletAddress !== wallet ? "polygon_relay_wallet_changed" : "polygon_relay_unavailable")) });
     } else {
       setBalance({ wallet, loading: false, balanceAtomic: sharedBalance.balanceAtomic, nativeBalanceAtomic: sharedBalance.nativeBalanceAtomic ?? null, error: "" });
-      if (!edited.current && !selected.current && !previewRef.current) setAmountState(formatPersonalCompanyPaymentAmount(sharedBalance.balanceAtomic));
+      if (!edited.current && !selected.current && !previewRef.current) setAmountState(initialPaymentAmount(sharedBalance.balanceAtomic));
     }
     return undefined;
   }, [verified, wallet, live, sharedBalance.walletAddress, sharedBalance.balanceAtomic, sharedBalance.nativeBalanceAtomic,
@@ -260,7 +263,7 @@ export function usePolygonRelay(reown) {
       if (!funds) throw new Error("polygon_relay_unavailable");
       if (funds.balanceAtomic !== balance.balanceAtomic) {
         setBalance({ wallet, loading: false, balanceAtomic: funds.balanceAtomic, nativeBalanceAtomic: funds.nativeBalanceAtomic ?? null, error: "" });
-        if (!edited.current && !selected.current && !previewRef.current) setAmountState(formatPersonalCompanyPaymentAmount(funds.balanceAtomic));
+        if (!edited.current && !selected.current && !previewRef.current) setAmountState(initialPaymentAmount(funds.balanceAtomic));
         if (edited.current && BigInt(atomic) > BigInt(funds.balanceAtomic)) throw new Error("polygon_relay_insufficient_balance");
         throw new Error("polygon_relay_balance_changed");
       }
@@ -477,7 +480,7 @@ export function usePolygonRelay(reown) {
   function newPayment() {
     if (!live() || operation.current || (selected.current && !terminal(selected.current)) || markerRef.current) return;
     selected.current = null; previewRef.current = null; setPayment(null); setPreview(null); setStage("form"); setRecovery(null); setErrorKey(""); edited.current = false;
-    setAmountState(balance.wallet === wallet && balance.balanceAtomic !== null ? formatPersonalCompanyPaymentAmount(balance.balanceAtomic) : "");
+    setAmountState(balance.wallet === wallet ? initialPaymentAmount(balance.balanceAtomic) : "");
     void sharedBalance.refresh(); setRevision(number => number + 1);
   }
   async function resume() {

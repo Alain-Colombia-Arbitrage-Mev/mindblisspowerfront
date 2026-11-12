@@ -61,7 +61,8 @@ test('the first-recharge popup advances through the Pen welcome and routes to th
   const html = renderToStaticMarkup(methods);
   assert.match(html, /Recargar fondos/);
   assert.equal(find(methods, node => node?.props?.href === '/dashboard/packages'), undefined);
-  assert.equal(find(methods, node => node?.props?.href === '/dashboard/wallet-personal#personal-wallet').props.href, '/dashboard/wallet-personal#personal-wallet');
+  assert.equal(find(methods, node => node?.props?.href === '/dashboard/wallet-personal#personal-wallet'), undefined);
+  assert.doesNotMatch(html, /Recibir desde otra wallet|Ver cómo recibir/);
   const cryptoMethod = find(methods, node => node?.type?.name === 'RechargeMethod' && node?.props?.href === '/dashboard/wallet-personal');
   cryptoMethod.props.onNavigate();
   assert.equal(closed, 1);

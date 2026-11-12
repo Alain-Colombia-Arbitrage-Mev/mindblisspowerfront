@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import * as Dialog from "@radix-ui/react-dialog";
-import { ArrowDownLeft, ArrowRight, CreditCard, Plus, Wallet, X } from "lucide-react";
+import { ArrowRight, CreditCard, Plus, Wallet, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { useI18n } from "@/i18n/LanguageProvider";
@@ -62,7 +62,6 @@ export default function FirstRechargeDialog({ open, initialStep = "welcome", onO
               </div>
               <div className="mb-recharge-methods">
                 <RechargeMethod icon={CreditCard} title={t("recharge.buyTitle")} copy={t("recharge.buyCopy")} action={t("recharge.buyAction")} href="/dashboard/wallet-personal" onNavigate={close} />
-                <RechargeMethod icon={ArrowDownLeft} title={t("recharge.receiveTitle")} copy={t("recharge.receiveCopy")} action={t("recharge.receiveAction")} href="/dashboard/wallet-personal#personal-wallet" onNavigate={close} />
               </div>
               <button type="button" className="mb-recharge-secondary" onClick={close}>{t("recharge.later")}</button>
             </>

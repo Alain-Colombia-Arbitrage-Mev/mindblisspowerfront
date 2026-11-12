@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createAppKit, useAppKit, useAppKitAccount, useAppKitProvider, useAppKitState, useAppKitTheme, useAppKitNetwork, useDisconnect } from "@reown/appkit/react";
 import { EthersAdapter } from "@reown/appkit-adapter-ethers";
 import { SolanaAdapter } from "@reown/appkit-adapter-solana/react";
-import { ConnectionController, ConnectorController, ConnectorControllerUtil, OnRampController, OptionsController } from "@reown/appkit-controllers";
+import { ChainController, ConnectionController, ConnectorController, ConnectorControllerUtil, OnRampController, OptionsController } from "@reown/appkit-controllers";
 import { ConstantsUtil as ReownConstantsUtil } from "@reown/appkit-common";
 import { mainnet, polygon, solana } from "@reown/appkit/networks";
 import { BrowserProvider, getAddress } from "ethers";
@@ -758,6 +758,28 @@ function ConfiguredReownProvider({ children }) {
     candidate: !walletNeedsAccountSelection && !walletIdentityMismatch && !walletSwitching };
   const headless = useHeadlessPaymentConnection({ read: () => ({ ...paymentSnapshot.current,
     live: mounted.current && !logoutStarted.current && latestOwner.current === ownerKey }), services: {
+    async restore(scope, expected) {
+      const assertCanonical = () => {
+        assertPaymentActive(scope);
+        const snapshot = paymentSnapshot.current;
+        if (snapshot?.linkStatus !== "linked" || !sameAddress(snapshot.linkedAddress, expected)
+          || (snapshot.address && !sameAddress(snapshot.address, expected))) throw new Error("wallet_address_mismatch");
+        if (onrampOperation.current?.active || linkingOperation.current?.active || switchRequest.current || connectionRequest.current) throw new Error("wallet_operation_pending");
+      };
+      assertCanonical();
+      const connector = ConnectorController.getAuthConnector("eip155");
+      if (typeof connector?.provider?.isConnected !== "function") return false;
+      const session = await scope.wait(() => { assertCanonical(); return connector.provider.isConnected(); }); assertCanonical();
+      if (session?.isConnected !== true) return false;
+      const network = ChainController.getCaipNetworkByNamespace("eip155", polygon.id);
+      if (network?.chainNamespace !== "eip155" || network.caipNetworkId !== "eip155:137" || network.id !== polygon.id) throw new Error("auth_connector_unavailable");
+      // The typed SDK controller reuses the frame's authenticated getUser
+      // session and preserves Reown SIWX. It never sends another email OTP.
+      const restored = await scope.wait(() => { assertCanonical(); return ConnectionController.connectExternal({ ...connector, chain: "eip155", caipNetwork: network }, "eip155"); });
+      assertCanonical();
+      if (!sameAddress(restored?.address, expected)) throw new Error("wallet_address_mismatch");
+      return true;
+    },
     async reset(scope) {
       assertPaymentActive(scope);
       if (onrampOperation.current?.active || linkingOperation.current?.active || switchRequest.current || connectionRequest.current) throw new Error("wallet_operation_pending");

@@ -23,13 +23,13 @@ export function headlessPaymentFailure(error) {
  * Construction/update never sends OTPs, requests signatures or creates payments.
  * SDK auth promises cannot be cancelled at transport level; every continuation
  * is fenced by owner generation + operation identity before linking a wallet.
- * @param {{read:()=>any,onState:(state:any)=>void,reset:(scope:any)=>Promise<unknown>,
+ * @param {{read:()=>any,onState:(state:any)=>void,reset:(scope:any)=>Promise<unknown>,restore?:(scope:any,expected:string)=>Promise<boolean>,
  * requestEmail:(email:string,scope:any)=>Promise<any>,verifyEmail:(otp:string,scope:any)=>Promise<unknown>,
  * confirmDevice:(scope:any)=>Promise<unknown>,connectSocial:(social:string,scope:any)=>Promise<unknown>,
  * connectExternal:(walletId:string,scope:any)=>Promise<unknown>,markCandidate:(value:any)=>void,
  * link:(scope:any)=>Promise<any>,openNative?:(scope:any)=>Promise<unknown>,fetchWallets?:()=>Promise<unknown>,cleanup?:()=>void,
  * now?:()=>number,timeoutMs?:number}} options */
-export function createHeadlessPaymentConnection({ read, onState, reset, requestEmail, verifyEmail, confirmDevice,
+export function createHeadlessPaymentConnection({ read, onState, reset, restore = async () => false, requestEmail, verifyEmail, confirmDevice,
   connectSocial, connectExternal, markCandidate, link, openNative, fetchWallets = async () => {}, cleanup = () => {}, now = Date.now, timeoutMs = 300_000 }) {
   let active = null, state = empty(), sendPolicy = { owner: '', generation: -1, resendAt: 0 };
   const listeners = new Set();
@@ -72,6 +72,24 @@ export function createHeadlessPaymentConnection({ read, onState, reset, requestE
     request.promise = (async () => {
       let selected = current(request);
       const restoringAddress = address(selected.linkedAddress);
+      if (selected.linkStatus === 'linked' && restoringAddress && selected.isConnected !== true
+        && (!address(selected.address) || address(selected.address) === restoringAddress)) {
+        // The embedded frame can retain its authenticated session while AppKit
+        // has not published an account yet. Probe/resume only on this explicit
+        // action, before a reset would sign that reusable session out.
+        const resumed = await request.scope.wait(() => { current(request); return restore(request.scope, restoringAddress); });
+        selected = current(request);
+        const sameBinding = value => {
+          if (value.linkStatus !== 'linked' || address(value.linkedAddress) !== restoringAddress
+            || (address(value.address) && address(value.address) !== restoringAddress)) throw new Error('wallet_address_mismatch');
+          return value.isConnected === true && address(value.address) === restoringAddress && value.providerReady === true;
+        };
+        const restored = sameBinding(selected);
+        if (resumed === true || restored) {
+          selected = restored ? selected : await observe(request, sameBinding);
+          return prepare ? { linked: true, address: selected.linkedAddress } : { connected: true };
+        }
+      }
       if (selected.linkStatus === 'linked' && selected.isConnected === true && restoringAddress
         && address(selected.address) === restoringAddress && selected.providerReady !== true) {
         // AppKit may restore the account before its signing provider. Keep the
@@ -85,7 +103,7 @@ export function createHeadlessPaymentConnection({ read, onState, reset, requestE
         return prepare ? { linked: true, address: selected.linkedAddress } : { connected: true };
       }
       if (!(ready(selected) && selected.candidate === true)) {
-        await request.scope.wait(() => reset(request.scope)); current(request);
+        await request.scope.wait(() => { current(request); return reset(request.scope); }); current(request);
         await observe(request, value => value.isConnected !== true);
         publish({ phase: 'choosing' });
         // A user opened activation. Wallet discovery is allowed here, never on mount.
@@ -111,7 +129,12 @@ export function createHeadlessPaymentConnection({ read, onState, reset, requestE
       if (active === request) {
         active = null;
         const value = read();
-        if (value?.live && value.owner === request.owner && value.generation === request.generation) publish({ phase: 'error', error: headlessPaymentFailure(error) });
+        if (value?.live && value.owner === request.owner && value.generation === request.generation) {
+          // Leaving Pagar aborts its parent scope while this provider stays
+          // mounted across routes. That cancellation is not a persistent error.
+          const cancelledScope = error?.name === 'AbortError' && request.scope.signal.aborted;
+          publish(cancelledScope ? empty() : { phase: 'error', error: headlessPaymentFailure(error) });
+        }
       }
       request.scope.cancel(); throw error;
     }).finally(() => signal?.removeEventListener('abort', abort));

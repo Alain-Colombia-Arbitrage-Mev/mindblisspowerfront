@@ -154,6 +154,67 @@ function harness(overrides = {}) {
 const writes = h => h.calls.filter(call => ['prepare', 'authorize', 'submit', 'verify', 'abandon'].includes(call.action));
 async function review(h) { await h.flush(); h.flow.setAmount('28.433366'); await h.flush(); await h.flow.review(); await h.flush(); }
 
+test('a verified empty wallet starts with an empty payment amount and no validation or financial work', async t => {
+  for (const connected of [false, true]) {
+    const h = harness({ connected, balance: async () => ({ walletAddress: wallet,
+      balances: [{ chainId: 137, balanceAtomic: '0', nativeBalanceAtomic: '0' }] }) });
+    t.after(() => h.unmount()); await h.flush();
+    assert.equal(h.flow.balanceAtomic, '0'); assert.equal(h.flow.amount, ''); assert.equal(h.flow.loadingBalance, false);
+    assert.equal(h.flow.errorKey, ''); await h.flow.review(); await h.flush();
+    assert.equal(h.flow.stage, 'form'); assert.equal(h.flow.preview, null); assert.deepEqual(writes(h), []);
+    assert.deepEqual(h.providerCalls, []); assert.deepEqual(h.signatures, []);
+  }
+});
+
+test('automatic Max prefill follows only positive verified balances and refresh never overwrites an edited amount', async t => {
+  for (const edit of [null, '1', '']) {
+    let latest = '0';
+    const h = harness({ balance: async () => ({ walletAddress: wallet,
+      balances: [{ chainId: 137, balanceAtomic: latest, nativeBalanceAtomic: '0' }] }) });
+    t.after(() => h.unmount()); await h.flush(); assert.equal(h.flow.amount, '');
+    if (edit !== null) { h.flow.setAmount(edit); await h.flush(); }
+    latest = '5000000'; await h.flow.refresh(); await h.flush();
+    assert.equal(h.flow.balanceAtomic, latest); assert.equal(h.flow.amount, edit === null ? '5' : edit);
+    latest = '0'; await h.flow.refresh(); await h.flush();
+    assert.equal(h.flow.balanceAtomic, '0'); assert.equal(h.flow.amount, edit === null ? '' : edit);
+    assert.deepEqual(writes(h), []); assert.deepEqual(h.providerCalls, []); assert.deepEqual(h.signatures, []);
+  }
+});
+
+test('an unavailable balance stays unknown rather than becoming zero or a suggested payment amount', async t => {
+  let unavailable = true;
+  const h = harness({ balance: async () => {
+    if (unavailable) throw new Error('company_payment_rpc_unavailable');
+    return { walletAddress: wallet, balances: [{ chainId: 137, balanceAtomic: '0', nativeBalanceAtomic: '0' }] };
+  } }); t.after(() => h.unmount()); await h.flush();
+  assert.equal(h.flow.balanceAtomic, null); assert.equal(h.flow.amount, ''); assert.ok(h.flow.errorKey);
+  unavailable = false; await h.flow.refresh(); await h.flush();
+  assert.equal(h.flow.balanceAtomic, '0'); assert.equal(h.flow.amount, ''); assert.equal(h.flow.errorKey, '');
+  assert.deepEqual(writes(h), []); assert.deepEqual(h.providerCalls, []); assert.deepEqual(h.signatures, []);
+});
+
+test('a changed-to-zero balance clears an untouched automatic amount before asking for another review', async t => {
+  let reads = 0;
+  const h = harness({ balance: async () => ({ walletAddress: wallet,
+    balances: [{ chainId: 137, balanceAtomic: ++reads === 1 ? balanceAtomic : '0', nativeBalanceAtomic: '0' }] }) });
+  t.after(() => h.unmount()); await h.flush(); assert.equal(h.flow.amount, '28.433366');
+  await h.flow.review(); await h.flush();
+  assert.equal(h.flow.balanceAtomic, '0'); assert.equal(h.flow.amount, ''); assert.equal(h.flow.preview, null);
+  assert.equal(h.flow.errorKey, 'companyPayment.balanceChanged'); assert.deepEqual(writes(h), []); assert.deepEqual(h.signatures, []);
+});
+
+test('a confirmed payment leaving zero funds resets the next untouched form to an empty amount', async t => {
+  let latest = balanceAtomic, record = submitted();
+  const h = harness({ history: async () => ({ payments: [record] }), status: async () => record,
+    balance: async () => ({ walletAddress: wallet, balances: [{ chainId: 137, balanceAtomic: latest, nativeBalanceAtomic: '0' }] }),
+    write: async action => { assert.equal(action, 'verify'); latest = '0'; record = confirmed(); return record; } });
+  t.after(() => h.unmount()); await h.flush(); await h.flow.verifyPayment(); await h.balanceEvents();
+  assert.equal(h.flow.payment.status, 'confirmed'); assert.equal(h.flow.balanceAtomic, '0');
+  h.flow.newPayment(); await h.flush();
+  assert.equal(h.flow.amount, ''); assert.equal(h.flow.stage, 'form'); assert.equal(h.flow.errorKey, '');
+  assert.deepEqual(writes(h).map(value => value.action), ['verify']); assert.deepEqual(h.signatures, []);
+});
+
 test('an interrupted binding lookup settles the balance spinner without accepting a late read from that lookup', async () => {
   for (const linkStatus of ['loading', 'error']) {
     const pending = deferred(), reown = {}, signals = []; let reads = 0;

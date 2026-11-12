@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { registrationViewHarness, findRegistrationNode as find } from '../../register/registration-view-test-harness.mjs';
 import { translateMessage } from '../../../i18n/translate.mjs';
+import { REFERRAL_REQUEST_TIMEOUT_MS } from '../../../lib/referral-sync.mjs';
 
 const email = 'member@example.test';
 const session = { authenticated: true, mode: 'better-auth', email, subject: 'synthetic-owner' };
@@ -25,7 +25,7 @@ function view(sync) {
     '@/components/reown/DashboardWalletProvider': { default: ({ children }) => children },
     '@/components/reown/PostAuthWalletSetup': { default: () => null, usePostAuthWalletSetup: () => ({ request: null, finish() {} }) },
     '@/lib/member-session-context': { MemberSessionContext: { Provider: ({ children }) => children } },
-    '@/lib/referral-sync.mjs': sync, '@/components/panel/panel-shell.css': {},
+    '@/lib/referral-sync.mjs': { REFERRAL_REQUEST_TIMEOUT_MS, ...sync }, '@/components/panel/panel-shell.css': {},
   });
 }
 
@@ -131,6 +131,10 @@ test('a dashboard GET that precedes the background save gets one bounded recheck
   assert.match(renderToStaticMarkup(harness.render()), /Reintentar guardar enlace/);
   marker = null;
   t.mock.timers.tick(5000); await settle();
+  assert.equal(reads, 1, 'the previous document still has time to finish its keepalive save');
+  t.mock.timers.tick(REFERRAL_REQUEST_TIMEOUT_MS - 5001); await settle();
+  assert.equal(reads, 1, 'reconciliation waits for the full write window');
+  t.mock.timers.tick(1); await settle();
   assert.equal(reads, 2);
   assert.doesNotMatch(renderToStaticMarkup(harness.render()), /role="alert"/);
   t.mock.timers.tick(60000); await settle();
@@ -261,7 +265,7 @@ test('a delayed reconciliation GET cannot overwrite the ACK of a later explicit 
     browserReferralChoice: () => assert.fail('a stale reply must not offer to overwrite the confirmed choice'),
   });
   harness.render(); await settle();
-  t.mock.timers.tick(5000); await settle();
+  t.mock.timers.tick(REFERRAL_REQUEST_TIMEOUT_MS); await settle();
   assert.equal(reads, 2);
   await find(harness.render(), node => node?.props?.children === 'Reintentar guardar enlace').props.onClick();
   assert.doesNotMatch(renderToStaticMarkup(harness.render()), /role="alert"/);
@@ -281,7 +285,7 @@ test('reconciliation is cancelled on unmount and late replies never update an ab
     });
     harness.render(); harness.replayEffects(); await settle();
     assert.equal(reads, 1);
-    if (startRecheck) { t.mock.timers.tick(5000); await settle(); assert.equal(reads, 2); }
+    if (startRecheck) { t.mock.timers.tick(REFERRAL_REQUEST_TIMEOUT_MS); await settle(); assert.equal(reads, 2); }
     harness.unmount(); const state = JSON.stringify(harness.state);
     t.mock.timers.tick(60000); await settle();
     assert.equal(reads, startRecheck ? 2 : 1);

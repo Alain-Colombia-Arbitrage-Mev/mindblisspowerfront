@@ -18,6 +18,7 @@ export function useHeadlessPaymentConnection({ read, services }) {
         setState({ owner: snapshot?.owner || "", generation: snapshot?.generation ?? -1, ...state });
       },
       reset: scope => latest.current.services.reset(scope),
+      restore: (scope, expected) => latest.current.services.restore?.(scope, expected) ?? Promise.resolve(false),
       requestEmail: (email, scope) => latest.current.services.requestEmail(email, scope),
       verifyEmail: (otp, scope) => latest.current.services.verifyEmail(otp, scope),
       confirmDevice: scope => latest.current.services.confirmDevice(scope),
