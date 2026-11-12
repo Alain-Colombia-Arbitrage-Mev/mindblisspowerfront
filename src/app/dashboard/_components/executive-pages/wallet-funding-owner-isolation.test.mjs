@@ -48,6 +48,7 @@ function harness(filename, { api = {}, reown = {}, exportName = 'default' } = {}
     '@/lib/personal-funding-errors.mjs': { personalFundingFailure }, '@/components/reown/ReownContext': { useReownWallet: () => reown },
     '@/components/wallet/PersonalWalletBalances': { default: () => null }, './WalletFundingForm': { PersonalFundingForm },
     './ResidenceImportantCard': { default: function ResidenceImportantCard() { return null; } },
+    './WalletFundingTutorial': { default: () => null },
     './WalletFundingHistory': { default: WalletFundingHistory }, './WalletFundingStatus': { default: WalletFundingStatus },
     './WalletFundingUI': { WalletFundingScreen, WalletActionError: () => null, WalletAddress: () => null, walletFailureDiagnostic: () => '' },
   };

@@ -13,6 +13,7 @@ import { personalWalletBalanceSessionKey } from "@/lib/personal-wallet-balance-s
 import { PersonalFundingForm } from "./WalletFundingForm";
 import WalletFundingStatus from "./WalletFundingStatus";
 import ResidenceImportantCard from "./ResidenceImportantCard";
+import WalletFundingTutorial from "./WalletFundingTutorial";
 import { WalletActionError, WalletAddress, WalletFundingScreen, walletFailureDiagnostic } from "./WalletFundingUI";
 import styles from "./wallet-funding.module.css";
 
@@ -33,7 +34,8 @@ export function personalWalletState(reown) {
 export function PersonalWalletFunding() {
   const { t } = useI18n();
   const reown = useReownWallet();
-  const owner = personalWalletBalanceSessionKey(useMemberSession());
+  const memberSession = useMemberSession();
+  const owner = personalWalletBalanceSessionKey(memberSession);
   const epoch = useRef({ owner, generation: 0 });
   if (epoch.current.owner !== owner) epoch.current = { owner, generation: epoch.current.generation + 1 };
   const generation = epoch.current.generation;
@@ -165,6 +167,7 @@ export function PersonalWalletFunding() {
         <WalletActionError diagnostic={actionDiagnostic} message={actionError || (reown.onrampStatus === "error" ? personalOnrampError(reown.onrampError, t) : reown.linkError ? personalOnrampError(reown.linkError, t) : "")} />
       </section>
       <aside className={styles.details} aria-label={t("funding.destinationDetails")}>
+        <WalletFundingTutorial key={owner} ownerId={memberSession?.subject || ""} />
         <ResidenceImportantCard />
         {!setupRequired ? <PersonalWalletBalances expectedAddress={address} /> : null}
         <section className={styles.detailCard}>

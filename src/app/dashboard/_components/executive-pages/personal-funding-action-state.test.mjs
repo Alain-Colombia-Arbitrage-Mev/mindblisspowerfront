@@ -45,6 +45,7 @@ function harness() {
     '@/lib/personal-funding-errors.mjs': { personalFundingFailure }, '@/lib/wallet-funding-contract.mjs': { FUNDING_UUID },
     './WalletFundingForm': { PersonalFundingForm }, './WalletFundingStatus': { default: WalletFundingStatus },
     './ResidenceImportantCard': { default: () => null },
+    './WalletFundingTutorial': { default: () => null },
     './WalletFundingUI': { WalletFundingScreen: ({ children }) => children, WalletActionError: () => null, WalletAddress: () => null, walletFailureDiagnostic: () => '' },
   };
   const module = { exports: {} };
