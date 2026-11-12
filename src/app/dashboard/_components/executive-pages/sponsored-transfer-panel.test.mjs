@@ -64,6 +64,26 @@ test('Sponsored Polygon form identifies Mindbliss without its address and preser
     tree.props.onSubmit({ preventDefault() {} }); assert.deepEqual(state.calls, [['amount', '28.433366'], 'review']);
   }
 });
+
+test('integrated activation replaces duplicate wallet CTAs and gates review, confirmation and resume in every locale', () => {
+  const activation = React.createElement('section', { 'aria-label': 'Integrated wallet activation' }, 'Account verification');
+  for (locale of ['es', 'en', 'ar', 'zh']) {
+    // Even a stale connected render cannot bypass a still-visible activation.
+    const state = flow(), form = SponsoredTransferForm({ flow: state, walletActivation: activation });
+    assertMerchantPresentation(renderToStaticMarkup(form)); assert.ok(renderToStaticMarkup(form).includes('Integrated wallet activation'));
+    form.props.onSubmit({ preventDefault() {} }); assert.deepEqual(state.calls, []);
+    assert.equal(all(form, node => node?.type === 'button' && node.props.type === 'submit').length, 0);
+    assert.equal(all(form, node => node?.type === 'button' && node.props.className?.includes('primary')).length, 0);
+    const review = SponsoredTransferReview({ flow: state, walletActivation: activation });
+    const confirm = all(review, node => node?.type === 'button' && node.props.className?.includes('primary'))[0];
+    assert.equal(confirm.props.disabled, true); confirm.props.onClick(); assert.deepEqual(state.calls, []);
+    assertMerchantPresentation(renderToStaticMarkup(review));
+    const status = SponsoredTransferStatus({ flow: flow({ payment: payment(), connected: false }), walletActivation: activation });
+    assert.ok(renderToStaticMarkup(status).includes('Integrated wallet activation')); assertMerchantPresentation(renderToStaticMarkup(status));
+    assert.equal(all(status, node => node?.type === 'button' && node.props.className?.includes('primary')).length, 0);
+  }
+  locale = 'es';
+});
 test('Unavailable sponsorship, insufficient funds and disconnected wallet never expose an enabled send path', () => {
   locale = 'es';
   for (const patch of [{ capabilities: { transferEnabled: false } }, { capabilities: { transferEnabled: true, loading: true } },

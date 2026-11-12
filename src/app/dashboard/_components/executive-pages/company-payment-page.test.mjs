@@ -26,6 +26,8 @@ function load(filename, mocks) {
     if (id === 'react' || id === 'react/jsx-runtime') return require(id);
     if (id === 'lucide-react') return icons;
     if (id === '@/i18n/LanguageProvider') return i18n;
+    if (id === '@/lib/member-session-context') return { useMemberSession: () => ({ subject: 'payment-owner', email: 'payment@example.test' }) };
+    if (id === '@/lib/personal-wallet-balance-store.mjs') return { personalWalletBalanceSessionKey: session => session.subject };
     if (id === '@/lib/personal-company-payment-values.mjs') return values;
     if (id.endsWith('.module.css')) return styles;
     assert.fail(`Presentation unexpectedly imports ${id}`);
@@ -249,12 +251,45 @@ test('the active transfer page starts on sponsored Polygon without exposing an E
     '@/hooks/usePolygonRelay': { usePolygonRelay: () => relay },
     '@/lib/polygon-relay-contract.mjs': { polygonRelayView: () => null },
     './SponsoredTransferPanel': { SponsoredTransferForm: SponsoredForm, SponsoredTransferReview: () => null, SponsoredTransferStatus: () => null },
+    './PaymentWalletActivation': { default: () => null },
   }).default;
   const tree = Router({ DirectPayment: PreviousPayments });
   const forms = findAll(tree, node => node?.type === SponsoredForm);
   assert.equal(forms.length, 1); assert.equal(forms[0].props.network, 'polygon'); assert.equal(forms[0].props.flow, relay);
   assert.equal(findAll(tree, node => node?.props?.role === 'radiogroup').length, 0);
   assert.equal(findAll(tree, node => node?.type === PreviousPayments)[0].props.historyOnly, true);
+});
+
+test('Pagar selects its headless connection without changing the shared wallet API or starting a payment', () => {
+  function SponsoredForm() { return null; }
+  function Activation() { return null; }
+  function PreviousPayments() { return null; }
+  const nativeConnect = () => assert.fail('Native connect unexpectedly invoked');
+  const nativePrepare = () => assert.fail('Native prepare unexpectedly invoked');
+  const connectPaymentWallet = () => assert.fail('Headless auth cannot start during render');
+  const preparePaymentWallet = () => assert.fail('Headless proof cannot start during render');
+  const wallet = { ...reown, connectWallet: nativeConnect, prepareWallet: nativePrepare, connectPaymentWallet, preparePaymentWallet,
+    paymentConnection: { available: true, phase: 'choosing' } };
+  const relay = { stage: 'form', connected: false, payment: null, history: [], historyLoading: false, busy: true };
+  let received;
+  const Router = load('PersonalTransferRouter.jsx', {
+    'next/link': { default: () => null }, '@/components/reown/ReownContext': { useReownWallet: () => wallet },
+    '@/hooks/usePolygonRelay': { usePolygonRelay: value => { received = value; return relay; } },
+    '@/lib/polygon-relay-contract.mjs': { polygonRelayView: () => null }, './PaymentWalletActivation': { default: Activation },
+    './SponsoredTransferPanel': { SponsoredTransferForm: SponsoredForm, SponsoredTransferReview: () => null, SponsoredTransferStatus: () => null },
+  }).default;
+  let tree = Router({ DirectPayment: PreviousPayments });
+  assert.equal(received.connectWallet, connectPaymentWallet); assert.equal(received.prepareWallet, preparePaymentWallet);
+  assert.equal(wallet.connectWallet, nativeConnect); assert.equal(wallet.prepareWallet, nativePrepare);
+  let activation = findAll(tree, node => node?.type === SponsoredForm)[0].props.walletActivation;
+  assert.equal(activation.type, Activation); assert.equal(activation.props.connection, wallet.paymentConnection);
+  assert.equal(activation.props.disabled, undefined, 'Auth controls must stay usable while the relay awaits activation');
+  wallet.paymentConnection.phase = 'idle'; tree = Router({ DirectPayment: PreviousPayments });
+  assert.equal(findAll(tree, node => node?.type === SponsoredForm)[0].props.walletActivation, null);
+  wallet.paymentConnection.phase = 'choosing'; relay.connected = true; tree = Router({ DirectPayment: PreviousPayments });
+  assert.equal(findAll(tree, node => node?.type === SponsoredForm)[0].props.walletActivation, null);
+  wallet.paymentConnection.available = false; wallet.paymentConnection.phase = 'idle'; Router({ DirectPayment: PreviousPayments });
+  assert.equal(received.connectWallet, nativeConnect); assert.equal(received.prepareWallet, nativePrepare);
 });
 
 test('previous direct payments remain readable and verifiable without a new payment or signature action', () => {

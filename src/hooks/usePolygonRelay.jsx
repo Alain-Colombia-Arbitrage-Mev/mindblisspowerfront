@@ -204,9 +204,9 @@ export function usePolygonRelay(reown) {
     return () => controller.abort();
   }, [verified, wallet, live, adopt, keyPromise, revision]);
 
-  const begin = () => {
+  const begin = (timeoutMs = undefined) => {
     if (!currentDisplay || !live() || operation.current || activationRequest.current) return null;
-    const scope = createReownFundingOperation(), next = { scope, signing: false }; operation.current = next; setBusy(true); setErrorKey(""); return next;
+    const scope = createReownFundingOperation({ timeoutMs }), next = { scope, signing: false }; operation.current = next; setBusy(true); setErrorKey(""); return next;
   };
   const finish = value => { value.scope.finish(); if (operation.current === value) {
     operation.current = null;
@@ -393,18 +393,21 @@ export function usePolygonRelay(reown) {
 
   async function connect() {
     if (!currentDisplay || !live() || operation.current || activationRequest.current || reown.configured !== true) return;
+    // Email/device verification may need human input. Only the connection gets
+    // this longer deadline; transaction authorization keeps its original one.
+    const connectionTimeoutMs = reown.paymentConnection?.available ? 300_000 : undefined;
     if (reown.linkStatus === "unlinked") {
       // Wallet activation has its own owner-scoped operation. Its successful
       // canonical publication changes wallet generation and must not cancel
       // itself or discard a financial record belonging to the former wallet.
       if (selected.current || previewRef.current || markerRef.current) { setErrorKey("walletTransfer.pending"); return; }
-      const request = { owner: sessionKey, generation: activationOwner.current.generation, scope: createReownFundingOperation() };
+      const request = { owner: sessionKey, generation: activationOwner.current.generation, scope: createReownFundingOperation({ timeoutMs: connectionTimeoutMs }) };
       activationRequest.current = request;
       const current = () => mounted.current && activationSnapshot.current?.sessionKey === request.owner
         && activationOwner.current.generation === request.generation && activationRequest.current === request;
       setActivation({ owner: sessionKey, generation: request.generation, phase: "pending", address: "", errorKey: "" });
       try {
-        const result = await request.scope.wait(() => reown.prepareWallet());
+        const result = await request.scope.wait(() => reown.prepareWallet({ signal: request.scope.signal }));
         request.scope.assertActive();
         if (!current()) return;
         if (result?.linked !== true || typeof result.address !== "string" || !/^0x[0-9a-f]{40}$/i.test(result.address)) throw new Error("wallet_address_mismatch");
@@ -424,9 +427,9 @@ export function usePolygonRelay(reown) {
     // A linked account only restores its existing signer; never obtain another
     // ownership proof or replace its bound wallet while resuming a payment.
     if (!verified) return;
-    const value = begin(); if (!value) return;
+    const value = begin(connectionTimeoutMs); if (!value) return;
     try {
-      if (!reown.isConnected || !reown.isLinked) await value.scope.wait(() => reown.connectWallet());
+      if (!reown.isConnected || !reown.isLinked) await value.scope.wait(() => reown.connectWallet({ signal: value.scope.signal }));
       active(value);
       setActivation({ owner: sessionKey, generation: activationOwner.current.generation, phase: "", address: "", errorKey: "" });
     } catch (failure) {

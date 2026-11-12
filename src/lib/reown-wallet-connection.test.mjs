@@ -7,6 +7,7 @@ import ts from 'typescript';
 import { createReownFundingOperation, verifyReownWalletOwnership } from './reown-funding-operation.mjs';
 import { personalWalletBalanceSessionKey } from './personal-wallet-balance-store.mjs';
 import { createReownWalletPreparationRequest } from './reown-wallet-preparation.mjs';
+import { createHeadlessPaymentConnection } from './reown-headless-payment.mjs';
 import { reownWalletConnectionState as state, createReownWalletConnectionRequest, createReownWalletSwitchRequest,
   reownWalletIdentityMismatch as identityMismatch, reownWalletNeedsAccountSelection as needsSelection } from './reown-wallet-connection.mjs';
 
@@ -191,12 +192,12 @@ function providerHarness(t, { bound = false, reset = async () => {}, proof = fal
   const context = { Provider: () => null };
   const imports = {
     react: hooks,
-    '@reown/appkit/react': { createAppKit() {}, useAppKit: () => ({ open, close: async () => {} }),
+    '@reown/appkit/react': { createAppKit: () => ({ updateFeatures() {} }), useAppKit: () => ({ open, close: async () => {} }),
       useAppKitAccount: options => options?.namespace === 'solana' ? {} : account, useAppKitProvider: () => ({ walletProvider: provider }),
       useAppKitState: () => sdk, useAppKitTheme: () => ({ setThemeMode() {}, setThemeVariables() {} }), useAppKitNetwork: () => ({ switchNetwork() { assert.fail('No payment network switch'); } }),
       useDisconnect: () => ({ disconnect }) },
     '@reown/appkit-adapter-ethers': { EthersAdapter: class {} }, '@reown/appkit-adapter-solana/react': { SolanaAdapter: class {} },
-    '@reown/appkit-controllers': { OnRampController: { state: { providers: [] } }, ConnectionController: { hasAnyConnection: () => false } },
+    '@reown/appkit-controllers': { OnRampController: { state: { providers: [] } }, OptionsController: { state: { features: {} } }, ConnectionController: { hasAnyConnection: () => false } },
     '@reown/appkit-common': { ConstantsUtil: { CONNECTOR_ID: { AUTH: 'AUTH' } } }, '@reown/appkit/networks': { mainnet: {}, polygon: {}, solana: {} },
     ethers: { getAddress: input => input.toLowerCase(), BrowserProvider: class {
       getSigner() { assert.equal(proof, true, 'No signature in connection tests'); return {
@@ -221,8 +222,18 @@ function providerHarness(t, { bound = false, reset = async () => {}, proof = fal
     '@/lib/personal-wallet-balance-store.mjs': { personalWalletBalanceSessionKey },
     '@/lib/member-logout-sync.mjs': { subscribeMemberLogout: listener => { logoutListeners.add(listener); return () => logoutListeners.delete(listener); } },
     '@/lib/reown-wallet-preparation.mjs': { createReownWalletPreparationRequest },
-    '@/hooks/useSolanaWalletBinding': { useSolanaWalletBinding: () => ({}) }, './ReownContext': { ReownContext: context, SOLANA_WALLET_UNAVAILABLE: {}, useReownWallet() {} },
+    '@/hooks/useSolanaWalletBinding': { useSolanaWalletBinding: () => ({}) }, './ReownContext': { ReownContext: context, PAYMENT_CONNECTION_UNAVAILABLE: {}, SOLANA_WALLET_UNAVAILABLE: {}, useReownWallet() {} },
   };
+  const headlessModule = { exports: {} };
+  const headlessCode = ts.transpileModule(readFileSync(new URL('../hooks/useHeadlessPaymentConnection.jsx', import.meta.url), 'utf8'), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+  }).outputText;
+  new Function('require', 'module', 'exports', headlessCode)(id => {
+    if (id === 'react') return hooks;
+    if (id === '@/lib/reown-headless-payment.mjs') return { createHeadlessPaymentConnection };
+    assert.fail(`Unexpected headless hook dependency ${id}`);
+  }, headlessModule, headlessModule.exports);
+  imports['@/hooks/useHeadlessPaymentConnection'] = headlessModule.exports;
   const code = ts.transpileModule(readFileSync(new URL('../components/reown/ReownProvider.jsx', import.meta.url), 'utf8'), {
     compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS },
   }).outputText;

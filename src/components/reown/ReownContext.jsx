@@ -2,6 +2,12 @@
 
 import { createContext, useContext } from "react";
 
+export const PAYMENT_CONNECTION_UNAVAILABLE = Object.freeze({ available: false, phase: "idle", error: "", email: "", canEmail: false,
+  socials: [], wallets: [], canResend: false, resendAt: 0,
+  requestEmail: async () => { throw new Error("reown_unavailable"); }, verifyEmail: async () => { throw new Error("reown_unavailable"); },
+  confirmDevice: async () => { throw new Error("reown_unavailable"); }, connectSocial: async () => { throw new Error("reown_unavailable"); },
+  connectExternal: async () => { throw new Error("reown_unavailable"); }, openNative: async () => { throw new Error("reown_unavailable"); }, cancel: () => {} });
+
 export const SOLANA_WALLET_UNAVAILABLE = Object.freeze({ namespace: "solana", configured: false, address: "", isConnected: false,
   linkedAddress: "", linkStatus: "unavailable", linkError: "", isLinked: false, isLinking: false, isRestoring: false,
   connectionStatus: "disconnected", needsVerification: false,
@@ -33,6 +39,9 @@ export const ReownContext = createContext(Object.freeze({
   connectWallet: async () => { throw new Error("reown_unavailable"); },
   chooseWallet: async () => { throw new Error("reown_unavailable"); },
   prepareWallet: async () => { throw new Error("reown_unavailable"); },
+  paymentConnection: PAYMENT_CONNECTION_UNAVAILABLE,
+  connectPaymentWallet: async () => { throw new Error("reown_unavailable"); },
+  preparePaymentWallet: async () => { throw new Error("reown_unavailable"); },
   onrampStatus: "idle",
   onrampError: "",
   fundingRevision: 0,
@@ -71,6 +80,9 @@ export const ReownContext = createContext(Object.freeze({
  * @property {() => Promise<unknown>} connectWallet
  * @property {() => Promise<unknown>} chooseWallet
  * @property {() => Promise<{linked:true,address:string}>} prepareWallet
+ * @property {any} paymentConnection
+ * @property {(options?: {signal?: AbortSignal}) => Promise<any>} connectPaymentWallet
+ * @property {(options?: {signal?: AbortSignal}) => Promise<any>} preparePaymentWallet
  * @property {string} onrampStatus
  * @property {string} onrampError
  * @property {number} fundingRevision

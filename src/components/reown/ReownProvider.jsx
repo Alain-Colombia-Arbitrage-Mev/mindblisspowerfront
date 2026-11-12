@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createAppKit, useAppKit, useAppKitAccount, useAppKitProvider, useAppKitState, useAppKitTheme, useAppKitNetwork, useDisconnect } from "@reown/appkit/react";
 import { EthersAdapter } from "@reown/appkit-adapter-ethers";
 import { SolanaAdapter } from "@reown/appkit-adapter-solana/react";
-import { ConnectionController, OnRampController, OptionsController } from "@reown/appkit-controllers";
+import { ConnectionController, ConnectorController, ConnectorControllerUtil, OnRampController, OptionsController } from "@reown/appkit-controllers";
 import { ConstantsUtil as ReownConstantsUtil } from "@reown/appkit-common";
 import { mainnet, polygon, solana } from "@reown/appkit/networks";
 import { BrowserProvider, getAddress } from "ethers";
@@ -21,7 +21,8 @@ import { personalWalletBalanceSessionKey } from "@/lib/personal-wallet-balance-s
 import { subscribeMemberLogout } from "@/lib/member-logout-sync.mjs";
 import { createReownWalletPreparationRequest } from "@/lib/reown-wallet-preparation.mjs";
 import { useSolanaWalletBinding } from "@/hooks/useSolanaWalletBinding";
-import { ReownContext, SOLANA_WALLET_UNAVAILABLE, useReownWallet } from "./ReownContext";
+import { useHeadlessPaymentConnection } from "@/hooks/useHeadlessPaymentConnection";
+import { ReownContext, PAYMENT_CONNECTION_UNAVAILABLE, SOLANA_WALLET_UNAVAILABLE, useReownWallet } from "./ReownContext";
 
 const projectId = process.env.NEXT_PUBLIC_REOWN_PROJECT_ID?.trim() || "";
 const walletMetadata = personalWalletMetadata(typeof window === "undefined" ? "https://app.mindblisspower.com" : window.location.origin);
@@ -47,6 +48,9 @@ const unavailable = Object.freeze({
   connectWallet: async () => { throw new Error("reown_unavailable"); },
   chooseWallet: async () => { throw new Error("reown_unavailable"); },
   prepareWallet: async () => { throw new Error("reown_unavailable"); },
+  paymentConnection: PAYMENT_CONNECTION_UNAVAILABLE,
+  connectPaymentWallet: async () => { throw new Error("reown_unavailable"); },
+  preparePaymentWallet: async () => { throw new Error("reown_unavailable"); },
   onrampStatus: "idle",
   onrampError: "configuration",
   fundingRevision: 0,
@@ -97,6 +101,12 @@ if (configured && walletMetadata) {
     themeMode: initialWalletTheme,
     themeVariables: themeVariables(initialWalletTheme),
   });
+  // This is a hybrid integration: Pagar renders its own connection UI, while
+  // the existing native scaffold remains available for secure signing/SIWX,
+  // WalletConnect QR/mobile and the independent funding/account screens.
+  // updateFeatures is the public SDK equivalent of setting the local feature.
+  // Setting it in the original constructor would suppress that native scaffold.
+  appKitInstance.updateFeatures({ ...OptionsController.state.features, headless: true });
 }
 
 function disconnectSharedAuthWallet(disconnect) {
@@ -168,6 +178,13 @@ function ConfiguredReownProvider({ children }) {
   const [connectionBusy, setConnectionBusy] = useState(false);
   const [walletSwitching, setWalletSwitching] = useState(false);
   const [restorationTimedOut, setRestorationTimedOut] = useState(false);
+  const paymentOwner = useRef({ owner: ownerKey, generation: 0 });
+  if (paymentOwner.current.owner !== ownerKey) paymentOwner.current = { owner: ownerKey, generation: paymentOwner.current.generation + 1 };
+  const paymentGeneration = paymentOwner.current.generation;
+  const paymentSnapshot = useRef(null);
+  const paymentNativeRequest = useRef(null);
+  const paymentActivation = useRef(null);
+  const [paymentWallets, setPaymentWallets] = useState([]);
 
   useEffect(() => {
     mounted.current = true;
@@ -178,6 +195,7 @@ function ConfiguredReownProvider({ children }) {
       connectionRequest.current?.cancel();
       switchRequest.current?.cancel();
       preparationRequest.current?.cancel();
+      paymentActivation.current?.stop();
     };
   }, []);
 
@@ -195,6 +213,7 @@ function ConfiguredReownProvider({ children }) {
     connectionRequest.current?.cancel();
     switchRequest.current?.cancel();
     preparationRequest.current?.cancel();
+    paymentActivation.current?.stop();
     preparationRequest.current = null; preparationSnapshot.current = null;
     selectedCandidate.current = null;
     onrampIntent.current = false; onrampFlow.current = null;
@@ -715,6 +734,101 @@ function ConfiguredReownProvider({ children }) {
     await switchAppKitNetwork(chainId === 137 ? polygon : mainnet);
   }, [getCompanyPaymentProvider, switchAppKitNetwork]);
 
+  const headlessAvailable = appKitState.initialized === true && appKitState.headless === true;
+  const directPaymentWallets = useCallback(() => (appKitInstance?.getWalletList().wallets || [])
+    .filter(wallet => wallet.isInjected || wallet.connectors?.some(connector => connector.chain === "eip155")), []);
+  useEffect(() => {
+    if (!headlessAvailable || !appKitInstance) { setPaymentWallets([]); return undefined; }
+    const update = () => setPaymentWallets(directPaymentWallets().map(({ id, name, imageUrl }) => ({ id, name, imageUrl })));
+    update();
+    return appKitInstance.subscribeWalletList(update);
+  }, [directPaymentWallets, headlessAvailable]);
+  const assertPaymentActive = scope => {
+    scope.assertActive();
+    if (!mounted.current || logoutStarted.current || latestOwner.current !== ownerKey || paymentOwner.current.generation !== paymentGeneration) throw new DOMException("Aborted", "AbortError");
+  };
+  const paymentAuthConnector = () => {
+    const connector = ConnectorController.getAuthConnector("eip155");
+    if (!connector?.provider) throw new Error("auth_connector_unavailable");
+    return connector;
+  };
+  paymentSnapshot.current = { owner: ownerKey, generation: paymentGeneration, live: mounted.current && !logoutStarted.current && latestOwner.current === ownerKey,
+    available: headlessAvailable, email: memberSession?.email, linkStatus: binding.status, linkedAddress: binding.address,
+    address: currentAddress, isConnected: account.isConnected === true, providerReady: typeof walletProvider?.request === "function",
+    candidate: !walletNeedsAccountSelection && !walletIdentityMismatch && !walletSwitching };
+  const headless = useHeadlessPaymentConnection({ read: () => ({ ...paymentSnapshot.current,
+    live: mounted.current && !logoutStarted.current && latestOwner.current === ownerKey }), services: {
+    async reset(scope) {
+      assertPaymentActive(scope);
+      if (onrampOperation.current?.active || linkingOperation.current?.active || switchRequest.current || connectionRequest.current) throw new Error("wallet_operation_pending");
+      selectedCandidate.current = null; setSelectionRevision(value => value + 1);
+      if (ConnectionController.hasAnyConnection(ReownConstantsUtil.CONNECTOR_ID.AUTH)) await scope.wait(() => disconnectSharedAuthWallet(disconnect));
+      else await scope.wait(() => disconnect({ namespace: "eip155" }));
+      assertPaymentActive(scope);
+      if (ConnectionController.hasAnyConnection(ReownConstantsUtil.CONNECTOR_ID.AUTH)) throw new Error("wallet_not_connected");
+      await scope.wait(() => switchAppKitNetwork(polygon)); assertPaymentActive(scope);
+    },
+    async requestEmail(email, scope) {
+      assertPaymentActive(scope);
+      if (appKitState.email !== true) throw new Error("auth_connector_unavailable");
+      const connector = paymentAuthConnector();
+      const result = await scope.wait(() => connector.provider.connectEmail({ email })); assertPaymentActive(scope);
+      if (result?.action === "CONNECT") {
+        await scope.wait(() => ConnectionController.connectExternal(connector, "eip155")); assertPaymentActive(scope);
+      }
+      return result;
+    },
+    async verifyEmail(otp, scope) {
+      assertPaymentActive(scope); const connector = paymentAuthConnector();
+      await scope.wait(() => connector.provider.connectOtp({ otp })); assertPaymentActive(scope);
+      await scope.wait(() => ConnectionController.connectExternal(connector, "eip155")); assertPaymentActive(scope);
+    },
+    async confirmDevice(scope) { assertPaymentActive(scope); await scope.wait(() => paymentAuthConnector().provider.connectDevice()); assertPaymentActive(scope); },
+    async connectSocial(social, scope) {
+      assertPaymentActive(scope);
+      if (!Array.isArray(appKitState.socials) || !appKitState.socials.includes(social)) throw new Error("auth_connector_unavailable");
+      await scope.wait(() => ConnectorControllerUtil.connectSocial({ social, namespace: "eip155", closeModalOnConnect: false })); assertPaymentActive(scope);
+    },
+    async connectExternal(walletId, scope) {
+      assertPaymentActive(scope);
+      const wallet = directPaymentWallets().find(item => item.id === walletId);
+      if (!wallet) throw new Error("auth_connector_unavailable");
+      await scope.wait(() => appKitInstance.connectWallet(wallet, "eip155")); assertPaymentActive(scope);
+    },
+    markCandidate(snapshot) {
+      if (!mounted.current || latestOwner.current !== ownerKey || paymentOwner.current.generation !== paymentGeneration) throw new DOMException("Aborted", "AbortError");
+      selectedCandidate.current = { owner: ownerKey, address: snapshot.address }; setSelectionRevision(value => value + 1);
+    },
+    link(scope) {
+      assertPaymentActive(scope);
+      const latest = preparationSnapshot.current;
+      if (!latest || latest.owner !== ownerKey || !latest.isCandidate) throw new Error("wallet_address_mismatch");
+      return latest.linkWallet(scope);
+    },
+    async openNative(scope) {
+      assertPaymentActive(scope);
+      const request = connectWallet(); paymentNativeRequest.current = request;
+      try { await scope.wait(() => request); assertPaymentActive(scope); }
+      finally { if (paymentNativeRequest.current === request) paymentNativeRequest.current = null; }
+    },
+    fetchWallets: () => appKitInstance?.fetchWallets({ entries: 8 }) || Promise.resolve(),
+    cleanup() {
+      const request = paymentNativeRequest.current;
+      if (request && connectionRequest.current?.promise === request) connectionRequest.current.cancel();
+      if (request && switchRequest.current?.promise === request) switchRequest.current.cancel();
+      paymentNativeRequest.current = null;
+    },
+  } });
+  paymentActivation.current = headless;
+  const paymentConnection = { available: headlessAvailable, ...headless.state,
+    email: headless.state.email || (typeof memberSession?.email === "string" ? memberSession.email : ""),
+    canEmail: appKitState.email === true, canResend: appKitState.email === true,
+    socials: Array.isArray(appKitState.socials) ? appKitState.socials.filter(value => ["google", "apple"].includes(value)) : [],
+    wallets: paymentWallets,
+    requestEmail: headless.requestEmail, verifyEmail: headless.verifyEmail, confirmDevice: headless.confirmDevice,
+    connectSocial: headless.connectSocial, connectExternal: headless.connectExternal, cancel: headless.cancel,
+    openNative: headless.openNative };
+
   const value = useMemo(() => ({
     configured: true,
     solana: solanaWallet,
@@ -733,6 +847,9 @@ function ConfiguredReownProvider({ children }) {
     connectWallet,
     chooseWallet,
     prepareWallet,
+    paymentConnection,
+    connectPaymentWallet: headless.connect,
+    preparePaymentWallet: headless.prepare,
     onrampStatus: onrampState.status,
     onrampError: onrampState.error,
     fundingRevision,
@@ -749,7 +866,7 @@ function ConfiguredReownProvider({ children }) {
     openAccount,
   }), [solanaWallet, account.isConnected, account.status, binding.address, binding.error, binding.status, currentAddress, isLinked, isLinking, connectionBusy, connectionStatus, connectWallet, chooseWallet, prepareWallet, walletIdentityMismatch, walletNeedsAccountSelection, walletSwitching, selectionRevision,
     linkWallet, verificationError, fundingRevision, onrampState.error, onrampState.status,
-    cancelOnramp, clearOnrampError, getCompanyPaymentProvider, switchCompanyPaymentNetwork, openAccount, openConnect, openOnramp, reconnectWallet, refreshLink, startOnramp]);
+    cancelOnramp, clearOnrampError, getCompanyPaymentProvider, switchCompanyPaymentNetwork, openAccount, openConnect, openOnramp, reconnectWallet, refreshLink, startOnramp, paymentConnection, headless.connect, headless.prepare]);
 
   preparationSnapshot.current = { owner: ownerKey, linkStatus: binding.status, linkedAddress: binding.address,
     address: value.address, isConnected: value.isConnected,

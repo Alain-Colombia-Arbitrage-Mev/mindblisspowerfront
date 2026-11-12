@@ -31,7 +31,7 @@ export function TransferNetworkPicker({ selected, onChange, disabled = false, so
   </fieldset>;
 }
 
-export function SponsoredTransferForm({ flow, network = "polygon" }) {
+export function SponsoredTransferForm({ flow, network = "polygon", walletActivation = null }) {
   const { t } = useI18n(); const id = useId();
   const walletState = network === "polygon" ? flow.walletState : undefined;
   const walletActionCopy = { activate: "funding.activateWalletCopy", activating: "funding.activateWalletCopy", checking: "walletPage.checkingCopy",
@@ -45,7 +45,7 @@ export function SponsoredTransferForm({ flow, network = "polygon" }) {
   const insufficient = available !== null && validAmount && BigInt(entered) > BigInt(available);
   const invalid = flow.amount !== "" && (!validAmount || insufficient);
   const ready = (!walletState || walletState === "ready") && flow.connected && !flow.busy && !flow.loadingBalance && !flow.capabilities?.loading && !flow.capabilities?.error && flow.capabilities?.transferEnabled === true;
-  const canReview = ready && available !== null && validAmount && !insufficient;
+  const canReview = ready && !walletActivation && available !== null && validAmount && !insufficient;
   const error = flow.errorKey ? t(flow.errorKey) : "";
   return <form className={`executive-panel ${styles.panel}`} aria-label={t("companyPayment.title")} onSubmit={event => { event.preventDefault(); if (canReview) void flow.review(); }}>
     <div className={styles.balance} aria-live="polite"><span>{t(network === "solana" ? "walletTransfer.solanaBalance" : "companyPayment.availableBalance")}{network === "polygon" ? " · Polygon" : ""}</span>
@@ -68,7 +68,7 @@ export function SponsoredTransferForm({ flow, network = "polygon" }) {
           : <p className={styles.note} role="status">{t("walletTransfer.sponsorUnavailable")}</p> : null}
     {error ? <p className={styles.error} role="alert">{error}</p> : null}
     {flow.errorKey === "walletTransfer.networkMismatch" ? <button type="button" className="executive-button" disabled={flow.busy} onClick={() => void flow.switchNetwork()}>{t("companyPayment.polygonSwitchNetwork")}</button> : null}
-    {flow.connected && (!walletState || walletState === "ready") ? <button className={`executive-button primary ${styles.primary}`} type="submit" disabled={!canReview}><ArrowRight size={17} aria-hidden="true" />{t("companyPayment.review")}</button>
+    {walletActivation || (flow.connected && (!walletState || walletState === "ready") ? <button className={`executive-button primary ${styles.primary}`} type="submit" disabled={!canReview}><ArrowRight size={17} aria-hidden="true" />{t("companyPayment.review")}</button>
       : walletState ? <><p className={styles.note} role={["checking", "activating"].includes(walletState) ? "status" : undefined}>{t(walletActionCopy || "walletPage.checkingCopy")}</p>
         <button className={`executive-button primary ${styles.primary}`} type="button" disabled={walletActionDisabled} onClick={() => {
           if (!walletActionDisabled) { if (walletState === "error") void flow.refresh(); else void flow.connect(); }
@@ -78,12 +78,12 @@ export function SponsoredTransferForm({ flow, network = "polygon" }) {
       : <><p className={styles.note}>{t(flow.restoring ? "companyPayment.restoringCopy" : flow.needsVerification ? "companyPayment.verifyWalletCopy" : "companyPayment.reconnectCopy")}</p>
         <button className={`executive-button primary ${styles.primary}`} type="button" disabled={flow.busy || flow.restoring} onClick={() => void flow.connect()}>
           {flow.busy || flow.restoring ? <Loader2 size={17} className="animate-spin" aria-hidden="true" /> : <WalletCards size={17} aria-hidden="true" />}
-          {t(flow.restoring ? "companyPayment.restoring" : flow.needsVerification ? "companyPayment.verifyWallet" : "companyPayment.reconnect")}</button></>}
+          {t(flow.restoring ? "companyPayment.restoring" : flow.needsVerification ? "companyPayment.verifyWallet" : "companyPayment.reconnect")}</button></>)}
     <p className={styles.pending}>{t("companyPayment.allocationPending")}</p>
   </form>;
 }
 
-export function SponsoredTransferReview({ flow, network = "polygon" }) {
+export function SponsoredTransferReview({ flow, network = "polygon", walletActivation = null }) {
   const { t } = useI18n(); const value = flow.preview, policy = networkPolicy(network);
   const valid = policy && value?.walletAddress === flow.wallet && (network === "solana" ? solanaAddress(value.walletAddress) && solanaAtomic(value.amountAtomic, false) : /^0x[0-9a-f]{40}$/.test(value.walletAddress) && personalCompanyPaymentAtomic(value.amountAtomic))
     && value.recipientAddress === policy.recipientAddress
@@ -98,16 +98,16 @@ export function SponsoredTransferReview({ flow, network = "polygon" }) {
     {network === "polygon" ? <p className={styles.note}>{t("walletTransfer.authorizationCopy")}</p> : null}
     {flow.errorKey ? <p className={styles.error} role="alert">{t(flow.errorKey)}</p> : null}
     {flow.errorKey === "walletTransfer.networkMismatch" ? <button type="button" className="executive-button" disabled={flow.busy} onClick={() => void flow.switchNetwork()}>{t("companyPayment.polygonSwitchNetwork")}</button> : null}
-    {!flow.connected ? <button type="button" className="executive-button" disabled={flow.busy || flow.restoring}
-      onClick={() => { if (!flow.busy && !flow.restoring) void flow.connect(); }}>{t(flow.restoring ? "companyPayment.restoring" : flow.needsVerification ? "companyPayment.verifyWallet" : "companyPayment.reconnect")}</button> : null}
+    {walletActivation || (!flow.connected ? <button type="button" className="executive-button" disabled={flow.busy || flow.restoring}
+      onClick={() => { if (!flow.busy && !flow.restoring) void flow.connect(); }}>{t(flow.restoring ? "companyPayment.restoring" : flow.needsVerification ? "companyPayment.verifyWallet" : "companyPayment.reconnect")}</button> : null)}
     <div className={styles.actions}><button className="executive-button" type="button" disabled={flow.busy} onClick={flow.cancelReview}>{t("walletTransfer.closeReview")}</button>
-      <button className={`executive-button primary ${styles.primary}`} type="button" disabled={!valid || !flow.connected || flow.busy || flow.capabilities?.loading || Boolean(flow.capabilities?.error) || !flow.capabilities?.transferEnabled}
-        onClick={() => { if (valid && flow.connected && !flow.busy && !flow.capabilities?.loading && !flow.capabilities?.error && flow.capabilities?.transferEnabled) void flow.confirm(); }}>
+      <button className={`executive-button primary ${styles.primary}`} type="button" disabled={!valid || !flow.connected || Boolean(walletActivation) || flow.busy || flow.capabilities?.loading || Boolean(flow.capabilities?.error) || !flow.capabilities?.transferEnabled}
+        onClick={() => { if (valid && flow.connected && !walletActivation && !flow.busy && !flow.capabilities?.loading && !flow.capabilities?.error && flow.capabilities?.transferEnabled) void flow.confirm(); }}>
         {flow.busy ? <Loader2 size={17} className="animate-spin" aria-hidden="true" /> : <ShieldCheck size={17} aria-hidden="true" />}{t(flow.busy ? "companyPayment.busyLabel" : "walletTransfer.confirm")}</button></div>
   </section>;
 }
 
-export function SponsoredTransferStatus({ flow, network = "polygon" }) {
+export function SponsoredTransferStatus({ flow, network = "polygon", walletActivation = null }) {
   const { t } = useI18n(), value = network === "polygon" ? polygonRelayView(flow.payment) : solanaPaymentView(flow.payment);
   if (!value || value.walletAddress !== flow.wallet) return null;
   const confirmed = value.status === "confirmed", prepared = value.status === "prepared", authorized = value.status === "authorized", terminal = ["confirmed", "failed", "expired"].includes(value.status);
@@ -121,9 +121,10 @@ export function SponsoredTransferStatus({ flow, network = "polygon" }) {
     <dl className={styles.reviewDetails}><div><dt>{t("companyPayment.networkLabel")}</dt><dd>{networkName(network)} · USDT</dd></div><div><dt>{t("companyPayment.recipientLabel")}</dt><dd>Mindbliss</dd></div>
       {hash ? <div><dt>{t("walletTransfer.receipt")}</dt><dd><a href={network === "polygon" ? `https://polygonscan.com/tx/${hash}` : `https://solscan.io/tx/${hash}`} target="_blank" rel="noreferrer noopener"><code dir="ltr">{hash}</code></a></dd></div> : null}</dl>
     {flow.errorKey ? <p className={styles.error} role="alert">{t(flow.errorKey)}</p> : null}
+    {walletActivation}
     <div className={styles.actions}>
       {!terminal ? <button className="executive-button" type="button" disabled={flow.busy} onClick={() => void flow.verifyPayment()}><RefreshCw size={16} aria-hidden="true" />{t("walletTransfer.verify")}</button> : null}
-      {prepared && !flow.recovery && flow.resume ? <button className="executive-button primary" type="button" disabled={flow.busy || flow.restoring}
+      {prepared && !flow.recovery && flow.resume && !walletActivation ? <button className="executive-button primary" type="button" disabled={flow.busy || flow.restoring}
         onClick={() => { if (!flow.busy && !flow.restoring) { if (flow.connected) void flow.resume(); else void flow.connect(); } }}>
         {t(flow.restoring ? "companyPayment.restoring" : flow.connected ? "companyPayment.resume" : flow.needsVerification ? "companyPayment.verifyWallet" : "companyPayment.reconnect")}</button> : null}
       {prepared && !flow.recovery && flow.abandon ? <button className="executive-button" type="button" disabled={flow.busy} onClick={() => void flow.abandon()}>{t("companyPayment.abandon")}</button> : null}

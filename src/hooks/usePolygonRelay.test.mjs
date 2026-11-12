@@ -43,7 +43,7 @@ function clock() {
 }
 
 function harness(overrides = {}) {
-  const slots = [], effects = [], calls = [], signatures = [], providerCalls = [], storage = overrides.storage || new Map(), digests = new Set();
+  const slots = [], effects = [], calls = [], signatures = [], providerCalls = [], storage = overrides.storage || new Map(), digests = new Set(), operationDeadlines = [];
   let cursor = 0, dirty = true, current, sourceWallet = wallet, connected = overrides.connected !== false;
   let sdkAddress = sourceWallet, balanceTime = 0;
   let session = { subject: 'owner-A', email: 'member@example.test' };
@@ -113,7 +113,10 @@ function harness(overrides = {}) {
     '@/lib/personal-wallet-balance-store.mjs': { personalWalletBalanceSessionKey }, '@/lib/personal-company-payment-values.mjs': amounts,
     '@/lib/polygon-relay-contract.mjs': contract, '@/lib/polygon-relay-client.mjs': client,
     '@/lib/polygon-relay-chain.mjs': { isPolygonRelayChain },
-    '@/lib/reown-funding-operation.mjs': { createReownFundingOperation: options => createReownFundingOperation({ ...options, ...(overrides.timeoutMs ? { timeoutMs: overrides.timeoutMs } : {}) }) },
+    '@/lib/reown-funding-operation.mjs': { createReownFundingOperation: options => {
+      operationDeadlines.push(options?.timeoutMs);
+      return createReownFundingOperation({ ...options, ...(overrides.timeoutMs ? { timeoutMs: overrides.timeoutMs } : {}) });
+    } },
     '@/lib/personal-wallet-balance.mjs': { readPersonalWalletBalances: readBalance },
     '@/lib/polygon-relay-signing.mjs': { async signPolygonRelay(dto, sdk, expectedWallet, assertActive) {
       signatures.push(dto); assertActive(); assert.equal(expectedWallet, dto.walletAddress);
@@ -131,7 +134,7 @@ function harness(overrides = {}) {
   } }, randomUUID: () => id }, { navigator: browserNavigator }, overrides.Date || Date,
   overrides.setTimeout || setTimeout, overrides.clearTimeout || clearTimeout);
   function render() { cursor = 0; dirty = false; current = module.exports.usePolygonRelay(reown()); }
-  return { get flow() { return current; }, calls, signatures, providerCalls, storage, browser, documentRef, sharedBalances,
+  return { get flow() { return current; }, calls, signatures, providerCalls, storage, browser, documentRef, sharedBalances, operationDeadlines,
     get ownerKey() { return personalWalletBalanceSessionKey(session); },
     advanceBalanceTime(duration) { balanceTime += duration; },
     async balanceEvents() { await new Promise(resolve => setTimeout(resolve, 275)); return this.flush(); },
@@ -1036,4 +1039,43 @@ test('an ambiguous unsigned preparation expires only through server verification
       assert.equal(writes(h).some(call => ['authorize', 'submit'].includes(call.action)), false);
     } finally { h.unmount(); }
   }
+});
+
+test('Headless activation forwards an owner-scoped abort signal and never starts financial work on cancel or unmount', async () => {
+  for (const linked of [false, true]) {
+    for (const stop of ['owner', 'unmount']) {
+      const pending = deferred(); let signal;
+      const reown = { paymentConnection: { available: true },
+        ...(linked ? {} : { linkedAddress: '', linkStatus: 'unlinked', isLinked: false }),
+        prepareWallet(options) { signal = options.signal; return pending.promise; },
+        connectWallet(options) { signal = options.signal; return pending.promise; } };
+      const h = harness({ connected: false, reown });
+      try {
+        await h.flush(); assert.equal(signal, undefined); assert.deepEqual(writes(h), []);
+        const request = h.flow.connect(); await h.flush();
+        assert.ok(signal instanceof AbortSignal); assert.equal(signal.aborted, false);
+        assert.deepEqual(h.operationDeadlines, [300_000]); assert.equal(h.flow.busy, true);
+        if (stop === 'unmount') h.unmount(); else await h.session({ subject: 'owner-B', email: 'next@example.test' });
+        assert.equal(signal.aborted, true); await request;
+        pending.resolve({ linked: true, address: wallet });
+        if (stop !== 'unmount') { await h.flush(); assert.equal(h.flow.preview, null); assert.equal(h.flow.payment, null); }
+        assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0); assert.equal(h.providerCalls.length, 0); assert.equal(h.storage.size, 0);
+      } finally { h.unmount(); }
+    }
+  }
+});
+
+test('the longer Headless connection deadline never changes financial review or continues it automatically', async () => {
+  const pending = deferred(); let signal;
+  const h = harness({ reown: { paymentConnection: { available: true }, connectWallet(options) { signal = options.signal; return pending.promise; } } });
+  try {
+    await review(h); const preview = h.flow.preview;
+    assert.equal(h.flow.stage, 'review'); assert.deepEqual(h.operationDeadlines, [undefined]);
+    await h.connection(false); const request = h.flow.connect(); await h.flush();
+    assert.deepEqual(h.operationDeadlines, [undefined, 300_000]); assert.equal(signal.aborted, false);
+    assert.deepEqual(h.flow.preview, preview); assert.equal(h.flow.stage, 'review');
+    await h.connection(true); pending.resolve(); await request; await h.flush();
+    assert.equal(h.flow.connected, true); assert.deepEqual(h.flow.preview, preview);
+    assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0); assert.equal(h.storage.size, 0);
+  } finally { h.unmount(); }
 });
