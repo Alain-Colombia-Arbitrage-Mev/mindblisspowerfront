@@ -36,7 +36,7 @@ test('personal checkout enforces its countries and excluded methods before const
     assert.equal(url.searchParams.get('countryCodeLocked'), countryCode);
     assert.equal(url.searchParams.get('sourceCurrencyCodeLocked'), 'USD');
   }
-  assert.equal(reownFundingSelection({ paymentMethodType: 'CREDIT_DEBIT_CARD' }, () => 'CO').countryCode, 'CO');
+  assert.equal(reownFundingSelection({ country: 'CO', paymentMethodType: 'CREDIT_DEBIT_CARD' }).countryCode, 'CO');
   for (const sourceCurrencyCode of ['COP', 'MXN']) {
     assert.throws(() => buildReownProductionOnrampUrl({ ...input, countryCode: 'CO', sourceCurrencyCode, paymentMethodType: 'SPEI', amount: 1000 }), { message: 'wallet_funding_valuation_unavailable' });
   }
@@ -46,10 +46,23 @@ test('personal checkout enforces its countries and excluded methods before const
   for (const paymentMethodType of ['NETELLER', 'SKRILL']) {
     assert.throws(() => buildReownProductionOnrampUrl({ ...input, paymentMethodType }), { message: 'wallet_funding_method_unavailable' });
   }
-  for (const detected of ['PA', '']) {
-    assert.throws(() => reownFundingSelection({ paymentMethodType: 'CREDIT_DEBIT_CARD' }, () => detected), { message: 'wallet_funding_invalid_country' });
-  }
   assert.throws(() => reownFundingSelection({ country: 'US', countryCode: 'MX', paymentMethodType: 'CREDIT_DEBIT_CARD' }), { message: 'invalid_request' });
+});
+
+test('missing or empty residence never uses browser hints or builds a checkout', t => {
+  let browserReads = 0;
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, get() {
+    browserReads++; return { language: 'en-US', languages: ['en-US'] };
+  } });
+  t.after(() => { if (previous) Object.defineProperty(globalThis, 'navigator', previous); else delete globalThis.navigator; });
+  for (const country of [{}, { country: '' }, { countryCode: '' }, { country: '', countryCode: '' },
+    { countryCode: null }, { countryCode: ' ' }, { countryCode: 'us' }]) {
+    assert.throws(() => reownFundingSelection({ sourceCurrencyCode: 'USD', paymentMethodType: 'CREDIT_DEBIT_CARD', ...country }),
+      { message: 'wallet_funding_invalid_country' });
+    assert.throws(() => buildReownProductionOnrampUrl({ ...input, countryCode: '', ...country }), { message: 'wallet_funding_invalid_country' });
+  }
+  assert.equal(browserReads, 0);
 });
 
 test('production checkout cannot discard an explicit local currency and open it as dollars', () => {

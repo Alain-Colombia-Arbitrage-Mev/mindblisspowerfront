@@ -61,7 +61,7 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
   const { t } = useI18n();
   const id = useId();
   const [amount, setAmount] = useState(String(PERSONAL_FORM_MINIMUM_USD));
-  const [countryCode, setCountryCode] = useState("US");
+  const [countryCode, setCountryCode] = useState("");
   const [method, setMethod] = useState("");
   const [options, setOptions] = useState(EMPTY_OPTIONS);
   const [revision, setRevision] = useState(0);
@@ -179,7 +179,7 @@ function FundingCountryField({ id, value, onChange, busy, label = "", describedB
   const { t, locale } = useI18n();
   function countryName(code) { try { return new Intl.DisplayNames([locale], { type: "region" }).of(code) || code; } catch { return code; } }
   return <label className={`mb-onramp-country-picker ${styles.countryField}`} htmlFor={`${id}-country`}><span>{label || t("onramp.countryLabel")}</span>
-    <select id={`${id}-country`} value={value} onChange={event => onChange(event.target.value)} aria-describedby={describedBy} disabled={busy} required>
+    <select id={`${id}-country`} value={value} onChange={event => onChange(event.target.value)} aria-describedby={describedBy} autoComplete="off" disabled={busy} required>
       <option value="">{t("funding.countryPrompt")}</option>{countries.map(([code]) => <option value={code} key={code}>{countryName(code)}</option>)}
     </select></label>;
 }

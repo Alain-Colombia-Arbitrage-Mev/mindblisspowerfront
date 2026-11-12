@@ -8,11 +8,13 @@ export function reownFundingCurrency(sourceCurrencyCode = 'USD', context = {}) {
   return sourceCurrencyCode;
 }
 
-export function reownFundingSelection(selection = {}, detectCountry = () => '') {
+export function reownFundingSelection(selection = {}) {
   const sourceCurrencyCode = fundingCurrencyCode(selection.sourceCurrencyCode);
   if (!sourceCurrencyCode) throw new Error('invalid_request');
   if (selection.country && selection.countryCode && selection.country !== selection.countryCode) throw new Error('invalid_request');
-  const countryCode = selection.country || selection.countryCode || detectCountry();
+  // Residence must come from the user's explicit selection. Browser locale,
+  // timezone and saved wallet state cannot supply a checkout country.
+  const countryCode = selection.country || selection.countryCode;
   if (!personalFundingCountry(countryCode)) throw new Error('wallet_funding_invalid_country');
   if (!personalFundingMethod(selection.paymentMethodType)) throw new Error('wallet_funding_method_unavailable');
   reownFundingCurrency(sourceCurrencyCode, { countryCode, paymentMethodType: selection.paymentMethodType });

@@ -8,7 +8,6 @@ import { OnRampController } from "@reown/appkit-controllers";
 import { mainnet, polygon, solana } from "@reown/appkit/networks";
 import { BrowserProvider, getAddress } from "ethers";
 import { useMemberSession } from "@/lib/member-session-context";
-import { browserOnrampRegion } from "@/lib/browser-onramp-region.mjs";
 import { buildReownProductionOnrampUrl, reownFundingSelection } from "@/lib/reown-production-onramp.mjs";
 import { createPersonalFundingIntent, fundingRequestId } from "@/lib/wallet-funding-client.mjs";
 import { PERSONAL_WALLET_ASSET, PERSONAL_WALLET_MINIMUM_USD } from "@/lib/personal-wallet.mjs";
@@ -27,12 +26,6 @@ const projectId = process.env.NEXT_PUBLIC_REOWN_PROJECT_ID?.trim() || "";
 const walletMetadata = personalWalletMetadata(typeof window === "undefined" ? "https://app.mindblisspower.com" : window.location.origin);
 const configured = /^[a-f0-9]{32}$/i.test(projectId) && Boolean(walletMetadata);
 const initialWalletTheme = typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
-
-function detectPersonalFundingCountry() {
-  const locale = navigator.languages?.[0] || navigator.language || '';
-  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
-  return browserOnrampRegion([...(navigator.languages || [locale])], timeZone);
-}
 
 const unavailable = Object.freeze({
   configured: false,
@@ -466,7 +459,7 @@ function ConfiguredReownProvider({ children }) {
     if (!mounted.current || logoutStarted.current) return Promise.reject(new DOMException('Aborted', 'AbortError'));
     let context;
     try {
-      context = reownFundingSelection(selection, detectPersonalFundingCountry);
+      context = reownFundingSelection(selection);
     } catch (error) {
       setOnrampState({ status: "error", error: personalFundingFailure(error) });
       return Promise.reject(error);
@@ -565,7 +558,7 @@ function ConfiguredReownProvider({ children }) {
   const startOnramp = useCallback(async (selection = {}) => {
     if (!mounted.current || logoutStarted.current) throw new DOMException('Aborted', 'AbortError');
     try {
-      reownFundingSelection(selection, detectPersonalFundingCountry);
+      reownFundingSelection(selection);
     } catch (error) {
       setOnrampState({ status: "error", error: personalFundingFailure(error) });
       throw error;
@@ -608,6 +601,12 @@ function ConfiguredReownProvider({ children }) {
 
   const reconnectWallet = useCallback(async () => {
     if (!mounted.current || logoutStarted.current) throw new DOMException('Aborted', 'AbortError');
+    try {
+      reownFundingSelection(onrampSelection.current || {});
+    } catch (error) {
+      setOnrampState({ status: "error", error: personalFundingFailure(error) });
+      throw error;
+    }
     if (onrampOperation.current?.active) return onrampFlow.current || { pending: true };
     const scope = beginOnrampOperation();
     onrampIntent.current = true;

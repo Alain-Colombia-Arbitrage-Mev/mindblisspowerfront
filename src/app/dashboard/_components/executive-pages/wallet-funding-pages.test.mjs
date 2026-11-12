@@ -59,6 +59,12 @@ function formHarness(name, api, detectedCountry = 'US') {
   return { ...harness, render(props = {}) { return render({ destinationAddress: `0x${'1'.repeat(40)}`, ...props }); } };
 }
 
+function selectFundingCountry(harness, props, country) {
+  find(harness.render(props), 'FundingCountryField').props.onChange(country);
+  harness.render(props);
+  return harness.render(props);
+}
+
 function personalPageHarness(reown, { locale = 'es', session = () => ({ subject: 'funding-owner', email: 'funding@example.test' }) } = {}) {
   const shared = load('WalletFundingUI.jsx', { 'lucide-react': icons, '@/i18n/LanguageProvider': i18n });
   function PersonalFundingForm() { return null; }
@@ -367,8 +373,7 @@ test('personal countries discard canceled responses, respect route limits and su
   });
   t.after(() => harness.unmount());
   const props = { onContinue: async value => submitted.push(value) };
-  harness.render(props); harness.render(props);
-  let tree = harness.render(props);
+  let tree = selectFundingCountry(harness, props, 'US');
   assert.equal(calls[0].country, 'US');
   find(tree, 'FundingCountryField').props.onChange('MX');
   harness.render(props);
@@ -456,19 +461,21 @@ test('only explicit personal field edits notify the page, never country detectio
   t.after(() => harness.unmount());
   const props = { onSelectionChange() { selectionChanges++; }, onContinue: async () => { sessions++; } };
   harness.render(props); harness.render(props); await flush(); harness.render(props); let tree = harness.render(props);
-  assert.equal(selectionChanges, 0, 'automatic country and default method cannot clear an acknowledged request');
+  assert.equal(selectionChanges, 0, 'mounting an unselected form cannot clear an acknowledged request');
+  tree = selectFundingCountry(harness, props, 'US'); await flush(); harness.render(props); tree = harness.render(props);
+  assert.equal(selectionChanges, 1, 'selecting residence is an explicit edit');
   find(tree, 'FundingMethodField').props.onRetry();
   harness.render(props); await flush(); harness.render(props); tree = harness.render(props);
-  assert.equal(selectionChanges, 0, 'retrying an availability read preserves the selected request');
+  assert.equal(selectionChanges, 1, 'retrying an availability read preserves the selected request');
   find(tree, 'FundingAmountField').props.onChange('30');
   harness.render(props); tree = harness.render(props);
-  assert.equal(selectionChanges, 1);
-  find(tree, 'FundingCountryField').props.onChange('US');
-  harness.render(props); await flush(); harness.render(props); tree = harness.render(props);
   assert.equal(selectionChanges, 2);
+  find(tree, 'FundingCountryField').props.onChange('CO');
+  harness.render(props); await flush(); harness.render(props); tree = harness.render(props);
+  assert.equal(selectionChanges, 3);
   find(tree, 'FundingMethodField').props.onChange('BANK_TRANSFER');
   harness.render(props);
-  assert.equal(selectionChanges, 3);
+  assert.equal(selectionChanges, 4);
   assert.equal(sessions, 0, 'editing a selection never starts a purchase');
 });
 
@@ -549,7 +556,7 @@ test('the personal form reviews its immutable trusted destination immediately be
   const harness = formHarness('PersonalFundingForm', { readPersonalFundingOptions: async country => ({ country,
     paymentMethods: ['CREDIT_DEBIT_CARD'], routes: [{ paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', minimumUsd: 50, maximumUsd: 1000 }] }] }) });
   t.after(() => harness.unmount());
-  harness.render(); await flush(); harness.render(); let tree = harness.render();
+  selectFundingCountry(harness, {}, 'US'); await flush(); harness.render(); let tree = harness.render();
   const fields = React.Children.toArray(tree.props.children.props.children);
   assert.equal(fields.at(-2).type.name, 'FundingDestination');
   assert.equal(fields.at(-1).type.name, 'FundingSubmit');
@@ -633,7 +640,7 @@ test('all returned production methods remain visible and selectable, including P
   });
   t.after(() => harness.unmount());
   const props = { onContinue: async input => submitted.push(input) };
-  harness.render(props); harness.render(props); await flush(); harness.render(props); let tree = harness.render(props);
+  selectFundingCountry(harness, props, 'US'); await flush(); harness.render(props); let tree = harness.render(props);
   let field = find(tree, 'FundingMethodField');
   let view = field.type(field.props);
   assert.deepEqual(findAll(view, node => node?.type === 'input' && node.props.type === 'radio').map(node => node.props.value), countries.US);
@@ -672,7 +679,7 @@ test('USD amount controls expose exact accessible limits, quick presets and a sl
     routes: [{ serviceProvider: 'SWAPPED', paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', minimumUsd: 1, maximumUsd: 25000 }] }] }) });
   t.after(() => harness.unmount());
   const props = { onContinue: input => submitted.push(input), onSelectionChange: () => selections.push('changed') };
-  harness.render(props); await flush(); harness.render(props); let tree = harness.render(props);
+  selectFundingCountry(harness, props, 'US'); await flush(); harness.render(props); let tree = harness.render(props);
   const amountField = () => { const field = find(tree, 'FundingAmountField'); return field.type(field.props); };
   const range = () => findAll(amountField(), node => node?.type === 'input' && node.props.type === 'range')[0];
   const number = () => findAll(amountField(), node => node?.type === 'input' && node.props.type === 'number')[0];
@@ -689,7 +696,7 @@ test('USD amount controls expose exact accessible limits, quick presets and a sl
   assert.equal(number().props.value, '1234.56'); assert.equal(range().props.value, 1234.56);
   assert.equal(range().props['aria-valuetext'], new Intl.NumberFormat('es', { style: 'currency', currency: 'USD' }).format(1234.56));
   harness.render(props); tree = harness.render(props); assert.equal(number().props.value, '1234.56');
-  assert.equal(submitted.length, 0); assert.equal(selections.length, 1);
+  assert.equal(submitted.length, 0); assert.equal(selections.length, 2, 'only manual country and amount edits notify the page');
   range().props.onChange({ target: { value: '6033.82' } }); harness.render(props); tree = harness.render(props);
   assert.equal(number().props.value, '6000');
   presets.at(-1).props.onClick(); harness.render(props); tree = harness.render(props);
@@ -814,28 +821,60 @@ test('personal MXN discovery cancels USD responses and enforces the fixed 931 fl
   assert.deepEqual(find(tree, 'FundingMethodField').props.methods, [], 'old MXN methods disappear before USD lookup completes');
 });
 
-test('personal funding defaults to the requested US choice with implicit USD and permits US, Mexico and Colombia', async t => {
-  const calls = [];
-  const personal = formHarness('PersonalFundingForm', { readPersonalFundingOptions: async (country, { sourceCurrencyCode }) => {
-    calls.push({ country, sourceCurrencyCode }); return { country, routes: [] };
-  } }, 'CO');
-  t.after(() => personal.unmount());
-  personal.render(); const personalTree = personal.render();
-  const field = find(personalTree, 'FundingCountryField');
-  assert.equal(field.props.value, 'US', 'the explicit default is not overwritten by browser detection');
-  assert.equal(find(personalTree, 'FundingCurrencyField'), undefined, 'USD does not need a redundant selector in the US');
-  assert.equal(find(personalTree, 'FundingAmountField').props.sourceCurrencyCode, 'USD');
-  assert.deepEqual(field.props.countries.map(([code]) => code), ['US', 'MX', 'CO']);
-  const html = renderToStaticMarkup(field.type(field.props));
-  assert.doesNotMatch(html, /value="(?:PA|ES|GB|CR|DO|GT|UY)"/);
-  assert.match(html, /value="CO">Colombia</);
-  field.props.onChange('CO'); personal.render(); const colombia = personal.render();
-  assert.equal(find(colombia, 'FundingCountryField').props.value, 'CO');
-  assert.equal(find(colombia, 'FundingCurrencyField'), undefined, 'Colombia uses implicit USD');
-  assert.equal(find(colombia, 'FundingAmountField').props.sourceCurrencyCode, 'USD');
-  assert.equal(find(colombia, 'FundingAmountField').props.amount, '100');
-  assert.deepEqual(calls.at(-1), { country: 'CO', sourceCurrencyCode: 'USD' });
-  assert.deepEqual(personal.exports.fundingCurrencyChoices('CO'), ['USD']);
+test('residence is initially unselected despite browser region or remount and cannot consult methods or continue until chosen', async t => {
+  for (const detectedCountry of ['US', 'MX', 'CO']) {
+    const calls = [], submitted = [];
+    const create = () => formHarness('PersonalFundingForm', { readPersonalFundingOptions: async (country, { sourceCurrencyCode }) => {
+      calls.push({ country, sourceCurrencyCode }); return { country, sourceCurrencyCode, routes: [{ paymentMethods: [{
+        method: 'CREDIT_DEBIT_CARD', minimumUsd: 100, maximumUsd: 15000 }] }] };
+    } }, detectedCountry);
+    const props = { onContinue: input => submitted.push(input) }, personal = create();
+    t.after(() => personal.unmount());
+    personal.render(props); await flush(); let tree = personal.render(props);
+    const field = find(tree, 'FundingCountryField');
+    assert.equal(field.props.value, '', detectedCountry); assert.deepEqual(field.props.countries.map(([code]) => code), ['US', 'MX', 'CO']);
+    const html = renderToStaticMarkup(field.type(field.props));
+    assert.match(html, /value=""/); assert.match(html, /value="CO">Colombia</); assert.doesNotMatch(html, /value="(?:PA|ES|GB|CR|DO|GT|UY)"/);
+    assert.equal(find(tree, 'FundingCurrencyField'), undefined); assert.equal(find(tree, 'FundingAmountField').props.sourceCurrencyCode, 'USD');
+    assert.equal(find(tree, 'FundingMethodField').props.countrySelected, false);
+    assert.deepEqual(find(tree, 'FundingMethodField').props.methods, []); assert.equal(find(tree, 'FundingSubmit').props.disabled, true);
+    find(tree, 'FundingMethodField').props.onRetry(); personal.render(props); await flush(); tree = personal.render(props);
+    tree.props.onSubmit({ preventDefault() {} }); await flush(); assert.deepEqual(calls, []); assert.deepEqual(submitted, []);
+    selectFundingCountry(personal, props, 'CO'); await flush(); personal.render(props); tree = personal.render(props);
+    assert.deepEqual(calls, [{ country: 'CO', sourceCurrencyCode: 'USD' }]); assert.equal(find(tree, 'FundingCountryField').props.value, 'CO');
+    assert.equal(find(tree, 'FundingCurrencyField'), undefined, 'Colombia uses implicit USD after its explicit selection');
+    assert.equal(find(tree, 'FundingAmountField').props.amount, '100'); assert.equal(find(tree, 'FundingSubmit').props.disabled, false);
+    assert.deepEqual(submitted, []); personal.unmount();
+    const remounted = create(); t.after(() => remounted.unmount());
+    remounted.render(props); await flush(); tree = remounted.render(props);
+    assert.equal(find(tree, 'FundingCountryField').props.value, ''); assert.equal(find(tree, 'FundingSubmit').props.disabled, true);
+    tree.props.onSubmit({ preventDefault() {} }); await flush(); assert.deepEqual(calls, [{ country: 'CO', sourceCurrencyCode: 'USD' }]);
+    assert.deepEqual(submitted, []);
+  }
+});
+
+test('clearing residence aborts and discards in-flight country methods without another lookup or an enabled checkout', async t => {
+  for (const outcome of ['late-success', 'late-failure']) {
+    const calls = [], submitted = [];
+    const harness = formHarness('PersonalFundingForm', { readPersonalFundingOptions(country, { signal, sourceCurrencyCode }) {
+      return new Promise((resolve, reject) => calls.push({ country, signal, sourceCurrencyCode, resolve, reject }));
+    } });
+    t.after(() => harness.unmount()); const props = { onContinue: input => submitted.push(input) };
+    let tree = selectFundingCountry(harness, props, 'US'); assert.equal(calls.length, 1); assert.equal(calls[0].country, 'US');
+    find(tree, 'FundingCountryField').props.onChange(''); tree = harness.render(props); harness.render(props);
+    assert.equal(calls[0].signal.aborted, true); assert.equal(find(tree, 'FundingSubmit').props.disabled, true);
+    if (outcome === 'late-success') calls[0].resolve({ country: 'US', sourceCurrencyCode: 'USD', routes: [{ paymentMethods: [{
+      method: 'CREDIT_DEBIT_CARD', minimumUsd: 100, maximumUsd: 15000 }] }] });
+    else calls[0].reject(new Error('Synthetic stale availability failure'));
+    await flush(); tree = harness.render(props);
+    assert.equal(find(tree, 'FundingCountryField').props.value, ''); assert.equal(find(tree, 'FundingMethodField').props.countrySelected, false);
+    assert.deepEqual(find(tree, 'FundingMethodField').props.methods, []); assert.equal(find(tree, 'FundingMethodField').props.limits, null);
+    assert.equal(find(tree, 'FundingSubmit').props.disabled, true); tree.props.onSubmit({ preventDefault() {} }); await flush();
+    assert.equal(calls.length, 1); assert.deepEqual(submitted, []);
+    selectFundingCountry(harness, props, 'MX'); assert.equal(calls.length, 2); assert.equal(calls[1].country, 'MX');
+    assert.equal(calls[1].sourceCurrencyCode, 'USD'); assert.equal(calls.some(call => !call.country), false);
+    assert.deepEqual(submitted, []);
+  }
 });
 
 test('manual country changes cancel prior methods and remember the Mexican currency without relabelling amounts', async t => {
@@ -846,7 +885,8 @@ test('manual country changes cancel prior methods and remember the Mexican curre
   t.after(() => harness.unmount());
   const props = { onContinue() {}, onSelectionChange: () => edits.push('edited') };
   let tree = harness.render(props); tree = harness.render(props);
-  assert.equal(find(tree, 'FundingCountryField').props.value, 'US');
+  assert.equal(find(tree, 'FundingCountryField').props.value, ''); assert.deepEqual(calls, []);
+  tree = selectFundingCountry(harness, props, 'US');
   assert.equal(find(tree, 'FundingCurrencyField'), undefined);
   assert.deepEqual([calls[0].country, calls[0].sourceCurrencyCode], ['US', 'USD']);
   find(tree, 'FundingCountryField').props.onChange('MX');
@@ -877,7 +917,7 @@ test('manual country changes cancel prior methods and remember the Mexican curre
   assert.equal(find(tree, 'FundingAmountField').props.amount, '931');
   assert.deepEqual([calls.at(-1).country, calls.at(-1).sourceCurrencyCode], ['MX', 'MXN']);
   assert.equal(calls.slice(0, -1).every(call => call.signal.aborted), true);
-  assert.equal(edits.length, 5, 'only explicit country, currency and amount changes notify the page');
+  assert.equal(edits.length, 6, 'only explicit country, currency and amount changes notify the page');
 });
 
 test('MXN amount validation and higher provider floors remain explicit even when an old route advertises less', async t => {
@@ -917,7 +957,7 @@ test('the public form starts at USD100, hides the small test amount and retains 
   ] }) });
   t.after(() => harness.unmount());
   const props = { onContinue: input => { submitted.push(input); return new Promise(resolve => { finish = resolve; }); } };
-  harness.render(props); harness.render(props); await flush(); harness.render(props); let tree = harness.render(props);
+  selectFundingCountry(harness, props, 'US'); await flush(); harness.render(props); let tree = harness.render(props);
   assert.equal(find(tree, 'FundingAmountField').props.amount, '100');
   assert.deepEqual(find(tree, 'FundingMethodField').props.methods, ['CREDIT_DEBIT_CARD']);
   assert.equal(find(tree, 'FundingSubmit').props.disabled, false);

@@ -38,7 +38,7 @@ function fundingRuntime(overrides = {}) {
   const ref = () => ({ current: null });
   const scope = {
     reownFundingSelection, buildReownProductionOnrampUrl, personalFundingFailure,
-    createReownFundingOperation, verifyReownWalletOwnership, detectPersonalFundingCountry: () => 'US', projectId,
+    createReownFundingOperation, verifyReownWalletOwnership, projectId,
     onrampErrorCode: personalFundingFailure, isAddress: value => /^0x[0-9a-f]{40}$/i.test(value || ''),
     sameAddress: (a, b) => typeof a === 'string' && typeof b === 'string' && a.toLowerCase() === b.toLowerCase(),
     getAddress: value => value, mounted: { current: true }, account: { isConnected: false }, boundAddress: address,
@@ -274,9 +274,9 @@ test('personal start and continuation reject ineligible country, method and curr
     { input: { country: 'CA', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' }, code: 'wallet_funding_invalid_country', category: 'method' },
     { input: { country: 'MX', amount: 100, paymentMethodType: 'SKRILL' }, code: 'wallet_funding_method_unavailable', category: 'method' },
     { input: { country: 'US', amount: 100, paymentMethodType: 'NETELLER' }, code: 'wallet_funding_method_unavailable', category: 'method' },
-    { input: { amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' }, detected: 'CA', code: 'wallet_funding_invalid_country', category: 'method' },
-    { input: { amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' }, detected: 'PA', code: 'wallet_funding_invalid_country', category: 'method' },
-    { input: { amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' }, detected: '', code: 'wallet_funding_invalid_country', category: 'method' },
+    { input: { amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' }, code: 'wallet_funding_invalid_country', category: 'method' },
+    { input: { countryCode: '', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' }, code: 'wallet_funding_invalid_country', category: 'method' },
+    { input: { country: '', countryCode: '', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' }, code: 'wallet_funding_invalid_country', category: 'method' },
   ];
   for (const name of ['startOnramp', 'runOnramp']) {
     for (const selection of selections) {
@@ -285,7 +285,8 @@ test('personal start and continuation reject ineligible country, method and curr
       const onrampSelection = ref();
       const never = () => assert.fail('unvalued local fiat caused a wallet or checkout side effect');
       const scope = {
-        reownFundingSelection, detectPersonalFundingCountry: () => selection.detected ?? 'US', personalFundingFailure, setOnrampState: state => states.push(state),
+        reownFundingSelection, personalFundingFailure, setOnrampState: state => states.push(state),
+        navigator: { language: 'en-US', languages: ['en-US'] },
         onrampSelection, onrampFlow: ref(), onrampAbort: ref(), onrampIntent: ref(),
         boundAddress: `0x${'1'.repeat(40)}`, currentAddress: `0x${'1'.repeat(40)}`, walletProvider: {}, account: { isConnected: true },
         mounted: { current: true }, isAddress: () => true, sameAddress: () => true,
@@ -306,6 +307,24 @@ test('personal start and continuation reject ineligible country, method and curr
   }
 });
 
+test('onramp opening and reconnection reject an empty retained country before SDK or checkout effects', async () => {
+  for (const name of ['openOnramp', 'reconnectWallet']) {
+    for (const selection of [null, { countryCode: '', sourceCurrencyCode: 'USD', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' }]) {
+      const never = () => assert.fail('Missing residence reached a wallet or checkout effect');
+      const runtime = fundingRuntime({ navigator: { language: 'en-US', languages: ['en-US'] },
+        open: never, disconnect: never, createPersonalFundingIntent: never,
+        OnRampController: { get state() { return never(); }, setSelectedProvider: never } });
+      runtime.scope.onrampSelection.current = selection;
+      await assert.rejects(onrampCallback(name, runtime.scope)(), { message: 'wallet_funding_invalid_country' });
+      assert.equal(runtime.scope.onrampOperation.current, null);
+      assert.deepEqual(runtime.events, []); assert.deepEqual(runtime.bindings, []);
+      assert.equal(runtime.states.at(-1).status, 'error');
+    }
+  }
+  const source = read('../components/reown/ReownProvider.jsx');
+  assert.doesNotMatch(source, /browserOnrampRegion|detectPersonalFundingCountry/);
+});
+
 test('personal dollar continuation explicitly forwards its currency to the intent and locked checkout', async () => {
   const events = [];
   const address = `0x${'1'.repeat(40)}`;
@@ -314,7 +333,7 @@ test('personal dollar continuation explicitly forwards its currency to the inten
   const provider = { name: 'meld', url: `https://meldcrypto.com/?publicKey=test&externalCustomerId=${projectId}` };
   const operation = createReownFundingOperation();
   const callback = onrampCallback('runOnramp', {
-    reownFundingSelection, detectPersonalFundingCountry: () => 'US', buildReownProductionOnrampUrl, personalFundingFailure, projectId,
+    reownFundingSelection, buildReownProductionOnrampUrl, personalFundingFailure, projectId,
     sameAddress: (left, right) => typeof left === 'string' && typeof right === 'string' && left.toLowerCase() === right.toLowerCase(),
     boundAddress: address, mounted: { current: true }, navigator: { languages: ['en-US'], language: 'en-US' },
     PERSONAL_WALLET_MINIMUM_USD: 30, PERSONAL_WALLET_ASSET: 'USDT', AbortController,
