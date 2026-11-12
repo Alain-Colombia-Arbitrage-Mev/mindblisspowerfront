@@ -640,7 +640,7 @@ test('all returned production methods remain visible and selectable, including P
   assert.match(renderToStaticMarkup(view), /5 opciones de pago/);
   assert.doesNotMatch(renderToStaticMarkup(view), /PSE/);
   const group = React.Children.toArray(tree.props.children.props.children)[0];
-  assert.deepEqual(React.Children.toArray(group.props.children).map(node => node.type.name), ['FundingCountryField', 'FundingAmountField', 'FundingMethodField']);
+  assert.deepEqual(React.Children.toArray(group.props.children).map(node => node.type.name).filter(Boolean), ['FundingCountryField', 'FundingAmountField', 'FundingMethodField']);
   find(tree, 'FundingCountryField').props.onChange('US');
   harness.render(props); await flush(); harness.render(props); tree = harness.render(props);
   field = find(tree, 'FundingMethodField'); view = field.type(field.props);

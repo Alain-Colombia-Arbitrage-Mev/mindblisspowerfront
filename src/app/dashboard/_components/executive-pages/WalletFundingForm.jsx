@@ -1,6 +1,6 @@
 "use client";
 
-import { CreditCard, Landmark, Loader2, RefreshCw, ShieldCheck, Smartphone, WalletCards } from "lucide-react";
+import { CreditCard, Info, Landmark, Loader2, RefreshCw, ShieldCheck, Smartphone, WalletCards } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useI18n } from "@/i18n/LanguageProvider";
 import { fundingRequestId, readPersonalFundingOptions } from "@/lib/wallet-funding-client.mjs";
@@ -107,7 +107,7 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
   return <form className="mb-onramp-simple" onSubmit={event => void submit(event).catch(() => {})} aria-label={t("walletPage.personalWalletLabel")}>
     <div className="mb-onramp-simple-main">
       <div className={`${styles.formFields}${countryCode !== "MX" ? ` ${styles.implicitCurrency}` : ""}`}>
-        <FundingCountryField id={id} value={countryCode} countries={PERSONAL_COUNTRIES} onChange={value => {
+        <FundingCountryField id={id} value={countryCode} countries={PERSONAL_COUNTRIES} label={t("funding.residenceCountryLabel")} describedBy={`${id}-residency-help`} onChange={value => {
           const currency = value === "MX" ? mexicoCurrency.current : "USD";
           changeSelection(setCountryCode, value);
           if (currency !== sourceCurrencyCode) setAmount(String(currency === "MXN" ? PERSONAL_FUNDING_MINIMUM_MXN : PERSONAL_FORM_MINIMUM_USD));
@@ -118,6 +118,9 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
           changeSelection(setSourceCurrencyCode, value);
           setAmount(String(value === "USD" ? PERSONAL_FORM_MINIMUM_USD : PERSONAL_FUNDING_MINIMUM_MXN));
         }} busy={busy} /> : null}
+        <div id={`${id}-residency-help`} className={styles.residencyHelp}>
+          <Info size={18} aria-hidden="true" /><div><p>{t("funding.residenceCountryHelp")}</p><p><strong>{t("funding.residenceCountrySsn")}</strong></p></div>
+        </div>
         <FundingAmountField id={id} amount={amount} sourceCurrencyCode={sourceCurrencyCode} onChange={value => changeSelection(setAmount, value)} busy={busy} />
         <FundingMethodField id={id} value={methods.includes(method) ? method : ""} methods={methods} status={current ? options.status : "loading"}
           countrySelected={Boolean(countryCode)} sourceCurrencyCode={sourceCurrencyCode} minimumUsd={routeMinimum}
@@ -172,11 +175,11 @@ function FundingCurrencyField({ id, country, value, onChange, busy }) {
     </select></label>;
 }
 
-function FundingCountryField({ id, value, onChange, busy, label = "", countries = PERSONAL_COUNTRIES }) {
+function FundingCountryField({ id, value, onChange, busy, label = "", describedBy = undefined, countries = PERSONAL_COUNTRIES }) {
   const { t, locale } = useI18n();
   function countryName(code) { try { return new Intl.DisplayNames([locale], { type: "region" }).of(code) || code; } catch { return code; } }
   return <label className={`mb-onramp-country-picker ${styles.countryField}`} htmlFor={`${id}-country`}><span>{label || t("onramp.countryLabel")}</span>
-    <select id={`${id}-country`} value={value} onChange={event => onChange(event.target.value)} disabled={busy} required>
+    <select id={`${id}-country`} value={value} onChange={event => onChange(event.target.value)} aria-describedby={describedBy} disabled={busy} required>
       <option value="">{t("funding.countryPrompt")}</option>{countries.map(([code]) => <option value={code} key={code}>{countryName(code)}</option>)}
     </select></label>;
 }
