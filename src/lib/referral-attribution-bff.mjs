@@ -4,7 +4,9 @@ import { profileSubjectFromHeader } from './member-profile.mjs';
 
 export const REFERRAL_UPSTREAM_TIMEOUT_MS = 20000;
 const diagnostic = value => console.warn(JSON.stringify(value));
-const upstreamReasons = new Set(['unauthorized', 'invalid_id_token', 'id_token_required', 'authentication_unavailable', 'identity_mismatch']);
+const upstreamReasons = new Set(['unauthorized', 'invalid_id_token', 'id_token_required', 'authentication_unavailable', 'identity_mismatch',
+  'jwt_format', 'jwt_signature', 'jwt_keys_unavailable', 'jwt_expired', 'jwt_not_yet_valid', 'jwt_issued_in_future', 'jwt_issuer', 'jwt_audience', 'jwt_claims',
+  'binding_missing', 'binding_mismatch', 'identity_storage_unavailable', 'identity_unavailable', 'identity_unknown']);
 
 // Service bindings and stalled readers may ignore cancellation. End the local
 // wait as well, dispose a late response, and never replay the original request.
@@ -133,7 +135,8 @@ export async function handleReferralAttribution(request, { env, identity, fetchI
     stage = 'response';
     const body = await boundedJSON(upstream, signal);
     if (upstream.status !== 200) {
-      failed('upstream', upstream.status, body.error);
+      const reason = upstream.headers.get('x-mindbliss-identity-reason');
+      failed('upstream', upstream.status, upstreamReasons.has(reason) ? reason : body.error);
       return reply({ error: 'referral_unavailable' },
         [400, 401, 403, 404, 409, 422, 429].includes(upstream.status) ? upstream.status : 503);
     }

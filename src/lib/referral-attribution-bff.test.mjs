@@ -213,6 +213,18 @@ test('upstream authentication diagnostics allow only fixed error codes and keep 
   }
 });
 
+test('a private identity failure hint is allowlisted in telemetry and never forwarded to the browser', async () => {
+  for (const reason of ['jwt_keys_unavailable', 'identity_storage_unavailable', 'private-user-private-token']) {
+    const events = [];
+    const response = await run(request('GET'), { observe: event => events.push(event), fetchImpl: async () =>
+      Response.json({ error: 'invalid_id_token' }, { status: 401, headers: { 'x-mindbliss-identity-reason': reason } }) });
+    assert.equal(response.headers.get('x-mindbliss-identity-reason'), null);
+    assert.deepEqual(await response.json(), { error: 'referral_unavailable' });
+    assert.equal(events[0].reason, reason.startsWith('private-') ? 'invalid_id_token' : reason);
+    assert.doesNotMatch(JSON.stringify(events), /private-user|private-token/);
+  }
+});
+
 test('the real route uses the existing JWT verifier and private core binding with no direct database or public transport', () => {
   const source = readFileSync(new URL('../app/api/member/referral-attribution/route.js', import.meta.url), 'utf8');
   assert.match(source, /rawIdToken\(\)/); assert.match(source, /claims: await verifyIdToken\(token\)/);
