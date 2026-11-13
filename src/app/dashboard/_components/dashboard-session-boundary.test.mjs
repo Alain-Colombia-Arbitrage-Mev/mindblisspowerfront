@@ -7,6 +7,7 @@ import { createRoot } from 'react-dom/client';
 import { flushSync } from 'react-dom';
 import ts from 'typescript';
 import * as sync from '../../../lib/member-logout-sync.mjs';
+import * as sessionSync from '../../../lib/member-session-sync.mjs';
 import * as session from '../../../lib/member-session-boundary.mjs';
 import { logoutMember } from '../../../lib/member-logout.mjs';
 import { translateMessage } from '../../../i18n/translate.mjs';
@@ -38,7 +39,7 @@ function compile() {
     compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS },
   }).outputText;
   const module = { exports: {} }, mocks = { react: React, 'react-dom': { flushSync }, 'react/jsx-runtime': require('react/jsx-runtime'),
-    '@/lib/member-logout-sync.mjs': sync, '@/lib/member-session-boundary.mjs': session,
+    '@/lib/member-logout-sync.mjs': sync, '@/lib/member-session-sync.mjs': sessionSync, '@/lib/member-session-boundary.mjs': session,
     '@/i18n/LanguageProvider': { useI18n: () => ({ t: key => translateMessage('es', key) }) } };
   new Function('require', 'module', 'exports', code)(name => { assert.ok(Object.hasOwn(mocks, name), name); return mocks[name]; }, module, module.exports);
   return module.exports.default;

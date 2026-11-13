@@ -45,7 +45,8 @@ export function selectedMethodLimits(routes, method, amount, sourceCurrencyCode 
 
 /** MELD sandbox has its own provider catalogue, amounts, destination and checkout. */
 export function AdministrativeSandboxFundingForm({ disabled = false, busy = false, onContinue, onSelectionChange = undefined, destinationAddress = "",
-  onOpenCheckout = undefined, checkoutCapability = undefined, onRetryCheckoutCapabilities = undefined, onShowCheckoutHistory = undefined }) {
+  onOpenCheckout = undefined, checkoutCapability = undefined, onRetryCheckoutCapabilities = undefined, onShowCheckoutHistory = undefined,
+  providersAllowed = PROVIDERS, readOptions = readAdministrativeSandboxOptions, countriesAllowed = undefined }) {
   const { t } = useI18n(), id = useId();
   const [amount, setAmount] = useState("50"), [countryCode, setCountryCode] = useState("");
   const [preferredProvider, setPreferredProvider] = useState("TRANSAK"), [method, setMethod] = useState("");
@@ -53,8 +54,10 @@ export function AdministrativeSandboxFundingForm({ disabled = false, busy = fals
   const submitting = useRef(false), discovery = useRef(null), contextEpoch = useRef(0), selectionEpoch = useRef(0), mounted = useRef(false);
   const liveGeneralCheckout = useRef(false);
   const renderEpoch = selectionEpoch.current;
+  const providerKey = PROVIDERS.filter(provider => providersAllowed.includes(provider)).join(",");
+  const countries = countriesAllowed ? ONRAMP_COUNTRIES.filter(([code]) => countriesAllowed.includes(code)) : ONRAMP_COUNTRIES;
   const current = options.country === countryCode && options.sourceCurrencyCode === sourceCurrencyCode;
-  const providers = current && options.status === "ready" ? options.providers.filter(provider => PROVIDERS.includes(provider.serviceProvider)
+  const providers = current && options.status === "ready" ? options.providers.filter(provider => providerKey.split(",").includes(provider.serviceProvider)
     && routeMethods(provider.routes, sourceCurrencyCode).length) : [];
   const serviceProvider = providers.some(provider => provider.serviceProvider === preferredProvider) ? preferredProvider : providers[0]?.serviceProvider || "";
   const selectedOptions = providers.find(provider => provider.serviceProvider === serviceProvider);
@@ -81,7 +84,7 @@ export function AdministrativeSandboxFundingForm({ disabled = false, busy = fals
   function changeCountry(value) {
     if (!mounted.current || busy || submitting.current) return;
     invalidateDiscovery(); selectionEpoch.current++;
-    setCountryCode(ONRAMP_COUNTRIES.some(([code]) => code === value) ? value : "");
+    setCountryCode(countries.some(([code]) => code === value) ? value : "");
     if (sourceCurrencyCode !== "USD") setAmount("50");
     setSourceCurrencyCode("USD"); setMethod(""); onSelectionChange?.();
   }
@@ -112,22 +115,23 @@ export function AdministrativeSandboxFundingForm({ disabled = false, busy = fals
     const controller = new AbortController(), operation = { controller, epoch: contextEpoch.current };
     discovery.current = operation;
     setOptions({ status: "loading", country: countryCode, sourceCurrencyCode, providers: [], failedProviders: [] });
-    void Promise.allSettled(PROVIDERS.map(provider => readAdministrativeSandboxOptions(countryCode, provider, { signal: controller.signal, sourceCurrencyCode }))).then(results => {
+    const requestedProviders = providerKey ? providerKey.split(",") : [];
+    void Promise.allSettled(requestedProviders.map(provider => readOptions(countryCode, provider, { signal: controller.signal, sourceCurrencyCode }))).then(results => {
       if (controller.signal.aborted || discovery.current !== operation || contextEpoch.current !== operation.epoch) return;
       const nextProviders = [], failedProviders = [];
       results.forEach((result, index) => {
         const value = result.status === "fulfilled" ? result.value : null;
-        if (value?.country === countryCode && (value.sourceCurrencyCode || "USD") === sourceCurrencyCode && value.serviceProvider === PROVIDERS[index]) {
+        if (value?.country === countryCode && (value.sourceCurrencyCode || "USD") === sourceCurrencyCode && value.serviceProvider === requestedProviders[index]) {
           const routes = sourceCurrencyCode === "MXN" ? (value.routes || []).map(route => ({ ...route, paymentMethods: (route.paymentMethods || [])
             .filter(item => MXN_METHODS.has(item.method) && (value.serviceProvider === "TRANSAK" || item.method === "CREDIT_DEBIT_CARD")) })) : value.routes;
           nextProviders.push({ ...value, routes });
         }
-        else failedProviders.push(PROVIDERS[index]);
+        else failedProviders.push(requestedProviders[index]);
       });
       setOptions({ status: "ready", country: countryCode, sourceCurrencyCode, providers: nextProviders, failedProviders });
     });
     return () => { controller.abort(); if (discovery.current === operation) discovery.current = null; };
-  }, [countryCode, sourceCurrencyCode, revision]);
+  }, [countryCode, sourceCurrencyCode, revision, providerKey, readOptions]);
 
   useEffect(() => {
     if (current && options.status === "ready") {
@@ -152,7 +156,7 @@ export function AdministrativeSandboxFundingForm({ disabled = false, busy = fals
   }
   return <form className="mb-onramp-simple" onSubmit={event => void submit(event).catch(() => {})} aria-label={t("walletPage.administrativeWalletLabel")}>
     <div className="mb-onramp-simple-main"><div className={styles.formFields}>
-      <FundingCountryField id={id} value={countryCode} onChange={changeCountry} busy={busy} />
+      <FundingCountryField id={id} value={countryCode} onChange={changeCountry} busy={busy} countries={countries} />
       <FundingCurrencyField id={id} country={countryCode} value={sourceCurrencyCode} onChange={changeCurrency} busy={busy} />
       <FundingAmountField id={id} amount={amount} sourceCurrencyCode={sourceCurrencyCode} minimumAmount={minimum} maximumAmount={maximum} onChange={value => changeSelection(setAmount, value)} busy={busy} />
       <FundingMethodField id={id} value={method} methods={methods} status={current ? discoveryStatus : countryCode ? "loading" : "idle"} partialAvailability={partialAvailability}

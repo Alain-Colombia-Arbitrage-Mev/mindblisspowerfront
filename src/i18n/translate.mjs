@@ -8,6 +8,7 @@ import { paymentWalletMessages } from "./payment-wallet-messages.js";
 import { walletTutorialMessages } from "./wallet-tutorial-messages.js";
 import { administrativeOfframpMessages } from "./administrative-offramp-messages.js";
 import { administrativeSigningMessages } from "./administrative-signing-messages.js";
+import { sandboxWalletMessages } from "./sandbox-wallet-messages.js";
 
 export function normalizeLocale(value) {
   const candidate = String(value || "").toLowerCase().split(/[-_]/)[0];
@@ -22,7 +23,8 @@ function valueAt(dictionary, key) {
 
 export function translateMessage(locale, key, variables = undefined) {
   const activeLocale = normalizeLocale(locale);
-  let value = valueAt(administrativeSigningMessages[activeLocale], key)
+  let value = valueAt(sandboxWalletMessages[activeLocale], key)
+    ?? valueAt(administrativeSigningMessages[activeLocale], key)
     ?? valueAt(administrativeOfframpMessages[activeLocale], key)
     ?? valueAt(walletTutorialMessages[activeLocale], key)
     ?? valueAt(paymentWalletMessages[activeLocale], key)
@@ -32,6 +34,7 @@ export function translateMessage(locale, key, variables = undefined) {
     ?? valueAt(portalMessages[activeLocale], key)
     ?? valueAt(dashboardMessages[activeLocale], key)
     ?? valueAt(messages[activeLocale], key)
+    ?? valueAt(sandboxWalletMessages.es, key)
     ?? valueAt(administrativeSigningMessages.es, key)
     ?? valueAt(administrativeOfframpMessages.es, key)
     ?? valueAt(walletTutorialMessages.es, key)

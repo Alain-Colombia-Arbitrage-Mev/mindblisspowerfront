@@ -52,3 +52,28 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - An assigned address, a relayer key or a gas sponsor does not identify an
   authorized signer for that administrative address. Do not activate SELL
   funding or wallet-to-wallet broadcasts until that signing mechanism exists.
+
+### Connected Reown wallet and Transak sandbox
+
+- The user explicitly selected the Reown-connected wallet as the destination
+  for new sandbox recargas. Its backend-verified SQL116 binding replaces pool
+  assignment for this new flow; never substitute the browser address directly.
+- Use only `NEXT_PUBLIC_WALLET_REOWN_PROJECT_ID`, the dedicated Wallet project.
+  AppKit connects and signs ownership messages only. Its on-ramp, swaps, send,
+  receive and payment functions remain disabled; funding uses Transak through
+  the existing MELD sandbox account, never Reown's production on-ramp.
+- New `/api/member/sandbox-wallet/*` requests use the private `WALLET_CORE`
+  binding to `mindbliss-wallet-core`. Existing `CORE_API` continues to provide
+  native authentication and profile access. Do not deploy the production Core
+  worker to release this portal's sandbox changes.
+- Require native-session authentication, exact Wallet origin, the canonical
+  mounted-subject equality fence and signed POST envelopes. SQL116 owns the
+  unique address binding and immutable per-attempt destination snapshots.
+- Preserve the historical pool-based journal as explicitly opened read-only
+  activity. Never relabel its proof or use it to fund the connected wallet.
+- New checkout returns use only `sandboxCheckoutReference`. A return is not
+  proof: only the independent authenticated MELD transaction read can show a
+  sandbox result. It never changes real balances or real commissions.
+- USD limits stay 50–25,000, further restricted by the returned Transak route.
+  MXN uses the provider's actual sandbox limits. An empty country route must
+  leave the CTA unavailable; never fall back to production or another provider.

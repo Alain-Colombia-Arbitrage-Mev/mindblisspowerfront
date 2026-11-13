@@ -1,7 +1,7 @@
-import { FinanceDashboardPage } from "../_components/executive-pages/FinanceDashboardPage";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
 export default function PaymentsPage() {
-  return <FinanceDashboardPage />;
+  redirect("/dashboard/wallet-administrative");
 }

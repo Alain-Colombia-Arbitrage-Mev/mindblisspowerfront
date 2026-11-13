@@ -5,6 +5,7 @@ import React from 'react';
 import ts from 'typescript';
 import * as deadline from '../../lib/browser-request-deadline.mjs';
 import * as walletSetupHandoff from '../../lib/wallet-setup-handoff.mjs';
+import * as sessionSync from '../../lib/member-session-sync.mjs';
 
 const require = createRequire(import.meta.url);
 const radixPassthrough = ({ children }) => children;
@@ -60,6 +61,7 @@ export function registrationViewHarness(filename, mocks) {
     if (id === '@radix-ui/react-dialog') return radixDialogStub;
     if (id === '@/lib/browser-request-deadline.mjs') return deadline;
     if (id === '@/lib/wallet-setup-handoff.mjs') return walletSetupHandoff;
+    if (id === '@/lib/member-session-sync.mjs') return sessionSync;
     if (id === 'react/jsx-runtime') return require(id);
     assert.fail(`Unexpected test dependency: ${id}`);
   }, module, module.exports);

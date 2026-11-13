@@ -19,11 +19,11 @@ test('administrative wallet is an isolated Worker with one custom domain and no 
  assert.equal(wallet.vars.NOWPAYMENTS_WEBHOOK_ENABLED,'false');
  assert.deepEqual(config.env.staging.routes,[]);
 });
-test('administrative wallet uses only the existing fresh reader and private Core binding without provider secrets', () => {
+test('wallet uses the existing session service and a separate private sandbox service without provider secrets', () => {
  assert.equal(wallet.hyperdrive.length,1);
  assert.equal(wallet.hyperdrive[0].binding,'HYPERDRIVE_MEMBER_FRESH');
  assert.equal(wallet.hyperdrive[0].id,'fea27e02187448dd940393bc63f4eda6');
- assert.deepEqual(wallet.services,[{binding:'CORE_API',service:'mindbliss-core-production'}]);
+ assert.deepEqual(wallet.services,[{binding:'CORE_API',service:'mindbliss-core-production'},{binding:'WALLET_CORE',service:'mindbliss-wallet-core'}]);
  assert.equal(wallet.vars.MEMBER_DB_PROVIDER,'hyperdrive');
  assert.equal(wallet.vars.MEMBER_DB_QUERY_CACHE_DISABLED,'true');
  for(const key of Object.keys(wallet.vars))assert.doesNotMatch(key,/SECRET|TOKEN|API_KEY|DATABASE_URL|PASSWORD|CERT|PRIVATE_KEY/);

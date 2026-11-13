@@ -1,0 +1,9 @@
+.section { display: grid; gap: 16px; min-width: 0; scroll-margin-top: 24px; color: var(--vp-text); background: var(--vp-surface); }
+.section h2 { margin: 0; color: var(--vp-text); font-size: 17px; font-weight: 800; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.actions button:disabled { color: var(--vp-muted); background: var(--vp-field); border-color: var(--vp-border); opacity: 1; cursor: not-allowed; }
+.error { margin: 0; padding: 12px; border: 1px solid var(--vp-danger-border); border-radius: 10px; color: var(--vp-danger); background: var(--vp-danger-muted); font-size: 13px; line-height: 1.6; }
+.legacy { display: grid; gap: 14px; }
+.legacy summary { min-height: 44px; align-content: center; color: var(--vp-link); font-weight: 700; cursor: pointer; }
+.legacy summary:focus-visible { outline: 2px solid var(--vp-accent); outline-offset: 3px; border-radius: 5px; }
+@media (max-width: 540px) { .actions > * { width: 100%; } }

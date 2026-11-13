@@ -27,6 +27,7 @@ import { registrationRequired, registrationRedirect, registrationRetrySeconds, r
 import { beginVerifiedReferralSync } from '@/lib/referral-sync.mjs';
 import { browserRequestDeadline } from '@/lib/browser-request-deadline.mjs';
 import { rememberWalletSetupAfterAuth } from '@/lib/wallet-setup-handoff.mjs';
+import { publishMemberSessionReplacement } from '@/lib/member-session-sync.mjs';
 
 const AUTH_STATE_MESSAGES = {
   "session-not-established": {
@@ -122,6 +123,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
 
   function showVerifiedLogin(verifiedEmail, prepareWallet = false) {
     if (!mountedRef.current || dashboardNavigationRef.current || verifiedLoginRef.current) return;
+    publishMemberSessionReplacement(window);
     // Same-tab setup intent only. The dashboard still proves the session and
     // reads its own binding before offering any wallet authentication.
     if (prepareWallet) rememberWalletSetupAfterAuth(verifiedEmail, window);

@@ -111,6 +111,10 @@
         {
           "binding": "CORE_API",
           "service": "mindbliss-core-production"
+        },
+        {
+          "binding": "WALLET_CORE",
+          "service": "mindbliss-wallet-core"
         }
       ]
     }

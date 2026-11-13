@@ -101,7 +101,7 @@ test("overview rejects malformed catalog rows and duplicate IDs instead of publi
   }
 });
 
-test("the wallet portal enters administrative funding after login and retains the legacy home redirect", () => {
+test("the wallet portal and its old summary bookmarks enter the dedicated sandbox wallet page", () => {
   const destinations = [];
   const { default: Page } = moduleAt("../app/dashboard/page.jsx", {
     "next/navigation": { redirect: destination => destinations.push(destination) },
@@ -113,7 +113,13 @@ test("the wallet portal enters administrative funding after login and retains th
     "next/navigation": { redirect: destination => destinations.push(destination) },
   });
   Home();
-  assert.deepEqual(destinations, ["/dashboard"]);
+  assert.deepEqual(destinations, ["/dashboard/wallet-administrative"]);
+  destinations.length = 0;
+  const { default: Payments } = moduleAt("../app/dashboard/payments/page.jsx", {
+    "next/navigation": { redirect: destination => destinations.push(destination) },
+  });
+  Payments();
+  assert.deepEqual(destinations, ["/dashboard/wallet-administrative"]);
   const source = readFileSync(new URL("../components/panel/overview/OverviewPlans.jsx", import.meta.url), "utf8");
   assert.doesNotMatch(source, /["']use client["']|useEffect|setInterval|\bfetch\s*\(|runtimeEnvironment|process\.env/);
 });

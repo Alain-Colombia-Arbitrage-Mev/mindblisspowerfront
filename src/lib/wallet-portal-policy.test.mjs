@@ -135,7 +135,7 @@ test('the actual history entry rejects every personal or ambiguous selector befo
   assert.deepEqual(await accepted.json(), { action: 'history' });
 });
 
-test('route entry graph contains no Reown SDK, personal wallet component or personal sidebar', () => {
+test('route graph permits only the dedicated wallet connection and never production wallet or financial capabilities', () => {
   const root = fileURLToPath(new URL('../', import.meta.url));
   const entries = [];
   const visit = folder => { for (const item of readdirSync(folder, { withFileTypes: true })) {
@@ -145,11 +145,20 @@ test('route entry graph contains no Reown SDK, personal wallet component or pers
   } };
   visit(path.join(root, 'app'));
   const seen = new Set();
+  const reownModules = new Set(['WalletReownProvider.jsx', 'WalletReownContext.jsx', 'SandboxWalletBindingProvider.jsx']);
+  const sdkImports = new Set(['@reown/appkit/react', '@reown/appkit-adapter-ethers', '@reown/appkit/networks']);
   function inspect(file) {
     if (seen.has(file)) return;
     seen.add(file);
     const source = readFileSync(file, 'utf8');
-    assert.doesNotMatch(source, /(?:from\s*|import\(\s*)["']@reown\//, file);
+    const usingSdk = [...source.matchAll(/(?:from\s*|import\(\s*)["'](@reown\/[^"']+)["']/g)].map(match => match[1]);
+    if (usingSdk.length) {
+      assert.equal(path.basename(file), 'WalletReownProvider.jsx', file);
+      for (const specifier of usingSdk) assert.ok(sdkImports.has(specifier), specifier);
+      assert.match(source, /NEXT_PUBLIC_WALLET_REOWN_PROJECT_ID/);
+      assert.doesNotMatch(source, /NEXT_PUBLIC_REOWN_PROJECT_ID|mainnet|SolanaAdapter|startOnramp|createPersonalFunding/);
+      assert.match(source, /networks: \[polygon\]/);
+    }
     for (const match of source.matchAll(/(?:from\s*|import\(\s*|import\s*)["']([^"']+)["']/g)) {
       const name = match[1];
       if (!name.startsWith('@/') && !name.startsWith('.')) continue;
@@ -157,10 +166,12 @@ test('route entry graph contains no Reown SDK, personal wallet component or pers
       const target = [base, ...['.js', '.jsx', '.mjs', '.ts', '.tsx'].map(extension => `${base}${extension}`)]
         .find(candidate => /\.(?:jsx?|mjs|tsx?)$/.test(candidate) && existsSync(candidate));
       if (!target) continue;
-      assert.doesNotMatch(target, /(?:components[\\/]reown[\\/]|PersonalWalletFundingPage|PersonalWalletRequestsPage|SidebarWalletCard|CompanyPaymentPage|PersonalTransferRouter|SponsoredTransferPanel)/, file);
+      if (/[\\/]components[\\/]reown[\\/]/.test(target)) assert.ok(reownModules.has(path.basename(target)), target);
+      assert.doesNotMatch(target, /(?:PersonalWalletFundingPage|PersonalWalletRequestsPage|SidebarWalletCard|CompanyPaymentPage|PersonalTransferRouter|SponsoredTransferPanel)/, file);
       inspect(target);
     }
   }
   entries.forEach(inspect);
   assert.ok(seen.size > 50, 'the check must traverse the real route graph');
+  assert.ok([...seen].some(file => path.basename(file) === 'WalletReownProvider.jsx'), 'the permitted dedicated connection must actually be covered');
 });

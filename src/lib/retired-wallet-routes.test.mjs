@@ -47,13 +47,12 @@ test('the administrative branch retains its native assignment and sandbox fundin
   assert.deepEqual(calls, ['status', 'ensure', 'options', 'administrative', 'administrative-status']);
 });
 
-test('the administrative page uses its own sandbox setting and never mounts a personal wallet', () => {
-  const AdministrativeWalletFundingPage = () => assert.fail('The route only returns its component');
+test('the wallet page mounts the dedicated sandbox wallet flow and never the old assignment or production wallet page', () => {
+  const SandboxWalletFundingPage = () => assert.fail('The route only returns its component');
   const page = route('../app/dashboard/wallet-administrative/page.jsx', {
-    '../_components/executive-pages/AdministrativeWalletFundingPage': { default: AdministrativeWalletFundingPage },
-    '@/lib/cloudflare-runtime.mjs': { runtimeEnvironment: () => ({ ADMINISTRATIVE_ONRAMP_ENVIRONMENT: 'sandbox' }) },
+    '../_components/executive-pages/SandboxWalletFundingPage': { default: SandboxWalletFundingPage },
   });
   const element = page.default();
-  assert.equal(element.type, AdministrativeWalletFundingPage);
-  assert.equal(element.props.environment, 'sandbox');
+  assert.equal(element.type, SandboxWalletFundingPage);
+  assert.deepEqual(element.props, {});
 });

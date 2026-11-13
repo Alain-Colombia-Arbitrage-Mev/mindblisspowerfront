@@ -23,7 +23,7 @@ export function currentFundingView(value, walletKind, checkoutReference) {
       : { session_created: "checkout_ready", unavailable: "request_unavailable", failed: "checkout_failed" }[safe.requestStatus] || "unconfirmed" };
 }
 
-export default function WalletFundingStatus({ walletKind, checkoutReference, focusKey = 0 }) {
+export default function WalletFundingStatus({ walletKind, checkoutReference, focusKey = 0, readStatus = readWalletFundingStatus, expectedAddress = "" }) {
   const { t } = useI18n();
   const owner = walletFundingOwnerKey(useMemberSession());
   const epoch = useRef({ owner, generation: 0 }), mounted = useRef(false);
@@ -32,7 +32,7 @@ export default function WalletFundingStatus({ walletKind, checkoutReference, foc
   const [revision, setRevision] = useState(0);
   const [state, setState] = useState({ key: "", loading: true, view: null, error: "" });
   const card = useRef(null);
-  const key = `${generation}:${walletKind}:${checkoutReference}`;
+  const key = `${generation}:${walletKind}:${checkoutReference}:${expectedAddress}`;
   const current = state.key === key;
   const loading = !current || state.loading;
   const active = () => mounted.current && Boolean(owner) && epoch.current.generation === generation;
@@ -41,17 +41,17 @@ export default function WalletFundingStatus({ walletKind, checkoutReference, foc
     if (!owner || epoch.current.generation !== generation || !FUNDING_UUID.test(checkoutReference || "") || walletKind !== "administrative") return undefined;
     const controller = new AbortController();
     setState({ key, loading: true, view: null, error: "" });
-    readWalletFundingStatus(walletKind, checkoutReference, { signal: controller.signal }).then(data => {
+    readStatus(walletKind, checkoutReference, { signal: controller.signal }).then(data => {
       if (!active() || controller.signal.aborted) return;
       const view = currentFundingView(data, walletKind, checkoutReference);
-      if (!view) throw Error("funding_unavailable");
+      if (!view || (expectedAddress && view.destination.address.toLowerCase() !== expectedAddress.toLowerCase())) throw Error("funding_unavailable");
       setState({ key, loading: false, view, error: "" });
     }).catch(error => {
       if (active() && !controller.signal.aborted) setState({ key, loading: false, view: null,
         error: error?.message === "wallet_funding_not_found" ? "funding.statusNotFound" : error?.message === "unauthenticated" ? "recharge.providerSession" : "funding.statusUnavailable" });
     });
     return () => controller.abort();
-  }, [owner, walletKind, checkoutReference, key, revision, focusKey]);
+  }, [owner, walletKind, checkoutReference, key, revision, focusKey, readStatus, expectedAddress]);
 
   useEffect(() => {
     if (!active() || !focusKey || !card.current) return;

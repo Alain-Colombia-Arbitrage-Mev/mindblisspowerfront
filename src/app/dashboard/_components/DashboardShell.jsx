@@ -9,6 +9,8 @@ import NavigationDrawer from "@/components/panel/NavigationDrawer";
 import { memberPageKeysFor } from "@/lib/member-navigation.mjs";
 import { MemberSessionContext } from "@/lib/member-session-context";
 import { browserRequestDeadline } from "@/lib/browser-request-deadline.mjs";
+import WalletReownProvider from "@/components/reown/WalletReownProvider";
+import SandboxWalletBindingProvider from "@/components/reown/SandboxWalletBindingProvider";
 import { useI18n } from "@/i18n/LanguageProvider";
 import "@/components/panel/panel-shell.css";
 
@@ -43,6 +45,7 @@ export default function DashboardShell({ authMode: _authMode, children }) {
   const pageKeys = memberPageKeysFor(pathname);
   const overview = pathname === "/dashboard" || pathname === "/dashboard/home";
   return <MemberSessionContext.Provider value={member}>
+    <WalletReownProvider><SandboxWalletBindingProvider>
     <div className="vp-dashboard-shell">
       <a className="vp-skip-link" href="#member-main">{t("dashboard.skipToContent")}</a>
       <NavigationDrawer open={mobileMenuOpen} onClose={closeMenu}>
@@ -57,5 +60,6 @@ export default function DashboardShell({ authMode: _authMode, children }) {
         </main>
       </div>
     </div>
+    </SandboxWalletBindingProvider></WalletReownProvider>
   </MemberSessionContext.Provider>;
 }

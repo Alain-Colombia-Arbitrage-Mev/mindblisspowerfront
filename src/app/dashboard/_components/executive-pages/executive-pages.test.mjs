@@ -125,6 +125,11 @@ test('server route entries import only their individual client page, not the com
       assert.doesNotMatch(source, /SupportDashboardPage/);
       continue;
     }
+    if (route === 'payments') {
+      assert.match(source, /redirect\("\/dashboard\/wallet-administrative"\)/);
+      assert.doesNotMatch(source, /FinanceDashboardPage|ExecutiveDashboardPages/);
+      continue;
+    }
     assert.match(source, new RegExp(`_components/executive-pages/${name}["']`), route);
     assert.doesNotMatch(source, /["'][^"']*ExecutiveDashboardPages["']/, route);
   }

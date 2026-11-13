@@ -10,6 +10,7 @@ import { RegistrationButton, RegistrationField } from './RegistrationFields';
 import { beginVerifiedReferralSync } from '@/lib/referral-sync.mjs';
 import { browserRequestDeadline } from '@/lib/browser-request-deadline.mjs';
 import { rememberWalletSetupAfterAuth } from '@/lib/wallet-setup-handoff.mjs';
+import { publishMemberSessionReplacement } from '@/lib/member-session-sync.mjs';
 import { recoverRegistrationSession, registrationSessionRecoveryEligible, registrationVerifiedWithoutSession } from '@/lib/registration-session-recovery.mjs';
 import ContactPhoneField from './ContactPhoneField';
 import { initialContactPhone, registrationContactValues } from './contact-phone-model.mjs';
@@ -112,6 +113,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
 
   function enterVerifiedDashboard(operation, recovered = false) {
     if (!currentRequest(operation) || dashboardNavigation.current) return;
+    publishMemberSessionReplacement(window);
     // The BFF proved a new native session, or the recovery GET independently
     // proved this browser's existing same-owner session. Neither is an email
     // lookup or an access grant; the dashboard still enforces permissions.

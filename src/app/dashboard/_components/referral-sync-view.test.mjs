@@ -13,12 +13,15 @@ function browser(t) {
   return events;
 }
 function view() {
-  // No Reown, referral or payment mocks: importing one is a test failure.
+  // Only the isolated Wallet project and shared binding wrappers are allowed.
+  // Production funding, old pool assignment, referral and payment imports fail.
   return registrationViewHarness('../dashboard/_components/DashboardShell.jsx', {
     'next/navigation': { usePathname: () => '/dashboard/wallet-administrative' },
     '@/components/panel/PanelHeader': { default: () => null },
     '@/components/panel/PanelSidebar': { default: () => null },
     '@/components/panel/NavigationDrawer': { default: ({ children }) => children },
+    '@/components/reown/WalletReownProvider': { default: ({ children }) => children },
+    '@/components/reown/SandboxWalletBindingProvider': { default: ({ children }) => children },
     '@/lib/member-navigation.mjs': { memberPageKeysFor: () => ({ title: 'nav.administrativeWallet', section: 'pages.account' }) },
     '@/i18n/LanguageProvider': { useI18n: () => ({ t: (key, values) => translateMessage('es', key, values) }) },
     '@/lib/member-session-context': { MemberSessionContext: { Provider: ({ children }) => children } },
@@ -26,7 +29,7 @@ function view() {
   });
 }
 
-test('administrative shell reads one native session and never starts wallet, referral, OTP or sponsorship operations', async t => {
+test('wallet shell reads one native session and never starts funding, pool assignment, referral, OTP or sponsorship operations', async t => {
   const events = browser(t), calls = [];
   t.mock.timers.enable({ apis: ['setTimeout'] });
   t.mock.method(globalThis, 'fetch', async (path, options) => {

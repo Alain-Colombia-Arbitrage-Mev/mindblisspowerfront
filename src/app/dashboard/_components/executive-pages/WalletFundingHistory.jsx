@@ -9,7 +9,7 @@ import { useMemberSession } from "@/lib/member-session-context";
 import { walletFundingOwnerKey } from "@/lib/wallet-funding-owner.mjs";
 import styles from "./wallet-funding.module.css";
 
-export default function WalletFundingHistory({ walletKind, refreshKey, onSelectRequest = undefined, showHeading = true }) {
+export default function WalletFundingHistory({ walletKind, refreshKey, onSelectRequest = undefined, showHeading = true, readHistory = readWalletFundingHistory, expectedAddress = "" }) {
   const { t, locale } = useI18n();
   const owner = walletFundingOwnerKey(useMemberSession());
   const epoch = useRef({ owner, generation: 0 }), mounted = useRef(false);
@@ -24,11 +24,12 @@ export default function WalletFundingHistory({ walletKind, refreshKey, onSelectR
     if (!owner || walletKind !== "administrative" || epoch.current.generation !== generation) return undefined;
     const controller = new AbortController();
     setState({ generation, loading: true, error: false, records: [] });
-    readWalletFundingHistory(walletKind, { signal: controller.signal }).then(data => {
+    readHistory(walletKind, { signal: controller.signal }).then(data => {
+      if (expectedAddress && data.records.some(record => record.destination?.address?.toLowerCase() !== expectedAddress.toLowerCase())) throw Error("funding_unavailable");
       if (active() && !controller.signal.aborted) setState({ generation, loading: false, error: false, records: data.records });
     }).catch(() => { if (active() && !controller.signal.aborted) setState({ generation, loading: false, error: true, records: [] }); });
     return () => controller.abort();
-  }, [owner, generation, walletKind, refreshKey, revision]);
+  }, [owner, generation, walletKind, refreshKey, revision, readHistory, expectedAddress]);
 
   if (!owner || walletKind !== "administrative") return null;
   const labels = { initiated: "funding.initiated", session_created: "funding.sessionCreated", unavailable: "funding.unavailable", failed: "funding.failed" };
