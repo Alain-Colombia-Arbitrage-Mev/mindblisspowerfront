@@ -201,6 +201,18 @@ test('diagnostics expose only fixed stages and status and cannot turn failed ide
   assert.doesNotMatch(await response.text(), /private-|observer-down/);
 });
 
+test('upstream authentication diagnostics allow only fixed error codes and keep the public response generic', async () => {
+  for (const reason of ['invalid_id_token', 'unauthorized', 'private-email-private-token']) {
+    const events = [];
+    const response = await run(request('GET'), { observe: event => events.push(event),
+      fetchImpl: async () => Response.json({ error: reason, email: 'private@example.invalid' }, { status: 401 }) });
+    assert.deepEqual(await response.json(), { error: 'referral_unavailable' });
+    assert.deepEqual(events, [{ event: 'referral_attribution_failure', method: 'GET', stage: 'upstream', status: 401,
+      ...(reason === 'invalid_id_token' || reason === 'unauthorized' ? { reason } : {}) }]);
+    assert.doesNotMatch(JSON.stringify(events), /private-|example/);
+  }
+});
+
 test('the real route uses the existing JWT verifier and private core binding with no direct database or public transport', () => {
   const source = readFileSync(new URL('../app/api/member/referral-attribution/route.js', import.meta.url), 'utf8');
   assert.match(source, /rawIdToken\(\)/); assert.match(source, /claims: await verifyIdToken\(token\)/);

@@ -4,6 +4,7 @@ import { profileSubjectFromHeader } from './member-profile.mjs';
 
 export const REFERRAL_UPSTREAM_TIMEOUT_MS = 20000;
 const diagnostic = value => console.warn(JSON.stringify(value));
+const upstreamReasons = new Set(['unauthorized', 'invalid_id_token', 'id_token_required', 'authentication_unavailable', 'identity_mismatch']);
 
 // Service bindings and stalled readers may ignore cancellation. End the local
 // wait as well, dispose a late response, and never replay the original request.
@@ -74,11 +75,12 @@ async function boundedJSON(message, signal, limit = 2048) {
 // An owner-scoped preference, never permission to move an existing tree node.
 // The BFF independently verifies its cookie/JWT; browser fields cannot select an owner.
 export async function handleReferralAttribution(request, { env, identity, fetchImpl, observe = diagnostic }) {
-  const failed = (stage, status) => {
+  const failed = (stage, status, reason) => {
     // Fixed stages and HTTP integers only: no email, subject, referral, cookie,
     // token, provider response, or exception text reaches telemetry.
     const safeStatus = Number.isInteger(status) && status >= 100 && status <= 599 ? status : 'unavailable';
-    try { observe({ event: 'referral_attribution_failure', method: request.method, stage, status: safeStatus }); } catch { /* telemetry never changes access */ }
+    try { observe({ event: 'referral_attribution_failure', method: request.method, stage, status: safeStatus,
+      ...(upstreamReasons.has(reason) ? { reason } : {}) }); } catch { /* telemetry never changes access */ }
   };
   if (!['GET', 'POST'].includes(request.method)) return reply({ error: 'method_not_allowed' }, 405);
   if (new URL(request.url).search) return reply({ error: 'invalid_request' }, 400);
@@ -131,7 +133,7 @@ export async function handleReferralAttribution(request, { env, identity, fetchI
     stage = 'response';
     const body = await boundedJSON(upstream, signal);
     if (upstream.status !== 200) {
-      failed('upstream', upstream.status);
+      failed('upstream', upstream.status, body.error);
       return reply({ error: 'referral_unavailable' },
         [400, 401, 403, 404, 409, 422, 429].includes(upstream.status) ? upstream.status : 503);
     }
