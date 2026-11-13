@@ -9,6 +9,7 @@ import { translateMessage } from '../../../../i18n/translate.mjs';
 import { PERSONAL_FUNDING_COUNTRIES, validFundingAmount, WALLET_GATEWAY_FAILURE_REASONS, FUNDING_UUID, fundingStatus, fundingConfirmation } from '../../../../lib/wallet-funding-contract.mjs';
 import { walletFundingOwnerKey } from '../../../../lib/wallet-funding-owner.mjs';
 import * as administrativeCheckoutReturn from '../../../../lib/administrative-checkout-return.mjs';
+import * as meldCheckoutContract from '../../../../lib/administrative-meld-checkout-contract.mjs';
 
 const require = createRequire(import.meta.url);
 const icons = new Proxy({}, { get: () => () => null });
@@ -25,6 +26,9 @@ function load(filename, mocks) {
     if (id === '@/lib/member-session-context') return { useMemberSession: () => ({ subject: 'owner', email: 'owner@example.test' }) };
     if (id === '@/lib/wallet-funding-owner.mjs') return { walletFundingOwnerKey };
     if (id === '@/lib/administrative-checkout-return.mjs') return administrativeCheckoutReturn;
+    if (id === '@/lib/administrative-meld-checkout-contract.mjs') return meldCheckoutContract;
+    if (id === '@/lib/administrative-meld-checkout-client.mjs') return { readAdministrativeMeldCheckoutCapabilities: async () => ({ configured: false }) };
+    if (id === './AdministrativeMeldCheckoutActivity' || id === './AdministrativeOfframpMethods' || id === './AdministrativeWalletOperations') return { default: () => null };
     if (id === '@/lib/wallet-funding-contract.mjs') return { PERSONAL_FUNDING_COUNTRIES, validFundingAmount, WALLET_GATEWAY_FAILURE_REASONS, FUNDING_UUID, fundingStatus, fundingConfirmation };
     if (id.endsWith('.module.css')) return styles;
     if (id === 'react/jsx-runtime' || id === 'react') return require(id);

@@ -7,6 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ONRAMP_COUNTRIES } from "@/lib/meld-onramp-client.mjs";
 import { fundingRequestId, readAdministrativeSandboxOptions } from "@/lib/wallet-funding-client.mjs";
 import { validFundingAmount } from "@/lib/wallet-funding-contract.mjs";
+import { validMeldCheckoutAmount } from "@/lib/administrative-meld-checkout-contract.mjs";
 import styles from "./wallet-funding.module.css";
 
 const MINIMUM_USD = 50, MAXIMUM_USD = 25_000;
@@ -43,12 +44,14 @@ export function selectedMethodLimits(routes, method, amount, sourceCurrencyCode 
 }
 
 /** MELD sandbox has its own provider catalogue, amounts, destination and checkout. */
-export function AdministrativeSandboxFundingForm({ disabled = false, busy = false, onContinue, onSelectionChange = undefined, destinationAddress = "" }) {
+export function AdministrativeSandboxFundingForm({ disabled = false, busy = false, onContinue, onSelectionChange = undefined, destinationAddress = "",
+  onOpenCheckout = undefined, checkoutCapability = undefined, onRetryCheckoutCapabilities = undefined, onShowCheckoutHistory = undefined }) {
   const { t } = useI18n(), id = useId();
   const [amount, setAmount] = useState("50"), [countryCode, setCountryCode] = useState("");
   const [preferredProvider, setPreferredProvider] = useState("TRANSAK"), [method, setMethod] = useState("");
   const [options, setOptions] = useState(idleOptions), [revision, setRevision] = useState(0), [sourceCurrencyCode, setSourceCurrencyCode] = useState("USD");
   const submitting = useRef(false), discovery = useRef(null), contextEpoch = useRef(0), selectionEpoch = useRef(0), mounted = useRef(false);
+  const liveGeneralCheckout = useRef(false);
   const renderEpoch = selectionEpoch.current;
   const current = options.country === countryCode && options.sourceCurrencyCode === sourceCurrencyCode;
   const providers = current && options.status === "ready" ? options.providers.filter(provider => PROVIDERS.includes(provider.serviceProvider)
@@ -66,6 +69,9 @@ export function AdministrativeSandboxFundingForm({ disabled = false, busy = fals
   const partialAvailability = current && discoveryStatus === "ready" && options.failedProviders.length > 0;
   const valid = current && Boolean(countryCode) && fundingCurrencyChoices(countryCode).includes(sourceCurrencyCode) && amountValid
     && eligibleMethods.includes(method) && /^0x[0-9a-f]{40}$/i.test(destinationAddress);
+  const generalCheckoutValid = checkoutCapability?.status === "ready" && checkoutCapability.configured === true
+    && validMeldCheckoutAmount(Number(amount), countryCode, sourceCurrencyCode) && /^0x[0-9a-f]{40}$/i.test(destinationAddress);
+  liveGeneralCheckout.current = generalCheckoutValid;
 
   function changeSelection(update, value) {
     if (!mounted.current || busy || submitting.current) return;
@@ -138,6 +144,12 @@ export function AdministrativeSandboxFundingForm({ disabled = false, busy = fals
     try { await onContinue({ requestId: fundingRequestId(), amount: Number(amount), countryCode, sourceCurrencyCode, serviceProvider, paymentMethodType: method }); }
     finally { submitting.current = false; }
   }
+  async function openGeneralCheckout() {
+    if (!mounted.current || renderEpoch !== selectionEpoch.current || disabled || busy || submitting.current || !liveGeneralCheckout.current || !onOpenCheckout) return;
+    submitting.current = true;
+    try { await onOpenCheckout({ requestId: fundingRequestId(), country: countryCode, sourceCurrencyCode, amount: Number(amount) }); }
+    finally { submitting.current = false; }
+  }
   return <form className="mb-onramp-simple" onSubmit={event => void submit(event).catch(() => {})} aria-label={t("walletPage.administrativeWalletLabel")}>
     <div className="mb-onramp-simple-main"><div className={styles.formFields}>
       <FundingCountryField id={id} value={countryCode} onChange={changeCountry} busy={busy} />
@@ -155,6 +167,16 @@ export function AdministrativeSandboxFundingForm({ disabled = false, busy = fals
         </select></label></details> : serviceProvider ? <p className={styles.processedBy}>{t("onramp.processedBy")} {serviceProvider === "TRANSAK" ? "Transak" : "Banxa"}</p> : null}
     <FundingDestination address={destinationAddress} />
     <FundingSubmit disabled={disabled || !valid} busy={busy} />
+    {onOpenCheckout ? <section className={styles.providerChoice} aria-label={t("funding.meldCheckoutAction")}>
+      <p className={styles.hint}>{t(checkoutCapability?.status === "loading" ? "common.loading" : checkoutCapability?.status === "error"
+        ? "funding.meldCheckoutCapabilityError" : checkoutCapability?.configured ? "funding.meldCheckoutHelp" : "funding.meldCheckoutConfiguration")}</p>
+      <button type="button" className="executive-button" disabled={disabled || busy || !generalCheckoutValid}
+        onClick={() => void openGeneralCheckout().catch(() => {})}>{t("funding.meldCheckoutAction")}</button>
+      {checkoutCapability?.status === "error" && onRetryCheckoutCapabilities ? <button type="button" className="executive-button" disabled={busy}
+        onClick={onRetryCheckoutCapabilities}>{t("walletPage.retry")}</button> : null}
+      {checkoutCapability?.status === "ready" && checkoutCapability.configured && onShowCheckoutHistory ? <button type="button" className="executive-button" disabled={busy}
+        onClick={() => { if (mounted.current && !busy && !submitting.current) onShowCheckoutHistory(); }}>{t("funding.meldCheckoutHistory")}</button> : null}
+    </section> : null}
     </div>
   </form>;
 }

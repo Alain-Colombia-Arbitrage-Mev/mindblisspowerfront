@@ -36,3 +36,19 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   a sandbox authentication failure.
 - Test without real charges, real transfers or automatic payment retries. Keep
   external support reports as drafts unless the user authorizes sending them.
+
+### Generic Checkout and off-ramp work on `wallet`
+
+- The user's generic Checkout request takes precedence over the earlier
+  provider-specific URL preference for the new Checkout flow. Use a separate
+  endpoint and pending-attempt record; never fabricate a provider session ID.
+- Keep generic Checkout disabled until the actual sandbox Public Crypto Widget
+  Key, reviewed database migration and live contract validation are available.
+  Check the full mint guide: this endpoint is not in the mounted OpenAPI yet.
+- Preserve `BUY`, assigned administrative destination and `USDT_POLYGON` in
+  server-side `prefill` and `locked`. Query-string replacements do not set locks.
+- Off-ramp discovery orders currencies crypto → fiat. Return only methods and
+  limits reported for the account; preserve each limit's currency units.
+- An assigned address, a relayer key or a gas sponsor does not identify an
+  authorized signer for that administrative address. Do not activate SELL
+  funding or wallet-to-wallet broadcasts until that signing mechanism exists.

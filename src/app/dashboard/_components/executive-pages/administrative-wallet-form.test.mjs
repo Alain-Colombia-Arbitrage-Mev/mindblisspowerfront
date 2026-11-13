@@ -7,6 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 import { translateMessage } from '../../../../i18n/translate.mjs';
 import { validFundingAmount } from '../../../../lib/wallet-funding-contract.mjs';
+import { validMeldCheckoutAmount } from '../../../../lib/administrative-meld-checkout-contract.mjs';
 
 const require = createRequire(import.meta.url), icons = new Proxy({}, { get: () => () => null });
 const address = `0x${'1'.repeat(40)}`, reference = 'd8a4c010-cc33-44da-a297-8b3c6440f491';
@@ -29,6 +30,7 @@ function fixture(t, onContinue = async () => {}) {
     '@/lib/wallet-funding-client.mjs': { fundingRequestId: () => reference,
       readAdministrativeSandboxOptions: (country, provider, context) => new Promise((resolve, reject) => calls.push({ country, provider, ...context, resolve, reject })) },
     '@/lib/wallet-funding-contract.mjs': { validFundingAmount }, './wallet-funding.module.css': { default: new Proxy({}, { get: (_target, key) => key }) },
+    '@/lib/administrative-meld-checkout-contract.mjs': { validMeldCheckoutAmount },
   };
   const code = ts.transpileModule(readFileSync(new URL('./WalletFundingForm.jsx', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
   const module = { exports: {} };
@@ -157,4 +159,40 @@ test('React cleanup and setup replay preserves a live manual submit without open
   submit({ preventDefault() {} }); await settle();
   assert.equal(h.submitted.length, 1); assert.equal(h.submitted[0].countryCode, 'US');
   assert.equal(h.submitted[0].serviceProvider, 'TRANSAK');
+});
+
+test('generic MELD Checkout stays disabled while unconfigured and its click cannot bypass the capability guard', async t => {
+  const h = fixture(t), minted = [], props = { onOpenCheckout: async body => minted.push(body), checkoutCapability: { status: 'ready', configured: false } };
+  find(h.render(props), 'FundingCountryField').props.onChange('US');
+  const tree = h.render(props), button = nodes(tree).find(node => node?.type === 'button' && node.props.children === translateMessage('es', 'funding.meldCheckoutAction'));
+  assert.equal(button.props.disabled, true); button.props.onClick(); await settle(); assert.equal(minted.length, 0); assert.equal(h.submitted.length, 0);
+  assert.ok(nodes(tree).some(node => node?.props?.children === translateMessage('es', 'funding.meldCheckoutConfiguration')));
+});
+
+test('generic MELD Checkout is manual, independent of legacy provider discovery, and emits only its own four-field request', async t => {
+  const h = fixture(t), minted = [], props = { onOpenCheckout: async body => minted.push(body), checkoutCapability: { status: 'ready', configured: true } };
+  find(h.render(props), 'FundingCountryField').props.onChange('MX'); h.render(props);
+  find(h.render(props), 'FundingCurrencyField').props.onChange('MXN'); h.render(props);
+  find(h.render(props), 'FundingAmountField').props.onChange('1');
+  const tree = h.render(props), button = nodes(tree).find(node => node?.type === 'button' && node.props.children === translateMessage('es', 'funding.meldCheckoutAction'));
+  assert.equal(find(tree, 'FundingSubmit').props.disabled, true, 'legacy route has not loaded'); assert.equal(button.props.disabled, false);
+  assert.equal(minted.length, 0); button.props.onClick(); button.props.onClick(); await settle();
+  assert.deepEqual(minted, [{ requestId: reference, country: 'MX', sourceCurrencyCode: 'MXN', amount: 1 }]); assert.equal(h.submitted.length, 0);
+});
+
+test('old general checkout clicks cannot mint after edits, unmount, missing residence or missing assigned address', async t => {
+  const h = fixture(t), minted = [], props = { onOpenCheckout: async body => minted.push(body), checkoutCapability: { status: 'ready', configured: true } };
+  const action = tree => nodes(tree).find(node => node?.type === 'button' && node.props.children === translateMessage('es', 'funding.meldCheckoutAction'));
+  assert.equal(action(h.render(props)).props.disabled, true);
+  find(h.render(props), 'FundingCountryField').props.onChange('US'); const tree = h.render(props), oldClick = action(tree).props.onClick;
+  find(tree, 'FundingAmountField').props.onChange('100'); oldClick(); await settle(); assert.equal(minted.length, 0);
+  assert.equal(action(h.render({ ...props, destinationAddress: '' })).props.disabled, true);
+  const validClick = action(h.render(props)).props.onClick; h.stop(); validClick(); await settle(); assert.equal(minted.length, 0);
+});
+
+test('a captured configured CTA stops immediately when the capability becomes unavailable', async t => {
+  const h = fixture(t), minted = [], props = { onOpenCheckout: async body => minted.push(body), checkoutCapability: { status: 'ready', configured: true } };
+  find(h.render(props), 'FundingCountryField').props.onChange('US'); const tree = h.render(props);
+  const click = nodes(tree).find(node => node?.type === 'button' && node.props.children === translateMessage('es', 'funding.meldCheckoutAction')).props.onClick;
+  h.render({ ...props, checkoutCapability: { status: 'ready', configured: false } }); click(); await settle(); assert.equal(minted.length, 0);
 });

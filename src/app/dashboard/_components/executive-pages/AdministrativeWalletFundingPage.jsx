@@ -6,11 +6,15 @@ import { useI18n } from "@/i18n/LanguageProvider";
 import { ensureAdministrativeWallet, readAdministrativeWallet } from "@/lib/administrative-wallet.mjs";
 import { startAdministrativeMeldOnramp } from "@/lib/administrative-onramp-client.mjs";
 import { administrativeCheckoutReturn } from "@/lib/administrative-checkout-return.mjs";
+import { meldCheckoutReturn } from "@/lib/administrative-meld-checkout-contract.mjs";
+import { readAdministrativeMeldCheckoutCapabilities, startAdministrativeMeldCheckout } from "@/lib/administrative-meld-checkout-client.mjs";
 import { useMemberSession } from "@/lib/member-session-context";
 import { walletFundingOwnerKey } from "@/lib/wallet-funding-owner.mjs";
 import { AdministrativeSandboxFundingForm } from "./WalletFundingForm";
 import WalletFundingHistory from "./WalletFundingHistory";
 import WalletFundingStatus from "./WalletFundingStatus";
+import AdministrativeMeldCheckoutActivity from "./AdministrativeMeldCheckoutActivity";
+import AdministrativeWalletOperations from "./AdministrativeWalletOperations";
 import { administrativeFundingError, ProviderNote, WalletActionError, WalletAddress, WalletFundingScreen } from "./WalletFundingUI";
 import styles from "./wallet-funding.module.css";
 
@@ -31,16 +35,39 @@ export function AdministrativeWalletFundingView({ environment }) {
   const [historyRevision, setHistoryRevision] = useState(0);
   const [selectedReference, setSelectedReference] = useState("");
   const [statusFocusKey, setStatusFocusKey] = useState(0);
-  const clearSelectionError = useCallback(() => { setProviderError(""); setSelectedReference(""); setStatusFocusKey(0); }, []);
+  const [checkoutCapability, setCheckoutCapability] = useState({ status: "loading", configured: false });
+  const [capabilityRevision, setCapabilityRevision] = useState(0);
+  const [preparedCheckout, setPreparedCheckout] = useState("");
+  const [generalReference, setGeneralReference] = useState("");
+  const [showGeneralActivity, setShowGeneralActivity] = useState(false);
+  const [generalRevision, setGeneralRevision] = useState(0);
+  const clearSelectionError = useCallback(() => { setProviderError(""); setSelectedReference(""); setStatusFocusKey(0); setPreparedCheckout(""); setGeneralReference(""); }, []);
   const checkoutRequest = useRef(null);
   const mounted = useRef(false);
+  const liveCheckoutCapability = useRef(false);
+  liveCheckoutCapability.current = checkoutCapability.status === "ready" && checkoutCapability.configured === true;
   const assigned = wallet.status === "assigned";
   const sandbox = environment === "sandbox";
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; checkoutRequest.current?.abort(); }; }, []);
   useEffect(() => {
+    if (new URLSearchParams(window.location?.search).has("meldCheckoutReference")) return;
     const reference = administrativeCheckoutReturn(window.location?.search);
     if (reference) { setSelectedReference(reference); setStatusFocusKey(1); }
   }, []);
+  useEffect(() => {
+    if (!sandbox) return undefined;
+    const controller = new AbortController();
+    setCheckoutCapability({ status: "loading", configured: false });
+    readAdministrativeMeldCheckoutCapabilities({ signal: controller.signal }).then(value => {
+      if (mounted.current && !controller.signal.aborted) setCheckoutCapability({ status: "ready", configured: value.configured });
+    }).catch(() => { if (mounted.current && !controller.signal.aborted) setCheckoutCapability({ status: "error", configured: false }); });
+    return () => controller.abort();
+  }, [sandbox, capabilityRevision]);
+  useEffect(() => {
+    if (!sandbox || checkoutCapability.status !== "ready" || !checkoutCapability.configured || !assigned) return;
+    const reference = meldCheckoutReturn(window.location?.search);
+    if (reference) { setGeneralReference(reference); setShowGeneralActivity(true); }
+  }, [sandbox, checkoutCapability.status, checkoutCapability.configured, assigned]);
 
   async function openProvider(input) {
     if (!mounted.current || !sandbox || checkoutRequest.current || !assigned) return;
@@ -58,6 +85,25 @@ export function AdministrativeWalletFundingView({ environment }) {
   }
 
   function selectStatus(reference) { setSelectedReference(reference); setStatusFocusKey(value => value + 1); }
+  async function openGeneralCheckout(input) {
+    if (!mounted.current || !sandbox || !assigned || checkoutRequest.current || !liveCheckoutCapability.current) return;
+    const controller = new AbortController(); checkoutRequest.current = controller;
+    setBusy(true); setProviderError(""); setPreparedCheckout(""); setGeneralReference("");
+    try {
+      const result = await startAdministrativeMeldCheckout({ requestId: input.requestId, country: input.country, sourceCurrencyCode: input.sourceCurrencyCode, amount: input.amount },
+        { expectedAddress: wallet.address, signal: controller.signal });
+      if (mounted.current && !controller.signal.aborted) setPreparedCheckout(result.checkoutReference);
+    } catch (error) {
+      if (mounted.current && !controller.signal.aborted) {
+        if (error?.message === "wallet_funding_unconfigured") { liveCheckoutCapability.current = false; setCheckoutCapability({ status: "ready", configured: false }); setShowGeneralActivity(false); }
+        setProviderError(error?.message === "wallet_funding_unconfigured" ? t("funding.meldCheckoutConfiguration") : administrativeFundingError(error, t));
+      }
+      throw error;
+    } finally {
+      if (checkoutRequest.current === controller) checkoutRequest.current = null;
+      if (mounted.current && !controller.signal.aborted) { setBusy(false); setGeneralRevision(value => value + 1); }
+    }
+  }
 
   return <WalletFundingScreen title={t("walletPage.administrativeTitle")} subtitle={t("walletPage.administrativeCopy")}
     provider="MELD">
@@ -66,7 +112,10 @@ export function AdministrativeWalletFundingView({ environment }) {
       {sandbox ? <p>{t("funding.sandboxNoticeShort")}</p> : null}</div></div>
     <div className={styles.flowLayout} id="administrative-wallet">
       <section className={`executive-panel ${styles.formPanel}`} aria-label={t("walletPage.addFundsAction")}>
-        {sandbox ? <AdministrativeSandboxFundingForm disabled={!assigned} busy={busy} onContinue={openProvider} onSelectionChange={clearSelectionError} destinationAddress={assigned ? wallet.address : ""} /> : null}
+        {sandbox ? <AdministrativeSandboxFundingForm disabled={!assigned} busy={busy} onContinue={openProvider} onSelectionChange={clearSelectionError} destinationAddress={assigned ? wallet.address : ""}
+          onOpenCheckout={openGeneralCheckout} checkoutCapability={checkoutCapability}
+          onRetryCheckoutCapabilities={() => { if (mounted.current && !checkoutRequest.current) setCapabilityRevision(value => value + 1); }}
+          onShowCheckoutHistory={() => { if (mounted.current && checkoutCapability.status === "ready" && checkoutCapability.configured) setShowGeneralActivity(true); }} /> : null}
         <WalletActionError message={providerError} />
       </section>
       <aside className={styles.details} aria-label={t("funding.destinationDetails")}>
@@ -82,6 +131,14 @@ export function AdministrativeWalletFundingView({ environment }) {
     </div>
     {sandbox && selectedReference ? <WalletFundingStatus walletKind="administrative" checkoutReference={selectedReference} focusKey={statusFocusKey} /> : null}
     {sandbox ? <section className="executive-panel"><WalletFundingHistory walletKind="administrative" refreshKey={historyRevision} onSelectRequest={selectStatus} /></section> : null}
+    {sandbox && checkoutCapability.status === "ready" && checkoutCapability.configured && preparedCheckout ? <section className="executive-panel" role="status">
+      <h2 className={styles.statusHeading}>{t("funding.meldCheckoutPrepared")}</h2><p className={styles.hint}>{t("funding.meldCheckoutPreparedCopy")}</p>
+      <button type="button" className="executive-button" disabled={busy} onClick={() => { if (mounted.current && !checkoutRequest.current) { setGeneralReference(preparedCheckout); setShowGeneralActivity(true); } }}>{t("funding.statusRefresh")}</button>
+    </section> : null}
+    {sandbox && assigned && checkoutCapability.status === "ready" && checkoutCapability.configured && showGeneralActivity ? <AdministrativeMeldCheckoutActivity
+      enabled expectedAddress={wallet.address} checkoutReference={generalReference} refreshKey={generalRevision}
+      onSelectRequest={reference => { if (mounted.current) setGeneralReference(reference); }} /> : null}
+    {sandbox ? <AdministrativeWalletOperations disabled={!assigned} assignedAddress={assigned ? wallet.address : ""} /> : null}
   </WalletFundingScreen>;
 }
 

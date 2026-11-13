@@ -11,6 +11,9 @@ import { personalFundingFailure } from '../../../../lib/personal-funding-errors.
 import { translateMessage } from '../../../../i18n/translate.mjs';
 import { startAdministrativeMeldOnramp } from '../../../../lib/administrative-onramp-client.mjs';
 import { administrativeCheckoutReturn } from '../../../../lib/administrative-checkout-return.mjs';
+import * as meldCheckoutContract from '../../../../lib/administrative-meld-checkout-contract.mjs';
+import * as administrativeSigningContract from '../../../../lib/administrative-signing-contract.mjs';
+import * as administrativeInjected from '../../../../lib/administrative-injected-provider.mjs';
 
 const require = createRequire(import.meta.url);
 const ownerA = { subject: 'owner-A', email: 'a@example.test' }, ownerB = { subject: 'owner-B', email: 'b@example.test' };
@@ -24,14 +27,20 @@ const status = (reference = referenceA, wallet = walletA) => ({ walletKind: 'adm
 function WalletFundingScreen({ children }) { return React.createElement('section', null, children); }
 function WalletFundingHistory() { return null; }
 function WalletFundingStatus() { return null; }
+function WalletFundingStatusView() { return null; }
+function AdministrativeMeldCheckoutActivity() { return null; }
+function AdministrativeWalletOperations() { return null; }
+function AdministrativeTransferDraft() { return null; }
+function AdministrativeOfframpMethods() { return null; }
 function PersonalFundingForm() { return null; }
 function AdministrativeSandboxFundingForm() { return null; }
 
-function harness(filename, { api = {}, reown = {}, administrative = {}, checkout = {}, exportName = 'default' } = {}) {
+function harness(filename, { api = {}, reown = {}, administrative = {}, checkout = {}, generic = {}, signing = {}, injected = {}, exportName = 'default' } = {}) {
   const cells = [], effects = [];
   let cursor = 0, dirty = true, tree, member = ownerA, attributes = {}, disposed = false;
   const changed = (left, right) => !left || !right || left.length !== right.length || left.some((value, i) => !Object.is(value, right[i]));
   const hooks = {
+    useId: () => 'administrative-operations-test',
     useRef(initial) { const at = cursor++; return cells[at] ??= { current: initial }; },
     useState(initial) { const at = cursor++, cell = cells[at] ??= { value: typeof initial === 'function' ? initial() : initial };
       cell.set ??= update => { const next = typeof update === 'function' ? update(cell.value) : update; if (!Object.is(next, cell.value)) { cell.value = next; dirty = true; } };
@@ -48,13 +57,20 @@ function harness(filename, { api = {}, reown = {}, administrative = {}, checkout
     '@/lib/member-session-context': { useMemberSession: () => member },
     '@/lib/administrative-wallet.mjs': administrative, '@/lib/administrative-onramp-client.mjs': checkout,
     '@/lib/administrative-checkout-return.mjs': { administrativeCheckoutReturn },
+    '@/lib/administrative-meld-checkout-contract.mjs': meldCheckoutContract,
+    '@/lib/administrative-meld-checkout-client.mjs': { readAdministrativeMeldCheckoutCapabilities: async () => ({ configured: false }), ...generic },
+    './AdministrativeMeldCheckoutActivity': { default: AdministrativeMeldCheckoutActivity }, './AdministrativeOfframpMethods': { default: AdministrativeOfframpMethods },
+    './AdministrativeWalletOperations': { default: AdministrativeWalletOperations }, './AdministrativeTransferDraft': { default: AdministrativeTransferDraft },
+    '@/lib/administrative-signing-contract.mjs': administrativeSigningContract,
+    '@/lib/administrative-signing-client.mjs': { readAdministrativeSignerCapabilities: async () => ({ configured: false }), ...signing },
+    '@/lib/administrative-injected-provider.mjs': { ...administrativeInjected, discoverAdministrativeProviders: () => () => {}, ...injected },
     '@/lib/wallet-funding-owner.mjs': { walletFundingOwnerKey },
     '@/lib/wallet-funding-client.mjs': api, '@/lib/wallet-funding-contract.mjs': { fundingStatus, fundingConfirmation, FUNDING_UUID },
     '@/lib/personal-funding-errors.mjs': { personalFundingFailure }, '@/components/reown/ReownContext': { useReownWallet: () => reown },
     '@/components/wallet/PersonalWalletBalances': { default: () => null }, './WalletFundingForm': { PersonalFundingForm, AdministrativeSandboxFundingForm },
     './ResidenceImportantCard': { default: function ResidenceImportantCard() { return null; } },
     './WalletFundingTutorial': { default: () => null },
-    './WalletFundingHistory': { default: WalletFundingHistory }, './WalletFundingStatus': { default: WalletFundingStatus },
+    './WalletFundingHistory': { default: WalletFundingHistory }, './WalletFundingStatus': { default: WalletFundingStatus, WalletFundingStatusView },
     './WalletFundingUI': { WalletFundingScreen, WalletActionError: () => null, WalletAddress: () => null, ProviderNote: () => null,
       administrativeFundingError: () => 'sandbox error', walletFailureDiagnostic: () => '' },
   };
@@ -185,4 +201,190 @@ test('leaving the administrative form cancels its pending quote/session and cann
     sourceCurrencyCode: 'MXN', createdAt: '2026-11-12T00:00:00Z', checkoutUrl: 'https://sb.meldcrypto.com/widget?token=synthetic' });
   await assert.rejects(operation, { name: 'AbortError' }); assert.deepEqual(opened, []);
   await submit({}); assert.equal(requests.length, 1, 'obsolete owner cannot initiate another operation');
+});
+
+function testWindow(t, search = '') {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  Object.defineProperty(globalThis, 'window', { value: { dispatchEvent() {}, location: { search } }, configurable: true });
+  t.after(() => { if (previous) Object.defineProperty(globalThis, 'window', previous); else delete globalThis.window; });
+}
+const generalStatus = (reference = referenceA) => ({ ...status(reference), checkoutType: 'meld_checkout', requestStatus: 'minted', createdAt: '2026-11-12T12:00:00Z' });
+
+test('disabled generic capability performs no mint or generic status/history reads, even on a return or a captured CTA', async t => {
+  testWindow(t, `?meldCheckoutReference=${referenceA}&success=true`); let creates = 0, reads = 0;
+  const h = harness('AdministrativeWalletFundingPage.jsx', { exportName: 'AdministrativeWalletFundingView',
+    administrative: { async readAdministrativeWallet() { return { status: 'assigned', address: walletA }; } },
+    generic: { readAdministrativeMeldCheckoutCapabilities: async () => ({ configured: false }),
+      startAdministrativeMeldCheckout: async () => { creates++; }, readAdministrativeMeldCheckoutHistory: async () => { reads++; }, readAdministrativeMeldCheckoutStatus: async () => { reads++; } } });
+  t.after(() => h.unmount()); h.render({ environment: 'sandbox' }); await h.flush();
+  const form = find(h.tree, 'AdministrativeSandboxFundingForm'); assert.equal(form.props.checkoutCapability.configured, false);
+  await form.props.onOpenCheckout({ requestId: referenceA, country: 'US', sourceCurrencyCode: 'USD', amount: 100 });
+  form.props.onShowCheckoutHistory(); await h.flush();
+  assert.equal(find(h.tree, 'AdministrativeMeldCheckoutActivity'), undefined); assert.equal(find(h.tree, 'WalletFundingStatus'), undefined);
+  assert.equal(creates, 0); assert.equal(reads, 0);
+});
+
+test('general return selects only its namespace after capability discovery; manual mint overrides injected wallet/provider and coalesces clicks', async t => {
+  testWindow(t, `?meldCheckoutReference=${referenceA}&status=paid&amount=999999`);
+  const pending = deferred(), minted = [];
+  const h = harness('AdministrativeWalletFundingPage.jsx', { exportName: 'AdministrativeWalletFundingView',
+    administrative: { async readAdministrativeWallet() { return { status: 'assigned', address: walletA }; } },
+    generic: { readAdministrativeMeldCheckoutCapabilities: async () => ({ configured: true }), startAdministrativeMeldCheckout: async (body, options) => { minted.push({ body, options }); return pending.promise; } } });
+  t.after(() => h.unmount()); h.render({ environment: 'sandbox' }); await h.flush();
+  assert.equal(find(h.tree, 'WalletFundingStatus'), undefined);
+  assert.equal(find(h.tree, 'AdministrativeMeldCheckoutActivity').props.checkoutReference, referenceA);
+  const submit = find(h.tree, 'AdministrativeSandboxFundingForm').props.onOpenCheckout;
+  const operation = submit({ requestId: referenceB, country: 'MX', sourceCurrencyCode: 'MXN', amount: 500, address: 'malicious', serviceProvider: 'unknown' });
+  await submit({}); assert.equal(minted.length, 1);
+  assert.deepEqual(minted[0].body, { requestId: referenceB, country: 'MX', sourceCurrencyCode: 'MXN', amount: 500 }); assert.equal(minted[0].options.expectedAddress, walletA);
+  h.unmount(); assert.equal(minted[0].options.signal.aborted, true); pending.resolve({ checkoutReference: referenceB }); await operation;
+  await submit({}); assert.equal(minted.length, 1);
+});
+
+test('a captured page mint callback cannot issue another POST after the backend reports configuration missing', async t => {
+  testWindow(t); let calls = 0;
+  const h = harness('AdministrativeWalletFundingPage.jsx', { exportName: 'AdministrativeWalletFundingView',
+    administrative: { async readAdministrativeWallet() { return { status: 'assigned', address: walletA }; } },
+    generic: { readAdministrativeMeldCheckoutCapabilities: async () => ({ configured: true }), startAdministrativeMeldCheckout: async () => { calls++; throw Error('wallet_funding_unconfigured'); } } });
+  t.after(() => h.unmount()); h.render({ environment: 'sandbox' }); await h.flush();
+  const submit = find(h.tree, 'AdministrativeSandboxFundingForm').props.onOpenCheckout;
+  const body = { requestId: referenceA, country: 'US', sourceCurrencyCode: 'USD', amount: 100 };
+  await assert.rejects(submit(body), /wallet_funding_unconfigured/);
+  await submit(body); assert.equal(calls, 1, 'live capability retires the captured callback even before rerender');
+  await h.flush(); assert.equal(find(h.tree, 'AdministrativeSandboxFundingForm').props.checkoutCapability.configured, false);
+});
+
+test('generic cached history and API status are owner-scoped and ignore late results across A → B → A and logout', async t => {
+  const reads = [], selected = [];
+  const h = harness('AdministrativeMeldCheckoutActivity.jsx', { generic: {
+    readAdministrativeMeldCheckoutHistory: options => { const pending = deferred(); reads.push({ ...options, ...pending }); return pending.promise; },
+  } }); t.after(() => h.unmount());
+  h.render({ enabled: false, expectedAddress: walletA, onSelectRequest: value => selected.push(value) }); await h.flush(); assert.equal(reads.length, 0);
+  h.render({ enabled: true, expectedAddress: walletA, onSelectRequest: value => selected.push(value) }); await h.flush(); assert.equal(reads.length, 1);
+  reads[0].resolve({ records: [generalStatus()] }); await h.flush(); assert.ok(html(h.tree).includes(referenceA.slice(-8)));
+  const action = all(h.tree, node => node?.type === 'button' && node.props.className === 'historyAction')[0];
+  h.owner(ownerB); assert.ok(!html(h.tree).includes(referenceA.slice(-8))); action.props.onClick(); assert.deepEqual(selected, []); await h.flush();
+  h.owner(ownerA); await h.flush(); assert.equal(reads.length, 3); assert.ok(reads.slice(0, 2).every(read => read.signal.aborted));
+  reads[1].resolve({ records: [generalStatus(referenceB)] }); await h.flush(); assert.ok(!html(h.tree).includes(referenceB.slice(-8)));
+  h.owner(null); assert.equal(h.tree, null); await h.flush(); assert.equal(reads[2].signal.aborted, true); assert.equal(reads.length, 3);
+});
+
+test('a generic minted link remains unconfirmed; verified API test proof appears only after a manual owned status refresh', async t => {
+  let statusReads = 0;
+  const completed = { ...generalStatus(), confirmation: { state: 'confirmed', source: 'meld_sandbox_api', testMode: true, providerStatus: 'SETTLED',
+    transactionId: 'sandbox-test-transaction', receivedAmount: '99.123456', confirmedAt: '2026-11-12T12:10:00Z', serviceProvider: 'TRANSAK', paymentMethodType: 'CREDIT_DEBIT_CARD' } };
+  const h = harness('AdministrativeMeldCheckoutActivity.jsx', { generic: { readAdministrativeMeldCheckoutHistory: async () => ({ records: [] }),
+    readAdministrativeMeldCheckoutStatus: async () => ++statusReads === 1 ? generalStatus() : completed } }); t.after(() => h.unmount());
+  h.render({ enabled: true, expectedAddress: walletA, checkoutReference: referenceA }); await h.flush();
+  assert.equal(statusReads, 1); assert.equal(find(h.tree, 'WalletFundingStatusView'), undefined); assert.ok(html(h.tree).includes(translateMessage('es', 'funding.meldCheckoutPreparedCopy')));
+  assert.ok(!html(h.tree).includes('Transak'));
+  const refresh = all(h.tree, node => node?.type === 'button' && React.Children.toArray(node.props.children).includes(translateMessage('es', 'funding.statusRefresh')))[0];
+  refresh.props.onClick(); await h.flush(); assert.equal(statusReads, 2); assert.equal(find(h.tree, 'WalletFundingStatusView').props.view.receivedAmount, '99.123456');
+  assert.ok(html(h.tree).includes('Transak'));
+  await h.flush(); assert.equal(statusReads, 2, 'no automatic polling or payment retry');
+});
+
+const signingCapability = { flow: 'administrative_signing', configured: true, mode: 'external', environment: 'sandbox', chainId: 137, broadcastEnabled: false, canBroadcast: false, canPrepareOfframp: false };
+const signingStatus = verified => ({ ...signingCapability, assignedAddress: walletA, verified, ...(verified ? { expiresAt: '2099-11-12T12:00:00.000Z' } : {}) });
+function injectedWallet(account = walletA) {
+  const calls = [], listeners = new Map();
+  const provider = { async request(input) { calls.push(input); return input.method === 'eth_chainId' ? '0x89' : input.method === 'personal_sign' ? `0x${'ab'.repeat(65)}` : [account]; },
+    on: (event, callback) => listeners.set(event, callback), removeListener: event => listeners.delete(event) };
+  return { provider, calls, listeners, discovery: callback => { callback([{ id: 'test-wallet', name: 'Test wallet', provider }]); return () => {}; } };
+}
+const action = (tree, key) => all(tree, node => node?.type === 'button' && node.props.children === translateMessage('es', `administrativeSigning.${key}`))[0];
+
+test('external signer wrapper remounts by native owner and the disabled feature never invokes wallet permissions or signing', async t => {
+  const wrapper = harness('AdministrativeWalletOperations.jsx'); t.after(() => wrapper.unmount());
+  const first = wrapper.render({ assignedAddress: walletA }), second = wrapper.owner(ownerB); assert.notEqual(first.key, second.key); assert.equal(wrapper.owner(null), null);
+  const wallet = injectedWallet(); let statusReads = 0;
+  const h = harness('AdministrativeWalletOperations.jsx', { exportName: 'OperationsView', signing: { readAdministrativeSignerCapabilities: async () => ({ ...signingCapability, configured: false }),
+    readAdministrativeSignerStatus: async () => { statusReads++; return signingStatus(false); } }, injected: { discoverAdministrativeProviders: wallet.discovery } });
+  t.after(() => h.unmount()); h.render({ assignedAddress: walletA, disabled: false }); await h.flush();
+  assert.equal(statusReads, 0); assert.equal(wallet.calls.length, 0); assert.equal(find(h.tree, 'AdministrativeTransferDraft').props.signerReady, false);
+});
+
+test('reload restores an already-verified external signer using readonly wallet RPC only; account changes retire local readiness without another signature', async t => {
+  const wallet = injectedWallet(); let challenges = 0;
+  const h = harness('AdministrativeWalletOperations.jsx', { exportName: 'OperationsView', signing: { readAdministrativeSignerCapabilities: async () => signingCapability,
+    readAdministrativeSignerStatus: async () => signingStatus(true), createAdministrativeSignerChallenge: async () => { challenges++; } }, injected: { discoverAdministrativeProviders: wallet.discovery } });
+  t.after(() => h.unmount()); h.render({ assignedAddress: walletA, disabled: false }); await h.flush();
+  assert.equal(find(h.tree, 'AdministrativeTransferDraft').props.signerReady, true); assert.equal(find(h.tree, 'AdministrativeOfframpMethods').props.signerReady, true);
+  assert.equal(find(h.tree, 'AdministrativeOfframpMethods').props.offrampEnabled, false, 'native capability controls optional off-ramp reads separately from local signer readiness');
+  const sellGuard = find(h.tree, 'AdministrativeOfframpMethods').props.canPrepare;
+  assert.equal(sellGuard(), true);
+  assert.deepEqual(wallet.calls.map(call => call.method), ['eth_accounts', 'eth_chainId']); assert.equal(challenges, 0);
+  wallet.listeners.get('accountsChanged')([`0x${'2'.repeat(40)}`]); await h.flush();
+  assert.equal(find(h.tree, 'AdministrativeTransferDraft').props.signerReady, false); assert.equal(wallet.calls.length, 2);
+  assert.ok(html(h.tree).includes(translateMessage('es', 'administrativeSigning.verifiedInactive')));
+  assert.equal(sellGuard(), false);
+  h.unmount(); assert.equal(sellGuard(), false);
+});
+
+test('new signer permissions and ownership requests require separate explicit actions and a wrong account never obtains a challenge', async t => {
+  const wallet = injectedWallet(`0x${'2'.repeat(40)}`); let challenges = 0, verifications = 0;
+  const h = harness('AdministrativeWalletOperations.jsx', { exportName: 'OperationsView', signing: { readAdministrativeSignerCapabilities: async () => signingCapability,
+    readAdministrativeSignerStatus: async () => signingStatus(false), createAdministrativeSignerChallenge: async () => { challenges++; }, verifyAdministrativeSigner: async () => { verifications++; } },
+    injected: { discoverAdministrativeProviders: wallet.discovery } }); t.after(() => h.unmount());
+  h.render({ assignedAddress: walletA, disabled: false }); await h.flush(); assert.equal(wallet.calls.length, 0);
+  all(h.tree, node => node?.type === 'select')[0].props.onChange({ target: { value: 'test-wallet' } }); await h.flush();
+  action(h.tree, 'connect').props.onClick(); await h.flush();
+  assert.deepEqual(wallet.calls.map(call => call.method), ['eth_requestAccounts', 'eth_chainId']);
+  assert.ok(html(h.tree).includes(translateMessage('es', 'administrativeSigning.mismatch'))); assert.equal(action(h.tree, 'verify'), undefined);
+  assert.equal(challenges, 0); assert.equal(verifications, 0);
+});
+
+test('an explicit connect handles its own accountsChanged event with a fresh readonly check and does not auto-sign', async t => {
+  const wallet = injectedWallet(); let challenges = 0;
+  wallet.provider.request = async input => {
+    wallet.calls.push(input);
+    if (input.method === 'eth_requestAccounts') wallet.listeners.get('accountsChanged')?.([walletA]);
+    return input.method === 'eth_chainId' ? '0x89' : [walletA];
+  };
+  const h = harness('AdministrativeWalletOperations.jsx', { exportName: 'OperationsView', signing: { readAdministrativeSignerCapabilities: async () => signingCapability,
+    readAdministrativeSignerStatus: async () => signingStatus(false), createAdministrativeSignerChallenge: async () => { challenges++; } }, injected: { discoverAdministrativeProviders: wallet.discovery } });
+  t.after(() => h.unmount()); h.render({ assignedAddress: walletA, disabled: false }); await h.flush();
+  all(h.tree, node => node?.type === 'select')[0].props.onChange({ target: { value: 'test-wallet' } }); await h.flush();
+  action(h.tree, 'connect').props.onClick(); await h.flush();
+  assert.ok(action(h.tree, 'verify')); assert.equal(challenges, 0);
+  assert.equal(wallet.calls.filter(call => call.method === 'eth_requestAccounts').length, 1);
+  assert.ok(wallet.calls.some(call => call.method === 'eth_accounts')); assert.ok(!wallet.calls.some(call => call.method === 'personal_sign'));
+});
+
+test('explicit ownership signs one message and cannot complete verification after leaving the native owner view', async t => {
+  const wallet = injectedWallet(), signed = deferred(); let challenges = 0, verifications = 0;
+  wallet.provider.request = async input => { wallet.calls.push(input); return input.method === 'eth_chainId' ? '0x89' : input.method === 'personal_sign' ? signed.promise : [walletA]; };
+  const h = harness('AdministrativeWalletOperations.jsx', { exportName: 'OperationsView', signing: { readAdministrativeSignerCapabilities: async () => signingCapability,
+    readAdministrativeSignerStatus: async () => signingStatus(false), createAdministrativeSignerChallenge: async () => { challenges++; return { challengeId: referenceA, message: 'Administrative ownership message only. '.repeat(4) }; },
+    verifyAdministrativeSigner: async () => { verifications++; return signingStatus(true); } }, injected: { discoverAdministrativeProviders: wallet.discovery } });
+  t.after(() => h.unmount()); h.render({ assignedAddress: walletA, disabled: false }); await h.flush();
+  all(h.tree, node => node?.type === 'select')[0].props.onChange({ target: { value: 'test-wallet' } }); await h.flush(); action(h.tree, 'connect').props.onClick(); await h.flush();
+  assert.equal(challenges, 0); action(h.tree, 'verify').props.onClick(); await h.flush(); assert.equal(challenges, 1); assert.equal(wallet.calls.filter(call => call.method === 'personal_sign').length, 1);
+  h.unmount(); signed.resolve(`0x${'ab'.repeat(65)}`); await new Promise(resolve => setImmediate(resolve)); assert.equal(verifications, 0);
+  assert.ok(wallet.calls.every(call => !['eth_sendTransaction', 'eth_sendRawTransaction', 'wallet_sendCalls'].includes(call.method)));
+});
+
+test('transfer preview is manual, coalesces duplicate prepares, clears on edits and cannot run from a retired signer', async t => {
+  const calls = [], pending = deferred();
+  const h = harness('AdministrativeTransferDraft.jsx', { api: { fundingRequestId: () => referenceA }, signing: { prepareAdministrativeTransfer: async (...args) => { calls.push(args); return pending.promise; } } });
+  t.after(() => h.unmount()); const props = { assignedAddress: walletA, signerReady: true, disabled: false, ensureActive: async () => {} };
+  h.render(props); await h.flush(); assert.equal(calls.length, 0);
+  all(h.tree, node => node?.type === 'input' && node.props.id.endsWith('-recipient'))[0].props.onChange({ target: { value: `0x${'2'.repeat(40)}` } }); await h.flush();
+  all(h.tree, node => node?.type === 'input' && node.props.id.endsWith('-amount'))[0].props.onChange({ target: { value: '1.123456' } }); await h.flush();
+  const submit = all(h.tree, node => node?.type === 'form')[0].props.onSubmit; submit({ preventDefault() {} }); submit({ preventDefault() {} }); await h.flush(); assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0][0], { requestId: referenceA, recipient: `0x${'2'.repeat(40)}`, amount: '1.123456' }); assert.equal(calls[0][1], walletA);
+  h.render({ ...props, signerReady: false }); await h.flush(); assert.equal(calls[0][2].signal.aborted, true);
+  pending.resolve({ recipient: `0x${'2'.repeat(40)}`, amount: '1.123456', draftReference: referenceA }); await h.flush(); assert.ok(!html(h.tree).includes(referenceA));
+  submit({ preventDefault() {} }); await h.flush(); assert.equal(calls.length, 1);
+});
+
+test('an expired native transfer binding requests manual reactivation and does not retry the draft', async t => {
+  let calls = 0, retired = 0;
+  const h = harness('AdministrativeTransferDraft.jsx', { api: { fundingRequestId: () => referenceA }, signing: { prepareAdministrativeTransfer: async () => { calls++; throw Error('administrative_transfer_binding_required'); } } });
+  t.after(() => h.unmount()); h.render({ assignedAddress: walletA, signerReady: true, disabled: false, ensureActive: async () => {}, onSignerInvalid: () => retired++ }); await h.flush();
+  all(h.tree, node => node?.type === 'input' && node.props.id.endsWith('-recipient'))[0].props.onChange({ target: { value: `0x${'2'.repeat(40)}` } }); await h.flush();
+  all(h.tree, node => node?.type === 'input' && node.props.id.endsWith('-amount'))[0].props.onChange({ target: { value: '1' } }); await h.flush();
+  all(h.tree, node => node?.type === 'form')[0].props.onSubmit({ preventDefault() {} }); await h.flush();
+  assert.equal(calls, 1); assert.equal(retired, 1); assert.ok(html(h.tree).includes(translateMessage('es', 'administrativeSigning.activateFirst')));
+  await h.flush(); assert.equal(calls, 1);
 });
