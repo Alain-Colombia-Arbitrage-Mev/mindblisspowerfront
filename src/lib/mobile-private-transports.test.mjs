@@ -34,7 +34,7 @@ test('private purchase/status/profile clients work without newer Safari AbortSig
     provider_invoice_revoked: false, late_payment_policy: 'review_required' }))).state, 'cancelled_local');
   assert.deepEqual(await readNOWPaymentsReceipt(order, response(pending)), pending);
   assert.equal((await requestProfile('GET', undefined, response(profile))).name, 'Synthetic Person');
-  assert.equal((await requestProfile('POST', { name: 'Synthetic' }, response({ ok: true, profile }))).name, 'Synthetic Person');
+  assert.equal((await requestProfile('POST', { name: 'Synthetic Person' }, response({ ok: true, profile }))).name, 'Synthetic Person');
   assert.equal(calls.length, 6); assert.equal(timers.size, 0);
   assert.deepEqual(calls.map(([, init]) => init.method || 'GET'), ['GET', 'POST', 'POST', 'GET', 'GET', 'POST']);
   assert.deepEqual(JSON.parse(calls[1][1].body), { order_id: order });

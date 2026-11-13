@@ -10,6 +10,7 @@ import * as deadline from '../../../../lib/browser-request-deadline.mjs';
 import { translateMessage } from '../../../../i18n/translate.mjs';
 import * as fundingContract from '../../../../lib/wallet-funding-contract.mjs';
 import * as paymentValues from '../../../../lib/personal-company-payment-values.mjs';
+import * as profileModel from '../../profile/profile-model.mjs';
 
 const require = createRequire(import.meta.url);
 const pageNames = [
@@ -97,7 +98,7 @@ function loadPages({ summary = { loading: true, data: null, error: '' }, health 
       if (Object.hasOwn(mocks, id)) return mocks[id];
       if (id.endsWith('.module.css')) return { default: new Proxy({}, { get: (_target, key) => key }) };
       if (id.endsWith('/StripeSalesHistory') || id.endsWith('/SupportTicketForm')) return { default: emptyComponent };
-      if (id.endsWith('/profile-model.mjs')) return { requestProfile: async () => { throw Error('Unexpected render-time request'); } };
+      if (id.endsWith('/profile-model.mjs')) return { ...profileModel, requestProfile: async () => { throw Error('Unexpected render-time request'); } };
       if (id.startsWith('.')) return load(new URL(/\.(?:mjs|jsx)$/.test(id) ? id : `${id}.jsx`, url));
       return require(id);
     }, module, module.exports);
@@ -158,11 +159,12 @@ test('shared presentation primitives have no API, auth, animation or page depend
 });
 
 test('Better Auth profile stays email-only, with saves disabled until the stored profile is loaded', () => {
-  const pages = loadPages({ session: { name: 'Persona Prueba', email: 'verified@example.test', referralCode: 'REF-123' } });
+  const pages = loadPages({ session: { subject: 'verified-owner', name: 'Persona Prueba', email: 'verified@example.test', referralCode: 'REF-123' } });
   const html = render(pages.ProfileDashboardPage, { authMode: 'better-auth' });
   assert.match(html, /Persona Prueba/);
   assert.match(html, /verified@example.test/);
-  assert.match(html, /REF-123/);
+  assert.doesNotMatch(html, /REF-123/);
+  assert.match(html, /Patrocinador pendiente de asignación/);
   assert.match(html, /autenticación se realiza por correo electrónico/);
   assert.match(html, /href="\/forgot-password"/);
   assert.match(html, /Crear o cambiar contraseña/);

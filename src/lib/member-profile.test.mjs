@@ -64,6 +64,8 @@ function profileRoute(upstream) {
     '@/lib/verify-id-token': { verifyIdTokenForSession: async () => ({ email: 'verified@example.test' }) },
     '@/lib/member-mutation-policy.mjs': { memberMutationError },
     '@/lib/member-profile.mjs': profilePolicy,
+    '@/lib/better-auth-bridge.mjs': { betterAuthEnabled: () => false },
+    '@/lib/member-profile-native-bff.mjs': { handleNativeMemberProfile: () => assert.fail('Legacy profile must preserve its existing transport') },
   };
   new Function('require', 'module', 'exports', code)(id => {
     assert.ok(Object.hasOwn(mocks, id), `Unexpected route dependency ${id}`);

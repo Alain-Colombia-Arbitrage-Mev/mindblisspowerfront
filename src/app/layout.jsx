@@ -17,16 +17,12 @@ export const viewport = {
 };
 
 const themeInitScript = `(() => {
-  let theme = "light";
-  try {
-    const saved = localStorage.getItem("vp-theme");
-    if (saved === "light" || saved === "dark") theme = saved;
-  } catch {}
   const root = document.documentElement;
-  root.dataset.theme = theme;
-  root.classList.toggle("dark", theme === "dark");
-  root.style.colorScheme = theme;
-  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", theme === "dark" ? "#0b1219" : "#f3f7f8");
+  root.dataset.theme = "light";
+  root.classList.remove("dark");
+  root.style.colorScheme = "light";
+  try { localStorage.setItem("vp-theme", "light"); } catch {}
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", "#f3f7f8");
 })();`;
 
 export default function RootLayout({ children }) {

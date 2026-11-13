@@ -54,7 +54,8 @@ function fixture(descriptor, {
       verifyIdTokenForSession: verify,
       verifiedEmailFromIdTokenForSession: async value => (await verify(value))?.email || '',
     },
-    '@/lib/better-auth-bridge.mjs': { AuthServiceUnavailable },
+    '@/lib/better-auth-bridge.mjs': { AuthServiceUnavailable, betterAuthEnabled: () => false },
+    '@/lib/member-profile-native-bff.mjs': { handleNativeMemberProfile: () => assert.fail('Legacy fixture must not invoke native profile transport') },
     '@/lib/cloudflare-runtime.mjs': {
       runtimeEnvironment: () => env,
       coreFetch: async (url, options) => {

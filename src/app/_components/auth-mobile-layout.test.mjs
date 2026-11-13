@@ -74,7 +74,7 @@ test('the real AuthShell renders the approved identity card and compact access l
   assert.match(html, /<main\b/); assert.match(html, /auth-identity/);
   assert.match(html, /<form aria-label="Acceso seguro"/);
   assert.match(html, /loading="eager" decoding="async"/);
-  assert.match(html, /aria-label="Cambiar tema"/);
+  assert.doesNotMatch(html, /aria-label="Cambiar tema"|role="switch"/);
   assert.match(html, /aria-label="Idioma"/);
   assert.doesNotMatch(html, /¿Necesitas ayuda\?|auth-support|vp-support/);
 });

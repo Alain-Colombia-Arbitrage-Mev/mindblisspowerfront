@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import ThemeToggle from "./ThemeToggle";
 import LanguageSwitcher from "@/i18n/LanguageSwitcher";
 import { AuthIdentityCopy, AuthLegal } from "./AuthLocalizedContent";
 
@@ -35,7 +34,6 @@ export default function AuthShell({
       <section className="auth-access-area">
         <header className="auth-access-tools">
           <LanguageSwitcher compact />
-          <ThemeToggle />
         </header>
 
         <div className="auth-content">

@@ -14,7 +14,6 @@ import {
   UserRound,
 } from "lucide-react";
 
-import ThemeToggle from "@/app/_components/ThemeToggle";
 import LanguageSwitcher from "@/i18n/LanguageSwitcher";
 import { readMemberParts, validMemberSummary, validMemberTree } from "@/lib/member-read.mjs";
 import { usePersonalWalletBalance } from "@/hooks/usePersonalWalletBalance";
@@ -120,7 +119,6 @@ export default function OverviewDashboard() {
             <RefreshCw size={16} /><span>{t("common.update")}</span>
           </button>
           <LanguageSwitcher compact />
-          <ThemeToggle />
           <Link className="vp-shell-icon" href="/dashboard/profile" aria-label={t("pages.profile")} title={t("pages.profile")}><UserRound size={17} /></Link>
         </div>
       </header>

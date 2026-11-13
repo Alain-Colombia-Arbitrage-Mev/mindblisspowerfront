@@ -27,7 +27,7 @@ test('the real auth shell keeps the Mindbliss identity and preferences without s
   const tree = shell({ activePath: '/register', loginHref: registrationLoginUrl('member@example.test', 'Sponsor', 'R'), registrationHref: registrationUrl('member@example.test', 'Sponsor', 'R') });
   const all = nodes(tree);
   assert.equal(all.find(node => node?.props?.className === 'auth-wordmark').props.href, '/');
-  assert.ok(all.some(node => node?.type === ThemeToggle));
+  assert.ok(all.every(node => node?.type !== ThemeToggle));
   assert.ok(all.some(node => node?.type === LanguageSwitcher && node.props.compact));
   assert.doesNotMatch(readFileSync(new URL('./AuthShell.jsx', import.meta.url), 'utf8'), /AuthSupportWidget/);
   assert.equal(all.some(node => node?.type === 'nav'), false);

@@ -5,6 +5,8 @@ import { NextResponse } from "next/server";
 import { verifyIdTokenForSession as verifyIdToken } from "@/lib/verify-id-token";
 import { memberMutationError } from '@/lib/member-mutation-policy.mjs';
 import { memberProfilePatch, validMemberProfile, validMemberProfileUpdate, readMemberProfileJson } from '@/lib/member-profile.mjs';
+import { betterAuthEnabled } from '@/lib/better-auth-bridge.mjs';
+import { handleNativeMemberProfile } from '@/lib/member-profile-native-bff.mjs';
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,6 +34,7 @@ const upstreamFailure = (response, data) => reply({ error: safeErrors.has(data?.
   [400, 401, 403, 404, 409, 422, 429, 503].includes(response.status) ? response.status : 502);
 
 export async function GET(request) {
+  if (betterAuthEnabled()) return handleNativeMemberProfile(request);
   const c = await ctx();
   if (c.error) return reply({ error: c.error }, c.status);
   const signal = AbortSignal.any([request.signal, AbortSignal.timeout(12000)]);
@@ -50,6 +53,7 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
+  if (betterAuthEnabled()) return handleNativeMemberProfile(request);
   const invalidOrigin = memberMutationError(request, runtimeEnvironment());
   if (invalidOrigin) return reply({ error: invalidOrigin.error }, invalidOrigin.status);
   const c = await ctx();

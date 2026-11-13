@@ -6,6 +6,7 @@ import { companyPaymentMessages } from "./company-payment-messages.js";
 import { walletTransferMessages } from "./wallet-transfer-messages.js";
 import { paymentWalletMessages } from "./payment-wallet-messages.js";
 import { walletTutorialMessages } from "./wallet-tutorial-messages.js";
+import { profileEditMessages } from "./profile-edit-messages.js";
 
 export function normalizeLocale(value) {
   const candidate = String(value || "").toLowerCase().split(/[-_]/)[0];
@@ -20,7 +21,8 @@ function valueAt(dictionary, key) {
 
 export function translateMessage(locale, key, variables = undefined) {
   const activeLocale = normalizeLocale(locale);
-  let value = valueAt(walletTutorialMessages[activeLocale], key)
+  let value = valueAt(profileEditMessages[activeLocale], key)
+    ?? valueAt(walletTutorialMessages[activeLocale], key)
     ?? valueAt(paymentWalletMessages[activeLocale], key)
     ?? valueAt(walletTransferMessages[activeLocale], key)
     ?? valueAt(companyPaymentMessages[activeLocale], key)
@@ -28,6 +30,7 @@ export function translateMessage(locale, key, variables = undefined) {
     ?? valueAt(portalMessages[activeLocale], key)
     ?? valueAt(dashboardMessages[activeLocale], key)
     ?? valueAt(messages[activeLocale], key)
+    ?? valueAt(profileEditMessages.es, key)
     ?? valueAt(walletTutorialMessages.es, key)
     ?? valueAt(paymentWalletMessages.es, key)
     ?? valueAt(walletTransferMessages.es, key)

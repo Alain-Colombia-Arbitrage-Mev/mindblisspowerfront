@@ -2,7 +2,6 @@
 
 import Link from "./IntentLink";
 import { Menu, UserRound } from "lucide-react";
-import ThemeToggle from "@/app/_components/ThemeToggle";
 import LanguageSwitcher from "@/i18n/LanguageSwitcher";
 import { useI18n } from "@/i18n/LanguageProvider";
 
@@ -35,7 +34,6 @@ export default function PanelHeader({
       </div>
       <div className="vp-panel-actions">
         <LanguageSwitcher compact />
-        <ThemeToggle />
         <Link
           className="vp-shell-icon vp-profile-action"
           href="/dashboard/profile"

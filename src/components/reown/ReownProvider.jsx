@@ -27,7 +27,7 @@ import { ReownContext, PAYMENT_CONNECTION_UNAVAILABLE, SOLANA_WALLET_UNAVAILABLE
 const projectId = process.env.NEXT_PUBLIC_REOWN_PROJECT_ID?.trim() || "";
 const walletMetadata = personalWalletMetadata(typeof window === "undefined" ? "https://app.mindblisspower.com" : window.location.origin);
 const configured = /^[a-f0-9]{32}$/i.test(projectId) && Boolean(walletMetadata);
-const initialWalletTheme = typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+const initialWalletTheme = 'light';
 let appKitInstance;
 
 const unavailable = Object.freeze({
@@ -234,17 +234,8 @@ function ConfiguredReownProvider({ children }) {
   }, [ownerKey]);
 
   useEffect(() => {
-    const root = document.documentElement;
-    const syncTheme = () => {
-      const mode = root.dataset.theme === "dark" ? "dark" : "light";
-      appKitThemeRef.current.setThemeMode(mode);
-      appKitThemeRef.current.setThemeVariables(themeVariables(mode));
-    };
-
-    syncTheme();
-    const observer = new MutationObserver(syncTheme);
-    observer.observe(root, { attributes: true, attributeFilter: ["data-theme"] });
-    return () => observer.disconnect();
+    appKitThemeRef.current.setThemeMode("light");
+    appKitThemeRef.current.setThemeVariables(themeVariables("light"));
   }, []);
 
   useEffect(() => {
