@@ -36,14 +36,38 @@ USD50 and USDT Polygon. The returned provider link used
 fallback used `https://sb.meldcrypto.com/` with a token. URL values and tokens
 were not published, and checkout was not completed.
 
-The existing sandbox webhook profile still targeted the personal app during
-the initial audit. Its signing secret matched the existing backend secret.
-The administrative destination is `wallet.mindblisspower.com/api/webhooks/meld`.
+The existing sandbox webhook profile targeted the personal app during the
+initial audit. It now points to
+`https://wallet.mindblisspower.com/api/webhooks/meld`, retains its existing
+signing secret, and subscribes to the four crypto transaction events plus
+`WEBHOOK_TEST`, using version `2026-02-03`.
+
+On 2026-11-13 UTC, MELD delivered the configuration test and a separate explicit
+test request. Both were verified and stored as technical receipts with no
+customer attempt, payment, credit or commission mutation. The explicit test
+increased the receipt count from one to two. An invalid signature returned
+HTTP 401. This verifies delivery and authentication; it does not represent a
+completed sandbox purchase.
 
 Banxa is connected through MELD's shared sandbox integration, but returned
 `SERVICE_PROVIDER_AUTHENTICATION_EXCEPTION` even for US/USD/USDC. That connection
 requires MELD review; country changes, a fabricated quote, or a production key
 do not repair it. The support report remains a draft.
+
+## Release validation
+
+- The frontend full suite passed 1,678 tests; the final contract negotiation
+  changes also passed their focused suite, type checking and lint checks.
+- The backend funding release passed 100 tests with 1,390 assertions; Core
+  contract forwarding passed 14 tests. The webhook/reconciliation and SQL
+  isolation suites passed, including 75 PostgreSQL probes.
+- The administrative portal was deployed from `wallet`; its personal and
+  community routes remain unavailable. The shared API was deployed from
+  `rewon`. Neither repository's `main` branch was modified.
+- Contract header `x-mindbliss-sandbox-contract: v2` opts administrative clients
+  into direct provider checkout and independent sandbox confirmation. Older
+  clients retain the MELD widget and legacy status projection. Personal
+  requests never opt into the administrative contract.
 
 ## Primary references
 
