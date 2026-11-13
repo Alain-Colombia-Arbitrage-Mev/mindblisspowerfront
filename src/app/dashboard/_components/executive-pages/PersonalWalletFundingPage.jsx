@@ -42,7 +42,6 @@ export function PersonalWalletFunding() {
   const mounted = useRef(false), action = useRef(null);
   const [actionError, setActionError] = useState("");
   const [actionDiagnostic, setActionDiagnostic] = useState("");
-  const [copyError, setCopyError] = useState("");
   const [actionBusy, setActionBusy] = useState(false);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [walletRecovery, setWalletRecovery] = useState({ phase: "", address: "" });
@@ -71,7 +70,7 @@ export function PersonalWalletFunding() {
   }, []);
   useEffect(() => {
     action.current = null; setActionBusy(false); setCheckoutBusy(false); setWalletRecovery({ phase: "", address: "" });
-    setActionError(""); setActionDiagnostic(""); setCopyError(""); setSelectedReference(""); setSelectedGeneration(-1); setStatusFocusKey(0);
+    setActionError(""); setActionDiagnostic(""); setSelectedReference(""); setSelectedGeneration(-1); setStatusFocusKey(0);
   }, [owner, generation]);
 
   async function walletAction(change = false) {
@@ -176,13 +175,12 @@ export function PersonalWalletFunding() {
           <p className={styles.hint}>{t(!setupRequired ? "walletPage.simpleLinkedCopy" : reown.walletIdentityMismatch ? "funding.walletAccountChange"
             : displayState === "error" ? (reown.linkError === "session" ? "walletPage.checkSession" : "walletPage.checkUnavailable") : displayState === "checking" ? "walletPage.checkingCopy" : "funding.activateWalletCopy")}</p>
           <WalletAddress address={address} label={t("walletPage.personalWalletLabel")} loading={displayState === "checking"}
-            emptyLabel={t(displayState === "checking" ? "walletPage.destinationLoading" : "funding.noPersonalAddress")} onCopyError={() => setCopyError(t("walletPage.administrativeCopyFailed"))} />
+            emptyLabel={t(displayState === "checking" ? "walletPage.destinationLoading" : "funding.noPersonalAddress")} />
           {!["verified", "checking", "verifying"].includes(displayState) ? <button className="executive-button primary" type="button" disabled={busy || !owner || !reown.configured} onClick={() => void walletAction()}>
             {actionBusy ? <Loader2 className="animate-spin" size={17} aria-hidden="true" /> : state === "error" ? <RefreshCw size={17} aria-hidden="true" /> : <ShieldCheck size={17} aria-hidden="true" />}
             {t(actionBusy ? "funding.activatingWallet" : state === "error" ? "walletPage.retryCheck" : "funding.activateWallet")}
           </button> : null}
           {!verified && state === "connected" ? <button className="executive-button" type="button" disabled={busy} onClick={() => void walletAction(true)}>{t("funding.chooseWallet")}</button> : null}
-          <WalletActionError message={copyError} />
         </section>
       </aside>
     </div>

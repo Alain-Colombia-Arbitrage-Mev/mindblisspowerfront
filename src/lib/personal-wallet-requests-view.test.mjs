@@ -9,6 +9,10 @@ import { translateMessage } from '../i18n/translate.mjs';
 import { matchesRoute, memberPageFor, memberPageKeysFor } from './member-navigation.mjs';
 import { FUNDING_UUID } from './wallet-funding-contract.mjs';
 import { personalWalletBalanceSessionKey } from './personal-wallet-balance-store.mjs';
+import { memberSessionOwnerKey } from './member-session-boundary.mjs';
+import { subscribeMemberLogout } from './member-logout-sync.mjs';
+import { subscribeMemberSessionReplacement } from './member-session-sync.mjs';
+import * as addressClipboard from './wallet-address-clipboard.mjs';
 
 const require = createRequire(import.meta.url);
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
@@ -30,6 +34,11 @@ function moduleAt(relative, locale = 'es', overrides = {}) {
       if (id === '@/lib/wallet-funding-contract.mjs') return { FUNDING_UUID };
       if (id === '@/lib/member-session-context') return { useMemberSession: () => ({ subject: 'requests-view-owner', email: 'member@example.test' }) };
       if (id === '@/lib/personal-wallet-balance-store.mjs') return { personalWalletBalanceSessionKey };
+      if (id === '@/lib/member-session-boundary.mjs') return { memberSessionOwnerKey };
+      if (id === '@/lib/member-logout-sync.mjs') return { subscribeMemberLogout };
+      if (id === '@/lib/member-session-sync.mjs') return { subscribeMemberSessionReplacement };
+      if (id === '@/lib/wallet-address-clipboard.mjs') return addressClipboard;
+      if (id === '@/components/wallet/WalletAddressCopyButton') return load(new URL('../components/wallet/WalletAddressCopyButton.jsx', import.meta.url));
       if (id === '@/lib/wallet-funding-client.mjs') return {
         readWalletFundingHistory: () => assert.fail('server render fetched funding history'), readWalletFundingStatus: () => assert.fail('server render fetched status'),
       };
