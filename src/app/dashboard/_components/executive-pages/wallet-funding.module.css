@@ -18,7 +18,14 @@
 .formPanel :global(.mb-onramp-simple) { display: block; margin-top: 0; }
 .formPanel :global(.mb-onramp-simple-main) { border: 0; padding: 0; background: transparent; }
 .formPanel :global(.mb-onramp-country-picker > span), .formPanel :global(.mb-onramp-country-picker > label), .formPanel :global(legend) { color: var(--vp-muted); font-size: 13px; font-weight: 700; letter-spacing: normal; text-transform: none; }
-.formPanel :global(select) { width: 100%; min-width: 0; font-size: 16px; }
+.formPanel :global(select) { width: 100%; min-width: 0; color-scheme: only light; color: var(--vp-text); background: var(--vp-field); font-size: 16px; }
+/* Keep funding controls above the legacy dashboard input normalization. */
+.formPanel .formFields :global(select:not(:disabled)) { border-color: var(--vp-border-strong) !important; }
+.formPanel .formFields :global(select:focus-visible) { border-color: var(--vp-accent) !important; outline: 2px solid var(--vp-accent); outline-offset: 2px; }
+.screen .formPanel :global([placeholder]::placeholder) { color: var(--vp-muted) !important; -webkit-text-fill-color: var(--vp-muted); opacity: 1; }
+.formPanel :global(option) { color: var(--vp-text); background: var(--vp-surface); }
+.formPanel :global(select:disabled) { color: var(--vp-muted); -webkit-text-fill-color: var(--vp-muted); opacity: 1; cursor: wait; }
+.formPanel :global(.executive-button:disabled), .formPanel :global(.executive-button:disabled:hover), .statusPanel > button:disabled { color: var(--vp-muted); background: var(--vp-field); border-color: var(--vp-border); opacity: 1; cursor: not-allowed; transform: none; }
 .formPanel :global(.mb-onramp-quick-amounts button) { min-height: 44px; font-family: inherit; font-size: 13px; }
 .formPanel :global(.mb-onramp-disclosure), .formPanel :global(.mb-onramp-amount-fieldset > small) { color: var(--vp-muted); font-size: 12px; line-height: 1.6; text-align: start; }
 .formPanel :global(.mb-onramp-amount-fieldset) { margin-bottom: 20px; }
@@ -42,16 +49,18 @@
 .amountCurrency { display: inline-block; margin-inline-start: 8px; padding: 3px 7px; border-radius: 5px; color: var(--vp-link); background: var(--vp-accent-muted); font-size: 11px; line-height: 1.4; vertical-align: middle; }
 .quickAmounts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .quickAmounts button { display: flex; align-items: center; justify-content: center; min-width: 0; padding: 10px 12px; font-variant-numeric: tabular-nums; line-height: 1.35; white-space: nowrap; touch-action: manipulation; transition: background-color .15s, border-color .15s; }
+.formPanel .quickAmounts button { border-color: var(--vp-border-strong); }
 .quickAmounts button bdi { min-width: 0; }
 .quickAmounts button:not(:disabled):hover { border-color: var(--vp-accent-border); background: var(--vp-accent-muted); }
 .quickAmounts button[aria-pressed="true"] { border-color: var(--vp-accent-border); box-shadow: inset 0 0 0 1px var(--vp-accent-border); }
-.quickAmounts button:disabled { cursor: wait; opacity: .6; }
+.quickAmounts button:disabled { cursor: wait; opacity: 1; }
 .quickAmounts button:focus-visible { outline: 2px solid var(--vp-accent); outline-offset: 3px; }
-.amountField .amountInput { min-width: 0; border-radius: 12px; }
+.formPanel .amountField .amountInput { min-width: 0; border-color: var(--vp-border-strong); border-radius: 12px; }
 .amountInput:focus-within { outline: 2px solid var(--vp-accent); outline-offset: 2px; }
 .amountField .amountInput:has(input[aria-invalid="true"]) { border-color: var(--vp-danger); }
-.amountInput input { direction: ltr; font-variant-numeric: tabular-nums; }
-.amountField:disabled .amountInput { opacity: .6; }
+.amountInput input { direction: ltr; color-scheme: only light; font-variant-numeric: tabular-nums; }
+.amountInput input:disabled { color: var(--vp-muted); -webkit-text-fill-color: var(--vp-muted); opacity: 1; cursor: wait; }
+.amountField :global([role="alert"]) { color: var(--vp-danger); font-weight: 600; }
 @container (min-width: 22rem) { .quickAmounts { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .amountSliderGroup { display: grid; gap: 3px; margin-top: 5px; }
 .amountSliderGroup .amountSlider { width: 100%; min-width: 0; height: 44px; margin: 0; padding: 0; accent-color: var(--vp-accent); cursor: pointer; }
@@ -63,7 +72,7 @@
 .methodField legend { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; width: 100%; margin-bottom: 10px; }
 .methodCount { margin-inline-start: auto; color: var(--vp-muted); font-size: 12px; font-weight: 500; }
 .methodChoices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.methodOption { position: relative; display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 44px; padding: 10px 11px; border: 1px solid var(--vp-border); border-radius: 10px; color: var(--vp-text); background: var(--vp-surface); cursor: pointer; }
+.methodOption { position: relative; display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 44px; padding: 10px 11px; border: 1px solid var(--vp-border-strong); border-radius: 10px; color: var(--vp-text); background: var(--vp-surface); cursor: pointer; }
 .methodOption input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
 .methodOption svg { flex: none; color: var(--vp-muted); }
 .methodOption span { min-width: 0; font-size: 13px; line-height: 1.35; overflow-wrap: anywhere; }
@@ -71,7 +80,8 @@
 .methodOption:focus-within { outline: 2px solid var(--vp-accent); outline-offset: 3px; }
 .methodSelected { border-color: var(--vp-accent-border); background: var(--vp-accent-muted); color: var(--vp-link); }
 .methodSelected svg { color: currentColor; }
-.methodOption:has(input:disabled) { cursor: wait; opacity: .65; }
+.methodOption:has(input:disabled) { cursor: wait; opacity: 1; }
+.methodOption:has(input:disabled):not(.methodSelected) { color: var(--vp-muted); background: var(--vp-field); }
 .providerChoice { margin-top: 12px; color: var(--vp-muted); font-size: 13px; }
 .providerChoice summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; cursor: pointer; }
 .providerChoice summary span { color: var(--vp-link); font-weight: 700; }

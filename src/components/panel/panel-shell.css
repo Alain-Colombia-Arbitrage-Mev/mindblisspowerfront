@@ -1078,7 +1078,7 @@ body:has(> .vp-dashboard-shell) {
   position: fixed;
   z-index: 80;
   inset: 0;
-  background: rgb(5 15 25 / 68%);
+  background: rgb(20 40 50 / 40%);
   backdrop-filter: blur(10px);
   animation: mb-recharge-fade 160ms ease-out;
 }
@@ -1094,13 +1094,14 @@ body:has(> .vp-dashboard-shell) {
   gap: 24px;
   overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 32px;
   transform: translate(-50%, -50%);
   border: 1px solid var(--vp-border);
   border-radius: 20px;
   outline: 0;
-  background: var(--vp-surface-raised);
-  box-shadow: 0 24px 54px rgb(2 8 13 / 70%), inset 0 1px rgb(255 255 255 / 7%);
+  background: var(--vp-surface);
+  box-shadow: 0 24px 64px -24px rgb(20 47 67 / 30%);
   color: var(--vp-text);
   animation: mb-recharge-enter 180ms cubic-bezier(.2,.8,.2,1);
 }
@@ -1128,7 +1129,7 @@ body:has(> .vp-dashboard-shell) {
   height: 44px;
   flex: 0 0 auto;
   place-items: center;
-  border: 1px solid var(--vp-border);
+  border: 1px solid var(--vp-border-strong);
   border-radius: 14px;
   background: var(--vp-shell);
   color: var(--vp-muted);
@@ -1195,7 +1196,7 @@ body:has(> .vp-dashboard-shell) {
   align-items: center;
   gap: 16px;
   padding: 20px;
-  border: 1px solid var(--vp-border);
+  border: 1px solid var(--vp-border-strong);
   border-radius: 16px;
   background: var(--vp-shell);
   color: var(--vp-text);
@@ -1206,7 +1207,14 @@ body:has(> .vp-dashboard-shell) {
   transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
 }
 .mb-recharge-method:hover { transform: translateY(-1px); border-color: var(--vp-accent-border); background: var(--vp-accent-muted); }
-.mb-recharge-method:disabled { cursor: progress; opacity: .72; transform: none; }
+.mb-recharge-method:disabled {
+  cursor: progress;
+  opacity: 1;
+  transform: none;
+  background: var(--vp-surface-raised);
+  color: var(--vp-muted);
+}
+.mb-recharge-method:disabled .mb-recharge-method-copy :is(strong, b) { color: var(--vp-muted); }
 .mb-recharge-method-icon { width: 44px; height: 44px; border-radius: 12px; }
 .mb-recharge-method-copy { display: grid; min-width: 0; gap: 6px; }
 .mb-recharge-method-copy strong { font-size: 20px; font-weight: 650; letter-spacing: -.02em; }
