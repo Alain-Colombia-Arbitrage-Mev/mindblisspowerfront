@@ -18,6 +18,7 @@ test('all dynamic statuses retain security, private cache, cookies, body and rou
     assert.equal(response.headers.get('content-security-policy'), DOCUMENT_CSP);
     assert.equal(response.headers.has('content-security-policy-report-only'), false);
     assert.equal(response.headers.get('referrer-policy'), 'strict-origin-when-cross-origin');
+    assert.equal(response.headers.get('cross-origin-opener-policy'), 'same-origin-allow-popups');
     assert.match(response.headers.get('permissions-policy'), /camera=\(\).*microphone=\(\)/);
     assert.equal(response.headers.get('strict-transport-security'), 'max-age=86400');
     assert.equal(response.headers.has('x-powered-by'), false);
@@ -55,6 +56,7 @@ test('uploaded static files get a controlled security-only prefix without wildca
   assert.match(output, /content-security-policy: base-uri 'self'; object-src 'none'; frame-ancestors 'none'/i);
   assert.match(output, /x-frame-options: DENY/i);
   assert.match(output, /referrer-policy: strict-origin-when-cross-origin/i);
+  assert.match(output, /cross-origin-opener-policy: same-origin-allow-popups/i);
   assert.doesNotMatch(output, /strict-transport-security|includeSubDomains|preload/);
   assert.equal(output.split('\n').filter(line => line.startsWith('/')).length, 2);
   assert.doesNotMatch(output, /\/_next\/static\/\*\n {2}Cache-Control/);

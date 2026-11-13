@@ -11,6 +11,8 @@ export function applySecurityHeaders(headers, request) {
   headers.set('X-Frame-Options', 'DENY');
   headers.set('X-Content-Type-Options', 'nosniff');
   headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  // Retain OAuth popup communication used by the embedded wallet provider.
+  headers.set('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
   headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()');
   headers.delete('X-Powered-By');
   let url;

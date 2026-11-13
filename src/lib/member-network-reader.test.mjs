@@ -16,6 +16,36 @@ function setup(options = {}) {
   return { reader, parts, sync, denied, starts };
 }
 
+function clock() {
+  let time = 0;
+  const tasks = new Map();
+  return {
+    now: () => time, tasks,
+    schedule(callback, delay) { const task = { callback, at: time + delay }; tasks.set(task, task); return task; },
+    unschedule(task) { tasks.delete(task); },
+    async advance(delay) {
+      const end = time + delay;
+      while (true) {
+        const next = [...tasks.values()].sort((a, b) => a.at - b.at)[0];
+        if (!next || next.at > end) break;
+        tasks.delete(next); time = next.at; next.callback(); await tick();
+      }
+      time = end;
+    },
+  };
+}
+function visibility(initial = "visible") {
+  const listeners = new Set();
+  return {
+    visibilityState: initial, listeners,
+    addEventListener(type, listener) { assert.equal(type, "visibilitychange"); listeners.add(listener); },
+    removeEventListener(type, listener) { assert.equal(type, "visibilitychange"); listeners.delete(listener); },
+    show(state) { this.visibilityState = state; for (const listener of [...listeners]) listener(); },
+  };
+}
+const waitingForPlacement = url => url.includes("/tree?") ? { positioned: false }
+  : url.includes("/payments/") ? { ...summary, active_packages: 1 } : referral;
+
 test("initial network reads run in parallel; depth changes request only the tree (3 → 1)", async () => {
   const calls = [];
   const { reader, starts } = setup({ read: async (url, { validate }) => { calls.push(url); const data = dataFor(url); assert.equal(validate(data), true); return data; } });
@@ -209,4 +239,106 @@ test("manual-placement payments do not poll and unmount ignores late transport r
   const depth = reader.changeDepth("6"); reader.dispose();
   assert.equal(signal.aborted, true); const count = parts.length;
   pending.resolve(tree); await depth; assert.equal(parts.length, count);
+});
+
+test("automatic network reads stay below the native token limit, even with a shorter requested delay, and exhaust their finite attempt budget", async () => {
+  const time = clock(), calls = [];
+  const { reader, sync } = setup({ ...time, pollDelay: 3000, read: async url => {
+    calls.push({ url, at: time.now() }); return waitingForPlacement(url);
+  } });
+  await reader.refresh();
+  await time.advance(60_000);
+  assert.equal(calls.length, 15, "one initial batch plus four automatic batches, not 60 GETs/minute");
+  for (const call of calls) assert.ok(calls.filter(other => other.at >= call.at && other.at <= call.at + 60_000).length <= 15);
+  assert.equal(calls.every(({ url }) => /^\/api\/(?:member\/(?:tree\?|referral)|payments\/me)/.test(url)), true);
+  await time.advance(600_000);
+  assert.equal(calls.length, 60, "twenty batches remain the lifetime bound for this refresh");
+  assert.equal(time.tasks.size, 0); assert.equal(sync.at(-1), false);
+  reader.dispose();
+});
+
+test("hidden network views remove polling and coalesce repeated restoration events behind the same cooldown", async () => {
+  const time = clock(), documentTarget = visibility(), calls = [];
+  let placed = false;
+  const { reader, sync } = setup({ ...time, documentTarget, read: async url => {
+    calls.push(url); return placed ? dataFor(url) : waitingForPlacement(url);
+  } });
+  await reader.refresh();
+  const stale = [...time.tasks.values()][0].callback;
+  documentTarget.show("hidden");
+  assert.equal(time.tasks.size, 0); assert.equal(sync.at(-1), false);
+  await time.advance(5000);
+  stale(); await tick(); assert.equal(calls.length, 3);
+  documentTarget.show("visible"); documentTarget.show("visible");
+  assert.equal(time.tasks.size, 1);
+  await time.advance(9999); assert.equal(calls.length, 3);
+  placed = true;
+  await time.advance(1); assert.equal(calls.length, 6);
+  assert.equal(time.tasks.size, 0); assert.equal(sync.at(-1), false);
+  await time.advance(60_000); assert.equal(calls.length, 6, "placement ends the automatic cycle after one complete refresh");
+  reader.dispose(); assert.equal(documentTarget.listeners.size, 0);
+});
+
+test("hiding aborts every in-flight part without publishing errors or stale responses after restoration", async () => {
+  const time = clock(), documentTarget = visibility(), old = [deferred(), deferred(), deferred()], signals = [];
+  let calls = 0;
+  const { reader, parts, denied } = setup({ ...time, documentTarget, read: async (url, { signal }) => {
+    const index = calls++; signals.push(signal); return index < 3 ? old[index].promise : dataFor(url);
+  } });
+  const initial = reader.refresh(); await tick();
+  documentTarget.show("hidden");
+  assert.equal(signals.every(signal => signal.aborted), true);
+  assert.equal(parts.length, 0); assert.equal(denied.length, 0);
+  documentTarget.show("visible");
+  await time.advance(15000);
+  assert.equal(calls, 6); assert.equal(parts.length, 3);
+  old[0].resolve({ ...tree, me: { affiliateId: "stale" } });
+  old[1].reject(Object.assign(new Error("cancelled stale access"), { status: 401 })); old[2].resolve(referral);
+  await initial;
+  assert.equal(parts.length, 3); assert.equal(denied.length, 0);
+  assert.equal(parts.find(([key]) => key === "tree")[1].data.me.affiliateId, "101");
+  reader.dispose();
+});
+
+test("an initially hidden view defers its first read, uses the latest selected depth, and unmount retires its visibility listener and callbacks", async () => {
+  const time = clock(), documentTarget = visibility("hidden"), calls = [];
+  const { reader } = setup({ ...time, documentTarget, read: async url => { calls.push(url); return dataFor(url); } });
+  await reader.refresh(); await reader.changeDepth("6");
+  await time.advance(60_000); assert.equal(calls.length, 0);
+  documentTarget.show("visible"); documentTarget.show("visible");
+  const stale = [...time.tasks.values()][0].callback;
+  await time.advance(0);
+  assert.equal(calls.length, 3); assert.equal(calls[0], memberTreeUrl("6"));
+  reader.dispose(); assert.equal(documentTarget.listeners.size, 0);
+  documentTarget.show("hidden"); documentTarget.show("visible"); stale(); await tick();
+  assert.equal(calls.length, 3); assert.equal(time.tasks.size, 0);
+});
+
+test("visibility changes preserve the attempt count instead of restarting placement polling", async () => {
+  const time = clock(), documentTarget = visibility(), calls = [];
+  const { reader } = setup({ ...time, documentTarget, maxTries: 3, read: async url => {
+    calls.push(url); return waitingForPlacement(url);
+  } });
+  await reader.refresh();
+  for (let count = 0; count < 4; count++) {
+    documentTarget.show("hidden"); documentTarget.show("visible");
+    await time.advance(15000);
+  }
+  assert.equal(calls.length, 9); assert.equal(time.tasks.size, 0);
+  await reader.refresh(); assert.equal(calls.length, 12, "only an explicit refresh starts a new bounded cycle");
+  reader.dispose();
+});
+
+test("restoring visibility never retries an authentication outage or generates a new access attempt", async () => {
+  const time = clock(), documentTarget = visibility(), calls = [];
+  const { reader, denied } = setup({ ...time, documentTarget, read: async url => {
+    calls.push(url);
+    if (url.includes("/referral")) throw Object.assign(new Error("Temporal"), { status: 503, code: "authentication_unavailable" });
+    return waitingForPlacement(url);
+  } });
+  await reader.refresh();
+  documentTarget.show("hidden"); documentTarget.show("visible");
+  await time.advance(60_000);
+  assert.equal(calls.length, 3); assert.equal(time.tasks.size, 0); assert.equal(denied.length, 0);
+  reader.dispose();
 });

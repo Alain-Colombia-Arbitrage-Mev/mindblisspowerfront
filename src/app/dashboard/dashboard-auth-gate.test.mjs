@@ -58,6 +58,7 @@ function gate({ token = 'synthetic-private-token', claims = null, tokenError,
     } },
     '../_components/AuthShell': { default: AuthShell },
     './_components/DashboardShell': { default: DashboardShell },
+    './_components/DashboardSessionBoundary': { default: ({ children }) => children },
   });
   function PrivateChild() {
     calls.privateChildren++;
@@ -160,8 +161,10 @@ test('healthy verified identities retain the shell and children without receivin
     assert.equal(app.calls.shell, 1);
     assert.equal(app.calls.privateChildren, 1);
     assert.deepEqual(app.calls.redirects, []);
-    assert.equal(output.props.authMode, betterAuth ? 'better-auth' : 'cognito');
-    assert.deepEqual(Object.keys(output.props).sort(), ['authMode', 'children']);
+    assert.equal(output.props.mode, betterAuth ? 'better-auth' : 'cognito');
+    assert.deepEqual(output.props.owner, { email: claims.email, subject: claims.sub });
+    assert.deepEqual(Object.keys(output.props).sort(), ['children', 'mode', 'owner']);
+    assert.equal(output.props.children.props.authMode, betterAuth ? 'better-auth' : 'cognito');
     assert.match(html, /synthetic-private-child-content/);
     assert.doesNotMatch(html, /synthetic-private-token|synthetic@example|untrusted-unused-role|MBP-LOGIN/);
   }

@@ -5,6 +5,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useI18n } from "@/i18n/LanguageProvider";
 import { ensureAdministrativeWallet, readAdministrativeWallet } from "@/lib/administrative-wallet.mjs";
 import { startAdministrativeMeldOnramp } from "@/lib/administrative-onramp-client.mjs";
+import { useMemberSession } from "@/lib/member-session-context";
+import { walletFundingOwnerKey } from "@/lib/wallet-funding-owner.mjs";
 import { AdministrativeSandboxFundingForm } from "./WalletFundingForm";
 import WalletFundingHistory from "./WalletFundingHistory";
 import WalletFundingStatus from "./WalletFundingStatus";
@@ -14,6 +16,12 @@ import styles from "./wallet-funding.module.css";
 const EMPTY_WALLET = { status: "loading", address: "", checkoutReference: "", assignedAt: "", errorCode: "" };
 
 export default function AdministrativeWalletFundingPage({ environment = "production" }) {
+  const owner = walletFundingOwnerKey(useMemberSession());
+  return owner ? <AdministrativeWalletFundingView key={owner} environment={environment} /> : null;
+}
+
+/** A native session change remounts the complete form and cancels its old reads/writes. */
+export function AdministrativeWalletFundingView({ environment }) {
   const { t } = useI18n();
   const { wallet, load } = useAdministrativeWallet();
   const [providerError, setProviderError] = useState("");
@@ -24,22 +32,23 @@ export default function AdministrativeWalletFundingPage({ environment = "product
   const [statusFocusKey, setStatusFocusKey] = useState(0);
   const clearSelectionError = useCallback(() => { setProviderError(""); setSelectedReference(""); setStatusFocusKey(0); }, []);
   const checkoutRequest = useRef(null);
+  const mounted = useRef(false);
   const assigned = wallet.status === "assigned";
   const sandbox = environment === "sandbox";
-  useEffect(() => () => checkoutRequest.current?.abort(), []);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; checkoutRequest.current?.abort(); }; }, []);
 
   async function openProvider(input) {
-    if (!sandbox || checkoutRequest.current || !assigned) return;
+    if (!mounted.current || !sandbox || checkoutRequest.current || !assigned) return;
     const controller = new AbortController(); checkoutRequest.current = controller;
     setBusy(true); setProviderError("");
     try {
       const session = await startAdministrativeMeldOnramp({ address: wallet.address, ...input }, { signal: controller.signal });
-      if (!controller.signal.aborted) { setSelectedReference(session.checkoutReference); setStatusFocusKey(0); }
+      if (mounted.current && !controller.signal.aborted) { setSelectedReference(session.checkoutReference); setStatusFocusKey(0); }
     }
-    catch (error) { if (!controller.signal.aborted) setProviderError(administrativeFundingError(error, t)); throw error; }
+    catch (error) { if (mounted.current && !controller.signal.aborted) setProviderError(administrativeFundingError(error, t)); throw error; }
     finally {
       if (checkoutRequest.current === controller) checkoutRequest.current = null;
-      if (!controller.signal.aborted) { setBusy(false); setHistoryRevision(value => value + 1); }
+      if (mounted.current && !controller.signal.aborted) { setBusy(false); setHistoryRevision(value => value + 1); }
     }
   }
 
@@ -73,7 +82,11 @@ export default function AdministrativeWalletFundingPage({ environment = "product
 
 function useAdministrativeWallet() {
   const [wallet, setWallet] = useState(EMPTY_WALLET);
-  const load = useCallback(async signal => {
+  const request = useRef(null), mounted = useRef(false);
+  const load = useCallback(async () => {
+    if (!mounted.current || request.current) return;
+    const controller = new AbortController(); request.current = controller;
+    const signal = controller.signal;
     setWallet(current => ({ ...current, status: "loading", errorCode: "" }));
     try {
       let next = await readAdministrativeWallet({ signal });
@@ -82,8 +95,9 @@ function useAdministrativeWallet() {
         setWallet({ ...EMPTY_WALLET, ...next, errorCode: "" });
         if (next.status === "assigned") window.dispatchEvent(new CustomEvent("vp:administrative-wallet-assigned"));
       }
-    } catch (error) { if (error?.name !== "AbortError") setWallet({ ...EMPTY_WALLET, status: "error", errorCode: error?.code || "administrative_wallet_unavailable" }); }
+    } catch (error) { if (mounted.current && !signal.aborted && error?.name !== "AbortError") setWallet({ ...EMPTY_WALLET, status: "error", errorCode: error?.code || "administrative_wallet_unavailable" }); }
+    finally { if (request.current === controller) request.current = null; }
   }, []);
-  useEffect(() => { const controller = new AbortController(); void load(controller.signal); return () => controller.abort(); }, [load]);
+  useEffect(() => { mounted.current = true; void load(); return () => { mounted.current = false; request.current?.abort(); request.current = null; }; }, [load]);
   return { wallet, load };
 }

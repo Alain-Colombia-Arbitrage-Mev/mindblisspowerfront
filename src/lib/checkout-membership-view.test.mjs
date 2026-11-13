@@ -550,7 +550,7 @@ test('checkout identity projection comes from verified subject claims and the mo
   const route = readFileSync(new URL('../app/api/auth/session/route.js', import.meta.url), 'utf8');
   const shell = readFileSync(new URL('../app/dashboard/_components/DashboardShell.jsx', import.meta.url), 'utf8');
   assert.match(route, /verifyIdToken\(idToken\)/); assert.match(route, /subject:/); assert.match(route, /claims\.sub/);
-  assert.match(shell, /subject:\s*d\.subject/);
+  assert.match(shell, /subject:\s*session\.subject/);
   const helper = readFileSync(new URL('./checkout-intent.mjs', import.meta.url), 'utf8');
   assert.doesNotMatch(helper, /email|localStorage|authorization|access_token|id_token|session_token/i);
 });

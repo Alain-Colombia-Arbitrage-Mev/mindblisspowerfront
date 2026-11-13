@@ -1,18 +1,23 @@
-import { FUNDING_UUID, validFundingAmount, fundingCurrencyCode, personalFundingCountry, personalFundingMethod } from './wallet-funding-contract.mjs';
+import { FUNDING_UUID, personalFundingProviders, validFundingSourceAmount, fundingCurrencyCode, fundingSourceSupported, personalFundingCountry, personalFundingMethod } from './wallet-funding-contract.mjs';
+import { PERSONAL_WALLET_MELD_ASSET } from './personal-wallet.mjs';
 
 /** Validate before linking, selecting a provider or creating a personal intent. */
-export function reownFundingCurrency(sourceCurrencyCode = 'USD') {
+export function reownFundingCurrency(sourceCurrencyCode = 'USD', context = {}) {
   if (!fundingCurrencyCode(sourceCurrencyCode)) throw new Error('invalid_request');
-  if (sourceCurrencyCode !== 'USD') throw new Error('wallet_funding_valuation_unavailable');
+  if (!fundingSourceSupported({ ...context, sourceCurrencyCode }, 'personal')) throw new Error('wallet_funding_valuation_unavailable');
   return sourceCurrencyCode;
 }
 
-export function reownFundingSelection(selection = {}, detectCountry = () => '') {
-  const sourceCurrencyCode = reownFundingCurrency(selection.sourceCurrencyCode);
+export function reownFundingSelection(selection = {}) {
+  const sourceCurrencyCode = fundingCurrencyCode(selection.sourceCurrencyCode);
+  if (!sourceCurrencyCode) throw new Error('invalid_request');
   if (selection.country && selection.countryCode && selection.country !== selection.countryCode) throw new Error('invalid_request');
-  const countryCode = selection.country || selection.countryCode || detectCountry();
+  // Residence must come from the user's explicit selection. Browser locale,
+  // timezone and saved wallet state cannot supply a checkout country.
+  const countryCode = selection.country || selection.countryCode;
   if (!personalFundingCountry(countryCode)) throw new Error('wallet_funding_invalid_country');
   if (!personalFundingMethod(selection.paymentMethodType)) throw new Error('wallet_funding_method_unavailable');
+  reownFundingCurrency(sourceCurrencyCode, { countryCode, paymentMethodType: selection.paymentMethodType });
   return { sourceCurrencyCode, countryCode };
 }
 
@@ -24,21 +29,21 @@ export function buildReownProductionOnrampUrl({ providerUrl, address, projectId,
     || !url.searchParams.get('publicKey')) throw new Error('reown_provider_invalid');
   if (!/^0x[0-9a-f]{40}$/i.test(address || '') || !/^[a-f0-9]{32}$/i.test(projectId || '')
     || !FUNDING_UUID.test(checkoutReference || '') || !/^[A-Z]{2}$/.test(countryCode || '')
-    || !validFundingAmount(amount) || !/^[A-Z0-9_]{2,40}$/.test(paymentMethodType || '')
-    || !Array.isArray(allowedProviders) || allowedProviders.length < 1 || allowedProviders.length > 2
-    || allowedProviders.some(provider => !['TOPPER', 'SWAPPED'].includes(provider))
+    || !validFundingSourceAmount(amount, 'personal', sourceCurrencyCode) || !/^[A-Z0-9_]{2,40}$/.test(paymentMethodType || '')
+    || !Array.isArray(allowedProviders) || allowedProviders.length < 1 || allowedProviders.length > personalFundingProviders(countryCode, sourceCurrencyCode, paymentMethodType).length
+    || allowedProviders.some(provider => !personalFundingProviders(countryCode, sourceCurrencyCode, paymentMethodType).includes(provider))
     || new Set(allowedProviders).size !== allowedProviders.length) throw new Error('reown_context_invalid');
   if (url.searchParams.get('externalCustomerId') !== projectId) throw new Error('reown_provider_invalid');
   url.searchParams.set('walletAddress', address);
   url.searchParams.set('externalSessionId', checkoutReference);
   url.searchParams.set('sourceCurrencyCode', sourceCurrencyCode);
-  url.searchParams.set('destinationCurrencyCode', 'USDT_POLYGON');
+  url.searchParams.set('destinationCurrencyCode', PERSONAL_WALLET_MELD_ASSET);
   url.searchParams.set('sourceAmount', String(amount));
   url.searchParams.set('countryCode', countryCode);
   url.searchParams.set('paymentMethodType', paymentMethodType);
   // Checkout's documented locks use the actual values, not boolean flags.
   for (const [key, value] of Object.entries({ walletAddress: address, countryCode,
-    sourceCurrencyCode, destinationCurrencyCode: 'USDT_POLYGON', sourceAmount: String(amount), paymentMethodType })) {
+    sourceCurrencyCode, destinationCurrencyCode: PERSONAL_WALLET_MELD_ASSET, sourceAmount: String(amount), paymentMethodType })) {
     url.searchParams.set(`${key}Locked`, value);
   }
   // Internal provider restrictions are merchant configuration. The public

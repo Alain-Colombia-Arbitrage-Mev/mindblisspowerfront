@@ -10,14 +10,14 @@ export default function SidebarUserCard({
   void [_name, _email];
   return (
     <Link
-      href="/dashboard/support"
+      href="/dashboard/profile"
       onClick={onNavigate}
       className="vp-sidebar-account"
-      title={t("nav.helpCenter")}
+      title={t("nav.profile")}
     >
       <span className="min-w-0 flex-1">
         <strong className="block truncate text-xs">{t("nav.personalAccount")}</strong>
-        <span className="mt-1 block truncate text-xs" style={{ color: "var(--vp-link)" }}>{t("nav.helpCenter")}</span>
+        <span className="mt-1 block truncate text-xs" style={{ color: "var(--vp-link)" }}>{t("nav.profile")}</span>
       </span>
     </Link>
   );

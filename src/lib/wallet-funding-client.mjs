@@ -1,4 +1,4 @@
-import { administrativeSandboxOptions, personalProductionOptions, fundingAcknowledgement, fundingHistory, fundingInput, fundingStatus, fundingCurrencyCode, FUNDING_UUID } from './wallet-funding-contract.mjs';
+import { administrativeSandboxOptions, personalProductionOptions, fundingAcknowledgement, fundingHistory, fundingInput, fundingStatus, fundingCurrencyCode, fundingSourceSupported, FUNDING_UUID, PERSONAL_FUNDING_DESTINATION } from './wallet-funding-contract.mjs';
 import { browserRequestDeadline } from './browser-request-deadline.mjs';
 
 export function fundingRequestId() { return crypto.randomUUID(); }
@@ -29,12 +29,37 @@ export async function readAdministrativeSandboxOptions(country, serviceProvider,
 /** Production discovery uses Reown's merchant configuration, never administrative MELD credentials. */
 /** @param {string} country @param {{signal?: AbortSignal, sourceCurrencyCode?: string}} [options] */
 export async function readPersonalFundingOptions(country, { signal, sourceCurrencyCode = 'USD' } = {}) {
-  if (!personalProductionOptions({ walletKind: 'personal', environment: 'production', provider: 'reown', country, sourceCurrencyCode, paymentMethods: [], routes: [] })) {
+  if (!personalProductionOptions({ walletKind: 'personal', environment: 'production', provider: 'reown', country, sourceCurrencyCode, paymentMethods: [], routes: [], ...PERSONAL_FUNDING_DESTINATION })) {
     throw new Error('invalid_request');
   }
-  const data = personalProductionOptions(await request(`/api/member/wallet-funding/personal/options?country=${country}&sourceCurrencyCode=${sourceCurrencyCode}`, { method: 'GET', signal }));
-  if (!data || data.country !== country || data.sourceCurrencyCode !== sourceCurrencyCode) throw new Error('funding_unavailable');
-  return data;
+  const deadline = browserRequestDeadline(signal, 25_000);
+  try {
+    let raw;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        raw = await request(`/api/member/wallet-funding/personal/options?country=${country}&sourceCurrencyCode=${sourceCurrencyCode}`, { method: 'GET', signal: deadline.signal });
+        break;
+      } catch (error) {
+        // Only this public route lookup is replayable. Payment writes, session
+        // failures, throttling and malformed success contracts never retry.
+        if (attempt || deadline.signal.aborted || !(error instanceof TypeError || [502, 503, 504].includes(error?.status))) throw error;
+        await fundingReadRetryDelay(deadline.signal);
+      }
+    }
+    const data = personalProductionOptions(raw);
+    if (!data || data.country !== country || data.sourceCurrencyCode !== sourceCurrencyCode) throw new Error('funding_unavailable');
+    return data;
+  } finally { deadline.dispose(); }
+}
+
+function fundingReadRetryDelay(signal) {
+  return new Promise((resolve, reject) => {
+    let timer;
+    const abort = () => { clearTimeout(timer); signal.removeEventListener('abort', abort); reject(signal.reason instanceof Error ? signal.reason : new DOMException('Aborted', 'AbortError')); };
+    if (signal.aborted) { abort(); return; }
+    signal.addEventListener('abort', abort, { once: true });
+    timer = setTimeout(() => { signal.removeEventListener('abort', abort); resolve(undefined); }, 250);
+  });
 }
 
 /** @param {'personal' | 'administrative'} kind @param {{signal?: AbortSignal}} [options] */
@@ -63,12 +88,15 @@ export async function readWalletFundingStatus(kind, checkoutReference, { signal 
 async function createFunding(input, kind, path, { signal } = {}) {
   const body = fundingInput(input, kind);
   if (!body) throw new Error('invalid_request');
-  // Local routes can be discovered, but no unverified USD valuation may create
-  // a checkout or be stored as a dollar-denominated funding request.
-  if (fundingCurrencyCode(body.sourceCurrencyCode) !== 'USD') throw new Error('wallet_funding_valuation_unavailable');
-  const data = fundingAcknowledgement(await request(path, { method: 'POST', signal, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }), kind);
+  // SPEI uses the provider's MXN limits and is recorded as MXN, never USD.
+  if (!fundingSourceSupported(body, kind)) throw new Error('wallet_funding_valuation_unavailable');
+  const data = fundingAcknowledgement(await request(path, { method: 'POST', signal,
+    headers: { 'content-type': 'application/json', ...(kind === 'personal' ? { 'x-mindbliss-wallet-network': 'polygon' } : {}) },
+    body: JSON.stringify(body) }), kind, body.country);
   if (!data || data.requestedAmount !== body.amount || data.checkoutReference !== body.requestId
-    || (kind === 'personal' && (!('paymentMethodType' in data) || data.paymentMethodType !== body.paymentMethodType))) throw new Error('funding_unavailable');
+    || fundingCurrencyCode(data.sourceCurrencyCode) !== fundingCurrencyCode(body.sourceCurrencyCode)
+    || (kind === 'personal' && (!('paymentMethodType' in data) || data.paymentMethodType !== body.paymentMethodType
+      || !('destination' in data) || data.destination.address.toLowerCase() !== body.walletAddress.toLowerCase()))) throw new Error('funding_unavailable');
   return data;
 }
 
@@ -78,8 +106,10 @@ async function request(path, init) {
     const response = await fetch(path, { ...init, signal: deadline.signal, credentials: 'same-origin', cache: 'no-store', redirect: 'error' });
     const text = await response.text();
     if (text.length > 65536) throw new Error('funding_unavailable');
-    const data = JSON.parse(text);
-    if (!response.ok) throw new Error(typeof data?.error === 'string' ? data.error : 'funding_unavailable');
+    let data;
+    try { data = JSON.parse(text); }
+    catch { throw Object.assign(new Error('funding_unavailable'), { status: response.status }); }
+    if (!response.ok) throw Object.assign(new Error(typeof data?.error === 'string' && /^[a-z0-9_]{1,80}$/.test(data.error) ? data.error : 'funding_unavailable'), { status: response.status });
     if (deadline.signal.aborted) throw new DOMException('Aborted', 'AbortError');
     return data;
   } finally { deadline.dispose(); }

@@ -10,9 +10,9 @@ import { formatPaymentMoney as money } from "@/lib/payment-display.mjs";
 import { requestProfile } from "../../profile/profile-model.mjs";
 import { browserRequestDeadline } from '@/lib/browser-request-deadline.mjs';
 
-import { Copy, KeyRound, Loader2, Send, Shield, ShieldCheck, User } from "lucide-react";
+import { KeyRound, Loader2, Send, Shield, ShieldCheck, User } from "lucide-react";
 
-import { PageHeader, StatusPill, Field } from './executive-ui';
+import { PageHeader, Field } from './executive-ui';
 
 import { member } from './member-defaults.mjs';
 import { useI18n } from "@/i18n/LanguageProvider";
@@ -37,7 +37,7 @@ export function ProfileDashboardPage({ authMode = 'cognito' }) {
   const { t } = useI18n();
   const modernAuth = authMode === 'better-auth';
   const session = useMemberSession();
-  const me = { name: session?.name || "", email: session?.email || "", referralCode: session?.referralCode || "" };
+  const me = { name: session?.name || "", email: session?.email || "" };
   const [summary, setSummary] = useState(null);
   const [form, setForm] = useState({ name: "", phone: "", country: "" });
   const [phoneVerify, setPhoneVerify] = useState({ sending: false, confirming: false, pending: false, code: "", type: "", text: "" });
@@ -167,9 +167,7 @@ export function ProfileDashboardPage({ authMode = 'cognito' }) {
 
   const displayName = me.name || t("pages.account");
   const displayEmail = me.email || member.email;
-  const displayReferral = me.referralCode || member.referralCode;
   const displayInitial = (displayName || "M").trim().charAt(0).toUpperCase();
-  const displayRank = summary?.rank && summary.rank !== "—" ? summary.rank : member.rank;
   const displayJoined = summary?.joined_at || member.joined;
   const planLabel = summary?.plan ? t(`profilePage.plan_${summary.plan}`) : "";
   const displayPlan = summary?.plan ? (planLabel.startsWith("profilePage.") ? summary.plan : planLabel) : member.plan;
@@ -214,9 +212,6 @@ export function ProfileDashboardPage({ authMode = 'cognito' }) {
               <p className="mt-2 text-sm" style={{ color: "var(--vp-muted)" }}>
                 {displayEmail}
               </p>
-              <div className="mt-5 flex justify-center">
-                <StatusPill tone="warning">{displayRank}</StatusPill>
-              </div>
               <div className="mt-7 grid grid-cols-2 gap-4 border-t pt-5 text-left" style={{ borderColor: "var(--vp-border)" }}>
                 <div>
                   <p className="executive-card-label mb-1">{t("profilePage.joined")}</p>
@@ -241,24 +236,6 @@ export function ProfileDashboardPage({ authMode = 'cognito' }) {
               </div>
             </div>
 
-            <div className="executive-panel">
-              <h2 className="executive-section-title">
-                <Copy size={18} style={{ color: "var(--vp-accent)" }} />
-                {t("profilePage.referral")}
-              </h2>
-              <div className="rounded-2xl p-4" style={{ background: "var(--vp-bg)", border: "1px solid var(--vp-border)" }}>
-                <p className="executive-card-label">{t("profilePage.uniqueCode")}</p>
-                {displayReferral ? (
-                  <p className="m-0 text-4xl font-light" style={{ color: "var(--vp-text)" }}>
-                    {displayReferral}
-                  </p>
-                ) : (
-                  <p className="m-0 mt-1 text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
-                    {t("profilePage.codePending")}
-                  </p>
-                )}
-              </div>
-            </div>
           </div>
 
           <div className="space-y-6">
@@ -320,9 +297,6 @@ export function ProfileDashboardPage({ authMode = 'cognito' }) {
                 </div>
                 <Field label={t("profilePage.country")}>
                   <input className="executive-input" value={form.country} onChange={setField("country")} disabled={saving || profileState !== 'ready'} maxLength={120} placeholder={t("profilePage.country")} />
-                </Field>
-                <Field label={t("profilePage.sponsor")}>
-                  <input className="executive-input" defaultValue={member.sponsor} readOnly />
                 </Field>
               </div>
             </div>

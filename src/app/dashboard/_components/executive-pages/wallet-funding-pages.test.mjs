@@ -7,7 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 import { translateMessage } from '../../../../i18n/translate.mjs';
 import { PERSONAL_FUNDING_COUNTRIES, validFundingAmount, WALLET_GATEWAY_FAILURE_REASONS, FUNDING_UUID, fundingStatus } from '../../../../lib/wallet-funding-contract.mjs';
-import { personalFundingFailure } from '../../../../lib/personal-funding-errors.mjs';
+import { walletFundingOwnerKey } from '../../../../lib/wallet-funding-owner.mjs';
 
 const require = createRequire(import.meta.url);
 const icons = new Proxy({}, { get: () => () => null });
@@ -20,6 +20,9 @@ function load(filename, mocks) {
   const module = { exports: {} };
   new Function('require', 'module', 'exports', code)(id => {
     if (Object.hasOwn(mocks, id)) return mocks[id];
+    if (id === '@/components/ui/popover') return { Popover: ({ children }) => children, PopoverContent: ({ children }) => children, PopoverTrigger: ({ children }) => children };
+    if (id === '@/lib/member-session-context') return { useMemberSession: () => ({ subject: 'owner', email: 'owner@example.test' }) };
+    if (id === '@/lib/wallet-funding-owner.mjs') return { walletFundingOwnerKey };
     if (id === '@/lib/wallet-funding-contract.mjs') return { PERSONAL_FUNDING_COUNTRIES, validFundingAmount, WALLET_GATEWAY_FAILURE_REASONS, FUNDING_UUID, fundingStatus };
     if (id.endsWith('.module.css')) return styles;
     if (id === 'react/jsx-runtime' || id === 'react') return require(id);
@@ -44,25 +47,31 @@ function componentHarness(filename, name, mocks) {
     unmount() { for (const effect of effects) effect?.cleanup?.(); }, exports, state };
 }
 
-function formHarness(name, api, detectedCountry = 'US') {
+function formHarness(name, api, selectedCountry = 'US') {
   const harness = componentHarness('WalletFundingForm.jsx', name, { 'lucide-react': icons, '@/i18n/LanguageProvider': i18n,
-    '@/lib/meld-onramp.mjs': { browserOnrampRegion: () => detectedCountry }, '@/lib/meld-onramp-client.mjs': { ONRAMP_COUNTRIES: [['CO'], ['US'], ['MX'], ['ES'], ['PA']] },
+    '@/lib/meld-onramp-client.mjs': { ONRAMP_COUNTRIES: [['CO'], ['US'], ['MX'], ['ES'], ['PA']] },
     '@/lib/wallet-funding-client.mjs': { fundingRequestId: () => 'd8a4c010-cc33-44da-a297-8b3c6440f491', ...api },
     '@/lib/wallet-funding-contract.mjs': { PERSONAL_FUNDING_COUNTRIES, validFundingAmount },
   });
   const render = harness.render;
-  return { ...harness, render(props = {}) { return render({ destinationAddress: `0x${'1'.repeat(40)}`, ...props }); } };
+  let selected = false;
+  return { ...harness, render(props = {}) {
+    const context = { destinationAddress: `0x${'1'.repeat(40)}`, ...props };
+    if (!selected && selectedCountry) {
+      selected = true;
+      // Fixture setup represents an explicit user selection; the real initial form is empty.
+      const initial = render({ ...context, onSelectionChange: undefined });
+      find(initial, 'FundingCountryField').props.onChange(selectedCountry);
+    }
+    return render(context);
+  } };
 }
 
 function find(node, name) {
   if (typeof name === 'function' ? name(node) : node?.type?.name === name) return node;
   return React.Children.toArray(node?.props?.children).map(child => find(child, name)).find(Boolean);
 }
-function findAll(node, predicate) {
-  return [...(predicate(node) ? [node] : []), ...React.Children.toArray(node?.props?.children).flatMap(child => findAll(child, predicate))];
-}
 const flush = async () => { await Promise.resolve(); await Promise.resolve(); };
-const methods = [{ method: 'CREDIT_DEBIT_CARD', minimumUsd: 75, maximumUsd: 1000 }];
 const statusReference = 'd8a4c010-cc33-44da-a297-8b3c6440f491';
 const secondStatusReference = 'd8a4c010-cc33-44da-a297-8b3c6440f492';
 const personalStatus = { checkoutReference: statusReference, walletKind: 'personal', environment: 'production', provider: 'reown', requestedAmount: 50,
@@ -103,7 +112,7 @@ test('administrative country discovery cancels both old requests and automatical
   assert.equal(personalCalls, 0);
 });
 
-test('administrative choices contain only amount-eligible providers and retain a selected provider when both are available', async t => {
+test('administrative choices preserve a selected provider when the amount changes instead of silently replacing it', async t => {
   const calls = [], submitted = [];
   const harness = formHarness('AdministrativeSandboxFundingForm', {
     readPersonalFundingOptions() { assert.fail('personal discovery called'); },
@@ -122,7 +131,7 @@ test('administrative choices contain only amount-eligible providers and retain a
   assert.equal(submitted[0].serviceProvider, 'BANXA');
   find(tree, 'FundingAmountField').props.onChange('250');
   harness.render(props); tree = harness.render(props);
-  assert.equal(find(tree, node => node?.type === 'select' && node.props.id.endsWith('-provider')), undefined);
+  assert.equal(find(tree, node => node?.type === 'select' && node.props.id.endsWith('-provider')).props.value, 'BANXA');
   tree.props.onSubmit({ preventDefault() {} }); await flush();
   assert.equal(submitted[1].serviceProvider, 'BANXA');
   assert.equal(calls.length, 2, 'provider and amount changes use their own already-fetched country routes');
@@ -142,7 +151,7 @@ test('administrative partial discovery keeps only verified eligible routes and d
     { name: 'CO Transak empty and Banxa failed remains a failed lookup, not an unsupported country', country: 'CO', transak: 'empty', banxa: 'failed', status: 'error', partial: false },
     { name: 'both failed remain blocked with retry', country: 'US', transak: 'failed', banxa: 'failed', status: 'error', partial: false },
     { name: 'both successful empty are legitimate no availability', country: 'CO', transak: 'empty', banxa: 'empty', status: 'ready', partial: false },
-    { name: 'a valid route outside the current amount cannot bypass a failed provider lookup', country: 'US', transak: 'aboveMinimum', banxa: 'failed', status: 'error', partial: false },
+    { name: 'a returned route retains its limits while an insufficient amount cannot submit', country: 'US', transak: 'aboveMinimum', banxa: 'failed', status: 'ready', partial: true },
   ];
   for (const scenario of cases) await t.test(scenario.name, async t => {
     const calls = [], submitted = [];
@@ -167,7 +176,8 @@ test('administrative partial discovery keeps only verified eligible routes and d
     assert.equal(field.props.status, scenario.status);
     assert.equal(field.props.partialAvailability, scenario.partial);
     assert.deepEqual(field.props.methods, scenario.partial ? ['CREDIT_DEBIT_CARD'] : []);
-    assert.equal(find(tree, 'FundingSubmit').props.disabled, !scenario.partial);
+    const eligible = scenario.partial && scenario.transak !== 'aboveMinimum';
+    assert.equal(find(tree, 'FundingSubmit').props.disabled, !eligible);
     const html = renderToStaticMarkup(field.type(field.props));
     assert.equal(html.includes(translateMessage('es', 'funding.methodsPartiallyLoaded')), scenario.partial);
     assert.doesNotMatch(html, /PRIVATE|api_key|never-render-this/);
@@ -175,8 +185,8 @@ test('administrative partial discovery keeps only verified eligible routes and d
     assert.equal(harness.state[4].providers.some(provider => harness.state[4].failedProviders.includes(provider.serviceProvider)), false);
     if (!scenario.partial) assert.match(html, new RegExp(translateMessage('es', scenario.status === 'error' ? 'funding.methodsLoadFailed' : 'funding.methodsForAmountUnavailable').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
     tree.props.onSubmit({ preventDefault() {} }); await flush();
-    assert.equal(submitted.length, scenario.partial ? 1 : 0, 'discovery never starts a checkout automatically or uses missing routes');
-    if (scenario.partial) {
+    assert.equal(submitted.length, eligible ? 1 : 0, 'discovery never starts a checkout automatically or uses missing routes');
+    if (eligible) {
       assert.equal(submitted[0].serviceProvider, 'TRANSAK');
       assert.equal(submitted[0].paymentMethodType, 'CREDIT_DEBIT_CARD');
       assert.equal(submitted[0].countryCode, 'US');
@@ -340,7 +350,7 @@ test('changing an administrative selection clears its old provider error while p
   let sessions = 0;
   function AdministrativeSandboxFundingForm() { return null; }
   function WalletFundingHistory() { return null; }
-  const harness = componentHarness('AdministrativeWalletFundingPage.jsx', 'default', {
+  const harness = componentHarness('AdministrativeWalletFundingPage.jsx', 'AdministrativeWalletFundingView', {
     'lucide-react': icons, '@/i18n/LanguageProvider': i18n,
     '@/lib/administrative-wallet.mjs': { readAdministrativeWallet: async () => ({ status: 'assigned', address }), ensureAdministrativeWallet() { assert.fail('unnecessary assignment'); } },
     '@/lib/administrative-onramp-client.mjs': { async startAdministrativeMeldOnramp() { sessions++; throw Error('wallet_funding_method_unavailable'); } },
@@ -551,13 +561,15 @@ test('administrative MXN methods stay within sandbox provider and currency conte
   const local = calls.filter(call => call.sourceCurrencyCode === 'MXN');
   assert.deepEqual(local.map(call => call.provider), ['TRANSAK', 'BANXA']);
   for (const call of local) call.resolve({ country: 'MX', sourceCurrencyCode: 'MXN', serviceProvider: call.provider,
-    routes: call.provider === 'TRANSAK' ? [{ paymentMethods: [{ method: 'SPEI', currencyCode: 'MXN', minimumAmount: 200, maximumAmount: 20000 }] }] : [] });
+    routes: call.provider === 'TRANSAK' ? [{ paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', currencyCode: 'MXN', minimumAmount: 200, maximumAmount: 20000 }, { method: 'SPEI', currencyCode: 'MXN', minimumAmount: 200, maximumAmount: 20000 }] }] : [] });
   await flush(); harness.render(props); tree = harness.render(props);
-  assert.deepEqual(find(tree, 'FundingMethodField').props.methods, ['SPEI']);
+  assert.deepEqual(find(tree, 'FundingMethodField').props.methods, ['CREDIT_DEBIT_CARD']);
   assert.equal(find(tree, 'FundingMethodField').props.sourceCurrencyCode, 'MXN');
   find(tree, 'FundingAmountField').props.onChange('1200'); harness.render(props); tree = harness.render(props);
   tree.props.onSubmit({ preventDefault() {} }); await flush();
-  assert.equal(submitted.length, 0);
+  assert.equal(submitted.length, 1);
+  assert.equal(submitted[0].sourceCurrencyCode, 'MXN');
+  assert.equal(submitted[0].paymentMethodType, 'CREDIT_DEBIT_CARD');
   assert.equal(calls.filter(call => call.sourceCurrencyCode !== 'MXN').every(call => call.signal.aborted), true);
 });
 

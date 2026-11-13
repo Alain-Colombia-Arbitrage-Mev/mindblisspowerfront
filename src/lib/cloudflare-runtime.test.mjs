@@ -82,7 +82,7 @@ test('Workers guard preserves proxy matcher, CSRF and customer/admin separation'
     const input = request(path);
     const decision = customerDomainDecision({ host: new URL(input.url).host, pathname: path });
     const result = cloudflarePortalGuard(input, {});
-    if (decision.type === 'notFound') assert.equal(result.status, 404);
+    if (path.startsWith('/api/network') || decision.type === 'notFound') assert.equal(result.status, 404);
     else if (decision.type === 'redirect') { assert.equal(result.status, 308); assert.equal(result.headers.get('location'), decision.location); }
     else assert.equal(result, null);
   }

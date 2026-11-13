@@ -24,11 +24,42 @@
 .formPanel :global(.mb-onramp-amount-fieldset) { margin-bottom: 20px; }
 .formPanel :global(.mb-onramp-country-picker) { margin-bottom: 18px; }
 .formFields { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "country" "currency" "amount" "method"; gap: 20px; }
+.formFields.implicitCurrency { grid-template-areas: "country" "amount" "method"; }
 .formFields .countryField, .formFields .currencyField, .formFields .amountField { min-width: 0; margin: 0; }
 .countryField { grid-area: country; align-content: start; }
+.countryHeading { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.countryHeading > label { color: var(--vp-muted); font-size: 13px; font-weight: 700; line-height: 1.4; }
+.residencyInfoButton { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; color: var(--vp-link); background: transparent; cursor: pointer; touch-action: manipulation; }
+.residencyInfoButton:hover, .residencyInfoButton[data-state="open"] { color: var(--vp-accent); background: var(--vp-accent-muted); }
+.residencyInfoButton:focus-visible { outline: 2px solid var(--vp-accent); outline-offset: 2px; }
+.residencyPopover { z-index: 100; width: min(360px, calc(100vw - 32px)); max-width: var(--radix-popover-content-available-width); max-height: var(--radix-popover-content-available-height); overflow-y: auto; padding: 16px; border: 1px solid var(--vp-border); border-radius: 14px; color: var(--vp-muted); background: var(--vp-surface-raised); box-shadow: 0 12px 32px rgb(0 0 0 / .15); font-size: 13px; line-height: 1.65; overflow-wrap: anywhere; }
+.residencyPopover p { margin: 0; }
+.residencyPopover p + p { margin-top: 10px; }
+.residencyPopover strong { color: var(--vp-text); font-weight: 600; }
 .currencyField { grid-area: currency; align-content: start; }
-.amountField { grid-area: amount; }
+.amountField { grid-area: amount; container-type: inline-size; }
+.amountLegend { width: 100%; }
+.amountCurrency { display: inline-block; margin-inline-start: 8px; padding: 3px 7px; border-radius: 5px; color: var(--vp-link); background: var(--vp-accent-muted); font-size: 11px; line-height: 1.4; vertical-align: middle; }
+.quickAmounts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.quickAmounts button { display: flex; align-items: center; justify-content: center; min-width: 0; padding: 10px 12px; font-variant-numeric: tabular-nums; line-height: 1.35; white-space: nowrap; touch-action: manipulation; transition: background-color .15s, border-color .15s; }
+.quickAmounts button bdi { min-width: 0; }
+.quickAmounts button:not(:disabled):hover { border-color: var(--vp-accent-border); background: var(--vp-accent-muted); }
+.quickAmounts button[aria-pressed="true"] { border-color: var(--vp-accent-border); box-shadow: inset 0 0 0 1px var(--vp-accent-border); }
+.quickAmounts button:disabled { cursor: wait; opacity: .6; }
+.quickAmounts button:focus-visible { outline: 2px solid var(--vp-accent); outline-offset: 3px; }
+.amountField .amountInput { min-width: 0; border-radius: 12px; }
+.amountInput:focus-within { outline: 2px solid var(--vp-accent); outline-offset: 2px; }
+.amountField .amountInput:has(input[aria-invalid="true"]) { border-color: var(--vp-danger); }
+.amountInput input { direction: ltr; font-variant-numeric: tabular-nums; }
+.amountField:disabled .amountInput { opacity: .6; }
+@container (min-width: 22rem) { .quickAmounts { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.amountSliderGroup { display: grid; gap: 3px; margin-top: 5px; }
+.amountSliderGroup .amountSlider { width: 100%; min-width: 0; height: 44px; margin: 0; padding: 0; accent-color: var(--vp-accent); cursor: pointer; }
+.amountSlider:focus-visible { outline: 2px solid var(--vp-accent); outline-offset: 2px; border-radius: 6px; }
+.sliderLimits { display: flex; justify-content: space-between; gap: 12px; color: var(--vp-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .methodField { grid-area: method; min-width: 0; margin: 0; padding: 0; border: 0; }
+.methodLoading { display: inline-flex; align-items: center; gap: 8px; }
+.methodLoading svg { flex: none; }
 .methodField legend { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; width: 100%; margin-bottom: 10px; }
 .methodCount { margin-inline-start: auto; color: var(--vp-muted); font-size: 12px; font-weight: 500; }
 .methodChoices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
@@ -78,6 +109,9 @@
 .destinationReview input:focus-visible { outline: 2px solid var(--vp-accent); outline-offset: 2px; }
 .destinationReview small { color: var(--vp-muted); font-size: 12px; line-height: 1.6; }
 .statusPanel { display: grid; gap: 18px; scroll-margin-top: 20px; }
+.connectionPending { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 16px; padding: 14px; border: 1px solid var(--vp-border); border-radius: 12px; }
+.connectionPending p { flex: 1 1 220px; margin: 0; color: var(--vp-muted); font-size: 13px; line-height: 1.6; }
+.connectionPending button { min-height: 44px; }
 .statusPanel:focus-visible { outline: 2px solid var(--vp-accent); outline-offset: 4px; }
 .statusPanel > button { justify-self: start; min-height: 44px; }
 .statusHeading { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; color: var(--vp-text); font-size: 18px; font-weight: 800; }
@@ -96,3 +130,4 @@
 @media (max-width: 640px) { .destinations { grid-template-columns: minmax(0, 1fr); } .screen { gap: 18px; } .destination > a { width: 100%; } .sectionHeading { align-items: start; } .pageHeading { flex-direction: column; } .pageHeading h1 { font-size: 1.75rem; } .hint, .sectionHeading p, .destination p, .pageHeading span { font-size: 14px; } }
 @media (max-width: 430px) { .statusDetails > div { grid-template-columns: minmax(0, 1fr); gap: 5px; } .destinationReview input { font-size: 16px; } }
 @media (min-width: 700px) { .formFields { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: "country currency" "amount amount" "method method"; gap: 18px 20px; } .methodChoices { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 700px) { .formFields.implicitCurrency { grid-template-areas: "country country" "amount amount" "method method"; } }

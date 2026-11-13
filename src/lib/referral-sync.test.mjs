@@ -12,6 +12,130 @@ function memory() {
 }
 const browser = () => ({ localStorage: memory(), sessionStorage: memory() });
 const pending = () => { let resolve; return { promise: new Promise(done => { resolve = done; }), resolve: value => resolve(value) }; };
+const settle = () => new Promise(resolve => setImmediate(resolve));
+
+function virtualDeadlines(t) {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1800000000000 });
+  // Node's native AbortSignal.timeout uses its own clock. Exercise the BFF's
+  // unchanged deadlines on the same virtual clock as the browser transport.
+  t.mock.method(AbortSignal, 'timeout', milliseconds => {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(new DOMException('Request timed out', 'TimeoutError')), milliseconds);
+    return controller.signal;
+  });
+  return async milliseconds => { t.mock.timers.tick(milliseconds); await settle(); };
+}
+
+function abortable(promise, signal) {
+  return new Promise((resolve, reject) => {
+    const cancelled = () => reject(signal.reason);
+    if (signal.aborted) cancelled();
+    else signal.addEventListener('abort', cancelled, { once: true });
+    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', cancelled));
+  });
+}
+
+const delay = (milliseconds, signal) => abortable(new Promise(resolve => setTimeout(resolve, milliseconds)), signal);
+
+function slowBff({ identityDelays = [7500, 7500, 7500, 7500], upstreamDelay = 7500, result = serverHint('', '') } = {}) {
+  const calls = [], upstreamCalls = [];
+  const fetchImpl = (path, input) => {
+    calls.push(input);
+    const request = new Request(`https://portal.example.test${path}`, { ...input,
+      headers: { ...input.headers, ...(input.method === 'POST' ? { Origin: 'https://portal.example.test' } : {}) },
+    });
+    const response = handleReferralAttribution(request, {
+      env: { AUTH_PUBLIC_ORIGIN: 'https://portal.example.test', PAYMENTS_SERVICE_TOKEN: 'synthetic-service' },
+      identity: async () => {
+        // Token headers/body, initial JWKS and a permitted key-rotation refresh
+        // each have their own 8s budget before the referral upstream starts.
+        for (const milliseconds of identityDelays) await delay(milliseconds, AbortSignal.timeout(8000));
+        return { token: 'synthetic-verified-jwt', claims: { sub: 'synthetic-owner', email, email_verified: true } };
+      },
+      fetchImpl: async (_url, options) => {
+        upstreamCalls.push(options);
+        await delay(upstreamDelay, options.signal);
+        return Response.json(result);
+      },
+    });
+    return abortable(response, input.signal);
+  };
+  return { calls, upstreamCalls, fetchImpl };
+}
+
+test('one slow valid BFF read survives sequential identity and upstream budgets and remains singleflight', async t => {
+  const advance = virtualDeadlines(t), transport = slowBff(), owner = browser();
+  const options = { browser: owner, fetchImpl: transport.fetchImpl };
+  let finished = false;
+  const first = readVerifiedReferral(email, options).then(value => { finished = true; return value; });
+  const duplicate = readVerifiedReferral(email, options);
+  await advance(7500); await advance(500);
+  assert.equal(finished, false, 'the browser must not abort at 8s while the BFF is still verifying identity');
+  await advance(7000); await advance(7500); await advance(7500);
+  assert.equal(transport.upstreamCalls.length, 1);
+  assert.equal(finished, false);
+  await advance(7500);
+  assert.deepEqual(await first, serverHint('', ''));
+  assert.deepEqual(await duplicate, serverHint('', ''));
+  assert.equal(transport.calls.length, 1, 'slow identity does not trigger another browser request');
+  assert.equal(transport.calls[0].headers['X-VP-Expected-Email'], email);
+  assert.equal(transport.calls[0].method, undefined);
+  assert.equal(pendingVerifiedReferral(email, { browser: owner }), null);
+});
+
+test('a slow explicit keepalive save waits for its exact ACK without replaying or clearing another owner', async t => {
+  const advance = virtualDeadlines(t), transport = slowBff({ result: serverHint('SlowSponsor', '') }), owner = browser();
+  await beginVerifiedReferralSync('another@example.test', 'OtherSponsor', '', {
+    browser: owner, fetchImpl: async () => Response.json({}, { status: 503 }),
+  });
+  let finished = false;
+  const saving = beginVerifiedReferralSync(email, 'SlowSponsor', 'R', { browser: owner, fetchImpl: transport.fetchImpl })
+    .then(value => { finished = true; return value; });
+  await advance(5000);
+  assert.equal(finished, false, 'the browser must not abandon a valid save at the former 5s limit');
+  assert.equal(pendingVerifiedReferral(email, { browser: owner }).ref, 'SlowSponsor');
+  const duplicate = retryVerifiedReferral(email, { browser: owner, fetchImpl: transport.fetchImpl });
+  assert.equal(transport.calls.length, 1);
+  await advance(2500); await advance(7500); await advance(7500); await advance(7500); await advance(7500);
+  assert.deepEqual(await saving, serverHint('SlowSponsor', ''));
+  assert.deepEqual(await duplicate, serverHint('SlowSponsor', ''));
+  assert.equal(pendingVerifiedReferral(email, { browser: owner }), null);
+  assert.equal(pendingVerifiedReferral('another@example.test', { browser: owner }).ref, 'OtherSponsor');
+  assert.equal(transport.calls.length, 1);
+  assert.equal(transport.calls[0].keepalive, true);
+  assert.deepEqual(JSON.parse(transport.calls[0].body), { ref: 'SlowSponsor', preferred_side: '', expected_email: email });
+});
+
+test('the BFF still fails a stalled referral upstream at 8s without a browser retry', async t => {
+  const advance = virtualDeadlines(t), transport = slowBff({ identityDelays: [], upstreamDelay: 9000 });
+  const result = readVerifiedReferral(email, { browser: browser(), fetchImpl: transport.fetchImpl });
+  await settle(); await advance(8000);
+  assert.deepEqual(await result, { ok: false });
+  await advance(60000);
+  assert.equal(transport.calls.length, 1); assert.equal(transport.upstreamCalls.length, 1);
+});
+
+test('the browser deadline still bounds a stalled read or save and retains an unacknowledged choice', async t => {
+  const advance = virtualDeadlines(t);
+  for (const method of ['GET', 'POST']) {
+    const owner = browser(), calls = [];
+    const options = { browser: owner, fetchImpl: (_path, input) => {
+      calls.push(input);
+      return abortable(new Promise(() => {}), input.signal);
+    } };
+    let finished = false;
+    const request = (method === 'POST' ? beginVerifiedReferralSync(email, 'Unacknowledged', '', options)
+      : readVerifiedReferral(email, options)).then(value => { finished = true; return value; });
+    await advance(44999);
+    assert.equal(finished, false);
+    await advance(1);
+    assert.deepEqual(await request, { ok: false });
+    assert.equal(calls[0].signal.aborted, true);
+    assert.equal(pendingVerifiedReferral(email, { browser: owner })?.ref || null, method === 'POST' ? 'Unacknowledged' : null);
+    await advance(60000);
+    assert.equal(calls.length, 1, 'timeout never replays a read or save');
+  }
+});
 
 test('mobile referral persistence and reads keep exact owner/ACK contracts without modern AbortSignal methods', async () => {
   const descriptors = new Map(['any', 'timeout'].map(key => [key, Object.getOwnPropertyDescriptor(AbortSignal, key)]));
@@ -254,6 +378,65 @@ test('a late server commit cannot silently undo an acknowledged last choice acro
     return Response.json(serverHint('LastChoice', 'R'));
   } });
   assert.equal(confirmed.ok, true); assert.deepEqual(methods, ['GET', 'POST']);
+});
+
+test('a late exact ACK confirms its owner in memory without replacing another owner marker across reloads', async () => {
+  const owner = browser(), firstReply = pending(), otherEmail = 'another@example.test';
+  const first = beginVerifiedReferralSync(email, 'FirstSponsor', '', { browser: owner, fetchImpl: () => firstReply.promise });
+  await beginVerifiedReferralSync(otherEmail, 'OtherSponsor', '', {
+    browser: owner, fetchImpl: async () => Response.json({}, { status: 503 }),
+  });
+  const storedOther = owner.sessionStorage.getItem('mp_ref_verified_visit.v1');
+  const reload = () => ({ sessionStorage: owner.sessionStorage, localStorage: owner.localStorage });
+  assert.equal(pendingVerifiedReferral(otherEmail, { browser: reload() }).ref, 'OtherSponsor');
+  firstReply.resolve(Response.json(serverHint('FirstSponsor', '')));
+  assert.equal((await first).ok, true);
+  assert.equal(pendingVerifiedReferral(email, { browser: owner }), null);
+  assert.equal(pendingVerifiedReferral(otherEmail, { browser: owner }).ref, 'OtherSponsor');
+  assert.equal(owner.sessionStorage.getItem('mp_ref_verified_visit.v1'), storedOther);
+  const reloaded = reload(), calls = [];
+  assert.equal(pendingVerifiedReferral(otherEmail, { browser: reloaded }).ref, 'OtherSponsor');
+  assert.deepEqual(await verifiedReferralForCheckout(otherEmail, { browser: reloaded, fetchImpl: async (_path, input) => {
+    calls.push(input.method || 'GET'); return Response.json(serverHint('OlderSponsor', ''));
+  } }), { ok: false, error: 'pending' });
+  assert.deepEqual(calls, ['GET']);
+  assert.equal(owner.sessionStorage.getItem('mp_ref_verified_visit.v1'), storedOther);
+});
+
+test('failed storage reads or writes during an exact ACK confirm only memory and retain the stored choice for reload', async () => {
+  for (const failure of ['read', 'write']) {
+    const owner = browser(), reply = pending();
+    const saving = beginVerifiedReferralSync(email, 'ChosenSponsor', '', { browser: owner, fetchImpl: () => reply.promise });
+    const stored = owner.sessionStorage.getItem('mp_ref_verified_visit.v1');
+    const getItem = owner.sessionStorage.getItem, setItem = owner.sessionStorage.setItem;
+    owner.sessionStorage[failure === 'read' ? 'getItem' : 'setItem'] = () => { throw new Error('storage_denied'); };
+    reply.resolve(Response.json(serverHint('ChosenSponsor', '')));
+    assert.equal((await saving).ok, true);
+    assert.equal(pendingVerifiedReferral(email, { browser: owner }), null, 'the exact ACK confirms this context');
+    owner.sessionStorage.getItem = getItem; owner.sessionStorage.setItem = setItem;
+    assert.equal(owner.sessionStorage.getItem('mp_ref_verified_visit.v1'), stored);
+    const reloaded = { sessionStorage: owner.sessionStorage, localStorage: owner.localStorage }, calls = [];
+    assert.equal(pendingVerifiedReferral(email, { browser: reloaded }).ref, 'ChosenSponsor');
+    assert.deepEqual(await verifiedReferralForCheckout(email, { browser: reloaded, fetchImpl: async (_path, input) => {
+      calls.push(input.method || 'GET'); return Response.json(serverHint('OlderSponsor', ''));
+    } }), { ok: false, error: 'pending' });
+    assert.deepEqual(calls, ['GET']);
+    assert.equal(owner.sessionStorage.getItem('mp_ref_verified_visit.v1'), stored);
+  }
+});
+
+test('an exact ACK cannot replace a different stored visit id for the same owner, even in the same millisecond', async t => {
+  t.mock.method(Date, 'now', () => 1800000000000);
+  const owner = browser(), reply = pending();
+  const saving = beginVerifiedReferralSync(email, 'EarlierSponsor', '', { browser: owner, fetchImpl: () => reply.promise });
+  const replacement = JSON.stringify({ email, id: 'new-document-choice', ref: 'NewerSponsor', preferred_side: '',
+    createdAt: Date.now(), confirmed: false });
+  owner.sessionStorage.setItem('mp_ref_verified_visit.v1', replacement);
+  reply.resolve(Response.json(serverHint('EarlierSponsor', '')));
+  assert.equal((await saving).ok, true);
+  assert.equal(owner.sessionStorage.getItem('mp_ref_verified_visit.v1'), replacement);
+  const reloaded = { sessionStorage: owner.sessionStorage, localStorage: owner.localStorage };
+  assert.equal(pendingVerifiedReferral(email, { browser: reloaded }).ref, 'NewerSponsor');
 });
 
 test('denied browser stores retain failed choices per owner and checkout fails closed until exact ACK or authoritative placement', async () => {

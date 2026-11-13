@@ -97,6 +97,38 @@ test('confirmation validates a new native session for the OTP owner before expos
   assert.doesNotMatch(JSON.stringify(body), /synthetic|token|emailVerified|personId|admin|redirectTo/);
 });
 
+test('a native registration commit after the former 8s deadline still proves its new session without replaying the OTP', async () => {
+  const paths = [];
+  let committed = false;
+  const response = await handleRegistration(request({ email, code: '001234' }), 'confirm', {
+    env, fetchImpl: async (url, options) => {
+      paths.push(new URL(url).pathname);
+      if (url.endsWith('/get-session')) {
+        assert.equal(committed, true);
+        assert.equal(options.headers.cookie, sessionCookie);
+        return Response.json(canonical());
+      }
+      // Real abortable transport timing reproduces the consumed-code failure:
+      // the native transaction can commit even if its HTTP caller has timed out.
+      return new Promise((resolve, reject) => {
+        const aborted = () => reject(options.signal.reason);
+        options.signal.addEventListener('abort', aborted, { once: true });
+        setTimeout(() => {
+          committed = true;
+          options.signal.removeEventListener('abort', aborted);
+          resolve(verifiedResponse());
+        }, 8300);
+      });
+    },
+  });
+  assert.equal(committed, true);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: false, sessionEstablished: true });
+  assert.deepEqual(paths, ['/api/auth/email-otp/verify-email', '/api/auth/get-session']);
+  assert.equal(response.headers.getSetCookie().filter(value => value.startsWith('__Secure-better-auth.session_token=')).length, 1);
+  assert.equal(response.headers.get('set-auth-jwt'), null);
+});
+
 test('resend is explicit, purpose-bound and preserves server cooldown without hidden retries', async () => {
   let calls = 0;
   const response = await handleRegistration(request({ email: 'member@example.test', resend: true }), 'confirm', { env, fetchImpl: async (url, options) => {
@@ -109,6 +141,30 @@ test('resend is explicit, purpose-bound and preserves server cooldown without hi
   assert.equal(response.status, 429);
   assert.equal(response.headers.get('retry-after'), '450');
   assert.equal((await response.json()).retryAfter, 450);
+});
+
+test('only native confirmation503 preserves the retryable verification code without cookies or verification claims', async () => {
+  for (const [action, body, status] of [
+    ['confirm', { email, code: '001234' }, 503], ['confirm', { email, code: '001234' }, 500],
+    ['confirm', { email, code: '001234' }, 400], ['confirm', { email, resend: true }, 503], ['register', form, 503],
+  ]) {
+    let calls = 0;
+    const response = await handleRegistration(request(body), action, { env, fetchImpl: async () => {
+      calls++;
+      return Response.json({ code: 'EMAIL_VERIFICATION_UNAVAILABLE', message: 'Synthetic private transaction diagnostic',
+        status: true, token, user, emailVerified: true, needsLogin: true, userConfirmed: true, sessionEstablished: true }, {
+        status, headers: { 'set-cookie': `${sessionCookie}; Secure; HttpOnly`, 'set-auth-jwt': 'synthetic-private-jwt' },
+      });
+    } });
+    const result = await response.json();
+    assert.equal(calls, 1); assert.equal(response.headers.get('set-cookie'), null); assert.equal(response.headers.get('set-auth-jwt'), null);
+    assert.equal(response.headers.get('cache-control'), 'private, no-store');
+    assert.deepEqual(Object.keys(result).sort(), ['code', 'error']);
+    assert.doesNotMatch(JSON.stringify(result), /Synthetic|synthetic|emailVerified|userConfirmed|sessionEstablished|token|needsLogin/);
+    if (action === 'confirm' && body.resend !== true && status === 503) {
+      assert.equal(response.status, 503); assert.equal(result.code, 'EMAIL_VERIFICATION_UNAVAILABLE');
+    } else assert.notEqual(result.code, 'EMAIL_VERIFICATION_UNAVAILABLE');
+  }
 });
 
 test('client-supplied credentials are rejected before signup, including malformed and previously valid-looking passwords', async () => {
@@ -133,7 +189,10 @@ test('no send or malformed verification acknowledgement can establish a session,
     } });
     assert.equal(response.status, 503); assert.equal(calls, 1);
     assert.equal(response.headers.get('set-cookie'), null);
-    assert.doesNotMatch(await response.text(), /private-|synthetic|sessionEstablished|userConfirmed/);
+    const payload = await response.json();
+    assert.equal(payload.code, 'REGISTRATION_UNAVAILABLE');
+    assert.equal(payload.emailVerified, undefined); assert.equal(payload.needsLogin, undefined);
+    assert.doesNotMatch(JSON.stringify(payload), /private-|synthetic|sessionEstablished|userConfirmed/);
   }
   for (const status of [201, 202]) {
     let calls = 0;
@@ -141,6 +200,60 @@ test('no send or malformed verification acknowledgement can establish a session,
       calls++; return verifiedResponse(undefined, undefined, status);
     } });
     assert.equal(response.status, 503); assert.equal(calls, 1); assert.equal(response.headers.get('set-cookie'), null);
+    const payload = await response.json(); assert.equal(payload.code, 'REGISTRATION_UNAVAILABLE');
+    assert.equal(payload.emailVerified, undefined);
+  }
+});
+
+test('validated native verification with an unavailable session handoff reports only non-authenticated email completion without retrying its consumed OTP', async () => {
+  const failures = [
+    { cookie: [], canonical: undefined, calls: 1 },
+    { cookie: undefined, canonical: () => new Response('private-upstream-failure', { status: 503 }), calls: 2 },
+    { cookie: undefined, canonical: () => Response.json(canonical({ user: { ...user, id: 'other-owner' } })), calls: 2 },
+    { cookie: undefined, canonical: () => { throw new Error('private-transport-failure'); }, calls: 2 },
+  ];
+  for (const failure of failures) {
+    const paths = [];
+    const response = await handleRegistration(request({ email, code: '001234' }), 'confirm', { env,
+      fetchImpl: async url => {
+        paths.push(new URL(url).pathname);
+        return url.endsWith('/get-session') ? failure.canonical() : verifiedResponse(undefined, failure.cookie);
+      },
+    });
+    assert.equal(response.status, 503);
+    assert.equal(response.headers.get('cache-control'), 'private, no-store');
+    assert.equal(response.headers.get('set-cookie'), null); assert.equal(response.headers.get('set-auth-jwt'), null);
+    const payload = await response.json();
+    assert.deepEqual(Object.keys(payload).sort(), ['code', 'emailVerified', 'error', 'needsLogin']);
+    assert.equal(payload.code, 'REGISTRATION_SESSION_UNAVAILABLE');
+    assert.equal(payload.emailVerified, true); assert.equal(payload.needsLogin, true);
+    assert.match(payload.error, /No vuelvas a usar este código/);
+    assert.doesNotMatch(JSON.stringify(payload), /private-|synthetic|other-owner|token|sessionEstablished|userConfirmed/);
+    assert.equal(paths.length, failure.calls);
+    assert.deepEqual(paths.filter(path => path.endsWith('/verify-email')), ['/api/auth/email-otp/verify-email']);
+    assert.equal(paths.some(path => /send-verification|sign-in|sign-out/.test(path)), false);
+  }
+});
+
+test('native errors, malformed acknowledgements and transport failure before verification cannot claim a verified email or relay credentials', async () => {
+  for (const result of [
+    new Response(JSON.stringify({ status: true, token, user }), { headers: { 'content-type': 'text/plain' } }),
+    verifiedResponse({ status: true, token, user: { ...user, email: 'other@example.test' } }),
+    verifiedResponse({ status: true, token: '', user }),
+    Response.json({ code: 'INVALID_OTP', status: true, token, user, emailVerified: true, needsLogin: true }, { status: 400 }),
+    Response.json({ code: 'REGISTRATION_SESSION_UNAVAILABLE', status: true, token, user, emailVerified: true, needsLogin: true }, { status: 503 }),
+    undefined,
+  ]) {
+    let calls = 0;
+    const response = await handleRegistration(request({ email, code: '001234' }), 'confirm', { env,
+      fetchImpl: async () => { calls++; if (!result) throw new Error('private-transport-before-verification'); return result; },
+    });
+    assert.ok([400, 503].includes(response.status)); assert.equal(calls, 1);
+    assert.equal(response.headers.get('set-cookie'), null);
+    const payload = await response.json();
+    assert.equal(payload.emailVerified, undefined); assert.equal(payload.needsLogin, undefined);
+    assert.notEqual(payload.code, 'REGISTRATION_SESSION_UNAVAILABLE');
+    assert.doesNotMatch(JSON.stringify(payload), /private-|synthetic|other@example|token|sessionEstablished|userConfirmed/);
   }
 });
 

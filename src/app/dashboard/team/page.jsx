@@ -1,5 +1,7 @@
-import { TeamDashboardPage } from "../_components/executive-pages/TeamDashboardPage";
+import { notFound } from "next/navigation";
 
-export default function TeamPage() {
-  return <TeamDashboardPage />;
+export const dynamic = "force-dynamic";
+
+export default function RetiredWalletPortalPage() {
+  notFound();
 }

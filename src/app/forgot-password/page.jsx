@@ -26,7 +26,7 @@ export default async function ForgotPasswordPage({ searchParams }) {
       description="Recibe un código por correo y define una nueva contraseña desde la experiencia propia de Mindbliss Power."
       sideKpis={useBetterAuth ? sideKpis.map(item => item.label === 'código' ? { ...item, value: '5m' } : item) : sideKpis}
       visualSrc="/mindbliss/mindbliss-auth-background.png"
-      visualAlt="Comunidad Mindbliss Power"
+      visualAlt="Mindbliss Power"
       visualPosition="center"
       layout="compact"
       supportEmail={initialEmail}

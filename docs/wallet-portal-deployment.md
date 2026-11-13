@@ -12,7 +12,7 @@ and no Reown project ID is required or read by its build. Personal wallet,
 wallet-link and personal funding HTTP routes return 404 before private transport.
 
 The separate `rewon` frontend at `app.mindblisspower.com` contains the personal
-Reown production wallet, limited to United States and Mexico. Neteller and
+Reown production wallet, limited to United States, Mexico and Colombia. Neteller and
 Skrill are excluded from that app's new funding methods. These restrictions do
 not replace this administrative portal's independent sandbox catalogue.
 
@@ -46,9 +46,24 @@ The draft support report is not sent, per the user's decision. US/Transak is the
 verified sandbox test path; a prepared checkout is not a completed payment.
 
 Local currency discovery keeps country, currency, provider and method together.
-The equivalent USD 50 minimum for non-USD checkout is unresolved pending the
-user's threshold policy and verified provider evidence. Do not enable an
-unverified MXN amount, equate 50 MXN with USD 50, assume USDT parity or treat a
-return URL as settlement. The webhook remains disabled until authenticated
-settlement persistence is separately verified. Sandbox attempts never accrue
-real commissions or wallet credits.
+USD retains its administrative 50–25,000 limit. In Mexico, MXN sandbox checkout
+uses the selected provider's own limits, as explicitly approved for testing;
+it does not claim a USD equivalent. Only card, Apple Pay and Google Pay are
+enabled for this new sandbox MXN path. Transak quotes US/USD and MX/MXN in this
+account. No SPEI route is advertised by this sandbox account, and Colombia/COP
+has no route. Banxa advertises some routes but currently rejects quotes with
+an authentication error; the application stops before recording an attempt or
+opening its checkout. Changing the amount cannot repair that provider setup.
+
+Every administrative checkout requires a fresh exact quote for its country,
+currency, amount, provider, method and USDT on Polygon. The backend checks the
+native user's assigned address and preserves the original fiat currency in
+idempotency checks, status and history. Automatic retries never initiate a
+checkout. A prepared checkout or return URL is not settlement. The webhook
+remains disabled until authenticated settlement persistence is separately
+verified. Sandbox attempts never accrue real commissions or wallet credits.
+
+The Comunidad group and its referral, network, rank, team and communication
+pages are retired in this portal, as are personal payment, relay and wallet-link
+APIs. These routes return 404 before backend/provider transport. Profile,
+password, OTP, native session checks and administrative history remain available.

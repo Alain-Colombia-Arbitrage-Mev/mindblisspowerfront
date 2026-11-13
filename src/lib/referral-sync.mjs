@@ -5,6 +5,11 @@ const key = 'mp_ref_verified_visit.v1';
 const ttl = 30 * 60 * 1000;
 const scopes = new WeakMap();
 const endpoint = '/api/member/referral-attribution';
+// The BFF verifies identity before its own 8s referral-upstream window.
+// Allow /token headers + body (8s each), JWKS load + one key-rotation refresh
+// (8s each), the referral upstream (8s), and 5s for browser/BFF delivery.
+// This is an outer bound only; all server deadlines remain unchanged.
+export const REFERRAL_REQUEST_TIMEOUT_MS = 45000;
 const browserDefault = () => typeof window === 'undefined' ? undefined : window;
 function syncState(browser) {
   const scope = browser && typeof browser === 'object' ? browser : globalThis;
@@ -61,7 +66,16 @@ function clearVisit(visit, browser) {
   // Retain the last explicit choice briefly, even after its exact ACK. An
   // aborted older request may still finish on the server; a later GET that
   // disagrees must block checkout, not silently accept that older choice.
-  store(browser, { ...visit, confirmed: true });
+  const confirmed = { ...visit, confirmed: true };
+  syncState(browser).visits.set(visit.email, confirmed);
+  try {
+    const raw = browser?.sessionStorage?.getItem(key);
+    const stored = typeof raw === 'string' && raw.length <= 2048 ? JSON.parse(raw) : null;
+    // The single stored slot may now belong to another owner or choice.
+    // Confirm this context's ACK without replacing that newer stored marker.
+    if (stored?.email === visit.email && stored?.id === visit.id)
+      browser.sessionStorage.setItem(key, JSON.stringify(confirmed));
+  } catch { /* An exact ACK still confirms memory; unknown storage is untouched. */ }
 }
 const matches = (result, visit) => result.positioned || result.ref === visit.ref;
 
@@ -71,7 +85,7 @@ async function postVisit(visit, { browser = browserDefault(), fetchImpl = fetch 
   if (writes.has(flight)) return writes.get(flight);
   state.revision++;
   const send = async () => {
-    const deadline = browserRequestDeadline(undefined, 5000);
+    const deadline = browserRequestDeadline(undefined, REFERRAL_REQUEST_TIMEOUT_MS);
     try {
       const response = await fetchImpl(endpoint, { method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error',
         keepalive: true, signal: deadline.signal, headers: { 'Content-Type': 'application/json' },
@@ -149,7 +163,7 @@ export async function readVerifiedReferral(email, options = {}) {
         const pending = [...state.writes].filter(([flight]) => flight.startsWith(`${normalized}:`)).map(([, write]) => write);
         if (pending.length) await Promise.all(pending);
         const revision = state.revision, visitId = currentVisit(normalized, browser)?.id;
-        const deadline = browserRequestDeadline(undefined, 8000);
+        const deadline = browserRequestDeadline(undefined, REFERRAL_REQUEST_TIMEOUT_MS);
         let response, body;
         try {
           response = await fetchImpl(endpoint, { credentials: 'same-origin', cache: 'no-store', redirect: 'error',

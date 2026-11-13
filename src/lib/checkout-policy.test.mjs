@@ -21,17 +21,17 @@ test('NOWPayments membership admission has an independent literal server flag an
   assert.match(checkoutErrorMessage('nowpayments_checkout_disabled', 'nowpayments'), /aún no están habilitadas/);
 });
 
-test('every portal deployment scope explicitly pauses Stripe and the page passes only a runtime boolean', () => {
+test('every administrative deployment scope pauses membership charges and its retired page cannot start purchases', () => {
   const config = JSON.parse(readFileSync(new URL('../../wrangler.jsonc', import.meta.url), 'utf8'));
   for (const scope of [config, ...Object.values(config.env)]) {
     assert.equal(scope.vars.STRIPE_CHECKOUT_ENABLED, 'false');
     assert.equal(scope.vars.NEXT_PUBLIC_STRIPE_CHECKOUT_ENABLED, undefined);
   }
   const page = readFileSync(new URL('../app/dashboard/packages/page.jsx', import.meta.url), 'utf8');
-  assert.match(page, /stripeCheckoutEnabled\(runtimeEnvironment\(\)\)/);
-  assert.match(page, /stripeEnabled=\{stripeEnabled\}/);
-  assert.match(page, /nowpaymentsMembershipsEnabled\(runtimeEnvironment\(\)\)/);
-  assert.match(page, /nowpaymentsEnabled=\{nowpaymentsEnabled\}/);
+  assert.match(page, /notFound\(\)/);
+  assert.doesNotMatch(page, /CompanyPaymentPage|PaymentResultModal/);
+  assert.doesNotMatch(page, /ActivatePackageButton|stripeCheckoutEnabled|nowpaymentsMembershipsEnabled|stripeEnabled=|nowpaymentsEnabled=/);
+  assert.doesNotMatch(page, /createCheckout|startCheckout|\/api\/checkout|checkout\.stripe\.com|nowpayments\.io\/payment/);
   assert.doesNotMatch(page, /NEXT_PUBLIC_STRIPE_CHECKOUT_ENABLED/);
   assert.doesNotMatch(page, /NEXT_PUBLIC_NOWPAYMENTS_MEMBERSHIPS_ENABLED/);
   for (const scope of [config, config.env.staging]) {

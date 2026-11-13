@@ -43,27 +43,27 @@ function moduleAt(relative, mocks = {}) {
   return module.exports;
 }
 
-test("actual member sidebar removes identity verification while preserving account, plans, network and support navigation", () => {
+test("administrative sidebar retains its wallet and profile without retired identity, community or personal payment navigation", () => {
   const { default: Sidebar } = moduleAt("../components/panel/PanelSidebar.jsx");
   const html = renderToStaticMarkup(React.createElement(Sidebar, {
-    pathname: "/dashboard/referrals",
+    pathname: "/dashboard/wallet-administrative",
     member: { name: "Test Member", email: "member@example.test" },
   }));
   assert.doesNotMatch(html, /\/dashboard\/kyc|Verificación de identidad|KYC|Identidad verificada/);
-  for (const href of ["/dashboard", "/dashboard/referrals", "/dashboard/support", "/dashboard/packages",
-    "/dashboard/wallet-administrative", "/dashboard/profile", "/dashboard/rank", "/dashboard/network"]) {
+  for (const href of ["/dashboard", "/dashboard/wallet-administrative", "/dashboard/profile"]) {
     assert.ok(html.includes(`href="${href}"`), `missing retained destination ${href}`);
   }
   assert.match(html, /<button[^>]*type="button"[^>]*aria-label="Cerrar sesión"/);
   assert.doesNotMatch(html, /href="\/api\/auth\/logout"/);
   assert.match(html, /aria-label="Navegación del miembro"/);
-  assert.match(html, /href="\/dashboard\/referrals"[^>]*aria-current="page"/);
+  assert.match(html, /href="\/dashboard\/wallet-administrative"[^>]*aria-current="page"/);
+  assert.doesNotMatch(html, /href="\/dashboard\/(?:referrals|network|ranks?|support|packages|wallet-personal)/);
 });
 
 test("retired KYC route has no remaining navigation title or false verified state", () => {
   assert.deepEqual(memberPageFor("/dashboard/kyc"), { title: "Mi cuenta", section: "Mindbliss Power" });
   assert.deepEqual(memberPageFor("/dashboard/profile"), { title: "Mi perfil", section: "Mi cuenta" });
-  assert.deepEqual(memberPageFor("/dashboard/packages"), { title: "Membresías", section: "Mi cuenta" });
+  assert.deepEqual(memberPageFor("/dashboard/packages"), { title: "Mi cuenta", section: "Mindbliss Power" });
   const source = readFileSync(new URL("./member-navigation.mjs", import.meta.url), "utf8");
   assert.doesNotMatch(source, /\/dashboard\/kyc|Verificación de identidad/);
 });

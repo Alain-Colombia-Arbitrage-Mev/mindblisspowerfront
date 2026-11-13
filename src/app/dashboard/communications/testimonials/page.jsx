@@ -1,16 +1,7 @@
-"use client";
+import { notFound } from "next/navigation";
 
-import { MessageSquareQuote } from "lucide-react";
-import EmptyStateCard from "@/components/panel/EmptyStateCard";
+export const dynamic = "force-dynamic";
 
-export default function TestimonialsPage() {
-  return (
-    <div className="h-full p-6">
-      <EmptyStateCard
-        icon={MessageSquareQuote}
-        title="Sin testimonios publicados"
-        description="Los testimonios de la comunidad aparecerán en esta sección."
-      />
-    </div>
-  );
+export default function RetiredWalletPortalPage() {
+  notFound();
 }

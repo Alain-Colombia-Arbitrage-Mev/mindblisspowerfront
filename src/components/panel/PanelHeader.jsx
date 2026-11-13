@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "./IntentLink";
-import { Headphones, Menu, UserRound } from "lucide-react";
+import { Menu, UserRound } from "lucide-react";
 import ThemeToggle from "@/app/_components/ThemeToggle";
 import LanguageSwitcher from "@/i18n/LanguageSwitcher";
 import { useI18n } from "@/i18n/LanguageProvider";
@@ -34,14 +34,6 @@ export default function PanelHeader({
         </div> : null}
       </div>
       <div className="vp-panel-actions">
-        <Link
-          className="vp-shell-icon vp-header-pill vp-desktop-action"
-          href="/dashboard/support"
-          aria-label={t("common.support")}
-          title={t("common.support")}
-        >
-          <Headphones size={16} /><span>{t("common.support")}</span>
-        </Link>
         <LanguageSwitcher compact />
         <ThemeToggle />
         <Link

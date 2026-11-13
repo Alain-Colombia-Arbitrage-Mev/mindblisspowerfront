@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 
 import { customerDomainDecision } from "@/lib/domain-routing";
 import { memberMutationError } from "@/lib/member-mutation-policy.mjs";
-import { walletPortalRequestAllowed } from "@/lib/wallet-portal-policy.mjs";
+import { walletPortalNotFound, walletPortalRequestAllowed } from "@/lib/wallet-portal-policy.mjs";
 
 export function proxy(request) {
-  if (!walletPortalRequestAllowed(new URL(request.url))) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  if (!walletPortalRequestAllowed(new URL(request.url))) return walletPortalNotFound();
   const decision = customerDomainDecision({
     host: request.headers.get("x-forwarded-host") || request.headers.get("host"),
     pathname: request.nextUrl.pathname,

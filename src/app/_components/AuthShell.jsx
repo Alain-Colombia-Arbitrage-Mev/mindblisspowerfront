@@ -1,7 +1,6 @@
 import Link from "next/link";
 
 import ThemeToggle from "./ThemeToggle";
-import AuthSupportWidget from "./AuthSupportWidget";
 import LanguageSwitcher from "@/i18n/LanguageSwitcher";
 import { AuthIdentityCopy, AuthLegal } from "./AuthLocalizedContent";
 
@@ -18,9 +17,9 @@ export default function AuthShell({
   sideKpis: _sideKpis = undefined,
   visualPosition: _visualPosition = undefined,
   layout = "default",
-  supportEmail = "",
+  supportEmail: _supportEmail = "",
 }) {
-  void [_activePath, _loginHref, _registrationHref, _eyebrow, _sideKpis, _visualPosition];
+  void [_activePath, _loginHref, _registrationHref, _eyebrow, _sideKpis, _visualPosition, _supportEmail];
   const shellLayout = ["default", "compact", "long"].includes(layout) ? layout : "default";
   return (
     <main className={`auth-shell auth-shell--${shellLayout}`}>
@@ -35,7 +34,6 @@ export default function AuthShell({
 
       <section className="auth-access-area">
         <header className="auth-access-tools">
-          <AuthSupportWidget initialEmail={supportEmail} variant="header" />
           <LanguageSwitcher compact />
           <ThemeToggle />
         </header>
@@ -46,8 +44,6 @@ export default function AuthShell({
 
         <AuthLegal />
       </section>
-
-      <AuthSupportWidget initialEmail={supportEmail} />
     </main>
   );
 }

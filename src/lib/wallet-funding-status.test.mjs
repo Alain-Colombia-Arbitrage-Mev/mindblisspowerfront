@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { fundingStatus } from './wallet-funding-contract.mjs';
+import { fundingStatus, fundingHistory } from './wallet-funding-contract.mjs';
 import { readWalletFundingStatus } from './wallet-funding-client.mjs';
 import { handleWalletFunding } from './wallet-funding-bff.mjs';
 
@@ -18,6 +18,19 @@ function status(kind = 'personal') {
 function request(kind, query = `checkoutReference=${reference}`, cookie = 'better-auth.session_token=synthetic') {
   return new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/wallet-funding/${kind}/status?${query}`, { headers: { cookie } });
 }
+
+test('Ethereum personal funding preserves its chain while historical Polygon and administrative destinations remain distinct', () => {
+  const ethereum = { ...status(), destination: { ...status().destination, network: 'ethereum', chainId: 1 } };
+  assert.deepEqual(fundingStatus(ethereum, 'personal').destination, ethereum.destination);
+  assert.equal(fundingStatus({ ...status('administrative'), destination: ethereum.destination }, 'administrative'), null);
+  const record = { checkoutReference: reference, requestedAmount: 50, country: 'CO', status: 'initiated', createdAt: '2026-11-11T10:00:00Z', provider: 'reown' };
+  const history = { walletKind: 'personal', environment: 'production', settlement: 'unconfirmed', records: [
+    { ...record, destination: ethereum.destination },
+    { ...record, checkoutReference: otherReference, destination: status().destination },
+  ] };
+  assert.deepEqual(fundingHistory(history, 'personal').records.map(row => row.destination), [ethereum.destination, status().destination]);
+  assert.equal(fundingHistory({ ...history, records: [{ ...record, destination: { ...ethereum.destination, chainId: 137 } }] }, 'personal'), null);
+});
 
 test('persisted funding status retains each immutable destination and never promotes a checkout to payment success', () => {
   for (const kind of ['personal', 'administrative']) {

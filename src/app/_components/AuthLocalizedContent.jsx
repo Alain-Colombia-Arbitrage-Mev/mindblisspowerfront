@@ -1,18 +1,16 @@
 "use client";
 
-import { Headphones, Layers3, Network } from "lucide-react";
+import { ReceiptText, Wallet } from "lucide-react";
 import { useI18n } from "@/i18n/LanguageProvider";
 
 const benefits = [
-  { icon: Layers3, key: "auth.benefitMemberships" },
-  { icon: Network, key: "auth.benefitNetwork" },
-  { icon: Headphones, key: "auth.benefitSupport" },
+  { icon: Wallet, key: "auth.benefitWallet" },
+  { icon: ReceiptText, key: "auth.benefitHistory" },
 ];
 
 const capabilities = [
   ["auth.capabilityAccount", "auth.capabilityAccountCopy"],
-  ["auth.capabilityCommunity", "auth.capabilityCommunityCopy"],
-  ["auth.capabilitySupport", "auth.capabilitySupportCopy"],
+  ["auth.capabilityWallet", "auth.capabilityWalletCopy"],
 ];
 
 export function AuthIdentityCopy({ title, description }) {

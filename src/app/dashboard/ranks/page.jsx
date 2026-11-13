@@ -1,5 +1,7 @@
-import { RankDashboardPage } from "../_components/executive-pages/RankDashboardPage";
+import { notFound } from "next/navigation";
 
-export default function RanksPage() {
-  return <RankDashboardPage />;
+export const dynamic = "force-dynamic";
+
+export default function RetiredWalletPortalPage() {
+  notFound();
 }

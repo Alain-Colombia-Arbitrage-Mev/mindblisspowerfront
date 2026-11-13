@@ -48,6 +48,14 @@ export async function GET(request) {
       cache: "no-store",
       signal: AbortSignal.any([request.signal, AbortSignal.timeout(20_000)]),
     });
+    if (resp.status === 401) {
+      // This request already passed local session and JWT verification. A
+      // rejected service handoff cannot establish that the browser signed out.
+      await resp.body?.cancel().catch(() => {});
+      return NextResponse.json({ error: "authentication_unavailable" }, {
+        status: 503, headers: privateHeaders,
+      });
+    }
     const payload = await resp.json().catch(() => ({}));
     if (!resp.ok) {
       const retry = Number(

@@ -6,11 +6,11 @@ import { useI18n } from "@/i18n/LanguageProvider";
 import { WALLET_GATEWAY_FAILURE_REASONS } from "@/lib/wallet-funding-contract.mjs";
 import styles from "./wallet-funding.module.css";
 
-export function WalletFundingScreen({ title, subtitle, provider, children }) {
+export function WalletFundingScreen({ title, subtitle, provider = "", children }) {
   const { t } = useI18n();
   return <section className="executive-page"><div className={`executive-container ${styles.screen}`}>
     <Link href="/dashboard/payments" prefetch={false} className={styles.back}><ArrowLeft size={16} aria-hidden="true" />{t("funding.backToSummary")}</Link>
-    <header className={styles.pageHeading}><div><h1>{title}</h1><span>{subtitle}</span></div><p className={styles.providerBadge}>{provider}</p></header>
+    <header className={styles.pageHeading}><div><h1>{title}</h1><span>{subtitle}</span></div>{provider ? <p className={styles.providerBadge}>{provider}</p> : null}</header>
     {children}
   </div></section>;
 }
@@ -41,14 +41,11 @@ export function WalletActionError({ message, diagnostic = "" }) {
 }
 
 export function administrativeFundingError(error, t) {
-  const code = error?.message;
-  if (code === "unauthenticated") return t("recharge.providerSession");
-  if (code === "wallet_funding_rate_limited") return t("funding.rateLimited");
-  if (code === "wallet_funding_request_already_used") return t("funding.requestUsed");
-  if (code === "wallet_funding_method_unavailable") return t("funding.methodReloadRequired");
-  if (code === "wallet_funding_amount_unavailable") return t("funding.amountUnavailable");
-  if (code === "wallet_funding_unconfigured") return t("funding.sandboxConfiguration");
-  if (code === "wallet_funding_provider_authentication_unavailable") return t("funding.sandboxProviderAuthentication");
-  if (code === "wallet_funding_valuation_unavailable") return t("funding.localMinimumPending");
-  return t("funding.sandboxUnavailable");
+  const keys = { unauthenticated: "recharge.providerSession", wallet_funding_rate_limited: "funding.rateLimited",
+    wallet_funding_request_already_used: "funding.requestUsed", wallet_funding_request_pending: "funding.sandboxRequestPending", wallet_funding_method_unavailable: "funding.methodReloadRequired",
+    wallet_funding_amount_unavailable: "funding.amountUnavailable", wallet_funding_amount_out_of_range: "funding.amountUnavailable",
+    wallet_funding_unconfigured: "funding.sandboxConfiguration",
+    wallet_funding_provider_authentication_unavailable: "funding.sandboxProviderAuthentication",
+    wallet_funding_valuation_unavailable: "funding.localMinimumPending" };
+  return t(Object.hasOwn(keys, error?.message) ? keys[error.message] : "funding.sandboxUnavailable");
 }

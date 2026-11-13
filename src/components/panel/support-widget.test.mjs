@@ -4,11 +4,11 @@ import test from 'node:test';
 
 const source = path => readFileSync(new URL(path, import.meta.url), 'utf8');
 
-test('the dashboard support launcher is an accessible controlled popup with working fallbacks', () => {
+test('the dashboard leaves the support launcher unmounted while its component remains available for later restoration', () => {
   const widget = source('./SupportWidget.jsx');
   const messages = source('../../i18n/messages.js');
   const shell = source('../../app/dashboard/_components/DashboardShell.jsx');
-  assert.match(shell, /<SupportWidget\s*\/>/);
+  assert.doesNotMatch(shell, /SupportWidget/);
   assert.match(widget, /<Popover\.Root open=\{open\} onOpenChange=\{setOpen\}>/);
   assert.match(widget, /<Popover\.Trigger asChild>/);
   assert.match(widget, /<Popover\.Content[\s\S]*side="top"[\s\S]*align="end"/);

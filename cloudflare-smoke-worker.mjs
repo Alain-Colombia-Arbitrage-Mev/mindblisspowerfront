@@ -294,7 +294,7 @@ const syntheticEnv = {
     }
     return Response.json({ error: 'unauthenticated' }, { status: 401 });
   } },
-  AUTH_PROVIDER: 'better-auth', AUTH_PUBLIC_ORIGIN: 'https://app.mindblisspower.com',
+  AUTH_PROVIDER: 'better-auth', AUTH_PUBLIC_ORIGIN: 'https://app.mindblisspower.com', AUTH_SOCIAL_PROVIDERS: '',
   AUTH_BFF_SHARED_SECRET: secret,
   BETTER_AUTH_BACKEND_URL: 'https://auth.core.internal',
   BETTER_AUTH_JWT_ISSUER: issuer, BETTER_AUTH_JWT_AUDIENCE: audience,
@@ -343,6 +343,7 @@ export default {
       }));
     }
     // Obsolete flags must not re-enable registration SMS, even with credentials.
+    const socialEnabledFixture = incoming.pathname.startsWith('/__social_enabled/');
     const staleSmsFixture = incoming.pathname.startsWith('/__stale_sms/');
     const nowDisabledFixture = incoming.pathname.startsWith('/__now_disabled/');
     const resendDisabledFixture = incoming.pathname.startsWith('/__resend_disabled/');
@@ -354,7 +355,8 @@ export default {
     const unavailableReferralFixture = incoming.pathname.startsWith('/__referral_unavailable/');
     const unavailableMembershipFixture = incoming.pathname.startsWith('/__membership_unavailable/');
     const invalidMembershipFixture = incoming.pathname.startsWith('/__membership_invalid/');
-    const pathname = staleSmsFixture ? incoming.pathname.slice('/__stale_sms'.length)
+    const pathname = socialEnabledFixture ? incoming.pathname.slice('/__social_enabled'.length)
+      : staleSmsFixture ? incoming.pathname.slice('/__stale_sms'.length)
       : nowDisabledFixture ? incoming.pathname.slice('/__now_disabled'.length)
       : resendDisabledFixture ? incoming.pathname.slice('/__resend_disabled'.length)
       : resendUnconfiguredFixture ? incoming.pathname.slice('/__resend_unconfigured'.length)
@@ -368,6 +370,7 @@ export default {
     const inputOrigin = alternateFixture ? 'https://mindbliss-portal-rewon.devfidubit.workers.dev' : 'https://app.mindblisspower.com';
     const input = new Request(`${inputOrigin}${pathname}${incoming.search}`, { method: request.method, headers, body: request.body });
     return worker.fetch(input, { ...env, ...syntheticEnv,
+      ...(socialEnabledFixture ? { AUTH_SOCIAL_PROVIDERS: 'google,apple' } : {}),
       ...(alternateFixture ? { AUTH_ALTERNATE_ORIGIN: inputOrigin } : {}),
       ...((positionedReferralFixture || unavailableReferralFixture) ? { CORE_API: { fetch: (url, options) =>
         syntheticEnv.CORE_API.fetch(url, options, { referralRead: positionedReferralFixture ? 'positioned' : 'unavailable' }) } } : {}),

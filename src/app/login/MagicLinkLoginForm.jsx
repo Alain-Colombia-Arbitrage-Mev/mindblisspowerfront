@@ -26,6 +26,7 @@ import { verifiedEmailSignIn, betterAuthAccess } from './better-auth-login.mjs';
 import { registrationRequired, registrationRedirect, registrationRetrySeconds, registrationUrl } from '../register/registration-model.mjs';
 import { beginVerifiedReferralSync } from '@/lib/referral-sync.mjs';
 import { browserRequestDeadline } from '@/lib/browser-request-deadline.mjs';
+import { rememberWalletSetupAfterAuth } from '@/lib/wallet-setup-handoff.mjs';
 
 const AUTH_STATE_MESSAGES = {
   "session-not-established": {
@@ -119,8 +120,11 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     if (verifiedEmail) verifiedTitle.current?.focus();
   }, [verifiedEmail]);
 
-  function showVerifiedLogin(verifiedEmail) {
+  function showVerifiedLogin(verifiedEmail, prepareWallet = false) {
     if (!mountedRef.current || dashboardNavigationRef.current || verifiedLoginRef.current) return;
+    // Same-tab setup intent only. The dashboard still proves the session and
+    // reads its own binding before offering any wallet authentication.
+    if (prepareWallet) rememberWalletSetupAfterAuth(verifiedEmail, window);
     setError('');
     setNotice('');
     setLoginCode('');
@@ -472,7 +476,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
           return;
         }
         // Fresh native proof permits the handoff, not network permissions.
-        await showVerifiedLogin(normalizedEmail);
+        await showVerifiedLogin(normalizedEmail, true);
         return;
       }
 

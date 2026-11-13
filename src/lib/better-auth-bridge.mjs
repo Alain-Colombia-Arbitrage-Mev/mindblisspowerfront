@@ -109,11 +109,13 @@ export async function readAuthUpstreamBody(upstream, signal) {
   }
 }
 
-// Email delivery includes Container startup, PostgreSQL and the provider's 8s
-// deadline. Keep other auth reads/canjes short; never retry a send on timeout.
+// Email delivery and registration verification include Container startup and
+// PostgreSQL work. Verification's transaction can exceed the short read budget:
+// aborting it at 8s can discard a session after its OTP has already been consumed.
+// Keep reads and sign-in exchanges short; never retry a mutation on timeout.
 const emailDeliveryPaths = new Set(['/sign-up/email', '/email-otp/send-verification-otp',
   '/send-verification-email', '/email-otp/request-password-reset']);
-export const betterAuthTimeoutMs = path => emailDeliveryPaths.has(path) ? 20000 : 8000;
+export const betterAuthTimeoutMs = path => emailDeliveryPaths.has(path) || path === '/email-otp/verify-email' ? 20000 : 8000;
 
 /** @param {string} path
  * @param {{cookie?: string, method?: string, body?: unknown, origin?: string, signal?: AbortSignal, query?: string}} [options]

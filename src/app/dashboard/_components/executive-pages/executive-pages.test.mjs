@@ -9,6 +9,7 @@ import * as paymentDisplay from '../../../../lib/payment-display.mjs';
 import * as deadline from '../../../../lib/browser-request-deadline.mjs';
 import { translateMessage } from '../../../../i18n/translate.mjs';
 import * as fundingContract from '../../../../lib/wallet-funding-contract.mjs';
+import { walletPortalRequestAllowed, WALLET_PORTAL_ORIGIN } from '../../../../lib/wallet-portal-policy.mjs';
 
 const require = createRequire(import.meta.url);
 const pageNames = [
@@ -115,6 +116,15 @@ test('all 16 public page exports remain compatible and render without fetching',
 test('server route entries import only their individual client page, not the compatibility barrel', () => {
   for (const [route, name] of Object.entries(routes)) {
     const source = readFileSync(new URL(`../../${route}/page.jsx`, import.meta.url), 'utf8');
+    if (!walletPortalRequestAllowed(new URL(`/dashboard/${route}`, WALLET_PORTAL_ORIGIN))) {
+      assert.match(source, /notFound\(\)/, route);
+      continue;
+    }
+    if (route === 'support') {
+      assert.match(source, /redirect\("\/dashboard"\)/);
+      assert.doesNotMatch(source, /SupportDashboardPage/);
+      continue;
+    }
     assert.match(source, new RegExp(`_components/executive-pages/${name}["']`), route);
     assert.doesNotMatch(source, /["'][^"']*ExecutiveDashboardPages["']/, route);
   }
@@ -153,7 +163,7 @@ test('Better Auth profile stays email-only, with saves disabled until the stored
   const html = render(pages.ProfileDashboardPage, { authMode: 'better-auth' });
   assert.match(html, /Persona Prueba/);
   assert.match(html, /verified@example.test/);
-  assert.match(html, /REF-123/);
+  assert.doesNotMatch(html, /REF-123|href="\/dashboard\/referrals"/);
   assert.match(html, /autenticación se realiza por correo electrónico/);
   assert.match(html, /href="\/forgot-password"/);
   assert.match(html, /Crear o cambiar contraseña/);

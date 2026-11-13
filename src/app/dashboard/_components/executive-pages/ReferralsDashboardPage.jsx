@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, BookOpen, MessageCircleQuestion, MessageSquareText, Network } from "lucide-react";
+import { ArrowRight, MessageSquareText, Network } from "lucide-react";
 import { useState } from "react";
 
 import { useI18n } from "@/i18n/LanguageProvider";
@@ -13,9 +13,7 @@ export function ReferralsDashboardPage() {
   const { t } = useI18n();
   const [editorOpen, setEditorOpen] = useState(false);
   const tools = [
-    { icon: BookOpen, title: t("community.guideTitle"), copy: t("community.guideCopy"), label: t("community.guideAction"), href: "/dashboard/support" },
     { icon: MessageSquareText, title: t("community.messageTitle"), copy: t("community.messageCopy"), label: t("community.messageAction"), action: () => setEditorOpen(true) },
-    { icon: MessageCircleQuestion, title: t("community.faqTitle"), copy: t("community.faqCopy"), label: t("community.faqAction"), href: "/dashboard/support" },
   ];
   return (
     <section className="executive-page mb-community-page">

@@ -1,5 +1,7 @@
-import { ReferralsDashboardPage } from "../_components/executive-pages/ReferralsDashboardPage";
+import { notFound } from "next/navigation";
 
-export default function ReferralsPage() {
-  return <ReferralsDashboardPage />;
+export const dynamic = "force-dynamic";
+
+export default function RetiredWalletPortalPage() {
+  notFound();
 }

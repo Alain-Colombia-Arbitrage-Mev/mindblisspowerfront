@@ -9,7 +9,7 @@ test('the dashboard uses one centered responsive content rail', () => {
   const css = read('./panel-shell.css');
 
   assert.match(shell, /className="vp-dashboard-content"/);
-  assert.match(shell, /className="vp-dashboard-notice/);
+  assert.doesNotMatch(shell, /DashboardWalletProvider|PostAuthWalletSetup|className="vp-dashboard-notice/);
   assert.match(css, /\.vp-dashboard-content\s*\{[^}]*max-width:\s*1440px;[^}]*margin-inline:\s*auto;/s);
   assert.match(css, /\.vp-dashboard-notice\s*\{[^}]*margin:\s*0 20px 16px;/s);
   assert.match(css, /@media \(min-width: 640px\)[\s\S]*?\.vp-dashboard-notice\s*\{[^}]*margin-inline:\s*28px;/);

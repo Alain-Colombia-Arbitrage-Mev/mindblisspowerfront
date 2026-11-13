@@ -2,11 +2,11 @@ import { referralLinkCode } from '../../lib/referral-links.mjs';
 import { parseAuthRetryAfter } from '../../lib/auth-retry-after.mjs';
 
 export const REGISTRATION_RESEND_SECONDS = 300;
-// Registration confirmation includes native OTP verification and a separate
-// private session proof. Login's shorter OTP exchange deadline is unchanged.
+// Cover the native verification's 20s budget and the separate 8s private session
+// proof with a small transport margin. Login's shorter exchange is unchanged.
 export function registrationTimeoutMs(action) {
   if (action === 'send') return 30000;
-  if (action === 'confirm') return 20000;
+  if (action === 'confirm') return 35000;
   throw new Error('invalid_registration_action');
 }
 const REGISTRATION_PREFILL_KEY = 'mindbliss.registration-prefill.v1';
@@ -99,12 +99,23 @@ export function registrationRetrySeconds(response, payload = {}, now = Date.now(
   return Math.max(REGISTRATION_RESEND_SECONDS, ...waits);
 }
 
+export function registrationCodeFailure(status, code) {
+  if (![400, 403, 422].includes(status)) return '';
+  const messages = {
+    INVALID_OTP: 'El código no es válido o ya se utilizó. Revisa el último correo de registro; si ya verificaste tu cuenta, entra con un código de acceso.',
+    OTP_EXPIRED: 'Este código venció. Espera a que termine el contador y solicita otro manualmente.',
+    TOO_MANY_ATTEMPTS: 'Este código agotó sus 3 intentos. Espera a que termine el contador y solicita otro manualmente.',
+  };
+  return typeof code === 'string' && Object.hasOwn(messages, code) ? messages[code] : '';
+}
+
 export function registrationFailure(status, action = 'register', code = '') {
   if (status === 429) return 'Alcanzaste un límite temporal. Espera el plazo indicado antes de volver a intentarlo y respeta el contador para solicitar otro código. No reintentaremos automáticamente.';
+  if (status === 503 && action === 'confirm' && code === 'EMAIL_VERIFICATION_UNAVAILABLE') return 'No pudimos completar la verificación por un fallo temporal. Vuelve a pulsar «Verificar correo» con el mismo código si todavía está vigente. No solicites otro código por este error; no reintentaremos automáticamente.';
   if (status >= 500 && action === 'confirm') return 'No pudimos confirmar el resultado de la verificación. Si el código ya fue utilizado, abre «Entrar de forma segura» y solicita un código de acceso. No reintentaremos automáticamente.';
   if (status >= 500) return 'El servicio de registro no está disponible en este momento. Intenta más tarde.';
   if (status === 409 && action === 'register' && code === 'ACCOUNT_EXISTS') return 'Ya existe un acceso con este correo. Usa «Entrar de forma segura» para iniciar sesión o crear/restablecer tu contraseña. Si dejaste un registro pendiente, usa «Ya solicité mi registro: verificar correo». No se enviará otro código automáticamente.';
-  if (action === 'confirm') return 'No pudimos verificar el código. Revisa los 6 dígitos del código de registro más reciente; vence en 5 minutos y permite hasta 3 intentos por código. Si necesitas otro, espera a que termine el contador y solicítalo manualmente. No compartas el código.';
+  if (action === 'confirm') return registrationCodeFailure(status, code) || 'No pudimos verificar el código. Revisa los 6 dígitos del código de registro más reciente; vence en 5 minutos y permite hasta 3 intentos por código. Si necesitas otro, espera a que termine el contador y solicítalo manualmente. No compartas el código.';
   if (action === 'resend') return 'No pudimos solicitar el código. Revisa el correo e inténtalo de nuevo.';
   return 'No pudimos completar el registro. Revisa los datos o entra si ya tienes una cuenta.';
 }

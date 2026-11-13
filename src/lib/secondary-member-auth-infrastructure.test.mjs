@@ -7,6 +7,7 @@ import * as profilePolicy from './member-profile.mjs';
 import * as onboardingPolicy from './member-onboarding-schema.js';
 import { memberMutationError } from './member-mutation-policy.mjs';
 import { hasSameOrigin } from './request-origin.js';
+import { walletPortalNotFound } from './wallet-portal-policy.mjs';
 
 const profile = { first_name: 'Synthetic', last_name: 'Member', phone: '', country: '', payout_wallet_usdc: '' };
 const onboarding = {
@@ -15,15 +16,12 @@ const onboarding = {
   acceptsPrivacy: true, acceptsCommunications: false,
 };
 const routes = [
-  { path: 'member/news', method: 'GET', upstreamPath: '/api/member/news' },
   { path: 'member/onboarding', method: 'GET', upstreamPath: '/api/member/onboarding' },
   { path: 'member/onboarding', method: 'POST', upstreamPath: '/api/member/onboarding', input: onboarding },
   { path: 'member/profile', method: 'GET', upstreamPath: '/api/member/profile', profile: true },
   { path: 'member/profile', method: 'POST', upstreamPath: '/api/member/profile', input: { name: 'Synthetic Member' }, profile: true },
   { path: 'member/support/ticket', method: 'POST', upstreamPath: '/api/support/ticket', input: { subject: 'Synthetic subject', body: 'Synthetic request' } },
   { path: 'member/support/tickets', method: 'GET', upstreamPath: '/api/support/tickets' },
-  { path: 'network/analyze', method: 'GET', analysis: true },
-  { path: 'network/analyze', method: 'POST', upstreamPath: '/network/analyze', input: { metrics: { total_members: 10 } }, analysis: true },
 ];
 
 function fixture(descriptor, {
@@ -46,6 +44,7 @@ function fixture(descriptor, {
     return email ? { email } : null;
   };
   const mocks = {
+    '@/lib/wallet-portal-policy.mjs': { walletPortalNotFound },
     '@/lib/admin-bff': { rawIdToken: async () => { calls.token++; if (tokenError) throw tokenError; return token; } },
     'next/server': { NextResponse: { json: (...args) => Response.json(...args) } },
     '@/lib/verify-id-token': {
@@ -197,29 +196,14 @@ for (const path of ['member/onboarding', 'member/profile']) {
   });
 }
 
-test('POST network/analyze: malformed and nonobject JSON fails safely before model or engine', async () => {
-  const descriptor = routes.find(route => route.analysis && route.method === 'POST');
-  for (const rawBody of ['{', 'null', '[]', '"text"', '42']) {
-    const setup = fixture(descriptor, { rawBody });
-    const response = await setup.invoke();
-    assert.equal(response.status, 400);
-    privateResponse(response, descriptor);
-    assert.deepEqual(await response.json(), { error: 'invalid_json' });
-    assert.equal(setup.calls.body, 1);
-    assert.equal(setup.calls.provider, 0);
-    assert.equal(setup.calls.model, 0);
-  }
-});
 
-test('POST network/analyze: engine transport fallback never exposes raw infrastructure errors', async () => {
-  const descriptor = routes.find(route => route.analysis && route.method === 'POST');
-  const setup = fixture(descriptor, { providerError: new Error('private-engine-hostname-and-token') });
-  const response = await setup.invoke();
-  assert.equal(response.status, 200);
-  privateResponse(response, descriptor);
-  const data = await response.json();
-  assert.equal(data.mode, 'deterministic');
-  assert.equal(data.provider, 'next-local-network-rules');
-  assert.deepEqual(data.warnings, ['El servicio de análisis no está disponible; se muestra un cálculo local.']);
-  assert.doesNotMatch(JSON.stringify(data), /private-engine|synthetic-private-token|stack/);
+test('retired news and network analysis never inspect identity or call a protected service', async () => {
+  for (const descriptor of [{ path: 'member/news', method: 'GET' }, { path: 'network/analyze', method: 'GET' }, { path: 'network/analyze', method: 'POST' }]) {
+    const setup = fixture(descriptor);
+    const response = await setup.invoke();
+    assert.equal(response.status, 404);
+    assert.equal(response.headers.get('cache-control'), 'private, no-store');
+    assert.deepEqual(await response.json(), { error: 'not_found' });
+    assert.ok(Object.values(setup.calls).every(count => count === 0));
+  }
 });

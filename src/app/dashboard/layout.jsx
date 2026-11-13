@@ -6,6 +6,7 @@ import { verifyIdTokenForSession } from "@/lib/verify-id-token";
 
 import AuthShell from "../_components/AuthShell";
 import DashboardShell from "./_components/DashboardShell";
+import DashboardSessionBoundary from "./_components/DashboardSessionBoundary";
 
 /**
  * Presentation gate, not a substitute for each API's owner/permission checks.
@@ -44,7 +45,10 @@ export default async function DashboardLayout({ children }) {
     redirect(betterAuthEnabled() ? "/login?auth=session-not-established" : "/login");
   }
 
-  return <DashboardShell authMode={betterAuthEnabled() ? "better-auth" : "cognito"}>{children}</DashboardShell>;
+  const authMode = betterAuthEnabled() ? "better-auth" : "cognito";
+  return <DashboardSessionBoundary owner={{ email: claims.email, subject: claims.sub }} mode={authMode}>
+    <DashboardShell authMode={authMode}>{children}</DashboardShell>
+  </DashboardSessionBoundary>;
 }
 
 function AuthHandoffUnavailable({ reference, restricted = false }) {

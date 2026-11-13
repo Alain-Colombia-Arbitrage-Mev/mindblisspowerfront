@@ -1,8 +1,26 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import ts from 'typescript';
 
 const source = file => readFileSync(new URL(file, import.meta.url), 'utf8');
+const require = createRequire(import.meta.url);
+
+function componentAt(file) {
+  const compiled = ts.transpileModule(source(file), { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
+  const module = { exports: {} };
+  new Function('require', 'module', 'exports', compiled)(id => {
+    if (id === 'react' || id === 'react/jsx-runtime') return require(id);
+    if (id === 'lucide-react') return { Loader2: () => null };
+    if (id === './SocialProviderIcon') return componentAt('./SocialProviderIcon.jsx');
+    if (id === '@/lib/browser-request-deadline.mjs') return { browserRequestDeadline() { assert.fail('SSR started an authentication request'); } };
+    assert.fail(`Unexpected social component dependency: ${id}`);
+  }, module, module.exports);
+  return module.exports;
+}
 
 test('the approved login uses real Google and Apple vector marks instead of placeholder glyphs', () => {
   const icons = source('./SocialProviderIcon.jsx');
@@ -34,9 +52,17 @@ test('mobile social actions are full-width touch targets and retain an accessibl
   assert.match(component, /aria-busy=/);
 });
 
-test('the login form always renders the social block so unavailable providers remain visible', () => {
+test('the actual social component renders no buttons or divider when disabled and only its explicitly enabled Google action', t => {
+  t.mock.method(globalThis, 'fetch', () => assert.fail('rendering social access must not make a request'));
   const login = source('./MagicLinkLoginForm.jsx');
   assert.match(login, /<SocialLoginButtons enabledProviders=\{enabledSocialProviders\} \/>/);
-  assert.doesNotMatch(login, /emailOtpOnly \? <SocialLoginButtons/);
-  assert.match(source('./SocialLoginButtons.jsx'), /\(próximamente\)/);
+  const SocialLoginButtons = componentAt('./SocialLoginButtons.jsx').default;
+  for (const props of [{}, { enabledProviders: [] }, { enabledProviders: ['unknown'] }]) {
+    assert.equal(renderToStaticMarkup(React.createElement(SocialLoginButtons, props)), '');
+  }
+  const google = renderToStaticMarkup(React.createElement(SocialLoginButtons, { enabledProviders: ['google'] }));
+  assert.equal((google.match(/<button\b/g) || []).length, 1);
+  assert.match(google, /aria-label="Continuar con Google"/);
+  assert.match(google, /auth-social-divider/);
+  assert.doesNotMatch(google, /Apple|próximamente|disabled/);
 });

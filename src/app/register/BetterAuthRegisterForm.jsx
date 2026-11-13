@@ -9,9 +9,11 @@ import { bindReferralCodeToEmail } from '@/lib/referral-attribution';
 import { RegistrationButton, RegistrationField } from './RegistrationFields';
 import { beginVerifiedReferralSync } from '@/lib/referral-sync.mjs';
 import { browserRequestDeadline } from '@/lib/browser-request-deadline.mjs';
+import { rememberWalletSetupAfterAuth } from '@/lib/wallet-setup-handoff.mjs';
+import { recoverRegistrationSession, registrationSessionRecoveryEligible, registrationVerifiedWithoutSession } from '@/lib/registration-session-recovery.mjs';
 import ContactPhoneField from './ContactPhoneField';
 import { initialContactPhone, registrationContactValues } from './contact-phone-model.mjs';
-import { REGISTRATION_RESEND_SECONDS, consumeRegistrationPrefill, registrationEmail, registrationErrors, registrationFailure, registrationHints, registrationLoginUrl, registrationUrl, registrationRetrySeconds, registrationAcknowledged, registrationPendingDelivery, registrationTimeoutMs } from './registration-model.mjs';
+import { REGISTRATION_RESEND_SECONDS, consumeRegistrationPrefill, registrationEmail, registrationErrors, registrationCodeFailure, registrationFailure, registrationHints, registrationLoginUrl, registrationUrl, registrationRetrySeconds, registrationAcknowledged, registrationPendingDelivery, registrationTimeoutMs } from './registration-model.mjs';
 
 const initialForm = { fullName: '', email: '', acceptsPrivacy: false,
   contactPhone: initialContactPhone(), contactWhatsapp: initialContactPhone(), whatsappSameAsPhone: false };
@@ -36,6 +38,9 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
   const title = useRef(null);
   const contactDetails = useRef(null);
   const email = registrationEmail(form.email);
+  const latestEmail = useRef(email); latestEmail.current = email;
+  const completed = step === 'verified' || step === 'recovered';
+  const awaitingAccess = step === 'verified-login';
   const cooldown = useResendCooldown(REGISTRATION_RESEND_SECONDS, email);
   const isLoading = Boolean(loading);
   const loginUrl = registrationLoginUrl(email, hints.referralCode, hints.preferredSide);
@@ -63,12 +68,16 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
 
   useEffect(() => {
     if (step === 'confirm') codeInput.current?.focus();
-    if (step === 'verified') title.current?.focus();
+    if (step === 'verified' || step === 'recovered' || step === 'verified-login') title.current?.focus();
   }, [step]);
 
   useEffect(() => {
     if (errors.form) feedback.current?.focus();
   }, [errors.form]);
+
+  useEffect(() => {
+    if (errors.code && !isLoading) codeInput.current?.focus();
+  }, [errors.code, isLoading]);
 
   function update(field, value) {
     setForm(current => ({ ...current, [field]: value }));
@@ -82,37 +91,55 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
   }
 
   function beginRequest() {
-    const operation = { generation: ++requestGeneration.current, controller: new AbortController() };
+    const operation = { generation: ++requestGeneration.current, controller: new AbortController(),
+      email: latestEmail.current, recoveryAttempted: false };
     activeRequest.current = operation;
     return operation;
   }
 
   function currentRequest(operation) {
     return mounted.current && activeRequest.current === operation
-      && requestGeneration.current === operation.generation && !operation.controller.signal.aborted;
+      && requestGeneration.current === operation.generation && operation.email === latestEmail.current
+      && !operation.controller.signal.aborted;
   }
 
   function finishRequest(operation) {
-    if (!currentRequest(operation)) return;
+    if (!mounted.current || activeRequest.current !== operation || requestGeneration.current !== operation.generation) return;
     activeRequest.current = null;
     submitting.current = false;
     setLoading('');
   }
 
-  function enterVerifiedDashboard(operation) {
+  function enterVerifiedDashboard(operation, recovered = false) {
     if (!currentRequest(operation) || dashboardNavigation.current) return;
-    // The BFF proved the new native session; the dashboard enforces access.
+    // The BFF proved a new native session, or the recovery GET independently
+    // proved this browser's existing same-owner session. Neither is an email
+    // lookup or an access grant; the dashboard still enforces permissions.
     // Optional attribution cannot delay the navigation or grant permissions.
     try {
       if (hints.referralCode) bindReferralCodeToEmail(email, hints.referralCode, undefined, undefined, 'registration', hints.preferredSide);
       if (hints.referralCode) void beginVerifiedReferralSync(email, hints.referralCode, hints.preferredSide);
     } catch { /* Server referral persistence independently verifies ownership. */ }
+    // Recovered registration may also offer the manual wallet activation UI.
+    // This hint has no authentication, ownership or automatic-signing power.
+    rememberWalletSetupAfterAuth(operation.email, window);
     dashboardNavigation.current = true;
     try {
       window.location.replace('/dashboard');
     } catch {
-      setErrors({ form: 'Tu correo está verificado. Abre el panel con el enlace de abajo para continuar.' });
+      setErrors({ form: recovered ? 'Tu sesión está recuperada. Abre el panel con el enlace de abajo para continuar.'
+        : 'Tu correo está verificado. Abre el panel con el enlace de abajo para continuar.' });
     }
+  }
+
+  async function recoverCurrentSession(operation) {
+    if (!currentRequest(operation) || operation.recoveryAttempted) return false;
+    operation.recoveryAttempted = true;
+    const identity = await recoverRegistrationSession(operation.email, { signal: operation.controller.signal });
+    if (!currentRequest(operation) || !identity || identity.email !== operation.email) return false;
+    setCode(''); setErrors({}); setNotice(''); setStep('recovered');
+    enterVerifiedDashboard(operation, true);
+    return true;
   }
 
   async function post(path, body, action, operation) {
@@ -185,7 +212,6 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
     setNotice('');
     if (!/^\d{6}$/.test(code)) {
       setErrors({ code: 'Ingresa los 6 dígitos del correo, sin espacios.' });
-      codeInput.current?.focus();
       return;
     }
     submitting.current = true;
@@ -195,14 +221,29 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
       const { response, payload } = await post('/api/auth/register/confirm', { email, code }, 'confirm', operation);
       if (!currentRequest(operation)) return;
       if (!response.ok || !registrationAcknowledged('confirm', payload)) {
+        // This closed native failure cannot establish a browser session.
+        // Keep the code for a manual retry if still valid; it is neither a
+        // consumed-code nor a browser-session recovery acknowledgement.
+        const retryableVerification = response.status === 503 && payload?.code === 'EMAIL_VERIFICATION_UNAVAILABLE';
+        if (!retryableVerification && registrationSessionRecoveryEligible(response.status, payload?.code) && await recoverCurrentSession(operation)) return;
+        if (!currentRequest(operation)) return;
+        if (registrationVerifiedWithoutSession(response.status, payload)) {
+          setCode(''); setErrors({}); setNotice(''); setStep('verified-login'); return;
+        }
         if (response.status === 429) cooldown.start(registrationRetrySeconds(response, payload));
-        setErrors({ form: registrationFailure(response.ok ? 502 : response.status, 'confirm', payload?.code) });
+        const status = response.ok ? 502 : response.status;
+        const message = registrationFailure(status, 'confirm', payload?.code);
+        if (registrationCodeFailure(status, payload?.code)) {
+          setErrors({ code: message });
+        } else setErrors({ form: message });
         return;
       }
       setCode('');
       setStep('verified');
       enterVerifiedDashboard(operation);
     } catch {
+      if (!currentRequest(operation)) return;
+      if (await recoverCurrentSession(operation)) return;
       if (!currentRequest(operation)) return;
       setErrors({ form: registrationFailure(503, 'confirm') });
     } finally {
@@ -245,11 +286,11 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
       <section className="auth-registration-card min-w-0" aria-labelledby="registration-title" aria-busy={isLoading}>
         <div className="mb-6 flex items-start gap-3">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[var(--vp-accent-muted)] text-[var(--vp-accent)]" aria-hidden="true">
-            {step === 'verified' ? <CheckCircle2 size={22} /> : step === 'confirm' ? <Mail size={22} /> : <UserPlus size={22} />}
+            {completed || awaitingAccess ? <CheckCircle2 size={22} /> : step === 'confirm' ? <Mail size={22} /> : <UserPlus size={22} />}
           </span>
           <div>
-            <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-[var(--vp-muted)]">{step === 'details' ? 'Paso 1 de 2' : step === 'confirm' ? 'Paso 2 de 2' : 'Correo verificado'}</p>
-            <h2 ref={title} tabIndex={-1} id="registration-title" className="auth-display text-2xl text-[var(--vp-text)]">{step === 'details' ? 'Crear cuenta' : step === 'confirm' ? 'Verifica tu correo' : 'Correo verificado correctamente'}</h2>
+            <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-[var(--vp-muted)]">{step === 'details' ? 'Paso 1 de 2' : step === 'confirm' ? 'Paso 2 de 2' : awaitingAccess ? 'Acceso pendiente' : step === 'recovered' ? 'Sesión recuperada' : 'Correo verificado'}</p>
+            <h2 ref={title} tabIndex={-1} id="registration-title" className="auth-display text-2xl text-[var(--vp-text)]">{step === 'details' ? 'Crear cuenta' : step === 'confirm' ? 'Verifica tu correo' : completed ? (step === 'recovered' ? 'Tu cuenta ya estaba verificada' : 'Correo verificado correctamente') : 'Tu correo ya está verificado'}</h2>
           </div>
         </div>
 
@@ -310,9 +351,17 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
             <button type="button" disabled={isLoading} onClick={() => { setStep('details'); setCode(''); setErrors({}); setNotice('Corrige tus datos y vuelve a solicitar el registro. Si la cuenta ya existe, utiliza el acceso.'); }}
               className="inline-flex min-h-11 items-center gap-2 text-sm text-[var(--vp-text)] underline"><ArrowLeft size={15} aria-hidden="true" />Corregir mis datos</button>
           </form>
+        ) : awaitingAccess ? (
+          <div className="space-y-5" role="status" aria-live="polite" aria-atomic="true">
+            <p className="text-sm leading-7 text-[var(--vp-text)]">El registro ya verificó tu correo, pero falta completar el acceso. No vuelvas a usar ese código ni te registres otra vez.</p>
+            <Link href={loginUrl} className="inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-[var(--vp-accent)] px-4 font-bold text-[var(--vp-shell)]">Entrar de forma segura</Link>
+            <p className="text-sm leading-7 text-[var(--vp-muted)]">Solicita un código de acceso en la siguiente pantalla. Es diferente del código de registro. No enviaremos correos automáticamente; respeta el contador si aparece.</p>
+          </div>
         ) : (
           <div className="space-y-5" role="status" aria-live="polite" aria-atomic="true">
-            <p className="text-sm leading-7 text-[var(--vp-text)]">El correo está verificado. No necesitas solicitar otro código para continuar.</p>
+            <p className="text-sm leading-7 text-[var(--vp-text)]">{step === 'recovered'
+              ? 'Tu cuenta ya estaba verificada. Recuperamos tu sesión activa sin volver a usar el código ni enviar otro correo.'
+              : 'El correo está verificado. No necesitas solicitar otro código para continuar.'}</p>
             {errors.form ? <p role="alert" className="text-sm leading-6 text-[var(--vp-danger)]">{errors.form}</p> : null}
             <p className="text-sm leading-7 text-[var(--vp-muted)]">Abriendo tu panel… El servidor comprobará tu sesión y tu acceso a la red. Si no se abre automáticamente, usa «Continuar al panel».</p>
             <p className="text-sm leading-7 text-[var(--vp-muted)]">Verificar tu correo no concede por sí solo acceso a saldos ni a cuentas antiguas de la red. Si tu vinculación requiere revisión, debe aprobarse antes de entrar.</p>
@@ -322,7 +371,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
           </div>
         )}
 
-        {step !== 'verified' ? <p className="mt-6 border-t border-[var(--vp-border)] pt-5 text-sm leading-6 text-[var(--vp-muted)]">¿Ya tienes cuenta? <Link href={loginUrl} className="font-bold text-[var(--vp-text)] underline">Entrar de forma segura</Link>. No cambies tu correo ni vuelvas a registrarte para crear o cambiar tu contraseña.</p> : null}
+        {!completed && !awaitingAccess ? <p className="mt-6 border-t border-[var(--vp-border)] pt-5 text-sm leading-6 text-[var(--vp-muted)]">¿Ya tienes cuenta? <Link href={loginUrl} className="font-bold text-[var(--vp-text)] underline">Entrar de forma segura</Link>. No cambies tu correo ni vuelvas a registrarte para crear o cambiar tu contraseña.</p> : null}
       </section>
     </AuthShell>
   );

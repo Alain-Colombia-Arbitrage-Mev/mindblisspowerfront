@@ -3,9 +3,9 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import ts from 'typescript';
 import { AuthServiceUnavailable } from './better-auth-bridge.mjs';
+import { walletPortalNotFound } from './wallet-portal-policy.mjs';
 
 const routes = [
-  { name: 'ranks', path: 'member/ranks', method: 'GET' },
   { name: 'BMP status', path: 'payments/bmp-status', method: 'GET', service: 'withdrawals', upstreamPath: '/api/payments/bmp-status' },
   { name: 'existing KYC documents route', path: 'member/kyc/documents', method: 'GET', service: 'payments', upstreamPath: '/api/member/kyc/documents' },
   { name: 'existing KYC confirmation route', path: 'member/kyc/confirm', method: 'POST', service: 'payments', upstreamPath: '/api/member/kyc/confirm', body: { document_id: 42 } },
@@ -21,6 +21,7 @@ function fixture(descriptor, {
   const source = readFileSync(new URL(`../app/api/${descriptor.path}/route.js`, import.meta.url), 'utf8');
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
   const mocks = {
+    '@/lib/wallet-portal-policy.mjs': { walletPortalNotFound },
     '@/lib/admin-bff': {
       rawIdToken: async () => { calls.token++; if (tokenError) throw tokenError; return token; },
       idTokenHeader: async () => { calls.idTokenHeader++; return { 'X-VP-Id-Token': token }; },
@@ -178,23 +179,12 @@ for (const descriptor of routes) {
   }
 }
 
-test('ranks: verified catalog and rate-limit behavior is preserved', async () => {
-  const healthy = fixture(routes[0]);
-  const response = await healthy.invoke();
-  assert.equal(response.status, 200);
-  privateAuthResponse(response);
-  assert.deepEqual(await response.json(), { ranks: [{ id: 1, name: 'Synthetic rank' }] });
-  assert.equal(healthy.calls.limiter, 1);
-  assert.equal(healthy.calls.catalog, 1);
 
-  const limitResponse = Response.json({ error: 'rate-limited' }, { status: 429 });
-  const limited = fixture(routes[0], { limitResponse });
-  assert.equal(await limited.invoke(), limitResponse);
-  assert.equal(limited.calls.catalog, 0);
-
-  const unavailable = fixture(routes[0], { catalogError: new Error('private catalog detail') });
-  const failure = await unavailable.invoke();
-  assert.equal(failure.status, 503);
-  privateAuthResponse(failure);
-  assert.deepEqual(await failure.json(), { error: 'ranks-unavailable' });
+test('retired ranks never read authentication, catalogues or rate-limit keys on the administrative portal', async () => {
+  const setup = fixture({ name: 'retired ranks', path: 'member/ranks', method: 'GET' });
+  const response = await setup.invoke();
+  assert.equal(response.status, 404);
+  assert.equal(response.headers.get('cache-control'), 'private, no-store');
+  assert.deepEqual(await response.json(), { error: 'not_found' });
+  assert.ok(Object.values(setup.calls).every(count => count === 0));
 });

@@ -1,5 +1,5 @@
 import { createAdministrativeSandboxSession } from './wallet-funding-client.mjs';
-import { fundingAcknowledgement, fundingCurrencyCode } from './wallet-funding-contract.mjs';
+import { fundingAcknowledgement, fundingCurrencyCode, fundingSourceSupported } from './wallet-funding-contract.mjs';
 
 /**
  * Administrative funding has its own checkout and never imports a personal wallet SDK.
@@ -11,11 +11,11 @@ export async function startAdministrativeMeldOnramp({ requestId, address, amount
 } = {}) {
   if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
   if (!fundingCurrencyCode(sourceCurrencyCode)) throw new Error('invalid_request');
-  if (sourceCurrencyCode !== 'USD') throw new Error('wallet_funding_valuation_unavailable');
+  if (!fundingSourceSupported({ sourceCurrencyCode, country: countryCode, paymentMethodType, serviceProvider }, 'administrative')) throw new Error('wallet_funding_valuation_unavailable');
   const response = await createSession({ requestId, walletAddress: address, country: countryCode, sourceCurrencyCode, amount, paymentMethodType, serviceProvider }, { signal });
   if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
   const session = fundingAcknowledgement(response, 'administrative');
-  if (!session || session.requestedAmount !== amount || session.checkoutReference !== requestId
+  if (!session || session.requestedAmount !== amount || session.checkoutReference !== requestId || fundingCurrencyCode(session.sourceCurrencyCode) !== sourceCurrencyCode
     || !('checkoutUrl' in session) || typeof session.checkoutUrl !== 'string') throw new Error('sandbox_unavailable');
   openCheckout(session.checkoutUrl);
   return session;

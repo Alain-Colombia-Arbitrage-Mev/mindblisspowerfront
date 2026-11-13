@@ -5,12 +5,15 @@ import React from 'react';
 import ts from 'typescript';
 import { registrationLoginUrl, registrationUrl } from '../register/registration-model.mjs';
 
+const ThemeToggle = () => null;
+const LanguageSwitcher = () => null;
+
 function shell(props) {
   const source = readFileSync(new URL('./AuthShell.jsx', import.meta.url), 'utf8');
   const code = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
   const module = { exports: {} }, mocks = { 'next/link': { default: ({ children, ...props }) => React.createElement('a', props, children) }, 'lucide-react': new Proxy({}, { get: () => () => null }),
-    './ThemeToggle': { default: () => null }, './AuthSupportWidget': { default: props => React.createElement('button', { className: `support-${props.variant || 'floating'}` }, 'Soporte') },
-    '@/i18n/LanguageSwitcher': { default: () => null }, './AuthLocalizedContent': { AuthIdentityCopy: () => null, AuthLegal: () => null },
+    './ThemeToggle': { default: ThemeToggle },
+    '@/i18n/LanguageSwitcher': { default: LanguageSwitcher }, './AuthLocalizedContent': { AuthIdentityCopy: () => null, AuthLegal: () => null },
     'react/jsx-runtime': { jsx: (type, props, key) => React.createElement(type, { ...props, key }), jsxs: (type, props, key) => React.createElement(type, { ...props, key }) } };
   new Function('require', 'module', 'exports', code)(name => {
     assert.ok(Object.hasOwn(mocks, name), `Unexpected auth navigation dependency: ${name}`); return mocks[name];
@@ -19,13 +22,14 @@ function shell(props) {
 }
 function nodes(node) { return [node, ...React.Children.toArray(node?.props?.children).flatMap(nodes)]; }
 
-test('the real auth shell keeps the approved Mindbliss identity and access-help navigation', t => {
+test('the real auth shell keeps the Mindbliss identity and preferences without support controls', t => {
   t.mock.method(globalThis, 'fetch', () => assert.fail('the static shell must not inspect a session or send messages'));
   const tree = shell({ activePath: '/register', loginHref: registrationLoginUrl('member@example.test', 'Sponsor', 'R'), registrationHref: registrationUrl('member@example.test', 'Sponsor', 'R') });
   const all = nodes(tree);
   assert.equal(all.find(node => node?.props?.className === 'auth-wordmark').props.href, '/');
-  assert.ok(all.some(node => node?.props?.variant === 'header'));
-  assert.ok(all.some(node => node?.props?.initialEmail === '' && node.props.variant === undefined));
+  assert.ok(all.some(node => node?.type === ThemeToggle));
+  assert.ok(all.some(node => node?.type === LanguageSwitcher && node.props.compact));
+  assert.doesNotMatch(readFileSync(new URL('./AuthShell.jsx', import.meta.url), 'utf8'), /AuthSupportWidget/);
   assert.equal(all.some(node => node?.type === 'nav'), false);
 });
 
