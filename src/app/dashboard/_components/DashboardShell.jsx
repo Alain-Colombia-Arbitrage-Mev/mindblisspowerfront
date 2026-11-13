@@ -10,6 +10,7 @@ import DashboardWalletProvider from "@/components/reown/DashboardWalletProvider"
 import PostAuthWalletSetup, { usePostAuthWalletSetup } from "@/components/reown/PostAuthWalletSetup";
 import { memberPageKeysFor } from "@/lib/member-navigation.mjs";
 import { MemberSessionContext } from "@/lib/member-session-context";
+import { memberSessionOwnerKey } from '@/lib/member-session-boundary.mjs';
 import { REFERRAL_REQUEST_TIMEOUT_MS, browserReferralChoice, chooseBrowserReferral, pendingVerifiedReferral, readVerifiedReferral, retryVerifiedReferral } from '@/lib/referral-sync.mjs';
 import { useI18n } from "@/i18n/LanguageProvider";
 import "@/components/panel/panel-shell.css";
@@ -54,11 +55,11 @@ export default function DashboardShell({ authMode: _authMode, children }) {
 
   useEffect(() => {
     let cancelled = false;
-    const view = { email: '', revision: 0, timer: null };
+    const view = { email: '', subject: '', revision: 0, timer: null };
     referralView.current = view;
     const checkReferral = (recipient, allowRecheck = true) => {
       const revision = ++view.revision;
-      void readVerifiedReferral(recipient).then(result => {
+      void readVerifiedReferral(recipient, { subject: view.subject }).then(result => {
         if (cancelled || referralView.current !== view || view.email !== recipient || view.revision !== revision) return;
         const pending = showReferralResult(recipient, result);
         // A keepalive save may still belong to the previous document. One
@@ -82,9 +83,10 @@ export default function DashboardShell({ authMode: _authMode, children }) {
               subject: d.subject,
               referralCode: d.referralCode,
             });
-          if (d?.authenticated === true && d?.mode === 'better-auth' && typeof d.email === 'string') {
+          if (d?.authenticated === true && d?.mode === 'better-auth' && memberSessionOwnerKey(d)) {
             const recipient = d.email.trim().toLowerCase();
             view.email = recipient;
+            view.subject = d.subject;
             checkReferral(recipient);
           }
         })
@@ -120,8 +122,9 @@ export default function DashboardShell({ authMode: _authMode, children }) {
     view.timer = null;
     setReferralSaving(true);
     try {
-      const result = await (referralChoice ? chooseBrowserReferral(view.email, referralChoice)
-        : referralPending ? retryVerifiedReferral(view.email) : readVerifiedReferral(view.email));
+      const options = { subject: view.subject };
+      const result = await (referralChoice ? chooseBrowserReferral(view.email, referralChoice, options)
+        : referralPending ? retryVerifiedReferral(view.email, options) : readVerifiedReferral(view.email, options));
       if (referralView.current !== view) return;
       showReferralResult(view.email, result);
     } finally {

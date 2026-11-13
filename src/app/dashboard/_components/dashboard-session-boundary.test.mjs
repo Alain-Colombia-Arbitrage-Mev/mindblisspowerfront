@@ -7,6 +7,7 @@ import { createRoot } from 'react-dom/client';
 import { flushSync } from 'react-dom';
 import ts from 'typescript';
 import * as sync from '../../../lib/member-logout-sync.mjs';
+import * as replacement from '../../../lib/member-session-sync.mjs';
 import * as session from '../../../lib/member-session-boundary.mjs';
 import { logoutMember } from '../../../lib/member-logout.mjs';
 import { translateMessage } from '../../../i18n/translate.mjs';
@@ -38,7 +39,7 @@ function compile() {
     compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS },
   }).outputText;
   const module = { exports: {} }, mocks = { react: React, 'react-dom': { flushSync }, 'react/jsx-runtime': require('react/jsx-runtime'),
-    '@/lib/member-logout-sync.mjs': sync, '@/lib/member-session-boundary.mjs': session,
+    '@/lib/member-logout-sync.mjs': sync, '@/lib/member-session-sync.mjs': replacement, '@/lib/member-session-boundary.mjs': session,
     '@/i18n/LanguageProvider': { useI18n: () => ({ t: key => translateMessage('es', key) }) } };
   new Function('require', 'module', 'exports', code)(name => { assert.ok(Object.hasOwn(mocks, name), name); return mocks[name]; }, module, module.exports);
   return module.exports.default;
@@ -128,4 +129,42 @@ test('a late restore proof is cancelled by logout and ordinary renders and brows
   await act(async () => h.remote()); assert.equal(h.calls[0].options.signal.aborted, true);
   pending.resolve(proof()); await settle(); assert.doesNotMatch(h.container.textContent, /PRIVATE/);
   assert.equal(h.calls.length, 1); assert.deepEqual(h.destinations, ['/login']);
+});
+
+test('a new sign-in masks the previous sponsor and account data before a single canonical owner check', async t => {
+  const pending = deferred(), h = await fixture(t, () => pending.promise);
+  await act(async () => {
+    h.emit('storage', { key: 'mindbliss.member-session.v1', newValue: 'confirmed-session-v1:11111111-1111-4111-8111-111111111111' });
+    assert.doesNotMatch(h.container.textContent, /PRIVATE/);
+    assert.equal(h.cleanups, 1);
+    h.emit('storage', { key: 'mindbliss.member-session.v1', newValue: 'confirmed-session-v1:11111111-1111-4111-8111-111111111111' });
+  });
+  assert.equal(h.calls.length, 1, 'the same event delivered twice is coalesced');
+  assert.equal(h.calls[0].path, '/api/auth/session?view=access');
+  pending.resolve(proof({ subject: 'another-subject-with-the-same-email' })); await settle();
+  assert.doesNotMatch(h.container.textContent, /PRIVATE/);
+  assert.deepEqual(h.destinations, ['/login']);
+});
+
+test('a proven same-owner replacement restores the view and a later sign-in is checked independently', async t => {
+  let calls = 0;
+  const h = await fixture(t, async () => ++calls === 1 ? proof() : proof({ subject: 'new-owner' }));
+  await act(async () => h.emit('storage', { key: 'mindbliss.member-session.v1', newValue: 'confirmed-session-v1:11111111-1111-4111-8111-111111111111' }));
+  assert.match(h.container.textContent, /PRIVATE/); assert.equal(calls, 1);
+  await act(async () => { h.emit('focus'); h.emit('pageshow', { persisted: false }); });
+  assert.equal(calls, 1, 'restoration never starts polling');
+  await act(async () => h.emit('storage', { key: 'mindbliss.member-session.v1', newValue: 'confirmed-session-v1:22222222-2222-4222-8222-222222222222' }));
+  assert.equal(calls, 2); assert.doesNotMatch(h.container.textContent, /PRIVATE/);
+  assert.deepEqual(h.destinations, ['/login']);
+});
+
+test('an unavailable replacement proof stays masked until explicit retry, never reusing a cached sponsor', async t => {
+  let attempts = 0;
+  const h = await fixture(t, async () => ++attempts === 1 ? Response.json({ error: 'unavailable' }, { status: 503 }) : proof());
+  await act(async () => replacement.publishMemberSessionReplacement(h.browser));
+  assert.equal(attempts, 1); assert.doesNotMatch(h.container.textContent, /PRIVATE/);
+  const button = allNodes(h.container).find(node => node.tagName === 'BUTTON');
+  const attributes = button[Object.keys(button).find(key => key.startsWith('__reactProps$'))];
+  await act(async () => attributes.onClick());
+  assert.equal(attempts, 2); assert.match(h.container.textContent, /PRIVATE/);
 });

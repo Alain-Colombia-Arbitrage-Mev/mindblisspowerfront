@@ -12,6 +12,7 @@ import * as emailOtp from '../../lib/email-otp-client.mjs';
 import * as auth from '../login/better-auth-login.mjs';
 import * as deadline from '../../lib/browser-request-deadline.mjs';
 import * as walletSetupHandoff from '../../lib/wallet-setup-handoff.mjs';
+import * as sessionSync from '../../lib/member-session-sync.mjs';
 
 const require = createRequire(import.meta.url);
 const source = file => readFileSync(new URL(file, import.meta.url), 'utf8');
@@ -36,6 +37,7 @@ function compile(file, mocks, exports = '') {
 }
 
 const loginMocks = {
+  '@/lib/member-session-sync.mjs': sessionSync,
   react: React,
   'lucide-react': icons,
   '@/lib/useResendCooldown': { useResendCooldown: () => ({ active: false, label: '', start() {} }), isMicrosoftEmail: () => false, suggestEmailFix: () => '' },

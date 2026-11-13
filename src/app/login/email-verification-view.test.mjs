@@ -20,7 +20,7 @@ function browser(t) {
   t.after(() => { if (previous === undefined) delete globalThis.window; else globalThis.window = previous; });
   return destinations;
 }
-function view({ microsoft = false, attribution, sync = () => Promise.resolve({ ok: true }), cooldowns } = {}) {
+function view({ microsoft = false, attribution, sync = () => Promise.resolve({ ok: true }), cooldowns, onSession = () => {} } = {}) {
   return registrationViewHarness('../login/MagicLinkLoginForm.jsx', {
     'lucide-react': new Proxy({}, { get: () => () => null }),
     '@/lib/useResendCooldown': { useResendCooldown: (_seconds, scope = '') => {
@@ -35,6 +35,7 @@ function view({ microsoft = false, attribution, sync = () => Promise.resolve({ o
     '@/lib/referral-attribution': attribution || { bindReferralCodeToEmail() {}, captureReferralFromUrl: () => null, normalizePlacementSide: () => '', normalizeReferralCode: value => value },
     '@/lib/email-otp-client.mjs': emailOtp, './BetterAuthPasswordLogin': { default: () => null },
     '@/lib/referral-sync.mjs': { beginVerifiedReferralSync: sync },
+    '@/lib/member-session-sync.mjs': { publishMemberSessionReplacement: onSession },
     './better-auth-login.mjs': auth, '../register/registration-model.mjs': registration,
   });
 }
@@ -86,13 +87,13 @@ test('rejected login OTP guidance cannot reflect provider diagnostics, delivery 
 });
 
 test('fresh BFF-proven OTP session checks the browser cookie once before one hard dashboard navigation', async t => {
-  const destinations = browser(t), paths = [];
+  const destinations = browser(t), paths = []; let notifications = 0;
   t.mock.method(globalThis, 'fetch', async path => {
     paths.push(path);
     return Response.json(path.endsWith('/send-verification-otp') ? { ok: true }
       : path === '/api/auth/session?view=access' ? { authenticated: true, mode: 'better-auth', email } : proof());
   });
-  const harness = view();
+  const harness = view({ onSession: () => { notifications++; assert.equal(paths.at(-1), '/api/auth/sign-in/email-otp'); } });
   harness.replayEffects();
   await enterCode(harness);
   for (let render = 0; render < 3; render++) {
@@ -105,6 +106,7 @@ test('fresh BFF-proven OTP session checks the browser cookie once before one har
     assert.deepEqual(destinations, ['/dashboard']);
   }
   assert.deepEqual(paths, ['/api/auth/email-otp/send-verification-otp', '/api/auth/sign-in/email-otp', '/api/auth/session?view=access']);
+  assert.equal(notifications, 1, 'only the verified native POST replaces other mounted sessions');
   harness.unmount();
 });
 
@@ -152,7 +154,7 @@ test('send acknowledgements, rejected OTPs and malformed or mismatched proof nev
       paths.push(path);
       return path.endsWith('/send-verification-otp') ? Response.json({ ok: true }) : Response.json(body, { status });
     });
-    const harness = view(); await enterCode(harness);
+    const harness = view({ onSession: () => assert.fail('rejected or malformed OTP proof must not signal a new session') }); await enterCode(harness);
     assert.doesNotMatch(html(harness), /Correo verificado correctamente|Continuar al panel/);
     assert.equal(paths.includes('/api/auth/session?view=access'), false, 'untrusted sign-in cannot query or install network authority');
     harness.unmount();
@@ -161,7 +163,7 @@ test('send acknowledgements, rejected OTPs and malformed or mismatched proof nev
 });
 
 test('password login publishes fresh native proof and the parent checks its browser cookie once without sending email', async t => {
-  const destinations = browser(t), paths = [];
+  const destinations = browser(t), paths = []; let notifications = 0;
   let release, started;
   const waiting = new Promise(resolve => { started = resolve; });
   t.mock.method(globalThis, 'fetch', async path => {
@@ -170,7 +172,7 @@ test('password login publishes fresh native proof and the parent checks its brow
     assert.equal(path, '/api/auth/sign-in/email');
     started(); return new Promise(resolve => { release = resolve; });
   });
-  const parent = view(), parentProps = { ...props, initialMode: 'password' };
+  const parent = view({ onSession: () => { notifications++; } }), parentProps = { ...props, initialMode: 'password' };
   const passwordProps = find(parent.render(parentProps), node => typeof node?.props?.onVerified === 'function').props;
   const harness = registrationViewHarness('../login/BetterAuthPasswordLogin.jsx', {
     'next/link': { default: ({ children, ...attributes }) => React.createElement('a', attributes, children) },
@@ -191,6 +193,7 @@ test('password login publishes fresh native proof and the parent checks its brow
   passwordProps.onVerified(email);
   assert.deepEqual(destinations, ['/dashboard']);
   assert.deepEqual(paths, ['/api/auth/sign-in/email', '/api/auth/session?view=access'], 'a duplicate password completion cannot repeat the cookie check');
+  assert.equal(notifications, 1, 'a verified password session uses the same duplicate-locked replacement notification');
   harness.unmount(); parent.unmount();
 });
 

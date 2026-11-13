@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
-import { handleReferralAttribution } from './referral-attribution-bff.mjs';
+import { handleReferralAttribution, REFERRAL_UPSTREAM_TIMEOUT_MS } from './referral-attribution-bff.mjs';
 
 const env = { AUTH_PUBLIC_ORIGIN: 'https://portal.example.test', PAYMENTS_SERVICE_TOKEN: 'synthetic-private-service' };
 const claims = { sub: 'synthetic-member-subject', email: ' MEMBER@example.test ', email_verified: true };
@@ -16,7 +16,7 @@ function request(method = 'POST', input = body, headers = {}, suffix = '') {
 }
 const never = async () => assert.fail('invalid or unauthenticated request reached the core');
 const run = (req = request(), overrides = {}) => handleReferralAttribution(req, {
-  env, identity, fetchImpl: async () => Response.json(answer), ...overrides,
+  env, identity, fetchImpl: async () => Response.json(answer), observe: () => {}, ...overrides,
 });
 function privateResponse(response) {
   assert.equal(response.headers.get('cache-control'), 'private, no-store, max-age=0');
@@ -129,19 +129,76 @@ test('upstream failures, HTML redirects, oversized bodies and provider details r
   assert.equal(failed.status, 503); assert.doesNotMatch(await failed.text(), /private-transport/);
 });
 
-test('caller cancellation is combined with an eight-second deadline and suppresses a late successful response', async () => {
+test('caller cancellation ends the local wait even when transport ignores its signal, with no replay', async () => {
   const caller = new AbortController();
   const req = new Request(request(), { signal: caller.signal });
-  let release, signal;
+  let release, signal, calls = 0;
   const pending = run(req, { fetchImpl: async (_url, options) => {
+    calls++;
     signal = options.signal;
     return new Promise(resolve => { release = resolve; });
   } });
   while (!release) await Promise.resolve();
   caller.abort(); assert.equal(signal.aborted, true);
-  release(Response.json(answer));
   const response = await pending;
   assert.equal(response.status, 503); privateResponse(response);
+  release(Response.json(answer));
+  assert.equal(calls, 1);
+});
+
+test('mounted subject equality prevents stale same-email views from reading a replacement identity', async () => {
+  for (const method of ['GET', 'POST']) {
+    const header = { 'x-mindbliss-referral-subject': encodeURIComponent(claims.sub) };
+    assert.equal((await run(request(method, body, header))).status, 200);
+    const changed = await run(request(method, body, header), { identity: async () => ({ token: 'verified-other',
+      claims: { ...claims, sub: 'replacement-subject' } }), fetchImpl: never });
+    assert.equal(changed.status, 409);
+    assert.deepEqual(await changed.json(), { error: 'referral_session_changed' });
+    for (const invalid of ['', '%', '%73ynthetic-member-subject', 'other-subject']) {
+      assert.equal((await run(request(method, body, { 'x-mindbliss-referral-subject': invalid }), { fetchImpl: never })).status, 409);
+    }
+  }
+});
+
+test('one slow startup response can complete after the former eight-second limit without another request', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let calls = 0;
+  const pending = run(request('GET'), { fetchImpl: () => {
+    calls++;
+    return new Promise(resolve => setTimeout(() => resolve(Response.json(answer)), 9000));
+  } });
+  while (!calls) await Promise.resolve();
+  t.mock.timers.tick(9000);
+  assert.deepEqual(await (await pending).json(), answer);
+  assert.equal(calls, 1);
+});
+
+test('the twenty-second deadline also ends a faulty stalled body and records no private context', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let reading = false, calls = 0;
+  const events = [];
+  const pending = run(request('GET'), { observe: event => events.push(event), fetchImpl: async () => {
+    calls++;
+    return { status: 200, headers: new Headers({ 'content-type': 'application/json' }), body: { getReader: () => ({
+      read: () => { reading = true; return new Promise(() => {}); }, cancel: () => new Promise(() => {}), releaseLock() {},
+    }) } };
+  } });
+  while (!reading) await Promise.resolve();
+  assert.equal(REFERRAL_UPSTREAM_TIMEOUT_MS, 20000);
+  t.mock.timers.tick(REFERRAL_UPSTREAM_TIMEOUT_MS);
+  const response = await pending;
+  assert.equal(response.status, 503); assert.equal(calls, 1);
+  assert.deepEqual(events, [{ event: 'referral_attribution_failure', method: 'GET', stage: 'cancelled', status: 503 }]);
+  assert.doesNotMatch(JSON.stringify(events), /example|subject|Sponsor|jwt|cookie/i);
+});
+
+test('diagnostics expose only fixed stages and status and cannot turn failed identity into access', async () => {
+  const events = [];
+  const response = await run(request('GET'), { observe: event => { events.push(event); throw new Error('observer-down'); },
+    identity: async () => { throw new Error('private-cookie-private-email-private-token'); }, fetchImpl: never });
+  assert.equal(response.status, 503);
+  assert.deepEqual(events, [{ event: 'referral_attribution_failure', method: 'GET', stage: 'identity', status: 503 }]);
+  assert.doesNotMatch(await response.text(), /private-|observer-down/);
 });
 
 test('the real route uses the existing JWT verifier and private core binding with no direct database or public transport', () => {

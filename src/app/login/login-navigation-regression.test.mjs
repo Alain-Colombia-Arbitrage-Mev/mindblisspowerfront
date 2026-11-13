@@ -12,6 +12,7 @@ import * as registration from '../register/registration-model.mjs';
 import * as auth from './better-auth-login.mjs';
 import * as deadline from '../../lib/browser-request-deadline.mjs';
 import * as walletSetupHandoff from '../../lib/wallet-setup-handoff.mjs';
+import * as sessionSync from '../../lib/member-session-sync.mjs';
 
 const require = createRequire(import.meta.url);
 const email = 'navigation-fixture@example.test';
@@ -117,6 +118,7 @@ function component() {
     '@/lib/referral-sync.mjs': referralSync,
     '@/lib/browser-request-deadline.mjs': deadline,
     '@/lib/wallet-setup-handoff.mjs': walletSetupHandoff,
+    '@/lib/member-session-sync.mjs': sessionSync,
     './better-auth-login.mjs': auth,
     '../register/registration-model.mjs': registration,
   };

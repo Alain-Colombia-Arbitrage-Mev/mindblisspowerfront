@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { beginVerifiedReferralSync, browserReferralChoice, chooseBrowserReferral, pendingVerifiedReferral, readVerifiedReferral, retryVerifiedReferral, verifiedReferralForCheckout } from './referral-sync.mjs';
+import { REFERRAL_REQUEST_TIMEOUT_MS, beginVerifiedReferralSync, browserReferralChoice, chooseBrowserReferral, pendingVerifiedReferral, readVerifiedReferral, retryVerifiedReferral, verifiedReferralForCheckout } from './referral-sync.mjs';
 import { bindReferralCodeToEmail, referralForCheckout } from './referral-attribution.js';
 import { handleReferralAttribution } from './referral-attribution-bff.mjs';
 
@@ -13,6 +13,35 @@ function memory() {
 const browser = () => ({ localStorage: memory(), sessionStorage: memory() });
 const pending = () => { let resolve; return { promise: new Promise(done => { resolve = done; }), resolve: value => resolve(value) }; };
 const settle = () => new Promise(resolve => setImmediate(resolve));
+
+test('a mounted subject is a strict mismatch fence and scopes concurrent reads even when the email is the same', async () => {
+  const owner = browser(), first = pending(), calls = [];
+  const fetchImpl = async (_url, options) => {
+    calls.push(options);
+    return calls.length === 1 ? first.promise : Response.json(serverHint('SecondSubjectSponsor', ''));
+  };
+  const oldRead = readVerifiedReferral(email, { browser: owner, fetchImpl, subject: 'first:subject' });
+  const nextRead = readVerifiedReferral(email, { browser: owner, fetchImpl, subject: 'second:subject' });
+  assert.equal(calls.length, 2, 'a new subject never joins the previous subject\'s in-flight response');
+  assert.equal(calls[0].headers['x-mindbliss-referral-subject'], 'first%3Asubject');
+  assert.equal(calls[1].headers['x-mindbliss-referral-subject'], 'second%3Asubject');
+  assert.deepEqual(await nextRead, serverHint('SecondSubjectSponsor', ''));
+  first.resolve(Response.json(serverHint('FirstSubjectSponsor', '')));
+  assert.deepEqual(await oldRead, serverHint('FirstSubjectSponsor', ''));
+  for (const subject of ['', ' padded ', null, 'x'.repeat(256), '\ud800']) {
+    assert.deepEqual(await readVerifiedReferral(email, { browser: owner, subject,
+      fetchImpl: () => assert.fail('invalid mounted identity must not make a request') }), { ok: false });
+  }
+});
+
+test('an explicit referral write with a mounted subject forwards only an equality fence, never a body owner selector', async () => {
+  const owner = browser(), calls = [];
+  const result = await beginVerifiedReferralSync(email, 'ChosenSponsor', '', { browser: owner, subject: 'member/subject',
+    fetchImpl: async (_url, options) => { calls.push(options); return Response.json(serverHint('ChosenSponsor', '')); } });
+  assert.equal(result.ok, true); assert.equal(calls.length, 1);
+  assert.equal(calls[0].headers['x-mindbliss-referral-subject'], 'member%2Fsubject');
+  assert.deepEqual(JSON.parse(calls[0].body), { ref: 'ChosenSponsor', preferred_side: '', expected_email: email });
+});
 
 function virtualDeadlines(t) {
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1800000000000 });
@@ -106,16 +135,17 @@ test('a slow explicit keepalive save waits for its exact ACK without replaying o
   assert.deepEqual(JSON.parse(transport.calls[0].body), { ref: 'SlowSponsor', preferred_side: '', expected_email: email });
 });
 
-test('the BFF still fails a stalled referral upstream at 8s without a browser retry', async t => {
-  const advance = virtualDeadlines(t), transport = slowBff({ identityDelays: [], upstreamDelay: 9000 });
+test('the BFF fails a stalled referral upstream at 20s without a browser retry', async t => {
+  const advance = virtualDeadlines(t), transport = slowBff({ identityDelays: [], upstreamDelay: 21000 });
   const result = readVerifiedReferral(email, { browser: browser(), fetchImpl: transport.fetchImpl });
-  await settle(); await advance(8000);
+  await settle(); await advance(20000);
   assert.deepEqual(await result, { ok: false });
   await advance(60000);
   assert.equal(transport.calls.length, 1); assert.equal(transport.upstreamCalls.length, 1);
 });
 
 test('the browser deadline still bounds a stalled read or save and retains an unacknowledged choice', async t => {
+  assert.equal(REFERRAL_REQUEST_TIMEOUT_MS, 32_000 + 8_000 + 20_000 + 5_000);
   const advance = virtualDeadlines(t);
   for (const method of ['GET', 'POST']) {
     const owner = browser(), calls = [];
@@ -126,7 +156,7 @@ test('the browser deadline still bounds a stalled read or save and retains an un
     let finished = false;
     const request = (method === 'POST' ? beginVerifiedReferralSync(email, 'Unacknowledged', '', options)
       : readVerifiedReferral(email, options)).then(value => { finished = true; return value; });
-    await advance(44999);
+    await advance(REFERRAL_REQUEST_TIMEOUT_MS - 1);
     assert.equal(finished, false);
     await advance(1);
     assert.deepEqual(await request, { ok: false });

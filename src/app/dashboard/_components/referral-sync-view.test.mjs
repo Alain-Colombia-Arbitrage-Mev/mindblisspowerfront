@@ -101,7 +101,7 @@ test('a browser-only backup is shown with its owner and sponsor while placement 
   assert.match(markup, /member@example\.test/); assert.match(markup, /Sponsor: BrowserBackup/); assert.match(markup, /Ubicación binaria: automática/);
   assert.equal(saves.length, 0);
   await find(tree, node => node?.props?.children === 'Guardar este enlace como mi elección').props.onClick();
-  assert.deepEqual(saves, [[email, choice]]);
+  assert.deepEqual(saves, [[email, choice, { subject: session.subject }]]);
   assert.doesNotMatch(renderToStaticMarkup(harness.render()), /Guardar este enlace como mi elección/);
   harness.unmount();
 });
@@ -234,6 +234,25 @@ test('a failed session HTTP response cannot trigger an authenticated referral lo
   harness.render(); await settle();
   assert.doesNotMatch(renderToStaticMarkup(harness.render()), /role="alert"|Referido:/);
   harness.unmount();
+});
+
+test('referral reads and explicit retries carry the mounted subject, and missing subjects never start a lookup', async t => {
+  browser(t);
+  for (const identity of [session, { ...session, subject: null }]) {
+    const calls = [];
+    t.mock.method(globalThis, 'fetch', async () => Response.json(identity));
+    const harness = view({ pendingVerifiedReferral: () => null,
+      readVerifiedReferral: async (...args) => { calls.push(args); return { ok: false }; },
+      browserReferralChoice: () => null,
+    });
+    harness.render(); await settle();
+    if (identity.subject) {
+      assert.deepEqual(calls, [[email, { subject: session.subject }]]);
+      await find(harness.render(), node => node?.props?.children === 'Reintentar comprobación').props.onClick();
+      assert.deepEqual(calls, [[email, { subject: session.subject }], [email, { subject: session.subject }]]);
+    } else assert.deepEqual(calls, []);
+    harness.unmount();
+  }
 });
 
 test('a displayed read retry stays read-only if a pending marker appears before the click', async t => {

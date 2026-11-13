@@ -15,6 +15,7 @@ import * as recovery from '../forgot-password/password-recovery-model.mjs';
 import * as auth from './better-auth-login.mjs';
 import * as deadline from '../../lib/browser-request-deadline.mjs';
 import * as walletSetup from '../../lib/wallet-setup-handoff.mjs';
+import * as sessionSync from '../../lib/member-session-sync.mjs';
 import * as sessionRecovery from '../../lib/registration-session-recovery.mjs';
 
 // Real installed ReactDOM/StrictMode and the actual recipient cooldown hook.
@@ -115,7 +116,7 @@ function component(file) {
     '@/lib/useResendCooldown': cooldown, '@/lib/email-otp-client.mjs': otp,
     '@/lib/password': { checkPassword: () => ({ results: [] }), isValidPassword: () => true },
     '@/lib/referral-attribution': attribution, '@/lib/referral-sync.mjs': referralSync,
-    '@/lib/browser-request-deadline.mjs': deadline, '@/lib/wallet-setup-handoff.mjs': walletSetup,
+    '@/lib/browser-request-deadline.mjs': deadline, '@/lib/wallet-setup-handoff.mjs': walletSetup, '@/lib/member-session-sync.mjs': sessionSync,
     '@/lib/registration-session-recovery.mjs': sessionRecovery,
     './BetterAuthPasswordLogin': { default: () => null }, './SocialLoginButtons': { default: () => null },
     './better-auth-login.mjs': auth, '../register/registration-model.mjs': registration, './registration-model.mjs': registration,

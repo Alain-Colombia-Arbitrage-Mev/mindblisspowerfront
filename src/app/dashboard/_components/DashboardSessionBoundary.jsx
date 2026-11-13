@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { subscribeMemberLogout } from '@/lib/member-logout-sync.mjs';
+import { subscribeMemberSessionReplacement } from '@/lib/member-session-sync.mjs';
 import { checkMemberSessionOwner, memberSessionOwnerKey } from '@/lib/member-session-boundary.mjs';
 import { useI18n } from '@/i18n/LanguageProvider';
 
@@ -44,12 +45,15 @@ export default function DashboardSessionBoundary({ owner, mode = 'better-auth', 
   useEffect(() => {
     control.current.mounted = true;
     const stop = subscribeMemberLogout(retire);
+    // A successful sign-in in another tab may replace our shared cookie.
+    // Mask the old owner immediately, then make one canonical read, never poll.
+    const stopReplacement = subscribeMemberSessionReplacement(() => { cancel(); void recheck(); });
     const restored = event => { if (event.persisted) void recheck(); };
     const leaving = event => { if (event.persisted && !control.current.closed) { cancel(); block('checking'); } };
     window.addEventListener('pageshow', restored);
     window.addEventListener('pagehide', leaving);
     return () => {
-      control.current.mounted = false; cancel(); stop();
+      control.current.mounted = false; cancel(); stop(); stopReplacement();
       window.removeEventListener('pageshow', restored); window.removeEventListener('pagehide', leaving);
     };
     // A boundary is pinned to the server-verified identity for this document.

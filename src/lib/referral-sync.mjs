@@ -1,15 +1,17 @@
 import { normalizeReferralCode, normalizeReferralEmail, normalizePlacementSide, referralForCheckout } from './referral-attribution.js';
 import { browserRequestDeadline } from './browser-request-deadline.mjs';
+import { profileSubjectHeader } from './member-profile.mjs';
 
 const key = 'mp_ref_verified_visit.v1';
 const ttl = 30 * 60 * 1000;
 const scopes = new WeakMap();
 const endpoint = '/api/member/referral-attribution';
-// The BFF verifies identity before its own 8s referral-upstream window.
+// The BFF verifies identity before its own 20s referral-upstream window.
 // Allow /token headers + body (8s each), JWKS load + one key-rotation refresh
-// (8s each), the referral upstream (8s), and 5s for browser/BFF delivery.
+// (8s each = 32s), the optional POST input body (8s), the referral upstream
+// (20s), and 5s for browser/BFF delivery. GETs simply leave that input reserve unused.
 // This is an outer bound only; all server deadlines remain unchanged.
-export const REFERRAL_REQUEST_TIMEOUT_MS = 45000;
+export const REFERRAL_REQUEST_TIMEOUT_MS = 65000;
 const browserDefault = () => typeof window === 'undefined' ? undefined : window;
 function syncState(browser) {
   const scope = browser && typeof browser === 'object' ? browser : globalThis;
@@ -78,17 +80,26 @@ function clearVisit(visit, browser) {
   } catch { /* An exact ACK still confirms memory; unknown storage is untouched. */ }
 }
 const matches = (result, visit) => result.positioned || result.ref === visit.ref;
+function subjectHeaders(options) {
+  if (!Object.hasOwn(options, 'subject')) return {};
+  const encoded = profileSubjectHeader(options.subject);
+  return encoded ? { 'x-mindbliss-referral-subject': encoded } : null;
+}
 
-async function postVisit(visit, { browser = browserDefault(), fetchImpl = fetch } = {}) {
+async function postVisit(visit, options = {}) {
+  const { browser = browserDefault(), fetchImpl = fetch } = options;
+  const ownerHeaders = subjectHeaders(options);
+  if (!ownerHeaders) return { ok: false };
   const state = syncState(browser), { writes, owners } = state;
-  const flight = `${visit.email}:${visit.id}`;
+  const owner = `${visit.email}:${ownerHeaders['x-mindbliss-referral-subject'] || ''}`;
+  const flight = `${owner}:${visit.id}`;
   if (writes.has(flight)) return writes.get(flight);
   state.revision++;
   const send = async () => {
     const deadline = browserRequestDeadline(undefined, REFERRAL_REQUEST_TIMEOUT_MS);
     try {
       const response = await fetchImpl(endpoint, { method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error',
-        keepalive: true, signal: deadline.signal, headers: { 'Content-Type': 'application/json' },
+        keepalive: true, signal: deadline.signal, headers: { 'Content-Type': 'application/json', ...ownerHeaders },
         body: JSON.stringify({ ref: visit.ref, preferred_side: visit.preferred_side, expected_email: visit.email }) });
       const body = await response.json().catch(() => null);
       if (!response.ok || !validResponse(body) || !matches(body, visit)) return { ok: false };
@@ -99,13 +110,13 @@ async function postVisit(visit, { browser = browserDefault(), fetchImpl = fetch 
   };
   // Only one save for this owner may be in flight in this browser context.
   // Queue explicit newer choices; reads never create or replay a save.
-  const previous = owners.get(visit.email);
+  const previous = owners.get(owner);
   const completion = previous ? previous.then(send) : send();
   writes.set(flight, completion);
-  owners.set(visit.email, completion);
+  owners.set(owner, completion);
   try { return await completion; } finally {
     if (writes.get(flight) === completion) { writes.delete(flight); state.revision++; }
-    if (owners.get(visit.email) === completion) owners.delete(visit.email);
+    if (owners.get(owner) === completion) owners.delete(owner);
   }
 }
 
@@ -113,7 +124,7 @@ async function postVisit(visit, { browser = browserDefault(), fetchImpl = fetch 
 // not an outbox: mounts and GETs never replay old localStorage attribution.
 export function beginVerifiedReferralSync(email, ref, preferredSide = '', options = {}) {
   const normalized = normalizeReferralEmail(email), code = normalizeReferralCode(ref);
-  if (!normalized || !code) return Promise.resolve({ ok: false });
+  if (!normalized || !code || !subjectHeaders(options)) return Promise.resolve({ ok: false });
   const browser = options.browser || browserDefault();
   try {
     const visit = { id: globalThis.crypto.randomUUID(), email: normalized, ref: code,
@@ -152,10 +163,12 @@ export function retryVerifiedReferral(email, options = {}) {
 
 export async function readVerifiedReferral(email, options = {}) {
   const normalized = normalizeReferralEmail(email);
-  if (!normalized) return { ok: false };
+  const ownerHeaders = subjectHeaders(options);
+  if (!normalized || !ownerHeaders) return { ok: false };
+  const owner = JSON.stringify([normalized, ownerHeaders['x-mindbliss-referral-subject'] || '']);
   const browser = options.browser || browserDefault(), fetchImpl = options.fetchImpl || fetch;
   const state = syncState(browser), { reads } = state;
-  if (reads.has(normalized)) return reads.get(normalized);
+  if (reads.has(owner)) return reads.get(owner);
   const completion = (async () => {
     try {
       for (let attempt = 0; attempt < 2; attempt++) {
@@ -167,7 +180,7 @@ export async function readVerifiedReferral(email, options = {}) {
         let response, body;
         try {
           response = await fetchImpl(endpoint, { credentials: 'same-origin', cache: 'no-store', redirect: 'error',
-            signal: deadline.signal, headers: { 'X-VP-Expected-Email': normalized } });
+            signal: deadline.signal, headers: { 'X-VP-Expected-Email': normalized, ...ownerHeaders } });
           body = await response.json().catch(() => null);
         } finally { deadline.dispose(); }
         if (!response.ok || !validResponse(body)) return { ok: false };
@@ -188,8 +201,8 @@ export async function readVerifiedReferral(email, options = {}) {
       return { ok: false };
     } catch { return { ok: false }; }
   })();
-  reads.set(normalized, completion);
-  try { return await completion; } finally { if (reads.get(normalized) === completion) reads.delete(normalized); }
+  reads.set(owner, completion);
+  try { return await completion; } finally { if (reads.get(owner) === completion) reads.delete(owner); }
 }
 
 export async function verifiedReferralForCheckout(email, options = {}) {

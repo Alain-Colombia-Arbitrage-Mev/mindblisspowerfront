@@ -14,9 +14,10 @@ import { registrationViewHarness, findRegistrationNode as find, registrationFiel
 
 const contactView = ({ id, label, value }) => React.createElement('div', null, label, React.createElement('input', { id, value: value.national, readOnly: true }));
 const valid = { fullName: 'Synthetic Member', email: 'member@example.test', acceptsPrivacy: true };
-function view(cooldown = { active: false, label: '', start() {} }, attribution = { bindReferralCodeToEmail() {} }, onCooldown = () => {}, sync = () => Promise.resolve({ ok: true })) {
+function view(cooldown = { active: false, label: '', start() {} }, attribution = { bindReferralCodeToEmail() {} }, onCooldown = () => {}, sync = () => Promise.resolve({ ok: true }), onSession = () => {}) {
   return registrationViewHarness('./BetterAuthRegisterForm.jsx', {
     '@/lib/referral-sync.mjs': { beginVerifiedReferralSync: sync },
+    '@/lib/member-session-sync.mjs': { publishMemberSessionReplacement: onSession },
     '@/lib/registration-session-recovery.mjs': sessionRecovery,
     'next/link': { default: ({ children, ...props }) => React.createElement('a', props, children) },
     'lucide-react': { ArrowLeft: () => null, CheckCircle2: () => null, Mail: () => null, UserPlus: () => null },
@@ -231,7 +232,7 @@ test('invalid optional contacts stop signup instead of dropping or silently alte
 });
 
 test('passwordless registration hands off once after fresh native session proof without any session GET or second code', async t => {
-  const destinations = browser(t), paths = [];
+  const destinations = browser(t), paths = []; let notifications = 0;
   t.mock.method(globalThis, 'fetch', async (path, options) => {
     paths.push(path);
     if (path === '/api/auth/register') return signupAck();
@@ -239,11 +240,12 @@ test('passwordless registration hands off once after fresh native session proof 
     assert.deepEqual(JSON.parse(options.body), { email: valid.email, code: '001234' });
     return confirmationAck();
   });
-  const harness = view(); harness.render(props); harness.replayEffects();
+  const harness = view(undefined, undefined, undefined, undefined, () => { notifications++; }); harness.render(props); harness.replayEffects();
   await submit(enterValid(harness));
   let tree = harness.render(props);
   assert.match(renderToStaticMarkup(tree), /Verifica tu correo/);
   assert.deepEqual(destinations, [], 'signup acknowledgement is not proof of a native session');
+  assert.equal(notifications, 0, 'requesting a registration code never replaces another session');
   assert.equal(walletSetupHandoff.consumeWalletSetupAfterAuth({ subject: 'synthetic-user', email: valid.email }, window), null);
   find(tree, node => node?.props?.id === 'code').props.onChange({ target: { value: '001234' } });
   await submit(harness.render(props));
@@ -257,6 +259,7 @@ test('passwordless registration hands off once after fresh native session proof 
   assert.deepEqual(destinations, ['/dashboard']);
   assert.equal(walletSetupHandoff.consumeWalletSetupAfterAuth({ subject: 'synthetic-user', email: valid.email }, window)?.email, valid.email);
   for (let render = 0; render < 3; render++) harness.render(props);
+  assert.equal(notifications, 1, 'only the established native session emits one replacement signal');
   assert.deepEqual(destinations, ['/dashboard']);
   assert.equal(find(tree, node => node?.props?.children === 'Crear o cambiar contraseña (opcional)').props.href, '/forgot-password');
   assert.match(renderToStaticMarkup(tree), /Puedes seguir entrando con códigos por correo, sin contraseña/);
