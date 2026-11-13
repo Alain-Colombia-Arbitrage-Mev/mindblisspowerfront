@@ -37,8 +37,8 @@ function MethodsView({ disabled, expectedAddress, signerReady, offrampEnabled, c
     finally { if (pending.current === controller) pending.current = null; if (active()) setLoading(false); }
   }
   const format = value => new Intl.NumberFormat(locale, { maximumFractionDigits: 6 }).format(value);
-  return <details className={`executive-panel ${styles.panel}`}>
-    <summary><ArrowDownToLine size={18} aria-hidden="true" />{t('administrativeOfframp.title')}</summary>
+  return <section id="administrative-offramp" tabIndex={-1} className={`executive-panel ${styles.panel}`} aria-labelledby={`${id}-heading`}>
+    <h2 id={`${id}-heading`} className={styles.heading}><ArrowDownToLine size={20} aria-hidden="true" />{t('administrativeOfframp.title')}</h2>
     <div className={styles.body}>
       <p>{t('administrativeOfframp.copy')}</p>
       <form className={styles.form} onSubmit={check}>
@@ -68,12 +68,13 @@ function MethodsView({ disabled, expectedAddress, signerReady, offrampEnabled, c
             <small>{t('administrativeOfframp.limits', { minimum: format(method.minimumAmount), maximum: format(method.maximumAmount), currency: method.currencyCode === 'USDT_POLYGON' ? 'USDT' : method.currencyCode })}</small>
           </li>))}</ul> : null}
       </div>
-      {!signerReady || !expectedAddress ? <p className={styles.notice}>{t('administrativeOfframp.signerPending')}</p> : null}
+      {!signerReady || !expectedAddress ? <div className={styles.activationPrompt}><p className={styles.notice}>{t('administrativeOfframp.signerPending')}</p>
+        <a className="executive-button" href="#administrative-signing">{t('administrativeSigning.activateConnection')}</a></div> : null}
       <OfframpExecution key={`${country}:${currency}`} options={result} expectedAddress={expectedAddress} disabled={disabled}
         signerReady={signerReady} enabled={offrampEnabled} canPrepare={canPrepare} onSignerRequired={onSignerRequired} />
       <small>{t('administrativeOfframp.sandbox')}</small>
     </div>
-  </details>;
+  </section>;
 }
 
 /** Each action is manual. Sandbox never asks the wallet to sign a transaction or fund a deposit. */

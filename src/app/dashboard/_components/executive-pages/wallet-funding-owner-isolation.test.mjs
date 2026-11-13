@@ -388,3 +388,33 @@ test('an expired native transfer binding requests manual reactivation and does n
   assert.equal(calls, 1); assert.equal(retired, 1); assert.ok(html(h.tree).includes(translateMessage('es', 'administrativeSigning.activateFirst')));
   await h.flush(); assert.equal(calls, 1);
 });
+
+test('administrative actions are visible above all histories and link directly to expanded send and withdrawal sections', async t => {
+  testWindow(t);
+  const h = harness('AdministrativeWalletFundingPage.jsx', { exportName: 'AdministrativeWalletFundingView',
+    administrative: { async readAdministrativeWallet() { return { status: 'assigned', address: walletA }; } } });
+  t.after(() => h.unmount()); h.render({ environment: 'sandbox' }); await h.flush();
+  const links = all(h.tree, node => node?.type === 'nav')[0];
+  assert.deepEqual(all(links, node => node?.type === 'a').map(node => node.props.href), ['#administrative-wallet', '#administrative-send', '#administrative-offramp']);
+  const order = all(h.tree, node => ['AdministrativeWalletOperations', 'WalletFundingHistory'].includes(node?.type?.name)).map(node => node.type.name);
+  assert.deepEqual(order, ['AdministrativeWalletOperations', 'WalletFundingHistory']);
+  const send = harness('AdministrativeTransferDraft.jsx'); t.after(() => send.unmount());
+  const tree = send.render({ assignedAddress: walletA, signerReady: false, disabled: false });
+  assert.equal(tree.type, 'section'); assert.equal(tree.props.id, 'administrative-send');
+  assert.ok(all(tree, node => node?.type === 'form').length); assert.equal(all(tree, node => node?.type === 'a')[0].props.href, '#administrative-signing');
+  assert.equal(all(tree, node => node?.type === 'details').length, 0);
+});
+
+test('a direct administrative action hash waits for its owned view and focuses once without triggering any financial action', async t => {
+  testWindow(t); window.location.hash = '#administrative-send';
+  const previousDocument = Object.getOwnPropertyDescriptor(globalThis, 'document'), events = [], read = deferred();
+  Object.defineProperty(globalThis, 'document', { configurable: true, value: { getElementById(id) { events.push(id); return { scrollIntoView: options => events.push(options), focus: options => events.push(options) }; } } });
+  t.after(() => { if (previousDocument) Object.defineProperty(globalThis, 'document', previousDocument); else delete globalThis.document; });
+  let checkouts = 0;
+  const h = harness('AdministrativeWalletFundingPage.jsx', { exportName: 'AdministrativeWalletFundingView', administrative: { readAdministrativeWallet: () => read.promise },
+    checkout: { startAdministrativeMeldOnramp: () => { checkouts++; } } }); t.after(() => h.unmount());
+  h.render({ environment: 'sandbox' }); await h.flush(); assert.deepEqual(events, []);
+  read.resolve({ status: 'assigned', address: walletA }); await h.flush();
+  assert.deepEqual(events, ['administrative-send', { block: 'start', behavior: 'auto' }, { preventScroll: true }]);
+  h.render({ environment: 'sandbox' }); await h.flush(); assert.equal(events.length, 3); assert.equal(checkouts, 0);
+});

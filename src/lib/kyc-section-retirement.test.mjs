@@ -50,7 +50,7 @@ test("administrative sidebar retains its wallet and profile without retired iden
     member: { name: "Test Member", email: "member@example.test" },
   }));
   assert.doesNotMatch(html, /\/dashboard\/kyc|Verificación de identidad|KYC|Identidad verificada/);
-  for (const href of ["/dashboard", "/dashboard/wallet-administrative", "/dashboard/profile"]) {
+  for (const href of ["/dashboard", "/dashboard/wallet-administrative", "/dashboard/wallet-administrative#administrative-send", "/dashboard/wallet-administrative#administrative-offramp", "/dashboard/profile"]) {
     assert.ok(html.includes(`href="${href}"`), `missing retained destination ${href}`);
   }
   assert.match(html, /<button[^>]*type="button"[^>]*aria-label="Cerrar sesión"/);

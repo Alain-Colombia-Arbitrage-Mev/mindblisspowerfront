@@ -1,7 +1,7 @@
-.panel { margin-top: 20px; color: var(--vp-text); }
-.panel > summary { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; font-weight: 750; }
-.panel > summary:focus-visible { outline: 2px solid var(--vp-accent); outline-offset: 4px; border-radius: 4px; }
-.panel > summary svg { flex: none; }
+.panel { margin-top: 20px; color: var(--vp-text); scroll-margin-top: 90px; }
+.panel:focus-visible { outline: 2px solid var(--vp-accent); outline-offset: 4px; }
+.heading { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 18px; line-height: 1.4; }
+.heading svg { flex: none; }
 .body { display: grid; gap: 16px; padding-top: 14px; }
 .body p, .body small { margin: 0; color: var(--vp-muted); line-height: 1.6; font-size: 13px; overflow-wrap: anywhere; }
 .form { display: flex; align-items: end; flex-wrap: wrap; gap: 14px; }
@@ -14,5 +14,8 @@
 .results li span { color: var(--vp-muted); font-size: 12px; }
 .results li small { flex-basis: 100%; }
 .notice { padding-inline-start: 12px; border-inline-start: 3px solid var(--vp-border); }
+.activationPrompt { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.activationPrompt p { flex: 1 1 240px; }
+.activationPrompt a { min-height: 44px; }
 .result { display: grid; gap: 6px; padding: 14px; border: 1px solid var(--vp-border); border-radius: 10px; overflow-wrap: anywhere; }
 @media(max-width: 480px) { .form label, .form button { flex-basis: 100%; width: 100%; } }

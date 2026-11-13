@@ -1,5 +1,6 @@
 export const administrativeSigningMessages = {
   es: { administrativeSigning: {
+    actionsLabel: "Acciones de la billetera", fundingAction: "Recargar", sendAction: "Enviar", withdrawAction: "Retirar", activateConnection: "Activar billetera",
     title: "Billetera externa administrativa", copy: "Conecta la billetera externa que controla exactamente tu dirección asignada. La verificación firma un mensaje de propiedad, sin mover fondos.",
     active: "Dirección verificada y conexión activa en Polygon.", verifiedInactive: "La propiedad está verificada para esta sesión. Comprueba la conexión de tu billetera para continuar.",
     verificationNeeded: "Conecta tu dirección asignada y confirma el mensaje de propiedad.", provider: "Billetera externa", chooseProvider: "Seleccione una billetera", noProvider: "Abre esta página desde el navegador de tu billetera o instala una extensión compatible.",
@@ -11,6 +12,7 @@ export const administrativeSigningMessages = {
     activateFirst: "Verifica tu dirección y activa su conexión antes de preparar la vista previa.", recipient: "Dirección de destino", amount: "Importe en USDT", prepare: "Preparar simulación", review: "Revisar simulación", reference: "Referencia", history: "Ver historial de simulaciones", draft: "Borrador · sin envío",
   } },
   en: { administrativeSigning: {
+    actionsLabel: "Wallet actions", fundingAction: "Add funds", sendAction: "Send", withdrawAction: "Withdraw", activateConnection: "Activate wallet",
     title: "Administrative external wallet", copy: "Connect the external wallet that controls your exact assigned address. Verification signs an ownership message without moving funds.",
     active: "Address verified and connection active on Polygon.", verifiedInactive: "Ownership is verified for this session. Check your wallet connection to continue.",
     verificationNeeded: "Connect your assigned address and confirm the ownership message.", provider: "External wallet", chooseProvider: "Select a wallet", noProvider: "Open this page in your wallet browser or install a compatible extension.",
@@ -22,6 +24,7 @@ export const administrativeSigningMessages = {
     activateFirst: "Verify your address and activate its connection before preparing a preview.", recipient: "Destination address", amount: "Amount in USDT", prepare: "Prepare simulation", review: "Review simulation", reference: "Reference", history: "View simulation history", draft: "Draft · not sent",
   } },
   ar: { administrativeSigning: {
+    actionsLabel: "إجراءات المحفظة", fundingAction: "شحن", sendAction: "إرسال", withdrawAction: "سحب", activateConnection: "تفعيل المحفظة",
     title: "المحفظة الإدارية الخارجية", copy: "اربط المحفظة الخارجية التي تتحكم بعنوانك المخصص تمامًا. يوقّع التحقق رسالة ملكية دون نقل الأموال.",
     active: "تم التحقق من العنوان والاتصال نشط على Polygon.", verifiedInactive: "تم التحقق من الملكية لهذه الجلسة. افحص اتصال المحفظة للمتابعة.",
     verificationNeeded: "اربط عنوانك المخصص وأكد رسالة الملكية.", provider: "المحفظة الخارجية", chooseProvider: "اختر محفظة", noProvider: "افتح هذه الصفحة من متصفح محفظتك أو ثبّت إضافة متوافقة.",
@@ -33,6 +36,7 @@ export const administrativeSigningMessages = {
     activateFirst: "تحقق من عنوانك وفعّل اتصاله قبل إعداد المعاينة.", recipient: "عنوان الوجهة", amount: "المبلغ بـ USDT", prepare: "إعداد المحاكاة", review: "مراجعة المحاكاة", reference: "المرجع", history: "عرض سجل المحاكاة", draft: "مسودة · لم تُرسل",
   } },
   zh: { administrativeSigning: {
+    actionsLabel: "钱包操作", fundingAction: "充值", sendAction: "发送", withdrawAction: "提现", activateConnection: "激活钱包",
     title: "管理外部钱包", copy: "连接能够控制你专属地址的外部钱包。验证只签署所有权消息，不转移资金。",
     active: "地址已验证，Polygon 连接处于活动状态。", verifiedInactive: "本次会话已验证所有权。请检查钱包连接以继续。",
     verificationNeeded: "连接专属地址并确认所有权消息。", provider: "外部钱包", chooseProvider: "选择钱包", noProvider: "请在钱包浏览器中打开此页面，或安装兼容的钱包扩展。",

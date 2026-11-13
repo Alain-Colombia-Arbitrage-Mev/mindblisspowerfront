@@ -122,7 +122,7 @@ export function OperationsView({ assignedAddress, disabled }) {
     invalidate(); setProviderId(value); setError("");
   }
   return <>
-    <section className={`executive-panel ${styles.panel}`} aria-label={t("administrativeSigning.title")}>
+    <section id="administrative-signing" tabIndex={-1} className={`executive-panel ${styles.panel}`} aria-label={t("administrativeSigning.title")}>
       <h2>{t("administrativeSigning.title")}</h2><p>{t("administrativeSigning.copy")}</p>
       <code dir="ltr">{assignedAddress || t("walletPage.destinationUnavailable")}</code>
       {capability?.configured ? <>

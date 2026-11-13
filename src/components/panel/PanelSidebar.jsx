@@ -1,6 +1,6 @@
 "use client";
 
-import { LayoutDashboard, LogOut, UserRound, Wallet } from "lucide-react";
+import { ArrowDownToLine, LayoutDashboard, LogOut, Send, UserRound, Wallet } from "lucide-react";
 import SidebarLogo from "./SidebarLogo";
 import SidebarNavItem from "./SidebarNavItem";
 import SidebarUserCard from "./SidebarUserCard";
@@ -13,6 +13,8 @@ const NAV_GROUPS = [
   { label: "nav.account", items: [
     { icon: LayoutDashboard, label: "nav.summary", href: "/dashboard", exact: true, also: ["/dashboard/home"] },
     { icon: Wallet, label: "nav.administrativeWallet", href: "/dashboard/wallet-administrative", also: ["/dashboard/payments"] },
+    { icon: Send, label: "administrativeSigning.sendAction", href: "/dashboard/wallet-administrative#administrative-send" },
+    { icon: ArrowDownToLine, label: "administrativeSigning.withdrawAction", href: "/dashboard/wallet-administrative#administrative-offramp" },
   ] },
   { label: "nav.settings", items: [
     { icon: UserRound, label: "nav.profile", href: "/dashboard/profile" },

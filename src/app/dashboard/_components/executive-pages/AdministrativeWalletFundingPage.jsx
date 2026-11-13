@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2, CheckCircle2, RefreshCw } from "lucide-react";
+import { ArrowDownToLine, ArrowUpRight, Building2, CheckCircle2, Plus, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useI18n } from "@/i18n/LanguageProvider";
 import { ensureAdministrativeWallet, readAdministrativeWallet } from "@/lib/administrative-wallet.mjs";
@@ -45,6 +45,7 @@ export function AdministrativeWalletFundingView({ environment }) {
   const checkoutRequest = useRef(null);
   const mounted = useRef(false);
   const liveCheckoutCapability = useRef(false);
+  const handledAnchor = useRef("");
   liveCheckoutCapability.current = checkoutCapability.status === "ready" && checkoutCapability.configured === true;
   const assigned = wallet.status === "assigned";
   const sandbox = environment === "sandbox";
@@ -68,6 +69,13 @@ export function AdministrativeWalletFundingView({ environment }) {
     const reference = meldCheckoutReturn(window.location?.search);
     if (reference) { setGeneralReference(reference); setShowGeneralActivity(true); }
   }, [sandbox, checkoutCapability.status, checkoutCapability.configured, assigned]);
+  useEffect(() => {
+    if (!sandbox || wallet.status === "loading" || !mounted.current || typeof document === "undefined") return;
+    const hash = window.location?.hash;
+    if (!["#administrative-wallet", "#administrative-send", "#administrative-offramp", "#administrative-signing"].includes(hash) || handledAnchor.current === hash) return;
+    const target = document.getElementById(hash.slice(1));
+    if (target) { handledAnchor.current = hash; target.scrollIntoView({ block: "start", behavior: "auto" }); target.focus({ preventScroll: true }); }
+  }, [sandbox, wallet.status]);
 
   async function openProvider(input) {
     if (!mounted.current || !sandbox || checkoutRequest.current || !assigned) return;
@@ -110,7 +118,12 @@ export function AdministrativeWalletFundingView({ environment }) {
     <div className={styles.sandboxNotice} role="status"><Building2 size={20} aria-hidden="true" /><div>
       <strong>{t(sandbox ? "funding.sandbox" : "funding.sandboxConfiguration")}</strong>
       {sandbox ? <p>{t("funding.sandboxNoticeShort")}</p> : null}</div></div>
-    <div className={styles.flowLayout} id="administrative-wallet">
+    {sandbox ? <nav className={styles.actionNavigation} aria-label={t("administrativeSigning.actionsLabel")}>
+      <a href="#administrative-wallet"><Plus size={20} aria-hidden="true" /><span>{t("administrativeSigning.fundingAction")}</span></a>
+      <a href="#administrative-send"><ArrowUpRight size={20} aria-hidden="true" /><span>{t("administrativeSigning.sendAction")}</span></a>
+      <a href="#administrative-offramp"><ArrowDownToLine size={20} aria-hidden="true" /><span>{t("administrativeSigning.withdrawAction")}</span></a>
+    </nav> : null}
+    <div className={styles.flowLayout} id="administrative-wallet" tabIndex={-1}>
       <section className={`executive-panel ${styles.formPanel}`} aria-label={t("walletPage.addFundsAction")}>
         {sandbox ? <AdministrativeSandboxFundingForm disabled={!assigned} busy={busy} onContinue={openProvider} onSelectionChange={clearSelectionError} destinationAddress={assigned ? wallet.address : ""}
           onOpenCheckout={openGeneralCheckout} checkoutCapability={checkoutCapability}
@@ -129,6 +142,7 @@ export function AdministrativeWalletFundingView({ environment }) {
         </section>
       </aside>
     </div>
+    {sandbox ? <AdministrativeWalletOperations disabled={!assigned} assignedAddress={assigned ? wallet.address : ""} /> : null}
     {sandbox && selectedReference ? <WalletFundingStatus walletKind="administrative" checkoutReference={selectedReference} focusKey={statusFocusKey} /> : null}
     {sandbox ? <section className="executive-panel"><WalletFundingHistory walletKind="administrative" refreshKey={historyRevision} onSelectRequest={selectStatus} /></section> : null}
     {sandbox && checkoutCapability.status === "ready" && checkoutCapability.configured && preparedCheckout ? <section className="executive-panel" role="status">
@@ -138,7 +152,6 @@ export function AdministrativeWalletFundingView({ environment }) {
     {sandbox && assigned && checkoutCapability.status === "ready" && checkoutCapability.configured && showGeneralActivity ? <AdministrativeMeldCheckoutActivity
       enabled expectedAddress={wallet.address} checkoutReference={generalReference} refreshKey={generalRevision}
       onSelectRequest={reference => { if (mounted.current) setGeneralReference(reference); }} /> : null}
-    {sandbox ? <AdministrativeWalletOperations disabled={!assigned} assignedAddress={assigned ? wallet.address : ""} /> : null}
   </WalletFundingScreen>;
 }
 

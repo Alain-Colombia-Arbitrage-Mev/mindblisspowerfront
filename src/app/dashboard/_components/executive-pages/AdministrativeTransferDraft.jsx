@@ -43,10 +43,11 @@ export default function AdministrativeTransferDraft({ assignedAddress, signerRea
     } }
     finally { if (pending.current === controller) pending.current = null; if (active()) setBusy(false); }
   }
-  return <details className={`executive-panel ${styles.panel}`}>
-    <summary>{t("administrativeSigning.transferTitle")}</summary><div className={styles.body}>
+  return <section id="administrative-send" tabIndex={-1} className={`executive-panel ${styles.panel}`} aria-labelledby={`${id}-heading`}>
+    <h2 id={`${id}-heading`}>{t("administrativeSigning.transferTitle")}</h2><div className={styles.body}>
       <p>{t("administrativeSigning.simulation")}</p>
-      {!signerReady ? <p>{t("administrativeSigning.activateFirst")}</p> : null}
+      {!signerReady ? <div className={styles.activationPrompt}><p>{t("administrativeSigning.activateFirst")}</p>
+        <a className="executive-button" href="#administrative-signing">{t("administrativeSigning.activateConnection")}</a></div> : null}
       <form className={styles.form} onSubmit={event => { event.preventDefault(); void run(); }}>
         <label htmlFor={`${id}-recipient`}>{t("administrativeSigning.recipient")}<input id={`${id}-recipient`} value={recipient} autoComplete="off" spellCheck={false} dir="ltr"
           onChange={event => edit(setRecipient, event.target.value)} disabled={busy || disabled} placeholder="0x…" /></label>
@@ -62,5 +63,5 @@ export default function AdministrativeTransferDraft({ assignedAddress, signerRea
       {records ? records.length ? <ul className={styles.history}>{records.map(record => <li key={record.draftReference}><strong>{t("administrativeSigning.draft")}</strong>
         <bdi>{record.amount} USDT</bdi><code dir="ltr">{record.recipient}</code><small>{new Intl.DateTimeFormat(locale, { dateStyle: "short", timeStyle: "short" }).format(new Date(record.createdAt))}</small></li>)}</ul>
         : <p>{t("funding.historyEmpty")}</p> : null}
-    </div></details>;
+    </div></section>;
 }
