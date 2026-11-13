@@ -4,20 +4,23 @@ import { CheckCircle2, Clock3, Info, Loader2, RefreshCw, XCircle } from "lucide-
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "@/i18n/LanguageProvider";
 import { readWalletFundingStatus } from "@/lib/wallet-funding-client.mjs";
-import { fundingStatus, FUNDING_UUID } from "@/lib/wallet-funding-contract.mjs";
+import { fundingStatus, fundingConfirmation, FUNDING_UUID } from "@/lib/wallet-funding-contract.mjs";
 import { useMemberSession } from "@/lib/member-session-context";
 import { walletFundingOwnerKey } from "@/lib/wallet-funding-owner.mjs";
 import styles from "./wallet-funding.module.css";
 
-/** Current native API deliberately accepts no paid/confirmed response. */
+/** Administrative results come only from the owned backend's sandbox readback. */
 export function currentFundingView(value, walletKind, checkoutReference) {
   if (walletKind !== "administrative") return null;
   const safe = fundingStatus(value, walletKind);
   if (!safe || typeof checkoutReference !== "string" || !FUNDING_UUID.test(checkoutReference)
     || safe.checkoutReference.toLowerCase() !== checkoutReference.toLowerCase()) return null;
   return { walletKind, checkoutReference: safe.checkoutReference, requestedAmount: safe.requestedAmount, sourceCurrencyCode: safe.sourceCurrencyCode || "USD",
-    destination: safe.destination, testMode: safe.confirmation.testMode, requestStatus: safe.requestStatus,
-    state: { session_created: "checkout_ready", unavailable: "request_unavailable", failed: "checkout_failed" }[safe.requestStatus] || "unconfirmed" };
+    destination: safe.destination, testMode: true, requestStatus: safe.requestStatus, confirmationSource: safe.confirmation.source,
+    ...(safe.confirmation.source === "meld_sandbox_api" ? { transactionId: safe.confirmation.transactionId, providerStatus: safe.confirmation.providerStatus,
+      ...(safe.confirmation.receivedAmount ? { receivedAmount: safe.confirmation.receivedAmount, confirmedAt: safe.confirmation.confirmedAt } : {}) } : {}),
+    state: safe.confirmation.source === "meld_sandbox_api" ? safe.confirmation.state
+      : { session_created: "checkout_ready", unavailable: "request_unavailable", failed: "checkout_failed" }[safe.requestStatus] || "unconfirmed" };
 }
 
 export default function WalletFundingStatus({ walletKind, checkoutReference, focusKey = 0 }) {
@@ -70,18 +73,17 @@ export default function WalletFundingStatus({ walletKind, checkoutReference, foc
   </section>;
 }
 
-/** Presentation for future trusted settlement states. Native reads cannot reach confirmed today. */
+/** A successful sandbox result never represents real wallet credit or fees. */
 export function WalletFundingStatusView({ view }) {
   const { t, locale } = useI18n();
   if (!view || view.walletKind !== "administrative" || view.testMode !== true) return null;
-  const received = typeof view.receivedAmount === "string" && /^(?:0|[1-9]\d{0,17})(?:\.\d{1,18})?$/.test(view.receivedAmount)
-    && !/^0(?:\.0+)?$/.test(view.receivedAmount);
-  const confirmedAt = typeof view.confirmedAt === "string" && Number.isFinite(Date.parse(view.confirmedAt));
-  const state = view.state === "confirmed" && (!received || !confirmedAt) ? "unconfirmed" : view.state;
+  const proof = fundingConfirmation({ state: view.state, source: view.confirmationSource, testMode: true, transactionId: view.transactionId,
+    providerStatus: view.providerStatus, receivedAmount: view.receivedAmount, confirmedAt: view.confirmedAt }, "administrative");
+  const state = ["pending", "confirmed", "failed"].includes(view.state) && proof?.source !== "meld_sandbox_api" ? "unconfirmed" : view.state;
   const confirmed = state === "confirmed";
-  const labels = { checkout_ready: "funding.statusCheckoutReady", unconfirmed: "funding.statusUnconfirmed", pending: "funding.statusPending", confirmed: "funding.statusConfirmed", failed: "funding.statusFailed",
+  const labels = { checkout_ready: "funding.statusCheckoutReady", unconfirmed: "funding.statusUnconfirmed", pending: "funding.statusSandboxPending", confirmed: "funding.statusSandboxConfirmed", failed: "funding.statusSandboxFailed",
     request_unavailable: "funding.statusRequestUnavailable", checkout_failed: "funding.statusCheckoutFailed" };
-  const copy = { checkout_ready: "funding.statusCheckoutReadyCopy", unconfirmed: "funding.statusUnconfirmedCopy", pending: "funding.statusPendingCopy", confirmed: "funding.statusConfirmedCopy", failed: "funding.statusFailedCopy",
+  const copy = { checkout_ready: "funding.statusCheckoutReadyCopy", unconfirmed: "funding.statusUnconfirmedCopy", pending: "funding.statusSandboxPendingCopy", confirmed: "funding.statusSandboxConfirmedCopy", failed: "funding.statusSandboxFailedCopy",
     request_unavailable: "funding.statusRequestUnavailableCopy", checkout_failed: "funding.statusCheckoutFailedCopy" };
   const Icon = confirmed ? CheckCircle2 : state === "failed" ? XCircle : state === "pending" ? Clock3 : Info;
   return <div className={confirmed ? styles.confirmedStatus : state === "failed" ? styles.failedStatus : ""}>
@@ -90,9 +92,10 @@ export function WalletFundingStatusView({ view }) {
     {view.testMode ? <p className={styles.testStatus}>{t("funding.statusSandboxCopy")}</p> : null}
     <dl className={styles.statusDetails}>
       <div><dt>{t("funding.statusRequestedAmount")}</dt><dd>{new Intl.NumberFormat(locale, { style: "currency", currency: view.sourceCurrencyCode || "USD" }).format(view.requestedAmount)}</dd></div>
-      {confirmed ? <div><dt>{t("funding.statusReceived")}</dt><dd><bdi dir="ltr">{view.receivedAmount} USDT</bdi></dd></div> : null}
+      {confirmed ? <div><dt>{t("funding.statusSandboxReceived")}</dt><dd><bdi dir="ltr">{view.receivedAmount} USDT</bdi></dd></div> : null}
       <div><dt>{t("funding.reviewDestination")}</dt><dd><code dir="ltr">{view.destination.address}</code><small>USDT · Polygon</small></dd></div>
       {confirmed ? <div><dt>{t("funding.statusConfirmedAt")}</dt><dd>{new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(view.confirmedAt))}</dd></div> : null}
+      {proof?.source === "meld_sandbox_api" ? <div><dt>{t("funding.statusSandboxTransaction")}</dt><dd><code dir="ltr">{proof.transactionId}</code></dd></div> : null}
       <div><dt>{t("funding.statusReference")}</dt><dd><code dir="ltr">{view.checkoutReference}</code></dd></div>
     </dl>
   </div>;

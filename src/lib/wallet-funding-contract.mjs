@@ -117,17 +117,28 @@ export function fundingInput(value, kind) {
   return Object.fromEntries(keys.filter(key => value[key] !== undefined).map(key => [key, value[key]]));
 }
 
-export function sandboxCheckoutUrl(value) {
-  if (typeof value !== 'string' || value.length > 8192) return null;
+export function sandboxCheckoutUrl(value, serviceProvider = '') {
+  // eslint-disable-next-line no-control-regex -- Reject literal URL controls before the URL parser can normalize them.
+  if (typeof value !== 'string' || value.length > 8192 || /[\u0000-\u0020\u007f\\#]/.test(value)
+    || (serviceProvider !== '' && !PROVIDERS.has(serviceProvider))) return null;
   try {
     const url = new URL(value);
-    if (url.origin !== 'https://sb.meldcrypto.com' || url.username || url.password || url.hash
-      || !url.search || /[\r\n]/.test(value)) return null;
+    if (url.username || url.password || url.hash || !url.search) return null;
+    if (url.origin === 'https://sb.meldcrypto.com' && /^https:\/\/sb\.meldcrypto\.com(?:\/|\?)/.test(value)) return value;
+    // The provider URL is minted by the backend. Never rebuild payment fields
+    // or accept a production/partner host from a browser-supplied URL.
+    if (serviceProvider !== 'TRANSAK' || url.origin !== 'https://global-stg.transak.com' || url.pathname !== '/'
+      || !/^https:\/\/global-stg\.transak\.com\/?\?/.test(value)) return null;
+    const keys = [...url.searchParams.keys()];
+    if (keys.length !== 2 || new Set(keys).size !== 2 || !keys.includes('apiKey') || !keys.includes('sessionId')
+      || !url.search.slice(1).split('&').every(part => /^(?:apiKey|sessionId)=/.test(part))
+      || !/^[A-Za-z0-9_-]{1,256}$/.test(url.searchParams.get('apiKey') || '')
+      || !/^[A-Za-z0-9._~-]{1,4096}$/.test(url.searchParams.get('sessionId') || '')) return null;
     return value;
   } catch { return null; }
 }
 
-export function fundingAcknowledgement(value, kind, requestCountry = '') {
+export function fundingAcknowledgement(value, kind, requestCountry = '', requestProvider = '') {
   if (!['personal', 'administrative'].includes(kind)) return null;
   const environment = kind === 'personal' ? 'production' : 'sandbox';
   const provider = kind === 'personal' ? 'reown' : 'meld';
@@ -140,9 +151,15 @@ export function fundingAcknowledgement(value, kind, requestCountry = '') {
   const safe = { checkoutReference: value.checkoutReference, walletKind: kind, environment, provider, status,
     requestedAmount: value.requestedAmount, createdAt: value.createdAt, ...source };
   if (kind === 'administrative') {
-    const checkoutUrl = sandboxCheckoutUrl(value.checkoutUrl);
+    if ((requestProvider !== '' && !PROVIDERS.has(requestProvider))
+      || (value.serviceProvider !== undefined && (!PROVIDERS.has(value.serviceProvider)
+        || (requestProvider !== '' && value.serviceProvider !== requestProvider)))) return null;
+    // Legacy administrative acknowledgements expose only a Meld sandbox URL.
+    // A direct launch also requires the requested and acknowledged provider.
+    const boundProvider = requestProvider && value.serviceProvider === requestProvider ? requestProvider : '';
+    const checkoutUrl = sandboxCheckoutUrl(value.checkoutUrl, boundProvider);
     if (!checkoutUrl) return null;
-    return { ...safe, checkoutUrl };
+    return { ...safe, ...(value.serviceProvider !== undefined ? { serviceProvider: value.serviceProvider } : {}), checkoutUrl };
   }
   if (!personalFundingMethod(value.paymentMethodType) || !Array.isArray(value.allowedProviders)
     || value.allowedProviders.length < 1 || value.allowedProviders.length > 3
@@ -169,6 +186,38 @@ function fundingDestination(value, kind) {
   return { address: value.address, asset: 'USDT', network: value.network, chainId: value.chainId };
 }
 
+const SANDBOX_PENDING_STATUSES = new Set(['PENDING_CREATED', 'PENDING', 'PROCESSING', 'AUTHORIZED', 'ACCEPTED', 'PARTIALLY_SETTLED',
+  'SETTLING', 'TWO_FA_REQUIRED', 'TWO_FA_PROVIDED', 'ERROR']);
+const SANDBOX_FAILED_STATUSES = new Set(['FAILED', 'DECLINED', 'CANCELLED', 'REFUNDED', 'VOIDED', 'AUTHORIZATION_EXPIRED']);
+const SANDBOX_IDENTIFIER = /^[A-Za-z0-9_.:-]{1,128}$/;
+const SANDBOX_RECEIVED_AMOUNT = /^(?:0|[1-9]\d{0,11})(?:\.\d{1,6})?$/;
+function fundingInstant(value) {
+  if (typeof value !== 'string' || value.length > 64 || !/^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/.test(value)
+    || !Number.isFinite(Date.parse(value))) return false;
+  const day = Number(value.slice(8, 10)), year = Number(value.slice(0, 4)), month = Number(value.slice(5, 7));
+  return day <= new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+/** A server-owned sandbox API result is distinct from real financial settlement. */
+export function fundingConfirmation(value, kind) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || value.testMode !== (kind === 'administrative')
+    || !['personal', 'administrative'].includes(kind)) return null;
+  if (value.state === 'unconfirmed' && value.source === 'none') return { state: 'unconfirmed', source: 'none', testMode: kind === 'administrative' };
+  if (kind !== 'administrative' || value.source !== 'meld_sandbox_api' || typeof value.transactionId !== 'string'
+    || !SANDBOX_IDENTIFIER.test(value.transactionId)) return null;
+  const expectedState = value.providerStatus === 'SETTLED' ? 'confirmed' : SANDBOX_PENDING_STATUSES.has(value.providerStatus) ? 'pending'
+    : SANDBOX_FAILED_STATUSES.has(value.providerStatus) ? 'failed' : null;
+  if (!expectedState || value.state !== expectedState) return null;
+  const safe = { state: expectedState, source: 'meld_sandbox_api', testMode: true, transactionId: value.transactionId, providerStatus: value.providerStatus };
+  if (expectedState === 'confirmed') {
+    if (typeof value.receivedAmount !== 'string' || !SANDBOX_RECEIVED_AMOUNT.test(value.receivedAmount)
+      || /^0(?:\.0+)?$/.test(value.receivedAmount) || !fundingInstant(value.confirmedAt)) return null;
+    return { ...safe, receivedAmount: value.receivedAmount, confirmedAt: value.confirmedAt };
+  }
+  if (value.receivedAmount !== undefined || value.confirmedAt !== undefined) return null;
+  return safe;
+}
+
 export function fundingHistory(value, kind) {
   if (!['personal', 'administrative'].includes(kind)) return null;
   const environment = kind === 'personal' ? 'production' : 'sandbox';
@@ -179,30 +228,32 @@ export function fundingHistory(value, kind) {
   const records = value.records.map(record => {
     const source = requestedSource(record, kind, true);
     const destination = record?.destination === undefined ? undefined : fundingDestination(record.destination, kind);
+    const confirmation = kind === 'administrative' && record?.confirmation !== undefined ? fundingConfirmation(record.confirmation, kind) : undefined;
     if (!record || !FUNDING_UUID.test(record.checkoutReference || '') || !source
       || !COUNTRY.test(record.country || '') || !STATUSES.has(record.status) || record.provider !== provider
       || (kind === 'personal' && record.status !== 'initiated')
       || (source?.sourceCurrencyCode === 'COP' && (!destination || destination.network !== 'polygon' || destination.chainId !== 137))
       || (source?.sourceCurrencyCode === 'MXN' && source.paymentMethodType !== 'SPEI' && (!destination || destination.network !== 'polygon' || destination.chainId !== 137))
       || (kind === 'personal' && ['VENMO', 'PAYPAL'].includes(source?.paymentMethodType) && (!destination || destination.network !== 'polygon' || destination.chainId !== 137))
-      || destination === null || typeof record.createdAt !== 'string' || record.createdAt.length > 64 || !Number.isFinite(Date.parse(record.createdAt))) return null;
+      || destination === null || confirmation === null || (confirmation?.source === 'meld_sandbox_api' && !destination)
+      || typeof record.createdAt !== 'string' || record.createdAt.length > 64 || !Number.isFinite(Date.parse(record.createdAt))) return null;
     return { checkoutReference: record.checkoutReference, requestedAmount: record.requestedAmount, country: record.country,
-      status: record.status, createdAt: record.createdAt, provider, ...source, ...(destination ? { destination } : {}) };
+      status: record.status, createdAt: record.createdAt, provider, ...source, ...(destination ? { destination } : {}), ...(confirmation ? { confirmation } : {}) };
   });
   if (records.some(record => !record) || new Set(records.map(record => record.checkoutReference)).size !== records.length) return null;
   return { walletKind: kind, environment, settlement: 'unconfirmed', records };
 }
 
-/** Reads a persisted request, never a checkout callback's claimed payment result.
- * Settlement remains unconfirmed until an authenticated provider event is
- * implemented and stored by the backend. Opening a checkout cannot change it.
+/** Reads an owned persisted request, never a checkout callback's claimed result.
+ * Personal settlement remains unconfirmed. Administrative test results require
+ * correlated Meld sandbox API evidence and never credit real funds or fees.
  */
 export function fundingStatus(value, kind) {
   if (!['personal', 'administrative'].includes(kind)) return null;
   const environment = kind === 'personal' ? 'production' : 'sandbox';
   const provider = kind === 'personal' ? 'reown' : 'meld';
   const destination = fundingDestination(value?.destination, kind);
-  const confirmation = value?.confirmation;
+  const confirmation = fundingConfirmation(value?.confirmation, kind);
   const source = requestedSource(value, kind, true);
   if (!value || typeof value !== 'object' || Array.isArray(value) || value.walletKind !== kind
     || value.environment !== environment || value.provider !== provider
@@ -214,13 +265,11 @@ export function fundingStatus(value, kind) {
     || (source?.sourceCurrencyCode === 'COP' && (destination.network !== 'polygon' || destination.chainId !== 137))
     || (source?.sourceCurrencyCode === 'MXN' && source.paymentMethodType !== 'SPEI' && (destination.network !== 'polygon' || destination.chainId !== 137))
     || (kind === 'personal' && ['VENMO', 'PAYPAL'].includes(source?.paymentMethodType) && (destination.network !== 'polygon' || destination.chainId !== 137))
-    || !confirmation || typeof confirmation !== 'object' || Array.isArray(confirmation)
-    || confirmation.state !== 'unconfirmed' || confirmation.source !== 'none'
-    || confirmation.testMode !== (kind === 'administrative')) return null;
+    || !confirmation) return null;
   return { checkoutReference: value.checkoutReference.toLowerCase(), walletKind: kind, environment, provider,
     requestedAmount: value.requestedAmount, country: value.country, requestStatus: value.requestStatus, ...source,
     destination,
-    confirmation: { state: 'unconfirmed', source: 'none', testMode: kind === 'administrative' } };
+    confirmation };
 }
 
 export function administrativeSandboxOptions(value) {

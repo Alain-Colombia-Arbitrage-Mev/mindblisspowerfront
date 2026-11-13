@@ -65,7 +65,8 @@ function fundingReadRetryDelay(signal) {
 /** @param {'personal' | 'administrative'} kind @param {{signal?: AbortSignal}} [options] */
 export async function readWalletFundingHistory(kind, { signal } = {}) {
   if (!['personal', 'administrative'].includes(kind)) throw new Error('invalid_request');
-  const data = fundingHistory(await request(`/api/member/wallet-funding/history?walletKind=${kind}`, { method: 'GET', signal }), kind);
+  const data = fundingHistory(await request(`/api/member/wallet-funding/history?walletKind=${kind}`, { method: 'GET', signal,
+    ...(kind === 'administrative' ? { headers: { 'x-mindbliss-sandbox-contract': 'v2' } } : {}) }), kind);
   if (!data) throw new Error('funding_unavailable');
   return data;
 }
@@ -79,7 +80,8 @@ export async function readWalletFundingStatus(kind, checkoutReference, { signal 
   if (!['personal', 'administrative'].includes(kind) || typeof checkoutReference !== 'string'
     || checkoutReference.length !== 36 || !FUNDING_UUID.test(checkoutReference)) throw new Error('invalid_request');
   const reference = checkoutReference.toLowerCase();
-  const data = fundingStatus(await request(`/api/member/wallet-funding/${kind}/status?checkoutReference=${reference}`, { method: 'GET', signal }), kind);
+  const data = fundingStatus(await request(`/api/member/wallet-funding/${kind}/status?checkoutReference=${reference}`, { method: 'GET', signal,
+    ...(kind === 'administrative' ? { headers: { 'x-mindbliss-sandbox-contract': 'v2' } } : {}) }), kind);
   if (!data || data.checkoutReference !== reference) throw new Error('funding_unavailable');
   return data;
 }
@@ -91,8 +93,8 @@ async function createFunding(input, kind, path, { signal } = {}) {
   // SPEI uses the provider's MXN limits and is recorded as MXN, never USD.
   if (!fundingSourceSupported(body, kind)) throw new Error('wallet_funding_valuation_unavailable');
   const data = fundingAcknowledgement(await request(path, { method: 'POST', signal,
-    headers: { 'content-type': 'application/json', ...(kind === 'personal' ? { 'x-mindbliss-wallet-network': 'polygon' } : {}) },
-    body: JSON.stringify(body) }), kind, body.country);
+    headers: { 'content-type': 'application/json', ...(kind === 'personal' ? { 'x-mindbliss-wallet-network': 'polygon' } : { 'x-mindbliss-sandbox-contract': 'v2' }) },
+    body: JSON.stringify(body) }), kind, body.country, kind === 'administrative' ? body.serviceProvider : '');
   if (!data || data.requestedAmount !== body.amount || data.checkoutReference !== body.requestId
     || fundingCurrencyCode(data.sourceCurrencyCode) !== fundingCurrencyCode(body.sourceCurrencyCode)
     || (kind === 'personal' && (!('paymentMethodType' in data) || data.paymentMethodType !== body.paymentMethodType

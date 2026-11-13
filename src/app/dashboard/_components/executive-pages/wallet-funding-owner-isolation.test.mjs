@@ -6,10 +6,11 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 import { walletFundingOwnerKey } from '../../../../lib/wallet-funding-owner.mjs';
-import { fundingStatus, FUNDING_UUID } from '../../../../lib/wallet-funding-contract.mjs';
+import { fundingStatus, fundingConfirmation, FUNDING_UUID } from '../../../../lib/wallet-funding-contract.mjs';
 import { personalFundingFailure } from '../../../../lib/personal-funding-errors.mjs';
 import { translateMessage } from '../../../../i18n/translate.mjs';
 import { startAdministrativeMeldOnramp } from '../../../../lib/administrative-onramp-client.mjs';
+import { administrativeCheckoutReturn } from '../../../../lib/administrative-checkout-return.mjs';
 
 const require = createRequire(import.meta.url);
 const ownerA = { subject: 'owner-A', email: 'a@example.test' }, ownerB = { subject: 'owner-B', email: 'b@example.test' };
@@ -46,8 +47,9 @@ function harness(filename, { api = {}, reown = {}, administrative = {}, checkout
     '@/i18n/LanguageProvider': { useI18n: () => ({ locale: 'es', t: (key, values) => translateMessage('es', key, values) }) },
     '@/lib/member-session-context': { useMemberSession: () => member },
     '@/lib/administrative-wallet.mjs': administrative, '@/lib/administrative-onramp-client.mjs': checkout,
+    '@/lib/administrative-checkout-return.mjs': { administrativeCheckoutReturn },
     '@/lib/wallet-funding-owner.mjs': { walletFundingOwnerKey },
-    '@/lib/wallet-funding-client.mjs': api, '@/lib/wallet-funding-contract.mjs': { fundingStatus, FUNDING_UUID },
+    '@/lib/wallet-funding-client.mjs': api, '@/lib/wallet-funding-contract.mjs': { fundingStatus, fundingConfirmation, FUNDING_UUID },
     '@/lib/personal-funding-errors.mjs': { personalFundingFailure }, '@/components/reown/ReownContext': { useReownWallet: () => reown },
     '@/components/wallet/PersonalWalletBalances': { default: () => null }, './WalletFundingForm': { PersonalFundingForm, AdministrativeSandboxFundingForm },
     './ResidenceImportantCard': { default: function ResidenceImportantCard() { return null; } },
@@ -150,6 +152,19 @@ test('the complete administrative form remounts for each native owner and never 
   assert.equal(h.owner(null), null);
 });
 
+test('a checkout return selects a native owner-scoped status read without trusting claimed payment values', async t => {
+  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  Object.defineProperty(globalThis, 'window', { value: { dispatchEvent() {}, location: { search: `?checkoutReference=${referenceA}&status=paid&amount=999999&walletAddress=other` } }, configurable: true });
+  t.after(() => { if (previousWindow) Object.defineProperty(globalThis, 'window', previousWindow); else delete globalThis.window; });
+  let checkouts = 0;
+  const h = harness('AdministrativeWalletFundingPage.jsx', { exportName: 'AdministrativeWalletFundingView',
+    administrative: { async readAdministrativeWallet() { return { status: 'assigned', address: walletA }; } },
+    checkout: { async startAdministrativeMeldOnramp() { checkouts++; assert.fail('A return must not start another checkout'); } } });
+  t.after(() => h.unmount()); h.render({ environment: 'sandbox' }); await h.flush();
+  assert.deepEqual(find(h.tree, 'WalletFundingStatus').props, { walletKind: 'administrative', checkoutReference: referenceA, focusKey: 1 });
+  assert.equal(checkouts, 0);
+});
+
 test('leaving the administrative form cancels its pending quote/session and cannot open a late checkout', async t => {
   const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
   Object.defineProperty(globalThis, 'window', { value: { dispatchEvent() {} }, configurable: true });
@@ -157,12 +172,12 @@ test('leaving the administrative form cancels its pending quote/session and cann
   const pending = deferred(), requests = [], opened = [];
   const h = harness('AdministrativeWalletFundingPage.jsx', { exportName: 'AdministrativeWalletFundingView',
     administrative: { async readAdministrativeWallet() { return { status: 'assigned', address: walletA }; } },
-    checkout: { startAdministrativeMeldOnramp: (input, { signal }) => startAdministrativeMeldOnramp(input, {
+    checkout: { startAdministrativeMeldOnramp: (input, { signal }) => { assert.equal(input.address, walletA); return startAdministrativeMeldOnramp(input, {
       signal, createSession: async (_body, options) => { requests.push(options.signal); return pending.promise; }, openCheckout: url => opened.push(url),
-    }) } }); t.after(() => h.unmount());
+    }); } } }); t.after(() => h.unmount());
   h.render({ environment: 'sandbox' }); await h.flush();
   const submit = find(h.tree, 'AdministrativeSandboxFundingForm').props.onContinue;
-  const operation = submit({ requestId: referenceA, amount: 150, sourceCurrencyCode: 'MXN', countryCode: 'MX', serviceProvider: 'TRANSAK', paymentMethodType: 'CREDIT_DEBIT_CARD' });
+  const operation = submit({ requestId: referenceA, address: `0x${'b'.repeat(40)}`, amount: 150, sourceCurrencyCode: 'MXN', countryCode: 'MX', serviceProvider: 'TRANSAK', paymentMethodType: 'CREDIT_DEBIT_CARD' });
   assert.equal(requests.length, 1);
   await submit({}); assert.equal(requests.length, 1, 'duplicate click cannot register another checkout');
   h.unmount(); assert.equal(requests[0].aborted, true);

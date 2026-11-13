@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useI18n } from "@/i18n/LanguageProvider";
 import { ensureAdministrativeWallet, readAdministrativeWallet } from "@/lib/administrative-wallet.mjs";
 import { startAdministrativeMeldOnramp } from "@/lib/administrative-onramp-client.mjs";
+import { administrativeCheckoutReturn } from "@/lib/administrative-checkout-return.mjs";
 import { useMemberSession } from "@/lib/member-session-context";
 import { walletFundingOwnerKey } from "@/lib/wallet-funding-owner.mjs";
 import { AdministrativeSandboxFundingForm } from "./WalletFundingForm";
@@ -36,13 +37,17 @@ export function AdministrativeWalletFundingView({ environment }) {
   const assigned = wallet.status === "assigned";
   const sandbox = environment === "sandbox";
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; checkoutRequest.current?.abort(); }; }, []);
+  useEffect(() => {
+    const reference = administrativeCheckoutReturn(window.location?.search);
+    if (reference) { setSelectedReference(reference); setStatusFocusKey(1); }
+  }, []);
 
   async function openProvider(input) {
     if (!mounted.current || !sandbox || checkoutRequest.current || !assigned) return;
     const controller = new AbortController(); checkoutRequest.current = controller;
     setBusy(true); setProviderError("");
     try {
-      const session = await startAdministrativeMeldOnramp({ address: wallet.address, ...input }, { signal: controller.signal });
+      const session = await startAdministrativeMeldOnramp({ ...input, address: wallet.address }, { signal: controller.signal });
       if (mounted.current && !controller.signal.aborted) { setSelectedReference(session.checkoutReference); setStatusFocusKey(0); }
     }
     catch (error) { if (mounted.current && !controller.signal.aborted) setProviderError(administrativeFundingError(error, t)); throw error; }

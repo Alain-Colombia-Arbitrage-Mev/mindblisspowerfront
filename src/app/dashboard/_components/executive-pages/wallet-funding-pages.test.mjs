@@ -6,8 +6,9 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 import { translateMessage } from '../../../../i18n/translate.mjs';
-import { PERSONAL_FUNDING_COUNTRIES, validFundingAmount, WALLET_GATEWAY_FAILURE_REASONS, FUNDING_UUID, fundingStatus } from '../../../../lib/wallet-funding-contract.mjs';
+import { PERSONAL_FUNDING_COUNTRIES, validFundingAmount, WALLET_GATEWAY_FAILURE_REASONS, FUNDING_UUID, fundingStatus, fundingConfirmation } from '../../../../lib/wallet-funding-contract.mjs';
 import { walletFundingOwnerKey } from '../../../../lib/wallet-funding-owner.mjs';
+import * as administrativeCheckoutReturn from '../../../../lib/administrative-checkout-return.mjs';
 
 const require = createRequire(import.meta.url);
 const icons = new Proxy({}, { get: () => () => null });
@@ -23,7 +24,8 @@ function load(filename, mocks) {
     if (id === '@/components/ui/popover') return { Popover: ({ children }) => children, PopoverContent: ({ children }) => children, PopoverTrigger: ({ children }) => children };
     if (id === '@/lib/member-session-context') return { useMemberSession: () => ({ subject: 'owner', email: 'owner@example.test' }) };
     if (id === '@/lib/wallet-funding-owner.mjs') return { walletFundingOwnerKey };
-    if (id === '@/lib/wallet-funding-contract.mjs') return { PERSONAL_FUNDING_COUNTRIES, validFundingAmount, WALLET_GATEWAY_FAILURE_REASONS, FUNDING_UUID, fundingStatus };
+    if (id === '@/lib/administrative-checkout-return.mjs') return administrativeCheckoutReturn;
+    if (id === '@/lib/wallet-funding-contract.mjs') return { PERSONAL_FUNDING_COUNTRIES, validFundingAmount, WALLET_GATEWAY_FAILURE_REASONS, FUNDING_UUID, fundingStatus, fundingConfirmation };
     if (id.endsWith('.module.css')) return styles;
     if (id === 'react/jsx-runtime' || id === 'react') return require(id);
     assert.fail(`Unexpected dependency ${id}`);
@@ -444,15 +446,15 @@ test('a status read failure stays unavailable with an explicit GET retry and nev
   assert.equal(reads, 2);
 });
 
-test('future confirmed visual fixtures distinguish received USDT from requested USD and mark sandbox as a test', () => {
+test('verified sandbox visual results distinguish test USDT from requested USD and require the complete proof projection', () => {
   const { currentFundingView, WalletFundingStatusView } = load('WalletFundingStatus.jsx', statusMocks(() => assert.fail('fixture cannot fetch')));
   const base = currentFundingView(administrativeStatus, 'administrative', statusReference);
-  const confirmed = { ...base, state: 'confirmed', receivedAmount: '46.580001', confirmedAt: '2026-11-10T21:00:00Z' };
+  const confirmed = { ...base, state: 'confirmed', confirmationSource: 'meld_sandbox_api', transactionId: 'synthetic-transaction', providerStatus: 'SETTLED', receivedAmount: '46.580001', confirmedAt: '2026-11-10T21:00:00Z' };
   let html = renderToStaticMarkup(WalletFundingStatusView({ view: confirmed }));
   assert.match(html, /Prueba confirmada/);
   assert.match(html, /46\.580001 USDT/);
   assert.ok(html.includes(translateMessage('es', 'funding.statusRequestedAmount')));
-  assert.ok(html.includes(translateMessage('es', 'funding.statusReceived')));
+  assert.ok(html.includes(translateMessage('es', 'funding.statusSandboxReceived')));
   html = renderToStaticMarkup(WalletFundingStatusView({ view: { ...confirmed, testMode: true } }));
   assert.match(html, /Prueba confirmada/);
   assert.match(html, /No acredita fondos ni comisiones reales/);
