@@ -114,7 +114,7 @@ export function SandboxWalletFundingView({ ownerSubject }) {
 
 export function SandboxWalletActivation() {
   const { t } = useI18n(), binding = useSandboxWalletBinding(), reown = useWalletReown();
-  const [connectionError, setConnectionError] = useState(false), [copyError, setCopyError] = useState(false);
+  const [connectionError, setConnectionError] = useState(false);
   const mounted = useRef(false);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const connect = async () => { if (!mounted.current) return; setConnectionError(false); try { await reown.connectWallet(); } catch { if (mounted.current) setConnectionError(true); } };
@@ -122,7 +122,7 @@ export function SandboxWalletActivation() {
   const ready = binding.canFund(), locked = binding.loading || binding.busy || binding.status === 'retired';
   return <section id="administrative-signing" tabIndex={-1} className={`executive-panel ${walletStyles.section}`} aria-busy={binding.loading || binding.busy}>
     <div className={styles.sectionHeading}>{ready ? <CheckCircle2 size={22} aria-hidden="true" /> : <Wallet size={22} aria-hidden="true" />}<div><h2>{t('sandboxWallet.connection')}</h2><p>{t(binding.loading ? 'sandboxWallet.loading' : ready ? 'sandboxWallet.active' : 'sandboxWallet.notActivated')}</p></div></div>
-    <WalletAddress address={binding.address} label={t('sandboxWallet.address')} loading={binding.loading} emptyLabel={t('sandboxWallet.noWallet')} onCopyError={() => { if (mounted.current) setCopyError(true); }} />
+    <WalletAddress address={binding.address} label={t('sandboxWallet.address')} loading={binding.loading} emptyLabel={t('sandboxWallet.noWallet')} />
     <div className={walletStyles.actions}>
       {binding.status === 'retired' ? <a className="executive-button primary" href="/dashboard/wallet-administrative">{t('sandboxWallet.reload')}</a>
         : !reown.isConnected ? <button type="button" className="executive-button primary" disabled={locked || reown.isRestoring || !reown.configured} onClick={() => void connect()}>{t('sandboxWallet.connect')}</button>
@@ -130,6 +130,6 @@ export function SandboxWalletActivation() {
             <button type="button" className="executive-button" disabled={locked} onClick={() => void disconnect()}>{t('sandboxWallet.choose')}</button></>}
       {binding.status !== 'retired' ? <button className="executive-button" type="button" disabled={locked} onClick={() => void binding.refresh()}><RefreshCw size={15} aria-hidden="true" />{t('sandboxWallet.refresh')}</button> : null}
     </div>
-    {binding.error || binding.mismatch || connectionError || copyError ? <p role="alert" className={walletStyles.error}>{t(copyError ? 'walletPage.administrativeCopyFailed' : `sandboxWallet.${binding.mismatch ? 'mismatch' : binding.error || 'unavailable'}`)}</p> : null}
+    {binding.error || binding.mismatch || connectionError ? <p role="alert" className={walletStyles.error}>{t(`sandboxWallet.${binding.mismatch ? 'mismatch' : binding.error || 'unavailable'}`)}</p> : null}
   </section>;
 }

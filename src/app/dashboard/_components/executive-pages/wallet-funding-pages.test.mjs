@@ -22,6 +22,7 @@ function load(filename, mocks) {
   const module = { exports: {} };
   new Function('require', 'module', 'exports', code)(id => {
     if (Object.hasOwn(mocks, id)) return mocks[id];
+    if (id === '@/components/wallet/WalletAddressCopyButton') return { default: function WalletAddressCopyButton() { return null; } };
     if (id === '@/components/ui/popover') return { Popover: ({ children }) => children, PopoverContent: ({ children }) => children, PopoverTrigger: ({ children }) => children };
     if (id === '@/lib/member-session-context') return { useMemberSession: () => ({ subject: 'owner', email: 'owner@example.test' }) };
     if (id === '@/lib/wallet-funding-owner.mjs') return { walletFundingOwnerKey };
@@ -347,7 +348,7 @@ test('administrative user edits notify the page once without retrying a session 
   assert.equal(sessions, 1, 'editing a selection never submits another checkout');
 });
 
-test('changing an administrative selection clears its old provider error while preserving its address, copy error and history', async t => {
+test('changing an administrative selection clears its provider error while preserving its address and history without parent-owned copy feedback', async t => {
   const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
   Object.defineProperty(globalThis, 'window', { value: { dispatchEvent() {} }, configurable: true });
   t.after(() => { if (previousWindow) Object.defineProperty(globalThis, 'window', previousWindow); else delete globalThis.window; });
@@ -366,19 +367,16 @@ test('changing an administrative selection clears its old provider error while p
   t.after(() => harness.unmount());
   const props = { environment: 'sandbox' };
   harness.render(props); await flush(); let tree = harness.render(props);
-  find(tree, 'WalletAddress').props.onCopyError();
-  tree = harness.render(props);
+  assert.equal(find(tree, 'WalletAddress').props.onCopyError, undefined, 'copy feedback belongs to the shared address component');
   await assert.rejects(find(tree, 'AdministrativeSandboxFundingForm').props.onContinue({}), /wallet_funding_method_unavailable/);
   tree = harness.render(props);
   assert.ok(find(tree, 'WalletActionError').props.message);
-  const copyError = harness.state[2];
   const revision = find(tree, 'WalletFundingHistory').props.refreshKey;
   find(tree, 'AdministrativeSandboxFundingForm').props.onSelectionChange();
   tree = harness.render(props);
   assert.equal(find(tree, 'WalletActionError').props.message, '');
   assert.equal(find(tree, 'WalletAddress').props.address, address);
-  assert.equal(harness.state[2], copyError);
-  assert.ok(copyError, 'clipboard error stays separate');
+  assert.equal(find(tree, 'WalletAddress').props.onCopyError, undefined, 'a selection change cannot restore stale parent copy feedback');
   assert.equal(find(tree, 'WalletFundingHistory').props.refreshKey, revision);
   assert.equal(sessions, 1);
 });

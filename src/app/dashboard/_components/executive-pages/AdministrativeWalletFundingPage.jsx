@@ -30,7 +30,6 @@ export function AdministrativeWalletFundingView({ environment }) {
   const { t } = useI18n();
   const { wallet, load } = useAdministrativeWallet();
   const [providerError, setProviderError] = useState("");
-  const [copyError, setCopyError] = useState("");
   const [busy, setBusy] = useState(false);
   const [historyRevision, setHistoryRevision] = useState(0);
   const [selectedReference, setSelectedReference] = useState("");
@@ -134,10 +133,8 @@ export function AdministrativeWalletFundingView({ environment }) {
       <aside className={styles.details} aria-label={t("funding.destinationDetails")}>
         <section className={styles.detailCard}><div className={styles.stateHeading}><CheckCircle2 size={19} aria-hidden="true" /><h2>{t(assigned ? "walletPage.administrativeReady" : wallet.status === "error" ? "walletPage.administrativeLoadError" : wallet.status === "exhausted" ? "walletPage.administrativeUnavailable" : "walletPage.administrativeAssigning")}</h2></div>
           <WalletAddress address={assigned ? wallet.address : ""} label={t("walletPage.administrativeAddress")} loading={wallet.status === "loading"}
-            emptyLabel={t(wallet.status === "exhausted" ? "walletPage.administrativeExhaustedCopy" : wallet.status === "error" ? "walletPage.destinationUnavailable" : "walletPage.administrativeAssigning")}
-            onCopyError={() => setCopyError(t("walletPage.administrativeCopyFailed"))} />
+            emptyLabel={t(wallet.status === "exhausted" ? "walletPage.administrativeExhaustedCopy" : wallet.status === "error" ? "walletPage.destinationUnavailable" : "walletPage.administrativeAssigning")} />
           {wallet.status === "error" ? <button className="executive-button" type="button" onClick={() => void load()}><RefreshCw size={16} aria-hidden="true" />{t("walletPage.retry")}</button> : null}
-          <WalletActionError message={copyError} />
           <ProviderNote>{t("walletPage.administrativeSeparation")}</ProviderNote>
         </section>
       </aside>

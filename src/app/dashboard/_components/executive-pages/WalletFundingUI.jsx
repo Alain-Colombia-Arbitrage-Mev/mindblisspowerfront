@@ -1,9 +1,10 @@
 "use client";
 
-import { ArrowLeft, Copy, Loader2, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Loader2, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useI18n } from "@/i18n/LanguageProvider";
 import { WALLET_GATEWAY_FAILURE_REASONS } from "@/lib/wallet-funding-contract.mjs";
+import WalletAddressCopyButton from "@/components/wallet/WalletAddressCopyButton";
 import styles from "./wallet-funding.module.css";
 
 export function WalletFundingScreen({ title, subtitle, provider = "", children }) {
@@ -15,16 +16,10 @@ export function WalletFundingScreen({ title, subtitle, provider = "", children }
   </div></section>;
 }
 
-export function WalletAddress({ address, label, loading = false, emptyLabel, onCopyError }) {
-  const { t } = useI18n();
-  async function copyAddress() {
-    if (!address) return;
-    try { await navigator.clipboard.writeText(address); }
-    catch { onCopyError(); }
-  }
+export function WalletAddress({ address, label, loading = false, emptyLabel }) {
   return <div className="mb-wallet-funding-address" aria-live="polite"><span>{label}</span>
     {address ? <code title={address}>{address}</code> : <p>{loading ? <Loader2 className="animate-spin" size={14} aria-hidden="true" /> : null}{emptyLabel}</p>}
-    {address ? <button type="button" onClick={copyAddress} aria-label={t("walletPage.copyAddress")}><Copy size={15} aria-hidden="true" /></button> : null}
+    {address ? <WalletAddressCopyButton address={address} /> : null}
   </div>;
 }
 

@@ -20,6 +20,7 @@ function moduleAt(relative, mocks = {}) {
   new Function("require", "module", "exports", code)(id => {
     if (Object.hasOwn(mocks, id)) return mocks[id];
     if (id === "lucide-react") return new Proxy({}, { get: () => icon });
+    if (id === "@/components/wallet/WalletAddressCopyButton") return { default: function WalletAddressCopyButton() { return null; } };
     if (id === "./IntentLink") return { default: Link };
     if (id === "@/lib/member-navigation.mjs") return { matchesRoute };
     if (id === "@/lib/personal-wallet.mjs") return { PERSONAL_WALLET_ASSET: "USDT" };
