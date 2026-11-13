@@ -7,7 +7,7 @@ export default function MessageList({ title, messages, selectedId, onSelect }) {
   return (
     <div
       className="flex w-full shrink-0 flex-col border-r md:w-80"
-      style={{ borderColor: "var(--vp-border)", background: "rgba(10, 10, 10, 0.5)" }}
+      style={{ borderColor: "var(--vp-border)", background: "var(--vp-surface-raised)" }}
     >
       <div
         className="flex h-[52px] shrink-0 items-center justify-between border-b px-4"

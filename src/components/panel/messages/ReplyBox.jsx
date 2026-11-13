@@ -15,7 +15,7 @@ export default function ReplyBox({ onSend }) {
   return (
     <div
       className="border-t p-4"
-      style={{ borderColor: "var(--vp-border)", background: "rgba(10, 10, 10, 0.5)" }}
+      style={{ borderColor: "var(--vp-border)", background: "var(--vp-surface-raised)" }}
     >
       <div
         className="flex items-center gap-2 rounded-lg p-2"

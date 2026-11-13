@@ -27,7 +27,7 @@ export default function MessageListItem({ message, active, onSelect }) {
       <p
         className="m-0 mt-1 text-[11px] font-light leading-relaxed"
         style={{
-          color: "rgba(156, 163, 175, 0.6)",
+          color: "var(--vp-muted)",
           display: "-webkit-box",
           WebkitLineClamp: 2,
           WebkitBoxOrient: "vertical",

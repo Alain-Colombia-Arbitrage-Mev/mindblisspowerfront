@@ -14,20 +14,21 @@ export const metadata = {
 export const viewport = {
   width: "device-width",
   initialScale: 1,
+  colorScheme: "only light",
 };
 
 const themeInitScript = `(() => {
   const root = document.documentElement;
   root.dataset.theme = "light";
   root.classList.remove("dark");
-  root.style.colorScheme = "light";
+  root.style.colorScheme = "only light";
   try { localStorage.setItem("vp-theme", "light"); } catch {}
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", "#f3f7f8");
 })();`;
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="es" data-theme="light" suppressHydrationWarning>
+    <html lang="es" data-theme="light" style={{ colorScheme: "only light" }} suppressHydrationWarning>
       <head>
         <meta name="theme-color" content="#f3f7f8" />
         <script id="vp-theme-init" dangerouslySetInnerHTML={{ __html: themeInitScript }} />

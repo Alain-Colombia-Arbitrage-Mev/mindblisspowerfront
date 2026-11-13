@@ -38,7 +38,7 @@ test('prepaint initialization always migrates old dark preferences to light, inc
       localStorage: { getItem() { assert.fail('retired theme must not be restored'); }, setItem(key, value) { if (saved instanceof Error) throw saved; stored.push([key, value]); } },
       document: { documentElement: root, querySelector: () => ({ setAttribute(name, value) { color = value; } }) },
     });
-    assert.equal(root.dataset.theme, 'light'); assert.equal(root.style.colorScheme, 'light'); assert.equal(root.dark, false); assert.equal(color, '#f3f7f8');
+    assert.equal(root.dataset.theme, 'light'); assert.equal(root.style.colorScheme, 'only light'); assert.equal(root.dark, false); assert.equal(color, '#f3f7f8');
     if (!(saved instanceof Error)) assert.deepEqual(stored, [['vp-theme', 'light']]);
   }
   assert.match(source('../layout.jsx'), /<html[^>]*data-theme="light"/);

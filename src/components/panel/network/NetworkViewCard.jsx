@@ -19,7 +19,7 @@ export default function NetworkViewCard({ title, memberCount, filterLabel = "Red
         </span>
         <span
           className="rounded-full border px-2.5 py-1 text-[10px]"
-          style={{ color: "var(--vp-muted)", background: "rgba(0,0,0,0.3)", borderColor: "var(--vp-border)" }}
+          style={{ color: "var(--vp-muted)", background: "var(--vp-surface-raised)", borderColor: "var(--vp-border)" }}
         >
           Filtro Activo: {filterLabel}
         </span>
