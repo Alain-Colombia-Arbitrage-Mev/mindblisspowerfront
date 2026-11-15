@@ -4,6 +4,7 @@ import { Loader2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { browserRequestDeadline } from '@/lib/browser-request-deadline.mjs';
 import { AppleIcon, GoogleIcon } from './SocialProviderIcon';
+import { authEntryAllowed } from '@/lib/auth-entry-policy.mjs';
 
 const providers = [
   { id: 'google', label: 'Continuar con Google', Icon: GoogleIcon, origin: 'https://accounts.google.com', path: '/o/oauth2/' },
@@ -33,7 +34,7 @@ export default function SocialLoginButtons({ enabledProviders = [] }) {
   }, []);
 
   async function start(provider) {
-    if (!enabled.has(provider.id) || pending.current) return;
+    if (!authEntryAllowed() || !enabled.has(provider.id) || pending.current) return;
     pending.current = true;
     setLoadingProvider(provider.id);
     setError('');
@@ -46,7 +47,7 @@ export default function SocialLoginButtons({ enabledProviders = [] }) {
         signal: deadline.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider: provider.id }),
       });
       const payload = await response.json().catch(() => ({}));
-      if (controller.signal.aborted || requestRef.current !== controller) return;
+      if (!authEntryAllowed() || controller.signal.aborted || requestRef.current !== controller) return;
       if (!response.ok || !trustedAuthorizationUrl(provider, payload.url)) throw new Error('social_sign_in_unavailable');
       window.location.assign(payload.url);
     } catch {
@@ -70,7 +71,7 @@ export default function SocialLoginButtons({ enabledProviders = [] }) {
           const loading = loadingProvider === provider.id;
           return (
             <button key={provider.id} type="button" className={`auth-social-button auth-social-button--${provider.id}`}
-              disabled={Boolean(loadingProvider)} aria-label={provider.label}
+              disabled={!authEntryAllowed() || Boolean(loadingProvider)} aria-label={provider.label}
               aria-busy={loading || undefined} onClick={() => start(provider)}>
               <span className="auth-social-icon">{loading ? <Loader2 size={20} aria-hidden="true" /> : <provider.Icon />}</span>
               <span>{loading ? 'Abriendo acceso…' : provider.label}</span>

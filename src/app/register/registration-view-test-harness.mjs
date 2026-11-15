@@ -57,6 +57,10 @@ export function registrationViewHarness(filename, mocks) {
   new Function('require', 'module', 'exports', code)(id => {
     if (id === 'react') return hooks;
     if (Object.hasOwn(mocks, id)) return mocks[id];
+    // Legacy behavior fixtures remain explicit unpaused scenarios. A caller may
+    // supply the real policy above to test the production pause itself.
+    if (id === '@/lib/auth-entry-policy.mjs') return { AUTH_ENTRY_PAUSED: false, authEntryAllowed: () => true, suppressAuthEntry: () => false };
+    if (id === '../_components/AuthEntryNotice' || id === './AuthEntryNotice') return { default: () => null };
     if (id === './SocialLoginButtons') return { default: () => null };
     if (id === '@/components/panel/SupportWidget') return { default: () => null };
     if (id === '@radix-ui/react-dialog') return radixDialogStub;

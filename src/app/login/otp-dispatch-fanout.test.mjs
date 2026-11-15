@@ -109,6 +109,10 @@ function component(file) {
   const fields = { RegistrationField: field, RegistrationPassword: field,
     RegistrationButton: ({ loading: _loading, children, ...attributes }) => React.createElement('button', attributes, children) };
   const mocks = {
+    // This harness deliberately exercises the enabled flow; real pause guards
+    // are covered independently with the actual policy module.
+    '@/lib/auth-entry-policy.mjs': { AUTH_ENTRY_PAUSED: false, authEntryAllowed: () => true, suppressAuthEntry: () => false },
+    '../_components/AuthEntryNotice': { default: () => null },
     react: React, 'react/jsx-runtime': require('react/jsx-runtime'),
     'next/link': { default: ({ children, ...attributes }) => React.createElement('a', attributes, children) },
     'lucide-react': new Proxy({}, { get: () => () => null }),

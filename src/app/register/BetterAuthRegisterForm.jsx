@@ -11,6 +11,8 @@ import { beginVerifiedReferralSync } from '@/lib/referral-sync.mjs';
 import { browserRequestDeadline } from '@/lib/browser-request-deadline.mjs';
 import { rememberWalletSetupAfterAuth } from '@/lib/wallet-setup-handoff.mjs';
 import { publishMemberSessionReplacement } from '@/lib/member-session-sync.mjs';
+import { authEntryAllowed, suppressAuthEntry } from '@/lib/auth-entry-policy.mjs';
+import AuthEntryNotice from '../_components/AuthEntryNotice';
 import { recoverRegistrationSession, registrationSessionRecoveryEligible, registrationVerifiedWithoutSession } from '@/lib/registration-session-recovery.mjs';
 import ContactPhoneField from './ContactPhoneField';
 import { initialContactPhone, registrationContactValues } from './contact-phone-model.mjs';
@@ -99,7 +101,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
   }
 
   function currentRequest(operation) {
-    return mounted.current && activeRequest.current === operation
+    return authEntryAllowed() && mounted.current && activeRequest.current === operation
       && requestGeneration.current === operation.generation && operation.email === latestEmail.current
       && !operation.controller.signal.aborted;
   }
@@ -147,6 +149,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
   }
 
   async function post(path, body, action, operation) {
+    if (!authEntryAllowed()) throw new Error('auth_entry_paused');
     const deadline = browserRequestDeadline(operation.controller.signal, registrationTimeoutMs(action));
     try {
       const response = await fetch(path, {
@@ -160,6 +163,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
 
   async function register(event) {
     event.preventDefault();
+    if (suppressAuthEntry(event)) return;
     if (submitting.current || !mounted.current) return;
     setNotice('');
     const contacts = registrationContactValues(form);
@@ -211,6 +215,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
 
   async function confirm(event) {
     event.preventDefault();
+    if (suppressAuthEntry(event)) return;
     if (submitting.current || !mounted.current || dashboardNavigation.current) return;
     setErrors({});
     setNotice('');
@@ -271,6 +276,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
   }
 
   async function resend() {
+    if (!authEntryAllowed()) return;
     if (submitting.current || cooldown.active || !mounted.current) return;
     submitting.current = true;
     const operation = beginRequest();
@@ -303,6 +309,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
       description="Crea tu acceso y verifica tu correo. Si ya perteneces a la red, tus posiciones y datos anteriores se conservan; si tu vinculación requiere revisión, deberás completarla antes de entrar."
       visualSrc="/mindbliss/mindbliss-auth-background.png" visualAlt="Arquitectura urbana de Mindbliss">
       <section className="auth-registration-card min-w-0" aria-labelledby="registration-title" aria-busy={isLoading}>
+        <AuthEntryNotice />
         <div className="mb-6 flex items-start gap-3">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[var(--vp-accent-muted)] text-[var(--vp-accent)]" aria-hidden="true">
             {completed || awaitingAccess ? <CheckCircle2 size={22} /> : step === 'confirm' ? <Mail size={22} /> : <UserPlus size={22} />}
@@ -317,7 +324,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
         {notice ? <p role="status" className="mb-5 rounded-lg border border-[var(--vp-accent-border)] p-3 text-sm leading-6 text-[var(--vp-text)]">{notice}</p> : null}
 
         {step === 'details' ? (
-          <form onSubmit={register} noValidate className="space-y-5">
+          <form onSubmit={register} onKeyDown={event => { if (event.key === 'Enter') suppressAuthEntry(event); }} noValidate className="space-y-5">
             <RegistrationField id="fullName" name="name" label="Nombre completo" autoComplete="name" required minLength={2} maxLength={120}
               value={form.fullName} onChange={event => update('fullName', event.target.value)} error={errors.fullName} disabled={isLoading} />
             <RegistrationField id="email" name="email" label="Correo electrónico" type="email" autoComplete="email" autoCapitalize="none" spellCheck={false} required maxLength={254}
@@ -349,21 +356,22 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
               </label>
               {errors.acceptsPrivacy ? <p id="acceptsPrivacy-error" className="mt-2 text-sm text-[var(--vp-danger)]">{errors.acceptsPrivacy}</p> : null}
             </div>
-            <RegistrationButton type="submit" disabled={isLoading || cooldown.active} loading={loading === 'register'}>{loading === 'register' ? 'Creando cuenta…' : cooldown.active ? cooldown.label : 'Crear cuenta y verificar correo'}</RegistrationButton>
-            <button type="button" disabled={isLoading} onClick={() => {
+            <RegistrationButton type="submit" disabled={!authEntryAllowed() || isLoading || cooldown.active} loading={loading === 'register'}>{loading === 'register' ? 'Creando cuenta…' : cooldown.active ? cooldown.label : 'Crear cuenta y verificar correo'}</RegistrationButton>
+            <button type="button" disabled={!authEntryAllowed() || isLoading} onClick={event => {
+              if (suppressAuthEntry(event)) return;
               if (!email) { setErrors({ email: 'Ingresa el correo con el que solicitaste el registro.' }); document.getElementById('email')?.focus(); return; }
               setErrors({}); setStep('confirm'); setNotice('Introduce el código de tu registro o solicítalo con el botón de abajo. No se enviará ningún correo automáticamente.');
             }} className="min-h-11 w-full text-sm text-[var(--vp-text)] underline">Ya solicité mi registro: verificar correo</button>
           </form>
         ) : step === 'confirm' ? (
-          <form onSubmit={confirm} noValidate className="space-y-5">
+          <form onSubmit={confirm} onKeyDown={event => { if (event.key === 'Enter') suppressAuthEntry(event); }} noValidate className="space-y-5">
             <p className="break-words text-sm leading-6 text-[var(--vp-muted)]">Ingresa el código de verificación de <strong className="text-[var(--vp-text)]">{email}</strong> cuando lo recibas. No compartas este código con nadie.</p>
             <RegistrationField id="code" name="one-time-code" label="Código de 6 dígitos" type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" required maxLength={6}
               value={code} onChange={event => { setCode(event.target.value.replace(/\D/g, '').slice(0, 6)); setErrors({}); }} error={errors.code} disabled={isLoading}
               helper="Usa los 6 dígitos del código más reciente de este registro: vence en 5 minutos y permite hasta 3 intentos por código. No uses un código de inicio de sesión o de recuperación."
               inputRef={codeInput} />
-            <RegistrationButton type="submit" disabled={isLoading || code.length !== 6} loading={loading === 'confirm'}>{loading === 'confirm' ? 'Verificando…' : 'Verificar correo'}</RegistrationButton>
-            <button type="button" onClick={resend} disabled={isLoading || cooldown.active} className="min-h-12 w-full rounded-lg border border-[var(--vp-border)] px-3 text-sm font-semibold text-[var(--vp-text)] disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--vp-accent)]">
+            <RegistrationButton type="submit" disabled={!authEntryAllowed() || isLoading || code.length !== 6} loading={loading === 'confirm'}>{loading === 'confirm' ? 'Verificando…' : 'Verificar correo'}</RegistrationButton>
+            <button type="button" onClick={resend} disabled={!authEntryAllowed() || isLoading || cooldown.active} className="min-h-12 w-full rounded-lg border border-[var(--vp-border)] px-3 text-sm font-semibold text-[var(--vp-text)] disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--vp-accent)]">
               {loading === 'resend' ? 'Solicitando código…' : cooldown.active ? cooldown.label : 'Solicitar otro código'}
             </button>
             <p className="text-sm leading-6 text-[var(--vp-muted)]">Si no lo ves, revisa spam o correo no deseado. El reenvío es manual: espera a que termine el contador; entre solicitudes deben pasar al menos 5 minutos y la espera puede ser mayor. Cambiar de pantalla no envía correos ni evita los límites.</p>
@@ -373,7 +381,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
         ) : awaitingAccess ? (
           <div className="space-y-5" role="status" aria-live="polite" aria-atomic="true">
             <p className="text-sm leading-7 text-[var(--vp-text)]">El registro ya verificó tu correo, pero falta completar el acceso. No vuelvas a usar ese código ni te registres otra vez.</p>
-            <Link href={loginUrl} className="inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-[var(--vp-accent)] px-4 font-bold text-[var(--vp-shell)]">Entrar de forma segura</Link>
+            {authEntryAllowed() ? <Link href={loginUrl} className="inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-[var(--vp-accent)] px-4 font-bold text-[var(--vp-shell)]">Entrar de forma segura</Link> : null}
             <p className="text-sm leading-7 text-[var(--vp-muted)]">Solicita un código de acceso en la siguiente pantalla. Es diferente del código de registro. No enviaremos correos automáticamente; respeta el contador si aparece.</p>
           </div>
         ) : (
@@ -390,7 +398,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
           </div>
         )}
 
-        {!completed && !awaitingAccess ? <p className="mt-6 border-t border-[var(--vp-border)] pt-5 text-sm leading-6 text-[var(--vp-muted)]">¿Ya tienes cuenta? <Link href={loginUrl} className="font-bold text-[var(--vp-text)] underline">Entrar de forma segura</Link>. No cambies tu correo ni vuelvas a registrarte para crear o cambiar tu contraseña.</p> : null}
+        {authEntryAllowed() && !completed && !awaitingAccess ? <p className="mt-6 border-t border-[var(--vp-border)] pt-5 text-sm leading-6 text-[var(--vp-muted)]">¿Ya tienes cuenta? <Link href={loginUrl} className="font-bold text-[var(--vp-text)] underline">Entrar de forma segura</Link>. No cambies tu correo ni vuelvas a registrarte para crear o cambiar tu contraseña.</p> : null}
       </section>
     </AuthShell>
   );

@@ -28,6 +28,8 @@ import { beginVerifiedReferralSync } from '@/lib/referral-sync.mjs';
 import { browserRequestDeadline } from '@/lib/browser-request-deadline.mjs';
 import { rememberWalletSetupAfterAuth } from '@/lib/wallet-setup-handoff.mjs';
 import { publishMemberSessionReplacement } from '@/lib/member-session-sync.mjs';
+import { authEntryAllowed, suppressAuthEntry } from '@/lib/auth-entry-policy.mjs';
+import AuthEntryNotice from '../_components/AuthEntryNotice';
 
 const AUTH_STATE_MESSAGES = {
   "session-not-established": {
@@ -122,7 +124,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
   }, [verifiedEmail]);
 
   function showVerifiedLogin(verifiedEmail, prepareWallet = false) {
-    if (!mountedRef.current || dashboardNavigationRef.current || verifiedLoginRef.current) return;
+    if (!authEntryAllowed() || !mountedRef.current || dashboardNavigationRef.current || verifiedLoginRef.current) return;
     publishMemberSessionReplacement(window);
     // Same-tab setup intent only. The dashboard still proves the session and
     // reads its own binding before offering any wallet authentication.
@@ -137,7 +139,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
   }
 
   async function enterVerifiedDashboard(verified) {
-    if (!mountedRef.current || dashboardNavigationRef.current || dashboardAccessRef.current || verifiedLoginRef.current !== verified) return;
+    if (!authEntryAllowed() || !mountedRef.current || dashboardNavigationRef.current || dashboardAccessRef.current || verifiedLoginRef.current !== verified) return;
     const controller = new AbortController();
     dashboardAccessRef.current = controller;
     setCheckingAccess(true);
@@ -146,7 +148,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
       // that this browser also returned its cookie, for the same verified owner.
       // It never replaces the dashboard/API gates or the direct fallback link.
       const access = await betterAuthAccess(fetch, verified.email, { signal: controller.signal });
-      if (!mountedRef.current || controller.signal.aborted || dashboardAccessRef.current !== controller || verifiedLoginRef.current !== verified) return;
+      if (!authEntryAllowed() || !mountedRef.current || controller.signal.aborted || dashboardAccessRef.current !== controller || verifiedLoginRef.current !== verified) return;
       if (!access.ready) {
         setError(access.error || '');
         setNotice(access.notice || '');
@@ -158,7 +160,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
         rememberReferralForEmail(verified.email);
         await beginVerifiedReferralSync(verified.email, referralCode, '', { subject: access.subject, signal: controller.signal, timeoutMs: 8000 });
       } catch { /* The server independently authorizes referral persistence. */ }
-      if (!mountedRef.current || controller.signal.aborted || dashboardAccessRef.current !== controller || verifiedLoginRef.current !== verified) return;
+      if (!authEntryAllowed() || !mountedRef.current || controller.signal.aborted || dashboardAccessRef.current !== controller || verifiedLoginRef.current !== verified) return;
       dashboardNavigationRef.current = true;
       window.location.replace('/dashboard');
     } catch {
@@ -192,6 +194,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
   }
 
   function continueToRegistration(normalizedEmail) {
+    if (!authEntryAllowed()) return;
     setPassword('');
     setLoginCode('');
     setCodeRecipient('');
@@ -229,6 +232,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
 
   async function requestLoginCode(event, { resend = false } = {}) {
     event?.preventDefault();
+    if (suppressAuthEntry(event)) return;
     if (otpSubmittingRef.current || isLoading || codeCooldown.active) return;
     setError("");
     setNotice("");
@@ -255,7 +259,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
         body: JSON.stringify(contract.body),
       });
       const payload = await response.json().catch(() => ({}));
-      if (controller.signal.aborted || otpRequestRef.current !== controller) return;
+      if (!authEntryAllowed() || controller.signal.aborted || otpRequestRef.current !== controller) return;
 
       if (emailOtpOnly) {
         if (registrationRequired(response.status, payload)) {
@@ -358,6 +362,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
   // Último recurso: si el código no llega por ningún canal, el usuario NO queda
   // atascado — abre un ticket de ayuda de acceso para que un asesor lo valide.
   async function requestAccessHelp() {
+    if (!authEntryAllowed()) return;
     setError("");
     setNotice("");
     const normalizedEmail = validateEmail();
@@ -422,7 +427,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
           />
           <button
             type="button"
-            disabled={isLoading}
+            disabled={!authEntryAllowed() || isLoading}
             onClick={requestAccessHelp}
             className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg px-4 text-center text-xs font-black transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             style={{
@@ -441,6 +446,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
 
   async function confirmLoginCode(event) {
     event.preventDefault();
+    if (suppressAuthEntry(event)) return;
     if (otpSubmittingRef.current || isLoading || (emailOtpOnly && confirmationCooldown.active)) return;
     setError("");
     setNotice("");
@@ -471,7 +477,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
         body: JSON.stringify(contract.body),
       });
       const payload = await response.json().catch(() => ({}));
-      if (controller.signal.aborted || otpRequestRef.current !== controller) return;
+      if (!authEntryAllowed() || controller.signal.aborted || otpRequestRef.current !== controller) return;
 
       if (emailOtpOnly) {
         if (!response.ok || !verifiedEmailSignIn(payload, normalizedEmail)) {
@@ -511,6 +517,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
 
   async function handlePasswordSubmit(event) {
     event.preventDefault();
+    if (suppressAuthEntry(event)) return;
     setError("");
     setNotice("");
     const normalizedEmail = validateEmail();
@@ -531,6 +538,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
       });
       const payload = await response.json().catch(() => ({}));
 
+      if (!authEntryAllowed()) return;
       if (!response.ok || !payload.ok) {
         if (payload.needsConfirm) {
           window.location.assign(authPathWithReferral("/register", normalizedEmail, { resume: "1" }));
@@ -659,6 +667,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
 
   return (
     <div className="auth-login-stack space-y-4">
+      <AuthEntryNotice />
       {(authMessage || error) && (
         <Message tone={error ? "danger" : authMessage.tone}>
           {error || authMessage.text}
@@ -686,13 +695,13 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
 
       {mode === "code" ? (
         codeStep === "request" ? (
-          <form className="auth-code-form space-y-4" onSubmit={requestLoginCode}>
+          <form className="auth-code-form space-y-4" onSubmit={requestLoginCode} onKeyDown={event => { if (event.key === 'Enter') suppressAuthEntry(event); }}>
             <p className="auth-code-intro text-sm leading-6" style={{ color: "var(--vp-muted)" }}>
               {emailOtpOnly ? 'Usa el correo original de tu cuenta. Puedes entrar con un código, aunque no tengas contraseña.' : 'Recibe un código en tu correo para entrar a tu cuenta.'}
             </p>
             <EmailField email={email} readOnly={isLoading} setEmail={setEmail} onClearError={() => setError("")} />
 
-            <PrimaryButton disabled={isLoading || codeCooldown.active} loading={loadingAction === "code-request"} icon={<ShieldCheck size={16} />}>
+            <PrimaryButton disabled={!authEntryAllowed() || isLoading || codeCooldown.active} loading={loadingAction === "code-request"} icon={<ShieldCheck size={16} />}>
               {codeCooldown.active ? codeCooldown.label : "Enviar código"}
             </PrimaryButton>
 
@@ -707,10 +716,8 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
             </p>
             <div className="auth-code-registration-action">
               <SecondaryButton
-                disabled={isLoading}
-                onClick={() =>
-                  window.location.assign(registrationUrl(email, referralCode, preferredSide))
-                }
+                disabled={!authEntryAllowed() || isLoading}
+                onClick={event => { if (!suppressAuthEntry(event)) window.location.assign(registrationUrl(email, referralCode, preferredSide)); }}
                 icon={<UserPlus size={15} />}
               >
                 Crear cuenta nueva
@@ -720,7 +727,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
             {showAccessFallback && renderAccessFallback()}
           </form>
         ) : (
-          <form className="space-y-4" onSubmit={confirmLoginCode}>
+          <form className="space-y-4" onSubmit={confirmLoginCode} onKeyDown={event => { if (event.key === 'Enter') suppressAuthEntry(event); }}>
             <EmailField email={codeRecipient} readOnly setEmail={setEmail} onClearError={() => setError("")} />
             <CodeField
               id="login-code"
@@ -734,7 +741,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
                 setError("");
               }}
             />
-            <PrimaryButton disabled={isLoading || (emailOtpOnly && confirmationCooldown.active)} loading={loadingAction === "code-confirm"} icon={<ArrowRight size={16} />}>
+            <PrimaryButton disabled={!authEntryAllowed() || isLoading || (emailOtpOnly && confirmationCooldown.active)} loading={loadingAction === "code-confirm"} icon={<ArrowRight size={16} />}>
               {emailOtpOnly && confirmationCooldown.active ? confirmationCooldown.label.replace(/^Reenviar/, 'Validar de nuevo') : 'Entrar con código'}
             </PrimaryButton>
 
@@ -746,7 +753,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
                 Cambiar email
               </SecondaryButton>
               <SecondaryButton
-                disabled={isLoading || codeCooldown.active}
+                disabled={!authEntryAllowed() || isLoading || codeCooldown.active}
                 onClick={(e) => requestLoginCode(e, { resend: true })}
                 icon={<KeyRound size={15} />}
               >
@@ -766,7 +773,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
           onUseCode={() => switchMode("code")}
           registrationHref={registrationUrl(email, referralCode, preferredSide, true)} />
       ) : mode === "password" ? (
-        <form className="auth-password-form" onSubmit={handlePasswordSubmit}>
+        <form className="auth-password-form" onSubmit={handlePasswordSubmit} onKeyDown={event => { if (event.key === 'Enter') suppressAuthEntry(event); }}>
           <EmailField email={email} setEmail={setEmail} onClearError={() => setError("")} />
           <PasswordField
             id="password"
@@ -785,7 +792,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
             <button type="button" onClick={() => switchMode("code")}>Entrar con código</button>
             <button type="button" onClick={() => switchMode("reset")}>¿Olvidaste tu contraseña?</button>
           </div>
-          <PrimaryButton disabled={isLoading} loading={loadingAction === "password"} icon={<ArrowRight size={16} />}>
+          <PrimaryButton disabled={!authEntryAllowed() || isLoading} loading={loadingAction === "password"} icon={<ArrowRight size={16} />}>
             Iniciar sesión
           </PrimaryButton>
         </form>
@@ -851,7 +858,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
       )}
       {emailOtpOnly ? <div className="auth-login-guidance space-y-2 border-t pt-4 text-sm leading-6" style={{ borderColor: "var(--vp-border)", color: "var(--vp-muted)" }}>
         <p className="m-0">Si ya pertenecías a la red, solicita un código con tu correo original. Tu cuenta y posición en la red se conservan; si tu vinculación requiere revisión, debe aprobarse antes de entrar. Si todavía no tienes un acceso, utiliza Registro.</p>
-        <a className="font-bold no-underline" style={{ color: "var(--vp-text-soft)" }} href={registrationUrl(codeStep === "confirm" ? codeRecipient : email, referralCode, preferredSide)}>Crear acceso en Registro</a>
+        {authEntryAllowed() ? <a className="font-bold no-underline" style={{ color: "var(--vp-text-soft)" }} href={registrationUrl(codeStep === "confirm" ? codeRecipient : email, referralCode, preferredSide)}>Crear acceso en Registro</a> : null}
       </div> : null}
     </div>
   );

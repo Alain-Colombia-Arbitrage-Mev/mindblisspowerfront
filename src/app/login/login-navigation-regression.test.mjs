@@ -106,6 +106,10 @@ function props(node) {
 }
 function component() {
   const mocks = {
+    // This harness deliberately exercises the enabled flow; real pause guards
+    // are covered independently with the actual policy module.
+    '@/lib/auth-entry-policy.mjs': { AUTH_ENTRY_PAUSED: false, authEntryAllowed: () => true, suppressAuthEntry: () => false },
+    '../_components/AuthEntryNotice': { default: () => null },
     'react': React,
     'react/jsx-runtime': require('react/jsx-runtime'),
     'lucide-react': new Proxy({}, { get: () => () => null }),

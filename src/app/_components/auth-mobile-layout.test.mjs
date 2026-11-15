@@ -39,6 +39,10 @@ function compile(file, mocks, exports = '') {
 }
 
 const loginMocks = {
+    // This harness deliberately exercises the enabled flow; real pause guards
+    // are covered independently with the actual policy module.
+    '@/lib/auth-entry-policy.mjs': { AUTH_ENTRY_PAUSED: false, authEntryAllowed: () => true, suppressAuthEntry: () => false },
+    '../_components/AuthEntryNotice': { default: () => null },
   '@/lib/member-session-sync.mjs': sessionSync,
   react: React,
   'lucide-react': icons,

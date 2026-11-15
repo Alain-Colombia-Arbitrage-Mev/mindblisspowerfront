@@ -6,6 +6,7 @@ import { RegistrationButton, RegistrationField, RegistrationPassword } from '../
 import { betterAuthPasswordRequest, betterAuthPasswordFailure, verifiedEmailSignIn } from './better-auth-login.mjs';
 import { registrationRequired, registrationRedirect, registrationUrl } from '../register/registration-model.mjs';
 import { browserRequestDeadline } from '@/lib/browser-request-deadline.mjs';
+import { authEntryAllowed, suppressAuthEntry } from '@/lib/auth-entry-policy.mjs';
 
 export default function BetterAuthPasswordLogin({ email, setEmail, onBusy, onError, onNotice, onVerified, onRegistrationRequired = undefined, onUseCode = undefined, rememberReferral, registrationHref = '' }) {
   const [password, setPassword] = useState('');
@@ -27,6 +28,7 @@ export default function BetterAuthPasswordLogin({ email, setEmail, onBusy, onErr
 
   async function submit(event) {
     event.preventDefault();
+    if (suppressAuthEntry(event)) return;
     if (submitting.current) return;
     onError('');
     onNotice('');
@@ -55,9 +57,9 @@ export default function BetterAuthPasswordLogin({ email, setEmail, onBusy, onErr
         method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error',
         signal: deadline.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(contract.body),
       });
-      if (controller.signal.aborted || pending.current !== controller) return;
+      if (!authEntryAllowed() || controller.signal.aborted || pending.current !== controller) return;
       const payload = await response.json().catch(() => ({}));
-      if (controller.signal.aborted || pending.current !== controller) return;
+      if (!authEntryAllowed() || controller.signal.aborted || pending.current !== controller) return;
       if (registrationRequired(response.status, payload)) {
         setPassword('');
         rememberReferral(contract.body.email);
@@ -90,13 +92,13 @@ export default function BetterAuthPasswordLogin({ email, setEmail, onBusy, onErr
   }
 
   return (
-    <form onSubmit={submit} noValidate aria-busy={loading} className="auth-password-form">
+    <form onSubmit={submit} onKeyDown={event => { if (event.key === 'Enter') suppressAuthEntry(event); }} noValidate aria-busy={loading} className="auth-password-form">
       <RegistrationField id="password-login-email" inputRef={emailInput} error={fieldErrors.email} name="email" label="Correo electrónico" type="email" autoComplete="email" autoCapitalize="none" spellCheck={false} required maxLength={254}
         value={email} disabled={loading} onChange={event => { setEmail(event.target.value); setFieldErrors({}); setRequiresVerification(false); onError(''); }} />
       <RegistrationPassword id="password-login-password" inputRef={passwordInput} error={fieldErrors.password} name="password" label="Contraseña" autoComplete="current-password" required maxLength={128}
         value={password} disabled={loading} onChange={event => { setPassword(event.target.value); setFieldErrors({}); onError(''); }} visible={visible} onToggle={() => setVisible(current => !current)} />
       <div className="auth-password-links">
-        <button type="button" onClick={onUseCode}>Entrar con código</button>
+        <button type="button" disabled={!authEntryAllowed()} onClick={event => { if (!suppressAuthEntry(event)) onUseCode?.(); }}>Entrar con código</button>
         <Link href="/forgot-password">¿Olvidaste tu contraseña?</Link>
       </div>
       <details className="auth-password-help">
@@ -106,8 +108,8 @@ export default function BetterAuthPasswordLogin({ email, setEmail, onBusy, onErr
         <p>Los pasos y límites de recuperación se muestran allí; ese código no es el de inicio de sesión. No compartas tu contraseña ni tus códigos.</p>
         <Link href="/forgot-password">Crear o cambiar contraseña con un código</Link>
       </details>
-      <RegistrationButton type="submit" disabled={loading} loading={loading}>{loading ? 'Comprobando acceso…' : 'Iniciar sesión'}</RegistrationButton>
-      {requiresVerification ? <Link href={registrationHref || registrationUrl(email, '', '', true)}
+      <RegistrationButton type="submit" disabled={!authEntryAllowed() || loading} loading={loading}>{loading ? 'Comprobando acceso…' : 'Iniciar sesión'}</RegistrationButton>
+      {authEntryAllowed() && requiresVerification ? <Link href={registrationHref || registrationUrl(email, '', '', true)}
         className="inline-flex min-h-11 items-center text-sm text-[var(--vp-text)] underline">Verificar mi correo de registro</Link> : null}
     </form>
   );

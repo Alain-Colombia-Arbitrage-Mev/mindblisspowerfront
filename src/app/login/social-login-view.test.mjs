@@ -14,6 +14,9 @@ function componentAt(file) {
   const module = { exports: {} };
   new Function('require', 'module', 'exports', compiled)(id => {
     if (id === 'react' || id === 'react/jsx-runtime') return require(id);
+    // Exercise the enabled provider-availability contract independently of the
+    // real production-pause click guards, which have their own tests.
+    if (id === '@/lib/auth-entry-policy.mjs') return { AUTH_ENTRY_PAUSED: false, authEntryAllowed: () => true, suppressAuthEntry: () => false };
     if (id === 'lucide-react') return { Loader2: () => null };
     if (id === './SocialProviderIcon') return componentAt('./SocialProviderIcon.jsx');
     if (id === '@/lib/browser-request-deadline.mjs') return { browserRequestDeadline() { assert.fail('SSR started an authentication request'); } };

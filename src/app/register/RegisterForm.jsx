@@ -5,6 +5,8 @@ import { ArrowRight, Check, ClipboardCheck, Eye, EyeOff, LifeBuoy, Loader2, Lock
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import AuthShell from "../_components/AuthShell";
+import { authEntryAllowed, suppressAuthEntry } from '@/lib/auth-entry-policy.mjs';
+import AuthEntryNotice from '../_components/AuthEntryNotice';
 import { isMicrosoftEmail, suggestEmailFix, useResendCooldown } from "@/lib/useResendCooldown";
 import { composePhone, formatLocalPhone, isValidE164 } from "@/lib/phone";
 import { checkPassword, isValidPassword } from "@/lib/password";
@@ -83,6 +85,7 @@ export default function RegisterForm() {
   const otpSubmittingRef = useRef(false);
 
   async function resumeRegistration(email) {
+    if (!authEntryAllowed()) return;
     setForm((current) => ({ ...current, email }));
     setConfirmStep(true);
     setLoading(true);
@@ -93,6 +96,7 @@ export default function RegisterForm() {
         body: JSON.stringify({ email, resend: true }),
       });
       const payload = await response.json().catch(() => ({}));
+      if (!authEntryAllowed()) return;
       if (payload.alreadyConfirmed) {
         router.push(`/login?email=${encodeURIComponent(email)}`);
         return;
@@ -134,7 +138,7 @@ export default function RegisterForm() {
     // ?resume=1&email=…: link de reactivación para cuentas creadas pero nunca
     // confirmadas — salta directo al paso del código y lo reenvía en el acto
     // (el BFF deriva el username determinístico desde el email).
-    if (resume && /^\S+@\S+\.\S+$/.test(prefillEmail) && !resumedRef.current) {
+    if (authEntryAllowed() && resume && /^\S+@\S+\.\S+$/.test(prefillEmail) && !resumedRef.current) {
       resumedRef.current = true;
       resumeRegistration(prefillEmail);
     }
@@ -219,6 +223,7 @@ export default function RegisterForm() {
 
   async function handleSubmit(event) {
     event.preventDefault();
+    if (suppressAuthEntry(event)) return;
     if (submittingRef.current) return; // ya hay un registro en curso → no duplicar
     setSuccess("");
     const nextErrors = validateForm();
@@ -256,6 +261,7 @@ export default function RegisterForm() {
       });
       const payload = await response.json().catch(() => ({}));
 
+      if (!authEntryAllowed()) return;
       if (payload.blacklisted) {
         setBanned(true);
         setLoading(false);
@@ -303,6 +309,7 @@ export default function RegisterForm() {
 
   async function handleConfirm(event) {
     event.preventDefault();
+    if (suppressAuthEntry(event)) return;
     if (otpSubmittingRef.current || loading) return;
     setErrors({});
     setSuccess("");
@@ -330,6 +337,7 @@ export default function RegisterForm() {
       });
       const payload = await response.json().catch(() => ({}));
 
+      if (!authEntryAllowed()) return;
       if (!response.ok || !payload.ok) {
         setErrors({ form: payload.error || "No se pudo confirmar la cuenta." });
         setLoading(false);
@@ -344,6 +352,7 @@ export default function RegisterForm() {
       });
       const loginPayload = await loginResponse.json().catch(() => ({}));
 
+      if (!authEntryAllowed()) return;
       if (loginResponse.ok && loginPayload.ok) {
         router.push("/onboarding?source=register");
         return;
@@ -359,6 +368,7 @@ export default function RegisterForm() {
   }
 
   async function handleResendCode() {
+    if (!authEntryAllowed()) return;
     if (otpSubmittingRef.current || resendCooldown.active || loading) return;
     otpSubmittingRef.current = true;
     setErrors({});
@@ -395,6 +405,7 @@ export default function RegisterForm() {
   }
 
   async function handleRegistrationHelp() {
+    if (!authEntryAllowed()) return;
     setErrors({});
     setSuccess("");
     const email = form.email.trim().toLowerCase();
@@ -448,6 +459,7 @@ export default function RegisterForm() {
       supportEmail={form.email}
     >
       <section className="auth-registration-card w-full">
+        <AuthEntryNotice />
         <div className="mb-7 flex items-start gap-4">
           <div
             className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-lg"
@@ -470,7 +482,7 @@ export default function RegisterForm() {
         </div>
 
         {confirmStep ? (
-          <form className="space-y-5" onSubmit={handleConfirm}>
+          <form className="space-y-5" onSubmit={handleConfirm} onKeyDown={event => { if (event.key === 'Enter') suppressAuthEntry(event); }}>
             {success && (
               <div
                 className="rounded-lg px-4 py-3 text-sm font-semibold"
@@ -518,7 +530,7 @@ export default function RegisterForm() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={!authEntryAllowed() || loading}
               className="flex min-h-12 w-full items-center justify-center gap-2 rounded-lg px-5 py-3 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-60"
               style={{
                 color: "#fff",
@@ -533,7 +545,7 @@ export default function RegisterForm() {
             <button
               type="button"
               onClick={handleResendCode}
-              disabled={loading || resendCooldown.active}
+              disabled={!authEntryAllowed() || loading || resendCooldown.active}
               className="block w-full text-center text-sm font-bold transition hover:opacity-80 disabled:opacity-50"
               style={{ color: "var(--vp-muted)" }}
             >
@@ -543,7 +555,7 @@ export default function RegisterForm() {
             <button
               type="button"
               onClick={handleRegistrationHelp}
-              disabled={loading}
+              disabled={!authEntryAllowed() || loading}
               className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg px-4 text-center text-xs font-black transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
               style={{
                 color: "var(--vp-on-accent)",
@@ -556,7 +568,7 @@ export default function RegisterForm() {
             </button>
           </form>
         ) : (
-        <form className="space-y-5" onSubmit={handleSubmit}>
+        <form className="space-y-5" onSubmit={handleSubmit} onKeyDown={event => { if (event.key === 'Enter') suppressAuthEntry(event); }}>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field
               id="fullName"
@@ -743,7 +755,7 @@ export default function RegisterForm() {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={!authEntryAllowed() || loading}
             className="flex min-h-12 w-full items-center justify-center gap-2 rounded-lg px-5 py-3 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-60"
             style={{
               color: "#fff",
@@ -757,7 +769,7 @@ export default function RegisterForm() {
         </form>
         )}
 
-        <div className="mt-6 grid gap-3 border-t pt-5 sm:grid-cols-2" style={{ borderColor: "var(--vp-border)" }}>
+        {authEntryAllowed() ? <div className="mt-6 grid gap-3 border-t pt-5 sm:grid-cols-2" style={{ borderColor: "var(--vp-border)" }}>
           <Link
             href={form.referralCode ? `/login?ref=${encodeURIComponent(form.referralCode)}` : "/login"}
             className="flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition"
@@ -782,7 +794,7 @@ export default function RegisterForm() {
             <ClipboardCheck size={16} />
             Completar perfil
           </Link>
-        </div>
+        </div> : null}
       </section>
     </AuthShell>
   );
