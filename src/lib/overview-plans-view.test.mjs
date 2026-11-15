@@ -21,6 +21,9 @@ function moduleAt(relative, mocks = {}) {
     : id === "@/i18n/LanguageProvider" ? { useI18n: () => ({ locale: "es", dir: "ltr", t: (key, values) => translateMessage("es", key, values) }) }
     : id === "@/i18n/LanguageSwitcher" ? { default: marker("LanguageSwitcher") }
     : id === "@/i18n/LocalizedText" ? { default: ({ as = "span", id: messageId, htmlId, values, ...props }) => React.createElement(as, { id: htmlId, ...props }, translateMessage("es", messageId, values)) }
+    : id === "@/lib/member-session-context" ? { useMemberSession: () => null }
+    : id === "@/components/member/useHistoricalPackageRights" ? { default: () => ({ data: null, visible: false, loading: false, error: "", canRefresh: false, refresh() { assert.fail("historical presentation mock cannot start a read"); } }) }
+    : id === "@/components/member/HistoricalPackageRightsCard" ? { default: function HistoricalPackageRightsCard({ snapshot }) { return snapshot.visible ? React.createElement("section", { "data-test": "HistoricalPackageRightsCard" }) : null; } }
     : Object.hasOwn(mocks, id) ? mocks[id] : require(id), module, module.exports);
   return module.exports;
 }

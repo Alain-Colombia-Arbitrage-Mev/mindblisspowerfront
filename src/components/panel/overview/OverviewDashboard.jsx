@@ -23,6 +23,9 @@ import PersonalWalletBalances from "@/components/wallet/PersonalWalletBalances";
 import OverviewDiscoveryCard from "./OverviewDiscoveryCard";
 import PositionSnapshotCard from "./PositionSnapshotCard";
 import { useI18n } from "@/i18n/LanguageProvider";
+import { useMemberSession } from '@/lib/member-session-context';
+import useHistoricalPackageRights from '@/components/member/useHistoricalPackageRights';
+import HistoricalPackageRightsCard from '@/components/member/HistoricalPackageRightsCard';
 
 const QUICK_ACTIONS = [
   { icon: CreditCard, label: "overview.payments", href: "/dashboard/payments" },
@@ -34,6 +37,7 @@ const ReownRechargeDialog = dynamic(() => import("./ReownRechargeDialog"), { ssr
 
 export default function OverviewDashboard() {
   const { t } = useI18n();
+  const historicalRights = useHistoricalPackageRights(useMemberSession());
   const polygonWallet = usePersonalWalletBalance('', 'polygon');
   const polygonBalance = personalCompanyPaymentAtomic(polygonWallet.balanceAtomic, true);
   const polygonReady = !polygonWallet.loading && !polygonWallet.error && /^0x[0-9a-f]{40}$/i.test(polygonWallet.walletAddress || "") && polygonBalance !== null;
@@ -133,10 +137,10 @@ export default function OverviewDashboard() {
               <button className="executive-button" type="button" onClick={() => openRecharge("welcome")}>{t("overview.howItWorks")}<ArrowUpRight size={14} /></button>
             </div>
           </section>
-          <section className="executive-card mb-membership-summary">
+          {historicalRights.data?.totalCount > 0 ? <HistoricalPackageRightsCard snapshot={historicalRights} compact /> : <section className="executive-card mb-membership-summary">
             <div className="mb-membership-header"><h2>{t("overview.myMemberships")}</h2><span>{summaryStatus === "ready" ? t("overview.updated") : t("overview.pending")}</span></div>
             <div className="mb-membership-count"><strong>{summaryStatus === "ready" ? String(summary?.active_packages ?? 0) : "—"}</strong><p>{summary?.active_packages === 1 ? t("overview.oneMembership") : t("overview.memberships")}</p></div>
-          </section>
+          </section>}
         </div>
         <OverviewDiscoveryCard />
       </div>

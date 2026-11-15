@@ -28,6 +28,15 @@ const copy = {
 };
 
 const icons = new Proxy({}, { get: () => () => null });
+const historicalMocks = {
+  '@/lib/member-session-context': { useMemberSession: () => null },
+  '@/components/member/useHistoricalPackageRights': { default: () => ({ data: null, visible: false, loading: false, error: '', canRefresh: false,
+    refresh() { assert.fail('funding presentation must not start a historical access read'); } }) },
+  '@/components/member/HistoricalPackageRightsCard': { default: function HistoricalPackageRightsCard({ snapshot }) {
+    return snapshot.visible ? React.createElement('section', { 'data-test': 'HistoricalPackageRightsCard' }) : null;
+  } },
+};
+
 const radix = {
   Root: ({ open, children }) => open ? React.createElement('div', null, children) : null,
   Portal: ({ children }) => children,
@@ -114,6 +123,7 @@ test('a confirmed empty wallet opens the welcome popup once per tab and keeps ma
   const Balance = () => React.createElement('output', { 'data-personal-balance': true }, '0 USDT');
   const Popup = props => React.createElement('recharge-popup', props);
   const harness = registrationViewHarness('../../components/panel/overview/OverviewDashboard.jsx', {
+      ...historicalMocks,
     'next/link': { default: link }, 'next/dynamic': { default: () => Popup }, 'lucide-react': icons,
     '@/app/_components/ThemeToggle': { default: () => null },
     '@/lib/member-read.mjs': {
@@ -158,6 +168,7 @@ test('overview never substitutes the internal USD ledger for an unavailable pers
     const Popup = props => React.createElement('recharge-popup', props);
     const Balance = () => React.createElement('output', { 'data-personal-balance': true }, wallet.balanceAtomic === null ? '— USDT' : '12 USDT');
     const harness = registrationViewHarness('../../components/panel/overview/OverviewDashboard.jsx', {
+      ...historicalMocks,
       'next/link': { default: link }, 'next/dynamic': { default: () => Popup }, 'lucide-react': icons,
       '@/app/_components/ThemeToggle': { default: () => null },
       '@/lib/member-read.mjs': { validMemberSummary: () => true, validMemberTree: () => true,
@@ -191,6 +202,7 @@ test('the active Polygon wallet opens no empty-wallet popup when its funds are p
   ]) {
     const Popup = props => React.createElement('recharge-popup', props), calledNetworks = [];
     const harness = registrationViewHarness('../../components/panel/overview/OverviewDashboard.jsx', {
+      ...historicalMocks,
       'next/link': { default: link }, 'next/dynamic': { default: () => Popup }, 'lucide-react': icons,
       '@/app/_components/ThemeToggle': { default: () => null },
       '@/lib/member-read.mjs': { validMemberSummary: () => true, validMemberTree: () => true,

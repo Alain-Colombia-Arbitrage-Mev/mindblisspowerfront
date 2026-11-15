@@ -17,6 +17,8 @@ import { PageHeader, StatusPill, Field } from './executive-ui';
 
 import { member } from './member-defaults.mjs';
 import { useI18n } from "@/i18n/LanguageProvider";
+import useHistoricalPackageRights from '@/components/member/useHistoricalPackageRights';
+import HistoricalPackageRightsCard from '@/components/member/HistoricalPackageRightsCard';
 
 const PROFILE_COUNTRIES = getCountries();
 
@@ -42,6 +44,7 @@ export function ProfileDashboardPage({ authMode = 'cognito' }) {
 export function ProfileDashboardView({ authMode = 'cognito', session = undefined }) {
   const { t, locale } = useI18n();
   const modernAuth = authMode === 'better-auth';
+  const historicalRights = useHistoricalPackageRights(session, modernAuth);
   const me = { name: session?.name || "", email: session?.email || "", referralCode: session?.referralCode || "" };
   const [summary, setSummary] = useState(null);
   const [form, setForm] = useState({ name: "", phone: "", country: "" });
@@ -265,9 +268,9 @@ export function ProfileDashboardView({ authMode = 'cognito', session = undefined
                   </p>
                 </div>
                 <div>
-                  <p className="executive-card-label mb-1">{t("profilePage.plan")}</p>
+                  <p className="executive-card-label mb-1">{t(historicalRights.data?.activeCount > 0 ? 'historicalPackage.accessLabel' : "profilePage.plan")}</p>
                   <p className="m-0 text-sm font-semibold" style={{ color: "var(--vp-text)" }}>
-                    {displayPlan}
+                    {historicalRights.data?.activeCount > 0 ? t('historicalPackage.activeUntilRevoked') : displayPlan}
                   </p>
                 </div>
                 {displayBalance != null && (
@@ -281,6 +284,7 @@ export function ProfileDashboardView({ authMode = 'cognito', session = undefined
               </div>
             </div>
 
+            <HistoricalPackageRightsCard snapshot={historicalRights} />
             <div className="executive-panel">
               <h2 className="executive-section-title">
                 <Copy size={18} style={{ color: "var(--vp-accent)" }} />

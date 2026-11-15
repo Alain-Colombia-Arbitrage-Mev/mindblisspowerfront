@@ -16,8 +16,9 @@ const deferred = () => { let resolve, reject; const promise = new Promise((yes, 
 const all = node => [node, ...React.Children.toArray(node?.props?.children).flatMap(all), ...React.Children.toArray(node?.props?.action).flatMap(all)];
 const input = (tree, name) => all(tree).find(node => node?.type === 'input' && node.props.autoComplete === name);
 const save = tree => all(tree).find(node => node?.type === 'button' && node.props.children === translateMessage('es', 'profilePage.saveChanges'));
-function fixture(t, { api = async () => stored, exportName = 'ProfileDashboardView' } = {}) {
-  const cells = [], effects = [], calls = [], events = []; let cursor = 0, dirty = true, tree, attributes, session = owner;
+function fixture(t, { api = async () => stored, exportName = 'ProfileDashboardView', summary = {},
+  historical = { data: null, visible: false, loading: false, error: '', canRefresh: false, refresh() { assert.fail('legacy profile fixture must not request historical rights'); } } } = {}) {
+  const cells = [], effects = [], calls = [], events = [], historicalCalls = []; let cursor = 0, dirty = true, tree, attributes, session = owner;
   const changed = (a, b) => !a || !b || a.length !== b.length || a.some((value, i) => !Object.is(value, b[i]));
   const hooks = { useRef(initial) { return cells[cursor++] ??= { current: initial }; }, useState(initial) {
     const at = cursor++, cell = cells[at] ??= { value: typeof initial === 'function' ? initial() : initial };
@@ -30,12 +31,14 @@ function fixture(t, { api = async () => stored, exportName = 'ProfileDashboardVi
   const mocks = { react: hooks, 'react/jsx-runtime': require('react/jsx-runtime'), 'libphonenumber-js/min': { getCountries },
     'next/link': { default: ({ children, ...props }) => React.createElement('a', props, children) }, 'lucide-react': new Proxy({}, { get: () => () => null }),
     '@/lib/member-session-context': { useMemberSession: () => session }, '@/lib/payment-display.mjs': { formatPaymentMoney: () => null },
+    '@/components/member/useHistoricalPackageRights': { default: (owner, enabled) => { historicalCalls.push([owner, enabled]); return historical; } },
+    '@/components/member/HistoricalPackageRightsCard': { default: function HistoricalPackageRightsCard({ snapshot }) { return snapshot.visible ? React.createElement('section', { 'data-test': 'HistoricalPackageRightsCard' }) : null; } },
     '../../profile/profile-model.mjs': { ...profileModel, requestProfile: async (...args) => { calls.push(args); return api(...args); } },
     '@/lib/browser-request-deadline.mjs': deadline, './executive-ui': { Field, PageHeader, StatusPill: ({ children }) => children },
     './member-defaults.mjs': { member: { email: '', referralCode: '', rank: '', joined: '', plan: '', username: '', sponsor: 'STATIC-MUST-NOT-SHOW' } },
     '@/i18n/LanguageProvider': { useI18n: () => ({ locale: 'es', t: (key, values) => translateMessage('es', key, values) }) },
   };
-  t.mock.method(globalThis, 'fetch', async path => { assert.equal(path, '/api/payments/me', 'No OTP, payment mutation or additional contact reads allowed'); return Response.json({}); });
+  t.mock.method(globalThis, 'fetch', async path => { assert.equal(path, '/api/payments/me', 'No OTP, payment mutation or additional contact reads allowed'); return Response.json(summary); });
   const saved = Object.getOwnPropertyDescriptor(globalThis, 'window'); Object.defineProperty(globalThis, 'window', { configurable: true, value: { dispatchEvent: event => events.push(event) } });
   t.after(() => { if (saved) Object.defineProperty(globalThis, 'window', saved); else delete globalThis.window; });
   const module = { exports: {} }, code = ts.transpileModule(readFileSync(new URL('./ProfileDashboardPage.jsx', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
@@ -44,7 +47,7 @@ function fixture(t, { api = async () => stored, exportName = 'ProfileDashboardVi
   const flush = async () => { for (let count = 0, quiet = 0; count < 50; count++) { if (dirty) render(); while (effects.length) effects.shift()(); await new Promise(resolve => setImmediate(resolve));
     if (dirty || effects.length) quiet = 0; else if (++quiet === 2) return tree; } assert.fail('Profile did not settle'); };
   const stop = () => cells.forEach(cell => cell?.cleanup?.()); t.after(stop);
-  return { render, flush, stop, calls, events, get tree() { return tree; }, owner(next) { session = next; return render(); } };
+  return { render, flush, stop, calls, events, historicalCalls, get tree() { return tree; }, owner(next) { session = next; return render(); } };
 }
 const viewProps = () => ({ authMode: 'better-auth', session: owner });
 
@@ -135,4 +138,25 @@ test('an owner mismatch on the initial native read reveals no stored form and do
   h.render(viewProps()); await h.flush(); assert.equal(h.calls.length, 1); assert.equal(h.calls[0][2].subject, owner.subject);
   assert.equal(input(h.tree, 'name'), undefined); assert.ok(renderToStaticMarkup(h.tree).includes(translateMessage('es', 'profilePage.reopenProfile')));
   await h.flush(); assert.equal(h.calls.length, 1);
+});
+
+
+test('owned historical access replaces only the profile Plan tile and never alters financial summary or editable profile fields', async t => {
+  const summary = Object.freeze({ active_packages: 0, plan: '' });
+  const data = Object.freeze({ activeCount: 1 });
+  const historical = Object.freeze({ data, visible: true, loading: false, error: '', canRefresh: true, refresh() { assert.fail('the profile does not refresh historical data implicitly'); } });
+  const h = fixture(t, { summary, historical, api: async (method, body) => method === 'GET' ? stored : { ...stored, name: body.name, phone: body.phone } });
+  h.render(viewProps()); await h.flush();
+  assert.ok(h.historicalCalls.length); assert.ok(h.historicalCalls.every(([context, enabled]) => context === owner && enabled === true));
+  const html = renderToStaticMarkup(h.tree);
+  assert.ok(html.includes(translateMessage('es', 'historicalPackage.accessLabel')));
+  assert.ok(html.includes(translateMessage('es', 'historicalPackage.activeUntilRevoked')));
+  assert.ok(!html.includes(`>${translateMessage('es', 'profilePage.plan')}</p>`));
+  const card = all(h.tree).find(node => node?.type?.name === 'HistoricalPackageRightsCard');
+  assert.equal(card.props.snapshot, historical); assert.equal(card.props.compact, undefined);
+  input(h.tree, 'tel').props.onChange({ target: { value: '+525557654321' } }); await h.flush();
+  save(h.tree).props.onClick(); await h.flush();
+  assert.deepEqual(h.calls[1][1], { name: stored.name, phone: '+525557654321' });
+  assert.deepEqual(summary, { active_packages: 0, plan: '' }); assert.equal(h.calls.length, 2);
+  for (const key of ['historical', 'activeCount', 'active_packages', 'plan', 'access', 'financialBenefits', 'points', 'bonuses', 'commissions']) assert.equal(Object.hasOwn(h.calls[1][1], key), false, key);
 });

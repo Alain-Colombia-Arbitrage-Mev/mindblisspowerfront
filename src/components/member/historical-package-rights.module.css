@@ -1,0 +1,25 @@
+.card { display: grid; gap: 10px; min-width: 0; scroll-margin-top: 90px; }
+.card p { margin: 0; color: var(--vp-muted); font-size: 12px; line-height: 1.5; }
+.heading { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--vp-accent); }
+.heading h2 { flex: 1; margin: 0; color: var(--vp-text); font-size: 14px; font-weight: 750; }
+.heading > button { flex: 0 0 auto; min-width: 40px; min-height: 40px; padding: 8px; }
+.access { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 12px; }
+.access strong { color: var(--vp-text); }
+.access span { color: var(--vp-muted); }
+.disclosure { border-top: 1px solid var(--vp-border); padding-top: 8px; }
+.link { color: var(--vp-link); font-size: 12px; text-decoration: underline; text-underline-offset: 3px; }
+.details summary { color: var(--vp-link); cursor: pointer; font-size: 13px; padding-block: 6px; }
+.details summary:focus-visible, .link:focus-visible { outline: 2px solid var(--vp-accent); outline-offset: 3px; border-radius: 3px; }
+.items { display: grid; gap: 12px; list-style: none; padding: 0; margin: 12px 0 0; }
+.items > li { min-width: 0; padding-block: 10px; border-top: 1px solid var(--vp-border); }
+.itemHeading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 10px; }
+.itemHeading h3 { margin: 0; color: var(--vp-text); font-size: 14px; }
+.itemHeading span { border: 1px solid var(--vp-border); border-radius: 8px; color: var(--vp-muted); padding: 3px 6px; font-size: 11px; }
+.items dl { display: grid; gap: 6px; margin: 10px 0; }
+.items dl > div { display: grid; gap: 2px; }
+.items dt { color: var(--vp-muted); font-size: 11px; }
+.items dd { margin: 0; color: var(--vp-text); font-size: 12px; overflow-wrap: anywhere; }
+.source { display: flex; align-items: center; gap: 5px; }
+.compact { padding: 16px; gap: 8px; }
+.compact .heading > button { min-width: 32px; min-height: 32px; padding: 6px; }
+@media (max-width: 640px) { .heading > button, .compact .heading > button { min-width: 44px; min-height: 44px; } }
