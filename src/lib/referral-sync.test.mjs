@@ -96,6 +96,7 @@ test('an explicit referral write with a mounted subject forwards only an equalit
     fetchImpl: async (_url, options) => { calls.push(options); return Response.json(serverHint('ChosenSponsor', '')); } });
   assert.equal(result.ok, true); assert.equal(calls.length, 1);
   assert.equal(calls[0].headers['x-mindbliss-referral-subject'], 'member%2Fsubject');
+  assert.equal(calls[0].headers['x-mindbliss-referral-contract'], 'v2');
   assert.deepEqual(JSON.parse(calls[0].body), { ref: 'ChosenSponsor', preferred_side: '', expected_email: email });
 });
 

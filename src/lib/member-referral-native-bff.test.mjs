@@ -7,7 +7,7 @@ const env = { AUTH_PROVIDER: 'better-auth', AUTH_PUBLIC_ORIGIN: origin, BETTER_A
 const value = (extra = {}) => ({ positioned: false, code: 'MPStable', name: 'Synthetic Member', placement: 'automatic', generated: true,
   metrics: { total: 0, active: 0, pending: 0 }, referrals: [], sponsor_name: '', sponsor_referral_code: '', attribution_source: 'unassigned', ...extra });
 const request = (path = '/api/member/referral', options = {}) => new Request(`${origin}${path}`, {
-  ...options, headers: { cookie, 'x-mindbliss-referral-subject': 'subject%2Fowner', ...options.headers } });
+  ...options, headers: { cookie, 'x-mindbliss-referral-subject': 'subject%2Fowner', 'x-mindbliss-referral-contract': 'v2', ...options.headers } });
 
 test('native own-link GET uses exact private path, cookie and mounted subject, without JWT/token/Go enrichment', async () => {
   let calls = 0;
@@ -88,4 +88,22 @@ test('real totals remain independent from the capped displayed referrals list an
   for (const metrics of [{ total: 0, active: 0, pending: 0 }, { total: 60, active: 0, pending: 60 }, { total: 1_000_000_001, active: 1, pending: 1_000_000_000 }]) {
     assert.equal((await handleNativeMemberReferral(request(), { env, serviceRequest: async () => ({ ok: true, data: value({ metrics, referrals: rows }) }) })).status, 502);
   }
+});
+
+test('already-open legacy documents retain their exact four-field attribution contract without changing native authority', async () => {
+  for (const capability of ['', 'v1', 'V2', 'v2, v2']) {
+    const response = await handleNativeReferralAttribution(request('/api/member/referral-attribution', { headers: { 'x-mindbliss-referral-contract': capability } }),
+      { env, serviceRequest: async (url, init) => {
+        assert.equal(url, 'https://auth.core.internal/api/member/referral'); assert.equal(init.headers['x-mindbliss-referral-subject'], 'subject%2Fowner');
+        return { ok: true, data: value({ positioned: true, attribution_source: 'existing_affiliate' }) };
+      } });
+    assert.equal(response.status, 200); assert.deepEqual(await response.json(), { ok: true, ref: '', preferred_side: '', positioned: true });
+  }
+  const response = await handleNativeReferralAttribution(request('/api/member/referral-attribution', { method: 'POST',
+    headers: { 'x-mindbliss-referral-contract': '', origin, 'sec-fetch-site': 'same-origin', 'content-type': 'application/json', 'cf-connecting-ip': '198.51.100.10' },
+    body: JSON.stringify({ ref: 'AttemptedSponsor' }) }), { env, serviceRequest: async (_url, init) => {
+    assert.deepEqual(JSON.parse(init.body), { ref: 'AttemptedSponsor' });
+    return { ok: true, data: { ok: true, ref: 'ActualImmutableSponsor', preferred_side: '', positioned: false, immutable: true } };
+  } });
+  assert.deepEqual(await response.json(), { ok: true, ref: 'ActualImmutableSponsor', preferred_side: '', positioned: false });
 });

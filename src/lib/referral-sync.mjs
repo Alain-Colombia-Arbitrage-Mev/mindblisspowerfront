@@ -86,9 +86,11 @@ function clearVisit(visit, browser) {
 }
 const matches = (result, visit) => result.immutable === true || result.positioned || result.ref === visit.ref;
 function subjectHeaders(options) {
-  if (!Object.hasOwn(options, 'subject')) return {};
+  // Response format only; the native cookie and mounted subject still own access.
+  const contract = { 'x-mindbliss-referral-contract': 'v2' };
+  if (!Object.hasOwn(options, 'subject')) return contract;
   const encoded = profileSubjectHeader(options.subject);
-  return encoded ? { 'x-mindbliss-referral-subject': encoded } : null;
+  return encoded ? { ...contract, 'x-mindbliss-referral-subject': encoded } : null;
 }
 
 async function postVisit(visit, options = {}) {

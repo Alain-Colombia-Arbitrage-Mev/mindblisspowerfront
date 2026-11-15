@@ -9,6 +9,10 @@ import { readBoundedRequestJson } from './bounded-request-json.mjs';
 
 const origin = 'https://app.mindblisspower.com', path = '/api/member/referral';
 const reply = (body, status = 200) => Response.json(body, { status, headers: { 'Cache-Control': 'private, no-store, max-age=0', Vary: 'Cookie' } });
+// Already-open documents accept exactly the original four fields. A response
+// capability changes presentation only; native ownership/immutability never do.
+const attributionReply = (request, body) => reply(request.headers.get('x-mindbliss-referral-contract') === 'v2' ? body
+  : { ok: body.ok, ref: body.ref, preferred_side: body.preferred_side, positioned: body.positioned });
 // Reject control characters in text received over the private JSON boundary.
 // eslint-disable-next-line no-control-regex
 const text = (value, maximum) => typeof value === 'string' && value.length <= maximum && !/[\u0000-\u001f\u007f]/.test(value);
@@ -93,13 +97,13 @@ export async function handleNativeReferralAttribution(request, { env = runtimeEn
     if (!mutation) {
       const safe = nativeMemberReferral(result.data, referralPublicOrigin(env));
       if (!safe || !['unassigned', 'existing_affiliate', 'referral', 'company'].includes(safe.attribution_source)) return reply({ error: 'member_referral_unavailable' }, 502);
-      return reply({ ok: true, ref: safe.positioned ? '' : safe.sponsor_referral_code, preferred_side: '', positioned: safe.positioned,
+      return attributionReply(request, { ok: true, ref: safe.positioned ? '' : safe.sponsor_referral_code, preferred_side: '', positioned: safe.positioned,
         immutable: safe.attribution_source !== 'unassigned' });
     }
     const value = result.data;
     if (!value || value.ok !== true || typeof value.positioned !== 'boolean' || value.preferred_side !== '' || value.immutable !== true
       || typeof value.ref !== 'string' || (value.ref !== '' && referralLinkCode(value.ref) !== value.ref)
       || (value.positioned && value.ref)) return reply({ error: 'member_referral_unavailable' }, 502);
-    return reply({ ok: true, ref: value.ref, preferred_side: '', positioned: value.positioned, immutable: true });
+    return attributionReply(request, { ok: true, ref: value.ref, preferred_side: '', positioned: value.positioned, immutable: true });
   } catch { return reply({ error: 'member_referral_unavailable' }, 503); }
 }
