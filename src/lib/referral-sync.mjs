@@ -1,6 +1,7 @@
 import { normalizeReferralCode, normalizeReferralEmail, normalizePlacementSide, referralForCheckout } from './referral-attribution.js';
 import { browserRequestDeadline } from './browser-request-deadline.mjs';
 import { profileSubjectHeader } from './member-profile.mjs';
+import { invalidateMemberReferral } from './member-referral-client.mjs';
 
 const key = 'mp_ref_verified_visit.v1';
 const ttl = 30 * 60 * 1000;
@@ -15,14 +16,15 @@ export const REFERRAL_REQUEST_TIMEOUT_MS = 65000;
 const browserDefault = () => typeof window === 'undefined' ? undefined : window;
 function syncState(browser) {
   const scope = browser && typeof browser === 'object' ? browser : globalThis;
-  if (!scopes.has(scope)) scopes.set(scope, { reads: new Map(), writes: new Map(), owners: new Map(), visits: new Map(), revision: 0 });
+  if (!scopes.has(scope)) scopes.set(scope, { reads: new Map(), writes: new Map(), owners: new Map(), visits: new Map(), revisions: new Map(), revision: 0 });
   return scopes.get(scope);
 }
 function validResponse(body) {
   return body && typeof body === 'object' && !Array.isArray(body)
-    && Object.keys(body).every(key => ['ok', 'ref', 'preferred_side', 'positioned'].includes(key))
+    && Object.keys(body).every(key => ['ok', 'ref', 'preferred_side', 'positioned', 'immutable'].includes(key))
     && body.ok === true && typeof body.positioned === 'boolean'
     && typeof body.ref === 'string' && normalizeReferralCode(body.ref) === body.ref
+    && (body.immutable === undefined || typeof body.immutable === 'boolean')
     && typeof body.preferred_side === 'string' && ['', 'L', 'R'].includes(body.preferred_side)
     && (!body.positioned || (!body.ref && !body.preferred_side)) && (body.ref || !body.preferred_side);
 }
@@ -36,13 +38,16 @@ function store(browser, value) {
     browser.sessionStorage.setItem(key, JSON.stringify(value));
   } catch { /* The owner-scoped memory above remains available in this context. */ }
 }
-function validVisit(value, email, now) {
+function validVisit(value, email, now, subject = undefined) {
   return value?.email === email && typeof value.id === 'string' && value.id.length <= 128
-    && value.ref && normalizeReferralCode(value.ref) === value.ref && ['', 'L', 'R'].includes(value.preferred_side)
+    && typeof value.ref === 'string' && normalizeReferralCode(value.ref) === value.ref
+    && (value.ref || (value.companyDefault === true && profileSubjectHeader(value.subject)))
+    && (subject === undefined || !value.subject || value.subject === subject)
+    && ['', 'L', 'R'].includes(value.preferred_side)
     && (value.confirmed === undefined || typeof value.confirmed === 'boolean')
     && Number.isSafeInteger(value.createdAt) && value.createdAt <= now && now - value.createdAt <= ttl;
 }
-function latestVisit(email, browser, now = Date.now()) {
+function latestVisit(email, browser, now = Date.now(), subject = undefined) {
   const normalized = normalizeReferralEmail(email);
   if (!normalized) return null;
   let value;
@@ -55,16 +60,16 @@ function latestVisit(email, browser, now = Date.now()) {
   // same millisecond. Prefer the latest known choice in that context; a valid,
   // strictly newer stored choice still wins. Equal-time conflicts fail closed
   // against the local choice instead of selecting an arbitrary random UUID.
-  if (validVisit(remembered, normalized, now)
-      && (!validVisit(value, normalized, now) || value.createdAt <= remembered.createdAt)) return remembered;
-  return validVisit(value, normalized, now) ? value : null;
+  if (validVisit(remembered, normalized, now, subject)
+      && (!validVisit(value, normalized, now, subject) || value.createdAt <= remembered.createdAt)) return remembered;
+  return validVisit(value, normalized, now, subject) ? value : null;
 }
-function currentVisit(email, browser, now = Date.now()) {
-  const visit = latestVisit(email, browser, now);
+function currentVisit(email, browser, now = Date.now(), subject = undefined) {
+  const visit = latestVisit(email, browser, now, subject);
   return visit && visit.confirmed !== true ? visit : null;
 }
 function clearVisit(visit, browser) {
-  if (latestVisit(visit.email, browser)?.id !== visit.id) return;
+  if (latestVisit(visit.email, browser, Date.now(), visit.subject)?.id !== visit.id) return;
   // Retain the last explicit choice briefly, even after its exact ACK. An
   // aborted older request may still finish on the server; a later GET that
   // disagrees must block checkout, not silently accept that older choice.
@@ -79,7 +84,7 @@ function clearVisit(visit, browser) {
       browser.sessionStorage.setItem(key, JSON.stringify(confirmed));
   } catch { /* An exact ACK still confirms memory; unknown storage is untouched. */ }
 }
-const matches = (result, visit) => result.positioned || result.ref === visit.ref;
+const matches = (result, visit) => result.immutable === true || result.positioned || result.ref === visit.ref;
 function subjectHeaders(options) {
   if (!Object.hasOwn(options, 'subject')) return {};
   const encoded = profileSubjectHeader(options.subject);
@@ -89,33 +94,43 @@ function subjectHeaders(options) {
 async function postVisit(visit, options = {}) {
   const { browser = browserDefault(), fetchImpl = fetch } = options;
   const ownerHeaders = subjectHeaders(options);
-  if (!ownerHeaders) return { ok: false };
+  if (!ownerHeaders || (visit.subject && visit.subject !== options.subject)) return { ok: false };
   const state = syncState(browser), { writes, owners } = state;
   const owner = `${visit.email}:${ownerHeaders['x-mindbliss-referral-subject'] || ''}`;
   const flight = `${owner}:${visit.id}`;
   if (writes.has(flight)) return writes.get(flight);
   state.revision++;
+  const revise = () => state.revisions.set(owner, (state.revisions.get(owner) || 0) + 1);
+  revise();
+  const timeoutMs = options.timeoutMs ?? REFERRAL_REQUEST_TIMEOUT_MS;
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > REFERRAL_REQUEST_TIMEOUT_MS) return { ok: false };
+  const deadline = browserRequestDeadline(options.signal, timeoutMs);
+  let aborted;
+  const cancellation = new Promise(resolve => { aborted = () => resolve({ ok: false }); deadline.signal.addEventListener('abort', aborted, { once: true });
+    if (deadline.signal.aborted) aborted(); });
   const send = async () => {
-    const deadline = browserRequestDeadline(undefined, REFERRAL_REQUEST_TIMEOUT_MS);
     try {
+      if (deadline.signal.aborted) return { ok: false };
       const response = await fetchImpl(endpoint, { method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error',
         keepalive: true, signal: deadline.signal, headers: { 'Content-Type': 'application/json', ...ownerHeaders },
-        body: JSON.stringify({ ref: visit.ref, preferred_side: visit.preferred_side, expected_email: visit.email }) });
+        body: JSON.stringify({ ref: visit.ref, preferred_side: '', expected_email: visit.email }) });
       const body = await response.json().catch(() => null);
-      if (!response.ok || !validResponse(body) || !matches(body, visit)) return { ok: false };
+      if (deadline.signal.aborted || !response.ok || !validResponse(body) || !matches(body, visit)) return { ok: false };
       clearVisit(visit, browser);
+      invalidateMemberReferral({ email: visit.email, subject: options.subject });
       return body;
     } catch { return { ok: false }; }
-    finally { deadline.dispose(); }
   };
   // Only one save for this owner may be in flight in this browser context.
   // Queue explicit newer choices; reads never create or replay a save.
   const previous = owners.get(owner);
-  const completion = previous ? previous.then(send) : send();
+  const operation = previous ? previous.then(send) : send();
+  const completion = Promise.race([operation, cancellation]);
   writes.set(flight, completion);
   owners.set(owner, completion);
   try { return await completion; } finally {
-    if (writes.get(flight) === completion) { writes.delete(flight); state.revision++; }
+    deadline.dispose(); deadline.signal.removeEventListener('abort', aborted);
+    if (writes.get(flight) === completion) { writes.delete(flight); state.revision++; revise(); }
     if (owners.get(owner) === completion) owners.delete(owner);
   }
 }
@@ -124,18 +139,20 @@ async function postVisit(visit, options = {}) {
 // not an outbox: mounts and GETs never replay old localStorage attribution.
 export function beginVerifiedReferralSync(email, ref, preferredSide = '', options = {}) {
   const normalized = normalizeReferralEmail(email), code = normalizeReferralCode(ref);
-  if (!normalized || !code || !subjectHeaders(options)) return Promise.resolve({ ok: false });
+  const companyDefault = ref === '' && Boolean(profileSubjectHeader(options.subject));
+  if (!normalized || (!code && !companyDefault) || !subjectHeaders(options)) return Promise.resolve({ ok: false });
   const browser = options.browser || browserDefault();
   try {
     const visit = { id: globalThis.crypto.randomUUID(), email: normalized, ref: code,
-      preferred_side: normalizePlacementSide(preferredSide), createdAt: Date.now() };
+      preferred_side: normalizePlacementSide(preferredSide), createdAt: Date.now(),
+      ...(options.subject ? { subject: options.subject } : {}), ...(companyDefault ? { companyDefault: true } : {}) };
     store(browser, visit);
     return postVisit(visit, { ...options, browser });
   } catch { return Promise.resolve({ ok: false }); }
 }
 
 export function pendingVerifiedReferral(email, options = {}) {
-  return currentVisit(email, options.browser || browserDefault(), options.now ?? Date.now());
+  return currentVisit(email, options.browser || browserDefault(), options.now ?? Date.now(), options.subject);
 }
 
 export function browserReferralChoice(email, options = {}) {
@@ -157,7 +174,7 @@ export function chooseBrowserReferral(email, hint, options = {}) {
 // Explicit user action only. A failed save never erases the original hint or
 // silently claims that the server accepted it.
 export function retryVerifiedReferral(email, options = {}) {
-  const browser = options.browser || browserDefault(), visit = currentVisit(email, browser);
+  const browser = options.browser || browserDefault(), visit = currentVisit(email, browser, Date.now(), options.subject);
   return visit ? postVisit(visit, { ...options, browser }) : readVerifiedReferral(email, options);
 }
 
@@ -166,6 +183,7 @@ export async function readVerifiedReferral(email, options = {}) {
   const ownerHeaders = subjectHeaders(options);
   if (!normalized || !ownerHeaders) return { ok: false };
   const owner = JSON.stringify([normalized, ownerHeaders['x-mindbliss-referral-subject'] || '']);
+  const writeOwner = `${normalized}:${ownerHeaders['x-mindbliss-referral-subject'] || ''}`;
   const browser = options.browser || browserDefault(), fetchImpl = options.fetchImpl || fetch;
   const state = syncState(browser), { reads } = state;
   if (reads.has(owner)) return reads.get(owner);
@@ -173,9 +191,9 @@ export async function readVerifiedReferral(email, options = {}) {
     try {
       for (let attempt = 0; attempt < 2; attempt++) {
         // Observe an already-started write, never start/replay one from a GET.
-        const pending = [...state.writes].filter(([flight]) => flight.startsWith(`${normalized}:`)).map(([, write]) => write);
+        const pending = [...state.writes].filter(([flight]) => flight.startsWith(`${writeOwner}:`)).map(([, write]) => write);
         if (pending.length) await Promise.all(pending);
-        const revision = state.revision, visitId = currentVisit(normalized, browser)?.id;
+        const revision = state.revisions.get(writeOwner) || 0, visitId = currentVisit(normalized, browser, Date.now(), options.subject)?.id;
         const deadline = browserRequestDeadline(undefined, REFERRAL_REQUEST_TIMEOUT_MS);
         let response, body;
         try {
@@ -184,11 +202,11 @@ export async function readVerifiedReferral(email, options = {}) {
           body = await response.json().catch(() => null);
         } finally { deadline.dispose(); }
         if (!response.ok || !validResponse(body)) return { ok: false };
-        const visit = currentVisit(normalized, browser);
+        const visit = currentVisit(normalized, browser, Date.now(), options.subject);
         // A late GET must not supersede a write that completed while it was
         // in flight, or clear the marker of a different verified visit.
-        if (revision !== state.revision || visitId !== visit?.id) continue;
-        const choice = latestVisit(normalized, browser);
+        if (revision !== (state.revisions.get(writeOwner) || 0) || visitId !== visit?.id) continue;
+        const choice = latestVisit(normalized, browser, Date.now(), options.subject);
         if (choice && !matches(body, choice)) {
           // A GET must never overwrite another document's stored choice. Keep
           // the discrepancy pending only in this context; a later document
@@ -210,7 +228,7 @@ export async function verifiedReferralForCheckout(email, options = {}) {
   if (!result.ok) return { ok: false, error: 'unavailable' };
   const visit = pendingVerifiedReferral(email, options);
   if (visit && !matches(result, visit)) return { ok: false, error: 'pending' };
-  if (!result.positioned && !result.ref) {
+  if (!result.immutable && !result.positioned && !result.ref) {
     if (browserReferralChoice(email, options)) return { ok: false, error: 'unconfirmed' };
   }
   return { ok: true, code: result.ref, email: result.ref ? normalizeReferralEmail(email) : '' };

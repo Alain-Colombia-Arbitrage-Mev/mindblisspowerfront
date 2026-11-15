@@ -10,6 +10,7 @@ import { readPolygonRelayCapabilities, readPolygonRelayHistory, readPolygonRelay
 import { polygonRelayView } from "@/lib/polygon-relay-contract.mjs";
 import { signPolygonRelay } from "@/lib/polygon-relay-signing.mjs";
 import { isPolygonRelayChain } from "@/lib/polygon-relay-chain.mjs";
+import { hasSelectedPolygonRelayAccount } from "@/lib/polygon-relay-accounts.mjs";
 import { createReownFundingOperation } from "@/lib/reown-funding-operation.mjs";
 import { FUNDING_UUID } from "@/lib/wallet-funding-contract.mjs";
 
@@ -228,8 +229,8 @@ export function usePolygonRelay(reown) {
     const [chain, accounts] = await value.scope.wait(() => Promise.all([
       provider.request({ method: "eth_chainId" }), provider.request({ method: "eth_accounts" }),
     ])); active(value);
-    if (signer.current.generation !== captured || !signer.current.connected || !Array.isArray(accounts) || accounts.length !== 1
-      || typeof accounts[0] !== "string" || accounts[0].toLowerCase() !== wallet) throw new Error("polygon_relay_wallet_changed");
+    if (signer.current.generation !== captured || !signer.current.connected
+      || !hasSelectedPolygonRelayAccount(accounts, wallet)) throw new Error("polygon_relay_wallet_changed");
     if (!isPolygonRelayChain(chain)) throw new Error("polygon_relay_network_mismatch");
   }
   async function review() {

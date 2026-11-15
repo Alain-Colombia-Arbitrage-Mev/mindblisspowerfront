@@ -1,4 +1,5 @@
 import { browserRequestDeadline } from '../../lib/browser-request-deadline.mjs';
+import { profileSubjectHeader } from '../../lib/member-profile.mjs';
 
 export function betterAuthPasswordRequest(email, password) {
   const normalizedEmail = String(email || '').trim().toLowerCase();
@@ -64,7 +65,10 @@ export async function betterAuthAccess(fetchImpl = fetch, expectedEmail = '', op
           || identity.email.trim().toLowerCase() !== expectedEmail.trim().toLowerCase())) {
         return { ready: false, error: 'La sesión actual no corresponde al correo verificado. Usa el acceso para comprobar tu cuenta.' };
       }
-      return { ready: true };
+      if (!profileSubjectHeader(identity.subject)) {
+        return { ready: false, error: 'No pudimos confirmar el estado de tu sesión. Reintenta la comprobación; no necesitas repetir el código ya utilizado.' };
+      }
+      return { ready: true, subject: identity.subject };
     }
     return { ready: false, notice: 'Tu correo está verificado, pero no pudimos confirmar una sesión con acceso al portal. Puedes revisar el acceso otra vez; si continúa sin sesión, vuelve a iniciar sesión con el mismo correo.' };
   } catch {

@@ -15,6 +15,8 @@ export function referralPublicOrigin(env = {}) {
 export function referralLinkCode(value) {
   if (typeof value !== 'string') return '';
   const code = value.trim();
+  // Codes are opaque identifiers; reject control bytes and whitespace.
+  // eslint-disable-next-line no-control-regex
   return code && code.length <= 64 && !/[\u0000-\u0020\u007f]/.test(code) ? code : '';
 }
 
@@ -37,6 +39,6 @@ export function buildReferralLink(value, origin = referralBrowserOrigin()) {
 // is the only opaque hint we retain: binary placement is selected atomically by
 // the backend when the paid membership is activated.
 export function referralLinkFrom(data, origin = referralBrowserOrigin()) {
-  if (data?.positioned !== true) return '';
+  if (typeof data?.positioned !== 'boolean') return '';
   return buildReferralLink(data.code, origin);
 }

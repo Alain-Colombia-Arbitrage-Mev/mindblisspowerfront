@@ -1,4 +1,6 @@
 import { referralLinkCode } from '../../lib/referral-links.mjs';
+import { referralCodeFromSearch } from '../../lib/referral-attribution.js';
+import { profileSubjectHeader } from '../../lib/member-profile.mjs';
 import { parseAuthRetryAfter } from '../../lib/auth-retry-after.mjs';
 
 export const REGISTRATION_RESEND_SECONDS = 300;
@@ -56,6 +58,8 @@ export function registrationErrors(form) {
   /** @type {Record<string, string>} */
   const errors = {};
   const name = String(form.fullName || '').trim();
+  // Reject hostile control characters in public identity or invitation input.
+  // eslint-disable-next-line no-control-regex
   if (name.length < 2 || name.length > 120 || /[\u0000-\u001f\u007f]/.test(name)) errors.fullName = 'Ingresa tu nombre completo (entre 2 y 120 caracteres, sin saltos de línea).';
   if (!registrationEmail(form.email)) errors.email = 'Ingresa un correo electrónico válido.';
   if (form.acceptsPrivacy !== true) errors.acceptsPrivacy = 'Debes autorizar el tratamiento de tus datos para registrarte.';
@@ -66,9 +70,17 @@ export function registrationAcknowledged(action, payload, email = '') {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload) || payload.error || payload.ok !== true || payload.mode !== 'better-auth') return false;
   if (action === 'register') return payload.email === registrationEmail(email) && payload.userConfirmed === false && payload.requiresConfirmation === true;
   if (action === 'confirm') return payload.userConfirmed === true && payload.needsLogin === false && payload.sessionEstablished === true
-    && Object.keys(payload).length === 5 && ['ok', 'mode', 'userConfirmed', 'needsLogin', 'sessionEstablished'].every(key => Object.hasOwn(payload, key));
+    && ['ok', 'mode', 'userConfirmed', 'needsLogin', 'sessionEstablished'].every(key => Object.hasOwn(payload, key))
+    && (Object.keys(payload).length === 5 || (Object.keys(payload).length === 6 && Boolean(profileSubjectHeader(payload.subject))));
   if (action === 'resend') return Number.isSafeInteger(payload.resendAfter) && payload.resendAfter >= REGISTRATION_RESEND_SECONDS;
   return false;
+}
+
+// Only the exact versioned acknowledgement exposes the canonical native ID.
+// Legacy success remains accepted but requires one separate current-session
+// read before an optional referral capture can be associated with a subject.
+export function registrationConfirmedSubject(payload) {
+  return registrationAcknowledged('confirm', payload) && Object.keys(payload).length === 6 ? payload.subject : '';
 }
 
 // This is a recoverable failure, never an accepted send or verified account.
@@ -83,7 +95,7 @@ export function registrationPendingDelivery(status, payload, email) {
 
 export function registrationHints(search) {
   const params = new URLSearchParams(search);
-  const referralCode = referralLinkCode(params.get('ref'));
+  const referralCode = referralCodeFromSearch(params);
   return {
     email: registrationEmail(params.get('email')),
     referralCode,

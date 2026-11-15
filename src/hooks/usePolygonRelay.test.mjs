@@ -9,6 +9,7 @@ import { createPersonalWalletBalanceStore, EMPTY_PERSONAL_BALANCE, personalWalle
 import { createReownFundingOperation } from '../lib/reown-funding-operation.mjs';
 import { FUNDING_UUID } from '../lib/wallet-funding-contract.mjs';
 import { isPolygonRelayChain } from '../lib/polygon-relay-chain.mjs';
+import { hasSelectedPolygonRelayAccount } from '../lib/polygon-relay-accounts.mjs';
 
 const wallet = `0x${'1'.repeat(40)}`, otherWallet = `0x${'2'.repeat(40)}`, relayer = `0x${'3'.repeat(40)}`;
 const id = '11111111-1111-4111-8111-111111111111', hash = `0x${'4'.repeat(64)}`, blockHash = `0x${'5'.repeat(64)}`;
@@ -51,7 +52,7 @@ function harness(overrides = {}) {
   const localStorage = { getItem: key => storage.get(key) ?? null, setItem: (key, value) => { if (overrides.storageFailure) throw Error('quota'); storage.set(key, value); }, removeItem: key => storage.delete(key) };
   const browser = Object.assign(new EventTarget(), { localStorage }), documentRef = Object.assign(new EventTarget(), { visibilityState: 'visible' });
   const provider = { request(input) { providerCalls.push(input); return Promise.resolve(input.method === 'eth_chainId' ? selectedChain
-    : input.method === 'eth_accounts' ? [sdkAddress] : signature); } };
+    : input.method === 'eth_accounts' ? (overrides.accounts || [sdkAddress]) : signature); } };
   const getProvider = () => provider;
   const reown = () => ({ configured: true, linkedAddress: sourceWallet, address: sdkAddress, linkStatus: 'linked', isConnected: connected, isLinked: connected && sdkAddress === sourceWallet,
     getCompanyPaymentProvider: getProvider, connectWallet: async () => calls.push({ action: 'connect' }),
@@ -113,6 +114,7 @@ function harness(overrides = {}) {
     '@/lib/personal-wallet-balance-store.mjs': { personalWalletBalanceSessionKey }, '@/lib/personal-company-payment-values.mjs': amounts,
     '@/lib/polygon-relay-contract.mjs': contract, '@/lib/polygon-relay-client.mjs': client,
     '@/lib/polygon-relay-chain.mjs': { isPolygonRelayChain },
+    '@/lib/polygon-relay-accounts.mjs': { hasSelectedPolygonRelayAccount },
     '@/lib/reown-funding-operation.mjs': { createReownFundingOperation: options => {
       operationDeadlines.push(options?.timeoutMs);
       return createReownFundingOperation({ ...options, ...(overrides.timeoutMs ? { timeoutMs: overrides.timeoutMs } : {}) });
@@ -153,6 +155,22 @@ function harness(overrides = {}) {
 }
 const writes = h => h.calls.filter(call => ['prepare', 'authorize', 'submit', 'verify', 'abandon'].includes(call.action));
 async function review(h) { await h.flush(); h.flow.setAmount('28.433366'); await h.flush(); await h.flow.review(); await h.flush(); }
+
+test('an external wallet exposing additional authorized accounts can review its selected bound account without spending gas', async t => {
+  const h = harness({ accounts: [wallet, otherWallet] }); t.after(() => h.unmount());
+  await review(h);
+  assert.equal(h.flow.stage, 'review'); assert.equal(h.flow.preview.walletAddress, wallet);
+  assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
+});
+
+test('a bound wallet appearing behind another selected account never prepares a sponsored payment', async t => {
+  for (const accounts of [[otherWallet, wallet], [wallet, wallet], [wallet, null], []]) {
+    const h = harness({ accounts }); t.after(() => h.unmount()); await review(h);
+    assert.equal(h.flow.stage, 'form'); assert.equal(h.flow.preview, null);
+    assert.equal(h.flow.errorKey, 'walletTransfer.walletMismatch');
+    assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
+  }
+});
 
 test('a verified empty wallet starts with an empty payment amount and no validation or financial work', async t => {
   for (const connected of [false, true]) {

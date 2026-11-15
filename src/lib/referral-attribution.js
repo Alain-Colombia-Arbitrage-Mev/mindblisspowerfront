@@ -8,7 +8,41 @@ const ATTRIBUTION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 export function normalizeReferralCode(value) {
   if (typeof value !== 'string') return '';
   const code = value.trim();
+  // Reject hostile control characters in public identity or invitation input.
+  // eslint-disable-next-line no-control-regex
   return code.length <= 64 && !/[\u0000-\u0020\u007f]/.test(code) ? code : '';
+}
+
+// Ambiguous links must not pick an arbitrary sponsor after the server has
+// rejected duplicate query values. This is only an invitation hint.
+export function referralCodeFromSearch(search) {
+  const params = search instanceof URLSearchParams ? search : new URLSearchParams(String(search || "").replace(/^\?/, ""));
+  const values = params.getAll("ref");
+  return values.length === 1 ? normalizeReferralCode(values[0]) : "";
+}
+
+// The identity link may preserve the current form's validated invitation, but
+// it never forwards redirect targets, placement, credentials or account powers.
+export function authReferralHref(activePath, href) {
+  if (!['/login', '/register'].includes(activePath) || typeof href !== 'string'
+      || href.length > 2048 || !href.startsWith('/') || href.startsWith('//')) return '/';
+  try {
+    const url = new URL(href, 'https://auth.invalid');
+    if (url.origin !== 'https://auth.invalid' || url.pathname !== activePath || url.hash) return '/';
+    const ref = referralCodeFromSearch(url.searchParams);
+    if (!ref) return '/';
+    const params = new URLSearchParams();
+    const mode = url.searchParams.get('mode');
+    if (activePath === '/login' && url.searchParams.getAll('mode').length === 1
+        && (mode === 'code' || mode === 'password')) params.set('mode', mode);
+    const emails = url.searchParams.getAll('email');
+    const email = emails.length === 1 ? normalizeReferralEmail(emails[0]) : '';
+    if (email) params.set('email', email);
+    params.set('ref', ref);
+    if (activePath === '/register' && url.searchParams.getAll('resume').length === 1
+        && url.searchParams.get('resume') === '1') params.set('resume', '1');
+    return `${activePath}?${params}`;
+  } catch { return '/'; }
 }
 
 export function normalizePlacementSide(value) {
@@ -25,7 +59,7 @@ export function normalizeReferralEmail(value) {
 
 export function captureReferralFromUrl(search, storage = browserStorage(), now = Date.now()) {
   const params = new URLSearchParams(String(search || "").replace(/^\?/, ""));
-  const code = normalizeReferralCode(params.get("ref"));
+  const code = referralCodeFromSearch(params);
   if (!code || !storage) return null;
 
   const email = normalizeReferralEmail(params.get("email"));

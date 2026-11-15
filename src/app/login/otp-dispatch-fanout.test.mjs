@@ -177,7 +177,7 @@ const scenarios = [
   { name: 'registration', file: '../register/BetterAuthRegisterForm.jsx', initial: {},
     sendPath: '/api/auth/register', verifyPath: '/api/auth/register/confirm', codeField: 'code',
     sendAck: () => Response.json({ ok: true, mode: 'better-auth', email, userConfirmed: false, requiresConfirmation: true, resendAfter: 300 }),
-    verifyAck: () => Response.json({ ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: false, sessionEstablished: true }) },
+    verifyAck: () => Response.json({ ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: false, sessionEstablished: true, subject: 'synthetic-fixture-user' }) },
   { name: 'password recovery', file: '../forgot-password/BetterAuthPasswordRecovery.jsx', initial: { initialEmail: email },
     sendPath: '/api/auth/email-otp/request-password-reset', verifyPath: '/api/auth/email-otp/reset-password', codeField: 'recovery-otp',
     sendAck: () => Response.json({ ok: true }), verifyAck: () => Response.json({ ok: true }) },
@@ -185,10 +185,16 @@ const scenarios = [
 for (const scenario of scenarios) {
   test(scenario.name + ': real StrictMode, cooldown ticks and browser activity never send unsolicited OTP; bursts dispatch once', async t => {
     const sending = deferred(), sent = deferred(), verifying = deferred(), verified = deferred();
-    const ui = await fixture(t, path => {
+    const ui = await fixture(t, (path, options) => {
+      if (path === '/api/member/referral-attribution') {
+        assert.equal(scenario.name === 'password recovery', false);
+        assert.equal(options.headers['x-mindbliss-referral-subject'], scenario.name === 'login' ? 'synthetic-member' : 'synthetic-fixture-user');
+        assert.deepEqual(JSON.parse(options.body), { ref: '', preferred_side: '', expected_email: email });
+        return Response.json({ error: 'unavailable' }, { status: 503 });
+      }
       if (path === scenario.sendPath) { sending.resolve(); return sent.promise; }
       if (path === scenario.verifyPath) { verifying.resolve(); return verified.promise; }
-      if (path === '/api/auth/session?view=access') return Response.json({ authenticated: true, mode: 'better-auth', email });
+      if (path === '/api/auth/session?view=access') return Response.json({ authenticated: true, mode: 'better-auth', email, subject: 'synthetic-member' });
       assert.fail('Unexpected offline request: ' + path);
     });
     const Form = component(scenario.file);
@@ -224,6 +230,7 @@ for (const scenario of scenarios) {
     await act(async () => { verified.resolve(scenario.verifyAck()); await verifyPending; });
     const expected = [scenario.sendPath, scenario.verifyPath];
     if (scenario.name === 'login') expected.push('/api/auth/session?view=access');
+    if (scenario.name !== 'password recovery') expected.push('/api/member/referral-attribution');
     assert.deepEqual(ui.calls.map(call => call.path), expected);
     for (let i = 0; i < 3; i++) await ui.activity(120);
     assert.deepEqual(ui.calls.map(call => call.path), expected, 'completed authentication never resends or verifies itself again');

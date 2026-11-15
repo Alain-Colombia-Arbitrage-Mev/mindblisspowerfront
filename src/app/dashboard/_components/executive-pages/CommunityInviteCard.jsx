@@ -4,50 +4,31 @@ import { Check, Copy, Loader2, RotateCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { useI18n } from "@/i18n/LanguageProvider";
-import { readMemberJson, validMemberReferral } from "@/lib/member-read.mjs";
-import { createClipboardFeedback, createLatestViewRequest } from "@/lib/member-view-effects.mjs";
+import useMemberReferral from '@/components/member/useMemberReferral';
+import { createClipboardFeedback } from "@/lib/member-view-effects.mjs";
 import { referralLinkFrom } from "@/lib/referral-links.mjs";
 
 export default function CommunityInviteCard({ editorOpen, onCloseEditor }) {
   const { locale, t } = useI18n();
-  const [status, setStatus] = useState("loading");
-  const [link, setLink] = useState("");
+  const { data, error, busy, refresh, canShare } = useMemberReferral();
+  const link = referralLinkFrom(data), status = link ? 'ready' : busy ? 'loading' : error ? 'error' : 'pending';
   const [feedback, setFeedback] = useState({ pending: "", copied: "", error: "" });
   const [message, setMessage] = useState(() => t("community.editorDefault"));
-  const request = useRef(null);
   const clipboard = useRef(null);
 
   useEffect(() => {
-    const active = createLatestViewRequest(
-      signal => readMemberJson("/api/member/referral", { signal, validate: validMemberReferral }),
-      {
-        onStart: () => setStatus("loading"),
-        onValue: data => {
-          const next = referralLinkFrom(data);
-          setLink(next);
-          setStatus(next ? "ready" : "pending");
-        },
-        onError: () => { setLink(""); setStatus("error"); },
-        onSettled: () => {},
-      },
-    );
-    request.current = active;
-    active.run();
-    return () => { active.dispose(); if (request.current === active) request.current = null; };
-  }, []);
-
-  useEffect(() => {
+    setFeedback({ pending: '', copied: '', error: '' });
     const active = createClipboardFeedback(setFeedback);
     clipboard.current = active;
     return () => { active.dispose(); if (clipboard.current === active) clipboard.current = null; };
-  }, []);
+  }, [link]);
 
   useEffect(() => setMessage(t("community.editorDefault")), [locale, t]);
 
   const linkCopy = async () => {
-    if (link) await clipboard.current?.copy(link, "link");
+    if (link && canShare()) await clipboard.current?.copy(link, link);
   };
-  const messageCopy = async () => clipboard.current?.copy(message, "message");
+  const messageCopy = async () => { if (canShare()) return clipboard.current?.copy(message, 'message'); };
 
   return (
     <div className="mb-community-invite-card">
@@ -60,12 +41,12 @@ export default function CommunityInviteCard({ editorOpen, onCloseEditor }) {
           </div>
           <strong title={link}>{linkText(status, link, t)}</strong>
         </div>
-        <button className="executive-button primary mb-community-copy" type="button" disabled={!link || feedback.pending === "link"} onClick={linkCopy}>
-          {feedback.pending === "link" ? <Loader2 className="animate-spin" size={16} /> : feedback.copied === "link" ? <Check size={16} /> : <Copy size={16} />}
-          {feedback.copied === "link" ? t("community.copied") : t("community.copyLink")}
+        <button className="executive-button primary mb-community-copy" type="button" disabled={!link || feedback.pending === link} onClick={linkCopy}>
+          {link && feedback.pending === link ? <Loader2 className="animate-spin" size={16} /> : link && feedback.copied === link ? <Check size={16} /> : <Copy size={16} />}
+          {link && feedback.copied === link ? t("community.copied") : t("community.copyLink")}
         </button>
       </div>
-      {status === "error" ? <button className="mb-community-refresh" type="button" onClick={() => request.current?.run()}><RotateCw size={14} />{t("common.update")}</button> : null}
+      {error ? <div role="alert">{link ? <p>{t('referralCard.refreshFailed')}</p> : null}<button className="mb-community-refresh" type="button" disabled={busy} onClick={() => void refresh()}><RotateCw size={14} />{t("common.update")}</button></div> : null}
 
       {editorOpen ? <section className="mb-community-editor" aria-labelledby="community-editor-title">
         <div>

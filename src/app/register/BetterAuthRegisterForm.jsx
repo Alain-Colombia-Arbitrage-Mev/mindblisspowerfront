@@ -14,7 +14,7 @@ import { publishMemberSessionReplacement } from '@/lib/member-session-sync.mjs';
 import { recoverRegistrationSession, registrationSessionRecoveryEligible, registrationVerifiedWithoutSession } from '@/lib/registration-session-recovery.mjs';
 import ContactPhoneField from './ContactPhoneField';
 import { initialContactPhone, registrationContactValues } from './contact-phone-model.mjs';
-import { REGISTRATION_RESEND_SECONDS, consumeRegistrationPrefill, registrationEmail, registrationErrors, registrationCodeFailure, registrationFailure, registrationHints, registrationLoginUrl, registrationUrl, registrationRetrySeconds, registrationAcknowledged, registrationPendingDelivery, registrationTimeoutMs } from './registration-model.mjs';
+import { REGISTRATION_RESEND_SECONDS, consumeRegistrationPrefill, registrationEmail, registrationErrors, registrationCodeFailure, registrationFailure, registrationHints, registrationLoginUrl, registrationUrl, registrationRetrySeconds, registrationAcknowledged, registrationConfirmedSubject, registrationPendingDelivery, registrationTimeoutMs } from './registration-model.mjs';
 
 const initialForm = { fullName: '', email: '', acceptsPrivacy: false,
   contactPhone: initialContactPhone(), contactWhatsapp: initialContactPhone(), whatsappSameAsPhone: false };
@@ -111,17 +111,19 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
     setLoading('');
   }
 
-  function enterVerifiedDashboard(operation, recovered = false) {
+  async function enterVerifiedDashboard(operation, recovered = false, subject = '') {
     if (!currentRequest(operation) || dashboardNavigation.current) return;
     publishMemberSessionReplacement(window);
     // The BFF proved a new native session, or the recovery GET independently
     // proved this browser's existing same-owner session. Neither is an email
     // lookup or an access grant; the dashboard still enforces permissions.
-    // Optional attribution cannot delay the navigation or grant permissions.
+    // One optional capture gets a bounded delivery window before navigation.
+    // Failure cannot reverse consumed email proof or grant permissions.
     try {
       if (hints.referralCode) bindReferralCodeToEmail(email, hints.referralCode, undefined, undefined, 'registration', hints.preferredSide);
-      if (hints.referralCode) void beginVerifiedReferralSync(email, hints.referralCode, hints.preferredSide);
+      if (subject) await beginVerifiedReferralSync(operation.email, hints.referralCode, '', { subject, signal: operation.controller.signal, timeoutMs: 8000 });
     } catch { /* Server referral persistence independently verifies ownership. */ }
+    if (!currentRequest(operation) || dashboardNavigation.current) return;
     // Recovered registration may also offer the manual wallet activation UI.
     // This hint has no authentication, ownership or automatic-signing power.
     rememberWalletSetupAfterAuth(operation.email, window);
@@ -140,7 +142,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
     const identity = await recoverRegistrationSession(operation.email, { signal: operation.controller.signal });
     if (!currentRequest(operation) || !identity || identity.email !== operation.email) return false;
     setCode(''); setErrors({}); setNotice(''); setStep('recovered');
-    enterVerifiedDashboard(operation, true);
+    await enterVerifiedDashboard(operation, true, identity.subject);
     return true;
   }
 
@@ -150,7 +152,7 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
       const response = await fetch(path, {
         method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error',
         signal: deadline.signal,
-        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        headers: { 'Content-Type': 'application/json', ...(action === 'confirm' ? { 'x-mindbliss-registration-context': 'v2' } : {}) }, body: JSON.stringify(body),
       });
       return { response, payload: await response.json().catch(() => ({})) };
     } finally { deadline.dispose(); }
@@ -240,9 +242,24 @@ export default function BetterAuthRegisterForm({ initialSearch = '' }) {
         } else setErrors({ form: message });
         return;
       }
+      let subject = registrationConfirmedSubject(payload);
+      if (!subject) {
+        // A cached legacy BFF may return the old exact ACK. One bounded GET
+        // obtains this browser's canonical subject without redeeming the OTP
+        // again. Optional capture failure never reverses completed email proof.
+        const identity = await recoverRegistrationSession(operation.email, { signal: operation.controller.signal });
+        if (!currentRequest(operation)) return;
+        subject = identity?.subject || '';
+      }
       setCode('');
       setStep('verified');
-      enterVerifiedDashboard(operation);
+      if (!subject) {
+        publishMemberSessionReplacement(window);
+        dashboardNavigation.current = true;
+        setErrors({ form: 'Tu correo está verificado. No pudimos comprobar la sesión actual; abre el panel con el enlace de abajo para continuar. No vuelvas a usar este código.' });
+        return;
+      }
+      await enterVerifiedDashboard(operation, false, subject);
     } catch {
       if (!currentRequest(operation)) return;
       if (await recoverCurrentSession(operation)) return;

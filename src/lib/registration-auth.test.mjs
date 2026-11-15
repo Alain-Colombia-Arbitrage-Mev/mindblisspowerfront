@@ -387,3 +387,28 @@ test('only the exact signup 503 code offers pending recovery; resend never impli
   assert.equal(body.registrationPending, undefined);
   assert.equal(body.email, undefined);
 });
+
+
+test('only an exact registration v2 context projects the canonical proved subject while cached clients keep their five-field ACK', async () => {
+  for (const context of [undefined, 'v1', 'V2', 'v2, v2', 'v2']) {
+    const incoming = request({ email, code: '001234' });
+    if (context !== undefined) incoming.headers.set('x-mindbliss-registration-context', context);
+    const paths = [];
+    const response = await handleRegistration(incoming, 'confirm', { env, fetchImpl: async url => {
+      paths.push(new URL(url).pathname);
+      return url.endsWith('/get-session') ? Response.json(canonical()) : verifiedResponse();
+    } });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.deepEqual(body, { ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: false, sessionEstablished: true,
+      ...(context === 'v2' ? { subject: user.id } : {}) });
+    assert.equal(response.headers.getSetCookie().length, 1);
+    assert.deepEqual(paths, ['/api/auth/email-otp/verify-email', '/api/auth/get-session']);
+    assert.doesNotMatch(JSON.stringify(body), /token|personId|role|redirect/);
+  }
+  const incoming = request({ email, code: '001234' }); incoming.headers.set('x-mindbliss-registration-context', 'v2');
+  const response = await handleRegistration(incoming, 'confirm', { env, fetchImpl: async url => url.endsWith('/get-session')
+    ? Response.json(canonical({ user: { ...user, id: 'other-owner' } })) : verifiedResponse() });
+  assert.equal(response.status, 503); assert.equal((await response.json()).subject, undefined);
+  assert.equal(response.headers.get('set-cookie'), null, 'a requested projection never bypasses native owner/session proof');
+});

@@ -1,6 +1,7 @@
 import { Signature, TypedDataEncoder, verifyTypedData } from 'ethers';
 import { polygonRelayView } from './polygon-relay-contract.mjs';
 import { isPolygonRelayChain } from './polygon-relay-chain.mjs';
+import { hasSelectedPolygonRelayAccount } from './polygon-relay-accounts.mjs';
 
 /** A NativeMetaTransaction authorization moves only the reviewed USDT amount.
  * The token's nonce prevents replay; the token does not support an onchain deadline.
@@ -17,7 +18,7 @@ export async function signPolygonRelay(value, provider, expectedWallet, assertAc
     const [chain, accounts] = await Promise.all([provider.request({ method: 'eth_chainId' }), provider.request({ method: 'eth_accounts' })]);
     assertActive();
     if (!isPolygonRelayChain(chain)) throw new Error('polygon_relay_network_mismatch');
-    if (!Array.isArray(accounts) || accounts.length !== 1 || typeof accounts[0] !== 'string' || accounts[0].toLowerCase() !== expectedWallet) throw new Error('polygon_relay_wallet_changed');
+    if (!hasSelectedPolygonRelayAccount(accounts, expectedWallet)) throw new Error('polygon_relay_wallet_changed');
   }
   await identity();
   const payload = TypedDataEncoder.getPayload(typed.domain, typed.types, typed.message);

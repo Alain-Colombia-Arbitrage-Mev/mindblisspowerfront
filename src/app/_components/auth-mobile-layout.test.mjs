@@ -1,3 +1,4 @@
+import { authReferralHref } from '../../lib/referral-attribution.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
@@ -29,6 +30,7 @@ function compile(file, mocks, exports = '') {
   }).outputText;
   const module = { exports: {} };
   new Function('require', 'module', 'exports', code)(id => {
+    if (id === '@/lib/referral-attribution') return { authReferralHref };
     if (id === 'react/jsx-runtime') return require(id);
     assert.ok(Object.hasOwn(mocks, id), `Unexpected auth layout dependency: ${id}`);
     return mocks[id];
@@ -181,7 +183,7 @@ test('verified login exposes a prominent native dashboard anchor without a JavaS
   t.mock.method(globalThis, 'fetch', async path => {
     paths.push(path);
     if (path === '/api/auth/email-otp/send-verification-otp') return Response.json({ ok: true });
-    if (path === '/api/auth/session?view=access') return Response.json({ authenticated: true, mode: 'better-auth', email });
+    if (path === '/api/auth/session?view=access') return Response.json({ authenticated: true, mode: 'better-auth', email, subject: 'synthetic-member' });
     assert.equal(path, '/api/auth/sign-in/email-otp');
     return Response.json({ ok: true, user: { id: 'synthetic-member', email, emailVerified: true } });
   });

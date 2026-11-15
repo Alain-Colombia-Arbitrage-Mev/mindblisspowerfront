@@ -1,9 +1,9 @@
 import { browserRequestDeadline } from './browser-request-deadline.mjs';
+import { profileSubjectHeader } from './member-profile.mjs';
 
 const normalizeEmail = value => typeof value === 'string' ? value.trim().toLowerCase() : '';
 const validEmail = value => value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-const validSubject = value => typeof value === 'string' && value.length > 0 && value.length <= 256
-  && value === value.trim() && !/[\u0000-\u001f\u007f]/.test(value);
+const validSubject = value => Boolean(profileSubjectHeader(value));
 
 /** A lost acknowledgement or a consumed code may follow a completed signup.
  * A recovery read never validates that code or requests another one. */

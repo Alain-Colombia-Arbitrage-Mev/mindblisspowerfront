@@ -18,24 +18,26 @@ const toneStyles = {
   neutral: { background: 'var(--vp-surface-raised)', border: 'var(--vp-border)', color: 'var(--vp-text-soft)' },
 };
 
-export default function ReferralShareModal({ isOpen, onClose, code }) {
+export default function ReferralShareModal({ isOpen, onClose, code, canShare = undefined }) {
   const [copyFeedback, setCopyFeedback] = useState({ pending: '', copied: '', error: '' });
   const [sharing, setSharing] = useState(null);
   const [shareError, setShareError] = useState('');
   const clipboard = useRef(null);
+  const mounted = useRef(false);
   const copied = copyFeedback.copied;
 
   useEffect(() => {
+    mounted.current = true; setCopyFeedback({ pending: '', copied: '', error: '' }); setShareError('');
     const active = createClipboardFeedback(setCopyFeedback);
     clipboard.current = active;
-    return () => { active.dispose(); if (clipboard.current === active) clipboard.current = null; };
-  }, []);
+    return () => { mounted.current = false; active.dispose(); if (clipboard.current === active) clipboard.current = null; };
+  }, [code]);
 
   const referralLink = buildReferralLink(code);
   const shareText = `Únete a mi red en Mindbliss Power usando mi código de referido: ${code}. El sistema asignará automáticamente tu posición en el árbol binario. ${referralLink}`;
 
   const handleShare = (type) => {
-    if (!referralLink) return;
+    if (!mounted.current || !referralLink || canShare?.() === false) return;
     setShareError('');
     if (type === 'link') return clipboard.current?.copy(referralLink, 'link');
     const message = encodeURIComponent(shareText);
@@ -101,7 +103,7 @@ export default function ReferralShareModal({ isOpen, onClose, code }) {
                 <p style={{ color: 'var(--vp-text)', fontSize: 20, fontWeight: 900, letterSpacing: '1px', margin: 0, flex: 1 }}>{code}</p>
                 <motion.button
                   aria-label="Copiar código"
-                  onClick={() => clipboard.current?.copy(code, 'code')}
+                  onClick={() => { if (mounted.current && canShare?.() !== false) return clipboard.current?.copy(code, 'code'); }}
                   whileHover={{ y: -1 }}
                   whileTap={{ scale: 0.96 }}
                   className="rounded p-2"

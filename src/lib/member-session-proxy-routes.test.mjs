@@ -34,7 +34,7 @@ function token(expired = false) {
   return `${message}.${sign('RSA-SHA256', Buffer.from(message), privateKey).toString('base64url')}`;
 }
 
-function route(path, method, rawToken, tokenError, serviceCalls) {
+function route(path, method, rawToken, tokenError, serviceCalls, native = false) {
   const source = readFileSync(new URL(`../app/api/${path}/route.js`, import.meta.url), 'utf8');
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
   const mocks = {
@@ -47,6 +47,11 @@ function route(path, method, rawToken, tokenError, serviceCalls) {
     '@/lib/nowpayments-status-bff.mjs': { handleNOWPaymentsStatus },
     '@/lib/nowpayments-purchases-bff.mjs': { handleNOWPaymentsPurchases },
     '@/lib/referral-attribution-bff.mjs': { handleReferralAttribution },
+    '@/lib/better-auth-bridge.mjs': { betterAuthEnabled: () => native },
+    '@/lib/member-referral-native-bff.mjs': { handleNativeReferralAttribution: request => {
+      assert.equal(native, true, 'legacy JWT cases must not bypass their actual proof through the native handler');
+      serviceCalls.push(request); return Response.json({ error: 'unauthenticated' }, { status: 401 });
+    } },
   };
   const module = { exports: {} };
   new Function('require', 'module', 'exports', compiled)(id => {
@@ -101,3 +106,13 @@ for (const [path, method, unavailableError] of cases) {
     });
   }
 }
+
+
+for (const method of ['GET', 'POST']) test(`native ${method} referral dispatch never falls through to legacy JWT or financial transport`, async () => {
+  const calls = [], input = new Request('https://portal.example.test/api/member/referral-attribution', { method,
+    ...(method === 'POST' ? { body: JSON.stringify({ ref: '', preferred_side: '', expected_email: 'native@example.test' }) } : {}) });
+  const handler = route('member/referral-attribution', method, '', new Error('legacy auth must not be queried'), calls, true);
+  const response = await handler(input);
+  assert.equal(response.status, 401); assert.deepEqual(await response.json(), { error: 'unauthenticated' });
+  assert.deepEqual(calls, [input]); assert.equal(input.bodyUsed, false, 'dispatch itself never interprets a caller identity or mutation');
+});

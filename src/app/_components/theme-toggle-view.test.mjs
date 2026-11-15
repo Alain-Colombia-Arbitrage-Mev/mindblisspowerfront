@@ -1,3 +1,4 @@
+import { authReferralHref } from '../../lib/referral-attribution.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
@@ -22,6 +23,7 @@ function load(file, mocks) {
   const module = { exports: {} };
   const code = ts.transpileModule(source(file), { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
   new Function('require', 'module', 'exports', code)(id => {
+    if (id === '@/lib/referral-attribution') return { authReferralHref };
     if (Object.hasOwn(mocks, id)) return mocks[id];
     if (id === 'react' || id === 'react/jsx-runtime') return require(id);
     assert.fail(`Unexpected dependency: ${id}`);

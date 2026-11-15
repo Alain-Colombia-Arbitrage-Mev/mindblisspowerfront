@@ -152,11 +152,13 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
         setNotice(access.notice || '');
         return;
       }
-      // Optional browser storage/referral sync must not strand a valid sign-in.
+      // Give the one optional capture a bounded delivery window before replacing
+      // this document. Its outcome cannot invalidate the completed sign-in.
       try {
         rememberReferralForEmail(verified.email);
-        if (referralCode) void beginVerifiedReferralSync(verified.email, referralCode, preferredSide);
+        await beginVerifiedReferralSync(verified.email, referralCode, '', { subject: access.subject, signal: controller.signal, timeoutMs: 8000 });
       } catch { /* The server independently authorizes referral persistence. */ }
+      if (!mountedRef.current || controller.signal.aborted || dashboardAccessRef.current !== controller || verifiedLoginRef.current !== verified) return;
       dashboardNavigationRef.current = true;
       window.location.replace('/dashboard');
     } catch {

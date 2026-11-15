@@ -6,6 +6,7 @@ import * as model from './registration-model.mjs';
 import * as contacts from './contact-phone-model.mjs';
 import * as emailOtp from '../../lib/email-otp-client.mjs';
 import * as referral from '../../lib/referral-attribution.js';
+import * as referralSync from '../../lib/referral-sync.mjs';
 import * as access from '../login/better-auth-login.mjs';
 import * as walletSetupHandoff from '../../lib/wallet-setup-handoff.mjs';
 import * as sessionRecovery from '../../lib/registration-session-recovery.mjs';
@@ -42,9 +43,10 @@ function enterValid(harness, values = valid) {
   }
   return tree;
 }
+const captureProjection = calls => calls.map(([recipient, ref, side, options]) => { assert.ok(options.signal instanceof AbortSignal); return [recipient, ref, side, { subject: options.subject, timeoutMs: options.timeoutMs }]; });
 const submit = tree => find(tree, node => node?.type === 'form').props.onSubmit({ preventDefault() {} });
 const signupAck = () => Response.json({ ok: true, mode: 'better-auth', email: valid.email, userConfirmed: false, requiresConfirmation: true, resendAfter: 300 });
-const confirmationAck = () => Response.json({ ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: false, sessionEstablished: true });
+const confirmationAck = () => Response.json({ ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: false, sessionEstablished: true, subject: 'synthetic-user' });
 const currentSessionAck = (changes = {}) => Response.json({ authenticated: true, mode: 'better-auth', email: valid.email, subject: 'synthetic-user', ...changes });
 const unavailableSessionAck = () => Response.json({ error: 'Verified but access unavailable', code: 'REGISTRATION_SESSION_UNAVAILABLE', emailVerified: true, needsLogin: true }, { status: 503 });
 function browser(t) {
@@ -561,13 +563,13 @@ test('resumed registration preserves its local sponsor without claiming another 
   referral.bindReferralCodeToEmail('other@example.test', 'OtherSponsor', storage, undefined, 'registration', 'R');
   t.mock.method(globalThis, 'fetch', async path => { assert.equal(path, '/api/auth/register/confirm'); return confirmationAck(); });
   const saves = [];
-  const harness = view(undefined, referral, undefined, (...values) => { saves.push(values); return new Promise(() => {}); });
+  const harness = view(undefined, referral, undefined, (...values) => { saves.push(values); return Promise.resolve({ ok: true }); });
   const resume = { initialSearch: `email=${encodeURIComponent(valid.email)}&resume=1&ref=LocalSponsor&side=L` };
   const tree = harness.render(resume);
   find(tree, node => node?.props?.id === 'code').props.onChange({ target: { value: '001234' } });
   await submit(harness.render(resume));
   assert.deepEqual(destinations, ['/dashboard']);
-  assert.deepEqual(saves, [[valid.email, 'LocalSponsor', '']], 'entry does not wait for background persistence');
+  assert.deepEqual(captureProjection(saves), [[valid.email, 'LocalSponsor', '', { subject: 'synthetic-user', timeoutMs: 8000 }]], 'entry captures the same proved owner before navigation');
   assert.deepEqual(referral.referralForCheckout(valid.email, storage), { code: 'LocalSponsor', email: valid.email });
   assert.deepEqual(referral.referralForCheckout('other@example.test', storage), { code: 'OtherSponsor', email: 'other@example.test' });
   harness.unmount();
@@ -779,7 +781,7 @@ test('registration send and confirmation retain their deadlines without adding a
     assert.equal(path, '/api/auth/register/confirm');
     return Response.json(JSON.parse(options.body).resend === true
       ? { ok: true, mode: 'better-auth', resendAfter: 300 }
-      : { ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: false, sessionEstablished: true });
+      : { ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: false, sessionEstablished: true, subject: 'synthetic-user' });
   });
   const harness = view(); await submit(enterValid(harness));
   let tree = harness.render(props);
@@ -855,7 +857,7 @@ test('leaving during signup, verification or resend aborts the request and ignor
     assert.equal(signal.aborted, true);
     complete(action === 'register' ? signupAck() : Response.json(action === 'resend'
       ? { ok: true, mode: 'better-auth', resendAfter: 300 }
-      : { ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: false, sessionEstablished: true }));
+      : { ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: false, sessionEstablished: true, subject: 'synthetic-user' }));
     await pending;
     assert.equal(paths.length, 1);
     assert.equal(JSON.stringify(harness.state), stateAtUnmount);
@@ -888,4 +890,123 @@ test('cancellation also ignores a late decoded body or rejected transport withou
     assert.deepEqual(referrals, []);
     assert.equal(paths.length, 1);
   }
+});
+
+
+test('bare registration never revives a previous visitor global invitation or auto-applies an old mailbox hint', async t => {
+  browser(t);
+  const values = new Map(), storage = { getItem: key => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, String(value)), removeItem: key => values.delete(key) };
+  window.localStorage = storage;
+  referral.bindReferralCodeToEmail(valid.email, 'PreviouslyBoundSponsor', storage);
+  referral.captureReferralFromUrl('?ref=OtherVisitorSponsor', storage);
+  const before = [...values], bodies = []; let bindings = 0, saves = 0;
+  t.mock.method(globalThis, 'fetch', async (path, options) => {
+    assert.equal(path, '/api/auth/register'); bodies.push(JSON.parse(options.body)); return signupAck();
+  });
+  const harness = view(undefined, { ...referral, bindReferralCodeToEmail() { bindings++; } }, undefined,
+    () => { saves++; return Promise.resolve({ ok: true }); });
+  const context = { initialSearch: '' };
+  let tree = harness.render(context);
+  for (const [id, value] of Object.entries(valid)) {
+    find(tree, node => node?.props?.id === id).props.onChange({ target: { value, checked: value } });
+    tree = harness.render(context);
+  }
+  await submit(tree);
+  assert.equal(bodies.length, 1); assert.equal(bodies[0].referralCode, '');
+  assert.equal(bindings, 0); assert.equal(saves, 0);
+  assert.deepEqual([...values], before, 'unrelated and explicitly mailbox-bound hints remain independent, never silently applied or deleted');
+  assert.deepEqual(referral.referralForCheckout(valid.email, storage), { code: 'PreviouslyBoundSponsor', email: valid.email });
+  harness.unmount();
+});
+
+
+test('fresh native registration captures the company default only after proof with its canonical subject and never a stale browser invitation', async t => {
+  const destinations = browser(t), values = new Map(), paths = [], saves = [];
+  const storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, String(value)), removeItem: key => values.delete(key) };
+  window.localStorage = storage; referral.captureReferralFromUrl('?ref=OtherVisitorSponsor', storage);
+  const before = [...values];
+  t.mock.method(globalThis, 'fetch', async (path, options) => {
+    paths.push(path); assert.equal(path, '/api/auth/register/confirm');
+    assert.equal(options.headers['x-mindbliss-registration-context'], 'v2');
+    return confirmationAck();
+  });
+  const harness = view(undefined, referral, undefined, (...args) => { saves.push(args); return Promise.resolve({ ok: true }); });
+  const context = { initialSearch: `email=${encodeURIComponent(valid.email)}&resume=1` };
+  let tree = harness.render(context); assert.deepEqual(saves, []);
+  find(tree, node => node?.props?.id === 'code').props.onChange({ target: { value: '001234' } });
+  const confirm = find(harness.render(context), node => node?.type === 'form').props.onSubmit;
+  await confirm({ preventDefault() {} });
+  assert.deepEqual(captureProjection(saves), [[valid.email, '', '', { subject: 'synthetic-user', timeoutMs: 8000 }]]);
+  assert.deepEqual(paths, ['/api/auth/register/confirm']); assert.deepEqual(destinations, ['/dashboard']);
+  harness.render(context); await confirm({ preventDefault() {} });
+  assert.equal(saves.length, 1); assert.equal(paths.length, 1, 'used proof cannot repeat capture or redemption');
+  assert.deepEqual([...values], before); harness.unmount();
+});
+
+test('a cached legacy registration ACK reads its current subject once without replaying OTP; failed subject proof preserves manual verified access', async t => {
+  for (const ready of [true, false]) {
+    const destinations = browser(t), paths = [], saves = [];
+    t.mock.method(globalThis, 'fetch', async path => {
+      paths.push(path);
+      if (path === '/api/auth/register/confirm') return Response.json({ ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: false, sessionEstablished: true });
+      assert.equal(path, '/api/auth/session?view=access');
+      return ready ? currentSessionAck() : Response.json({ error: 'unavailable' }, { status: 503 });
+    });
+    const harness = view(undefined, undefined, undefined, (...args) => { saves.push(args); return Promise.resolve({ ok: true }); });
+    const context = { initialSearch: `email=${encodeURIComponent(valid.email)}&resume=1&ref=ExplicitSponsor` };
+    let tree = harness.render(context);
+    find(tree, node => node?.props?.id === 'code').props.onChange({ target: { value: '001234' } });
+    const confirm = find(harness.render(context), node => node?.type === 'form').props.onSubmit;
+    await confirm({ preventDefault() {} }); tree = harness.render(context);
+    assert.deepEqual(paths, ['/api/auth/register/confirm', '/api/auth/session?view=access']);
+    assert.deepEqual(destinations, ready ? ['/dashboard'] : []);
+    assert.deepEqual(captureProjection(saves), ready ? [[valid.email, 'ExplicitSponsor', '', { subject: 'synthetic-user', timeoutMs: 8000 }]] : []);
+    const markup = renderToStaticMarkup(tree);
+    assert.match(markup, /Correo verificado correctamente/); assert.match(markup, /href="\/dashboard"/);
+    assert.doesNotMatch(markup, /El código no es válido|Solicitar otro código/);
+    await confirm({ preventDefault() {} }); assert.equal(paths.length, 2); harness.unmount();
+  }
+});
+
+
+test('fresh registration keeps its one operation alive until referral ACK and never navigates after cancellation', async t => {
+  for (const cancel of [false, true]) {
+    const destinations = browser(t), paths = [], saves = []; let release;
+    t.mock.method(globalThis, 'fetch', async path => { paths.push(path); assert.equal(path, '/api/auth/register/confirm'); return confirmationAck(); });
+    const harness = view(undefined, undefined, undefined, (...args) => { saves.push(args); return new Promise(resolve => { release = resolve; }); });
+    const context = { initialSearch: `email=${encodeURIComponent(valid.email)}&resume=1&ref=ExplicitSponsor` };
+    const tree = harness.render(context); find(tree, node => node?.props?.id === 'code').props.onChange({ target: { value: '001234' } });
+    const confirm = find(harness.render(context), node => node?.type === 'form').props.onSubmit;
+    const pending = confirm({ preventDefault() {} }); await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(destinations, []); assert.equal(saves.length, 1);
+    await confirm({ preventDefault() {} }); assert.equal(paths.length, 1, 'duplicate OTP handlers stay locked while capture is pending');
+    assert.deepEqual(captureProjection(saves), [[valid.email, 'ExplicitSponsor', '', { subject: 'synthetic-user', timeoutMs: 8000 }]]);
+    if (cancel) { harness.unmount(); assert.equal(saves[0][3].signal.aborted, true); }
+    release({ ok: true }); await pending;
+    assert.deepEqual(destinations, cancel ? [] : ['/dashboard']); assert.equal(paths.length, 1);
+    if (!cancel) harness.unmount();
+  }
+});
+
+test('registration enters after one eight-second capture timeout without replaying proof and retains the explicit pending sponsor', async t => {
+  const destinations = browser(t), paths = [], captures = []; let expire;
+  const originalTimeout = globalThis.setTimeout, originalClear = globalThis.clearTimeout, timer = 987654322;
+  t.mock.method(globalThis, 'setTimeout', (callback, milliseconds, ...args) => {
+    if (milliseconds === 8000) { expire = callback; return timer; }
+    return originalTimeout(callback, milliseconds, ...args);
+  });
+  t.mock.method(globalThis, 'clearTimeout', handle => { if (handle !== timer) originalClear(handle); });
+  t.mock.method(globalThis, 'fetch', async path => { paths.push(path); assert.equal(path, '/api/auth/register/confirm'); return confirmationAck(); });
+  const harness = view(undefined, undefined, undefined, (recipient, ref, side, options) => referralSync.beginVerifiedReferralSync(recipient, ref, side, {
+    ...options, browser: window, fetchImpl: (_path, request) => { captures.push(request); return new Promise(() => {}); },
+  }));
+  const context = { initialSearch: `email=${encodeURIComponent(valid.email)}&resume=1&ref=ExplicitSponsor` };
+  const tree = harness.render(context); find(tree, node => node?.props?.id === 'code').props.onChange({ target: { value: '001234' } });
+  const pending = submit(harness.render(context)); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(captures.length, 1); assert.deepEqual(destinations, []); expire(); await pending;
+  assert.deepEqual(destinations, ['/dashboard']); assert.equal(captures[0].signal.aborted, true);
+  assert.equal(referralSync.pendingVerifiedReferral(valid.email, { browser: window }).ref, 'ExplicitSponsor');
+  assert.match(renderToStaticMarkup(harness.render(context)), /Correo verificado correctamente/);
+  assert.equal(paths.length, 1); assert.equal(captures.length, 1); harness.unmount();
 });

@@ -36,9 +36,9 @@ test('only the canonical verified session permits navigation and it is never cac
     assert.equal(options.credentials, 'same-origin');
     assert.equal(options.cache, 'no-store');
     assert.equal(options.redirect, 'error');
-    return Response.json({ authenticated: true, mode: 'better-auth', email: 'member@example.test' });
+    return Response.json({ authenticated: true, mode: 'better-auth', email: 'member@example.test', subject: 'synthetic-member' });
   });
-  assert.deepEqual(result, { ready: true });
+  assert.deepEqual(result, { ready: true, subject: 'synthetic-member' });
   assert.ok((await betterAuthAccess(async () => new Response(null, { status: 503 }))).error);
   assert.ok((await betterAuthAccess(async () => { throw new Error('private provider diagnostics'); })).error);
 });
@@ -78,7 +78,7 @@ test('canonical access belongs to the just-verified recipient, not an older sign
     assert.equal(result.ready, false);
     assert.match(result.error, /no corresponde al correo verificado/);
   }
-  assert.deepEqual(await betterAuthAccess(async () => Response.json({ authenticated: true, mode: 'better-auth', email: 'MEMBER@EXAMPLE.TEST' }), 'member@example.test'), { ready: true });
+  assert.deepEqual(await betterAuthAccess(async () => Response.json({ authenticated: true, mode: 'better-auth', email: 'MEMBER@EXAMPLE.TEST', subject: 'synthetic-member' }), 'member@example.test'), { ready: true, subject: 'synthetic-member' });
 });
 
 test('cookie roundtrip distinguishes missing or inactive browser sessions from restricted access without reflecting diagnostics', async () => {
@@ -105,7 +105,7 @@ test('cookie roundtrip has one mobile-compatible bounded request and releases it
   t.mock.method(globalThis, 'clearTimeout', id => timers.delete(id));
   try {
     for (const key of descriptors.keys()) Object.defineProperty(AbortSignal, key, { configurable: true, value: undefined });
-    assert.deepEqual(await betterAuthAccess(async () => Response.json({ authenticated: true, mode: 'better-auth', email: 'member@example.test' }), 'member@example.test'), { ready: true });
+    assert.deepEqual(await betterAuthAccess(async () => Response.json({ authenticated: true, mode: 'better-auth', email: 'member@example.test', subject: 'synthetic-member' }), 'member@example.test'), { ready: true, subject: 'synthetic-member' });
     assert.equal(timers.size, 0);
     for (const stalled of ['transport', 'body']) {
       let calls = 0, signal, bodyStarted;
@@ -129,4 +129,15 @@ test('cookie roundtrip has one mobile-compatible bounded request and releases it
   } finally {
     for (const [key, descriptor] of descriptors) Object.defineProperty(AbortSignal, key, descriptor);
   }
+});
+
+
+test('canonical access exposes only its actual bounded subject and never accepts missing or malformed subjects', async () => {
+  for (const subject of [undefined, null, '', ' owner', 'owner\n', 'a'.repeat(256), '\ud800']) {
+    const result = await betterAuthAccess(async () => Response.json({ authenticated: true, mode: 'better-auth', email: 'member@example.test', subject }), 'member@example.test');
+    assert.equal(result.ready, false); assert.equal(result.subject, undefined);
+  }
+  const result = await betterAuthAccess(async () => Response.json({ authenticated: true, mode: 'better-auth', email: 'member@example.test', subject: 'current-native-owner',
+    sponsor: 'untrusted-extra', role: 'super_admin', wallet: 'not-projected' }), 'member@example.test');
+  assert.deepEqual(result, { ready: true, subject: 'current-native-owner' });
 });

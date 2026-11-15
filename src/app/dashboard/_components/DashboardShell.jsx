@@ -30,16 +30,16 @@ export default function DashboardShell({ authMode: _authMode, children }) {
   const closeMenu = useCallback(() => setMobileMenuOpen(false), []);
 
   function showReferralResult(recipient, result) {
-    const visit = pendingVerifiedReferral(recipient);
+    const visit = pendingVerifiedReferral(recipient, { subject: referralView.current?.subject });
     const positioned = result?.ok === true && result.positioned === true && result.ref === '' && result.preferred_side === '';
-    const confirmed = result?.ok === true && (positioned || (result.positioned === false && result.ref
+    const confirmed = result?.ok === true && (result.immutable === true || positioned || (result.positioned === false && result.ref
       && (!visit || result.ref === visit.ref)));
     let notice = '', choice = null;
     if (!confirmed && visit) {
       notice = 'dashboard.referralSaveFailed';
     } else if (result?.ok !== true) {
       notice = 'dashboard.referralReadFailed';
-    } else if (!positioned && !result.ref) {
+    } else if (!result.immutable && !positioned && !result.ref) {
       choice = browserReferralChoice(recipient);
       if (choice) notice = 'dashboard.referralLocalOnly';
     }

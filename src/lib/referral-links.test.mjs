@@ -37,7 +37,8 @@ test('old or arbitrary returned links are rebuilt from the real code without hos
   for (const link of ['https://app.mindblisspower.com/register?ref=wrong&side=R', 'https://evil.example/register?ref=bad&email=private@example.test&redirect=evil']) {
     assert.equal(referralLinkFrom({ positioned: true, code: 'MP50793', link }), expected);
   }
-  assert.equal(referralLinkFrom({ positioned: false, code: 'MP50793' }), '');
+  assert.equal(referralLinkFrom({ positioned: false, code: 'MP50793' }), expected, 'a permanent invitation does not require package or binary placement');
+  assert.equal(referralLinkFrom({ code: 'MP50793' }), '', 'unvalidated legacy hints are not own-link API responses');
 });
 
 test('a mounted portal keeps its own exact origin when rebuilding untrusted API links', t => {

@@ -59,7 +59,7 @@ test('password sign-in does not schedule the OTP-only wallet setup handoff', asy
   window.sessionStorage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) };
   t.mock.method(globalThis, 'fetch', async path => {
     paths.push(path); assert.equal(path, '/api/auth/session?view=access');
-    return Response.json({ authenticated: true, mode: 'better-auth', email: 'member@example.test' });
+    return Response.json({ authenticated: true, mode: 'better-auth', email: 'member@example.test', subject: 'synthetic-member' });
   });
   const harness = magicView(), tree = harness.render({ authMode: 'better-auth', initialMode: 'password', initialEmail: 'member@example.test' });
   await find(tree, node => node?.type === passwordView).props.onVerified('member@example.test');

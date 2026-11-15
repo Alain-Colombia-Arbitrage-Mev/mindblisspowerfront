@@ -1,56 +1,30 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Check, Copy, Link2, RefreshCw, Share2 } from "lucide-react";
-import { readMemberJson, validMemberReferral } from "@/lib/member-read.mjs";
+import useMemberReferral from '@/components/member/useMemberReferral';
 import { referralLinkFrom } from '@/lib/referral-links.mjs';
 import { createClipboardFeedback } from '@/lib/member-view-effects.mjs';
 import { useI18n } from '@/i18n/LanguageProvider';
 
 export default function ReferralLinkCard() {
   const { t } = useI18n();
-  const [link, setLink] = useState("");
-  const [code, setCode] = useState("");
+  const { data, error, busy, refresh, canShare } = useMemberReferral();
+  const link = referralLinkFrom(data), code = link ? data.code : '';
+  const status = link ? 'ready' : busy ? 'loading' : error ? 'error' : 'pending';
   const [copyFeedback, setCopyFeedback] = useState({ pending: '', copied: '', error: '' });
-  const [status, setStatus] = useState("loading");
-  const [error, setError] = useState(null);
-  const request = useRef(null);
   const clipboard = useRef(null);
-
-  const load = useCallback(() => {
-    request.current?.abort();
-    const controller = new AbortController();
-    request.current = controller;
-    setStatus("loading"); setError(null); setLink(""); setCode("");
-    return readMemberJson("/api/member/referral", { signal: controller.signal, validate: validMemberReferral })
-      .then((data) => {
-        if (controller.signal.aborted) return;
-        if (!data.positioned) {
-          setStatus("pending");
-          setLink("");
-          setCode("");
-          return;
-        }
-        const nextLink = referralLinkFrom(data);
-        setLink(nextLink);
-        setCode(data.code || "");
-        setStatus(nextLink ? "ready" : "pending");
-      })
-      .catch((failure) => {
-        if (!controller.signal.aborted) { setStatus("error"); setError(failure); }
-      });
-  }, []);
-  useEffect(() => { load(); return () => request.current?.abort(); }, [load]);
   useEffect(() => {
+    setCopyFeedback({ pending: '', copied: '', error: '' });
     const active = createClipboardFeedback(setCopyFeedback);
     clipboard.current = active;
     return () => { active.dispose(); if (clipboard.current === active) clipboard.current = null; };
-  }, []);
+  }, [link]);
 
   async function copy() {
-    if (!link) return;
-    await clipboard.current?.copy(link, "link");
+    if (!link || !canShare()) return;
+    await clipboard.current?.copy(link, link);
   }
 
   return (
@@ -64,12 +38,12 @@ export default function ReferralLinkCard() {
         {status === "error" ? t("referralCard.unavailable") : status === "loading" ? t("referralCard.loading") : status === "ready"
           ? t("referralCard.ready") : t("referralCard.pending")}
       </p>
-      {status === "error" ? <div role="alert" className="mb-3">{error?.status === 401
+      {error ? <div role="alert" className="mb-3">{link ? <p>{t('referralCard.refreshFailed')}</p> : null}{error?.status === 401
         ? <Link href="/login" className="executive-button">{t("referralCard.signIn")}</Link>
-        : <button type="button" onClick={load} className="executive-button"><RefreshCw size={15} />{t("referralCard.retry")}</button>}</div> : null}
+        : <button type="button" disabled={busy} onClick={() => void refresh()} className="executive-button"><RefreshCw size={15} />{t("referralCard.retry")}</button>}</div> : null}
 
       <div>
-        <SideLink label={t("referralCard.automatic")} hint={t("referralCard.automaticHint")} Icon={Link2} link={link} status={status} copied={copyFeedback.copied === "link"} onCopy={copy} t={t} />
+        <SideLink label={t("referralCard.automatic")} hint={t("referralCard.automaticHint")} Icon={Link2} link={link} status={status} copied={Boolean(link) && copyFeedback.copied === link} onCopy={copy} t={t} />
       </div>
       {copyFeedback.error ? <p role="alert" className="mt-2 text-xs" style={{ color: 'var(--vp-danger)' }}>{copyFeedback.error}</p> : null}
     </div>

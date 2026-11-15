@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { registrationEmail, registrationErrors, registrationHints, registrationRetrySeconds, registrationCodeFailure, registrationFailure, registrationLoginUrl, registrationAcknowledged, registrationUrl, registrationPendingDelivery, registrationRequired, registrationRedirect, consumeRegistrationPrefill, registrationTimeoutMs } from './registration-model.mjs';
+import { registrationEmail, registrationErrors, registrationHints, registrationRetrySeconds, registrationCodeFailure, registrationFailure, registrationLoginUrl, registrationAcknowledged, registrationConfirmedSubject, registrationUrl, registrationPendingDelivery, registrationRequired, registrationRedirect, consumeRegistrationPrefill, registrationTimeoutMs } from './registration-model.mjs';
 
 const valid = { fullName: 'Persona Prueba', email: ' test@example.test ', acceptsPrivacy: true };
 
@@ -233,4 +233,24 @@ test('blocked browser storage still navigates to a fixed registration path witho
   assert.equal(url.searchParams.get('side'), null);
   assert.equal(consumeRegistrationPrefill(browser), '');
   assert.equal(registrationRedirect('invalid', 'invalid ref', 'R'), '/register?reason=registration-required');
+});
+
+
+test('registration never recovers an arbitrary sponsor from a duplicated ref query', () => {
+  for (const search of ['ref=First&ref=Second', 'ref=First&ref=First', 'ref=&ref=Second', 'ref=First&%72ef=Second']) {
+    assert.equal(registrationHints(search).referralCode, '');
+    assert.equal(registrationHints(search).preferredSide, '');
+  }
+});
+
+
+test('only an exact versioned native registration ACK provides its bounded canonical subject; legacy success stays compatible', () => {
+  const legacy = { ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: false, sessionEstablished: true };
+  assert.equal(registrationAcknowledged('confirm', legacy), true); assert.equal(registrationConfirmedSubject(legacy), '');
+  assert.equal(registrationConfirmedSubject({ ...legacy, subject: 'native-owner' }), 'native-owner');
+  for (const subject of [undefined, null, '', ' owner', 'owner\n', 'x'.repeat(256), '\ud800']) {
+    assert.equal(registrationAcknowledged('confirm', { ...legacy, subject }), false);
+    assert.equal(registrationConfirmedSubject({ ...legacy, subject }), '');
+  }
+  assert.equal(registrationConfirmedSubject({ ...legacy, subject: 'native-owner', role: 'admin' }), '');
 });

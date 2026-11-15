@@ -6,6 +6,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 import { treeRefreshFailure } from '../../../lib/tree-read-model.mjs';
+import { memberSessionOwnerKey } from '../../../lib/member-session-boundary.mjs';
 import { translateMessage } from '../../../i18n/translate.mjs';
 
 const require = createRequire(import.meta.url);
@@ -62,6 +63,10 @@ function networkView({ query = '', loading = false, stateOverride = {} } = {}) {
       return Component;
     } },
     '@/lib/tree-read-model.mjs': { treeRefreshFailure },
+    '@/lib/member-session-context': { useMemberSession: () => ({ subject: 'synthetic-network-owner', email: 'network@example.test' }) },
+    '@/lib/member-session-boundary.mjs': { memberSessionOwnerKey },
+    '@/lib/member-read.mjs': { readMemberJson: async (url, options) => { events.push({ kind: 'member-read', url, signal: options.signal }); return {}; } },
+    '@/lib/member-referral-client.mjs': { readMemberReferral: async (session, options) => { events.push({ kind: 'owned-referral', session, signal: options.signal, refresh: options.refresh }); return {}; } },
     '@/i18n/LanguageProvider': { useI18n: () => ({ locale: 'es', dir: 'ltr', t: (key, values) => translateMessage('es', key, values) }) },
     '@/lib/member-network-reader.mjs': { createMemberNetworkReader: handlers => { callbacks.push(handlers); return {
       refresh: async () => { events.push('reads-started'); },
@@ -190,5 +195,18 @@ test('temporary tree refresh preserves the last tree with an explicit stale noti
   view.callbacks[0].onPart('tree', { data: before });
   assert.equal(view.state.refreshError, '');
   assert.equal(view.state.errorStatus, 0);
+  cleanup();
+});
+
+
+test('network reader delegates own referral to the shared owner-scoped resource and leaves other reads on the existing read-only transport', async () => {
+  const view = networkView(), signal = new AbortController().signal;
+  const cleanup = view.effects[1]();
+  await view.callbacks[0].read('/api/member/referral', { signal });
+  await view.callbacks[0].read('/api/member/tree', { signal });
+  assert.deepEqual(view.events.slice(1), [
+    { kind: 'owned-referral', session: { subject: 'synthetic-network-owner', email: 'network@example.test' }, signal, refresh: true },
+    { kind: 'member-read', url: '/api/member/tree', signal },
+  ]);
   cleanup();
 });

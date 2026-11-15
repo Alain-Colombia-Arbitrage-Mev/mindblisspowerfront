@@ -1,3 +1,4 @@
+import { authReferralHref } from './referral-attribution.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
@@ -14,6 +15,7 @@ function load(name, mocks = {}) {
   } }).outputText;
   const module = { exports: {} };
   new Function('require', 'module', 'exports', code)(id => {
+    if (id === '@/lib/referral-attribution') return { authReferralHref };
     if (id === 'react/jsx-runtime') return jsx;
     if (Object.hasOwn(mocks, id)) return mocks[id];
     assert.fail(`Unexpected dependency in lightweight portal shell: ${id}`);

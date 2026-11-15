@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  authReferralHref,
+  referralCodeFromSearch,
   bindReferralCodeToEmail,
   bindReferralToEmail,
   captureReferralFromUrl,
@@ -208,4 +210,30 @@ test('mailbox-scoped hint retention is bounded and oversized or non-string stora
     assert.deepEqual(referralForCheckout('member@example.test', bad, now), { code: '', email: '' });
   }
   for (const code of ['a'.repeat(65), 'has whitespace', '\u0000control', 123, {}]) assert.equal(normalizeReferralCode(code), '');
+});
+
+
+test('duplicate sponsor query parameters never select a hint or overwrite an independent bound invitation', () => {
+  const storage = new MemoryStorage();
+  bindReferralCodeToEmail('existing@example.test', 'ExistingSponsor', storage, now);
+  const before = [...storage.data];
+  for (const search of ['?ref=First&ref=Second', '?ref=First&ref=First', '?ref=&ref=Second', '?ref=First&%72ef=Second']) {
+    assert.equal(referralCodeFromSearch(search), '');
+    assert.equal(captureReferralFromUrl(search, storage, now), null);
+    assert.deepEqual([...storage.data], before);
+  }
+  assert.equal(referralCodeFromSearch(new URLSearchParams('ref=Opaque%26Sponsor%23%3F%2B')), 'Opaque&Sponsor#?+');
+});
+
+test('identity navigation preserves only one local form invitation and permitted mailbox hints without binding or external redirects', () => {
+  assert.equal(authReferralHref('/register', '/register?email=MEMBER%40example.test&ref=Opaque%26Sponsor&resume=1&side=R&role=admin&next=https://evil.test'),
+    '/register?email=member%40example.test&ref=Opaque%26Sponsor&resume=1');
+  assert.equal(authReferralHref('/login', '/login?mode=password&email=member%40example.test&ref=Sponsor&code=123456'),
+    '/login?mode=password&email=member%40example.test&ref=Sponsor');
+  for (const href of ['/register', '/register?ref=First&ref=Second', '/register?ref=bad+code', '/register?ref=Sponsor#fragment',
+    '/login?ref=Sponsor', '//evil.test/register?ref=Sponsor', 'https://evil.test/register?ref=Sponsor', '/other?ref=Sponsor']) {
+    assert.equal(authReferralHref('/register', href), '/', href);
+  }
+  assert.equal(authReferralHref('/forgot-password', '/login?ref=Sponsor'), '/');
+  assert.equal(authReferralHref('/register', undefined), '/');
 });

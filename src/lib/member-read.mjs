@@ -1,4 +1,5 @@
 import { canonicalSide } from "./tree-read-model.mjs";
+import { referralLinkCode } from './referral-links.mjs';
 
 const numeric = value => ["number", "string"].includes(typeof value) && String(value).trim() !== "" && Number.isFinite(Number(value));
 const identity = value => ["number", "string"].includes(typeof value) && String(value).trim() !== "";
@@ -31,8 +32,8 @@ export function validMemberSummary(data) {
 
 export function validMemberReferral(data) {
   if (typeof data.positioned !== "boolean") return false;
-  if (!data.positioned) return true;
-  if (typeof data.code !== "string" || data.code.length === 0 || typeof data.link !== "string") return false;
+  if (!data.positioned && !data.code && !data.link) return true;
+  if (!referralLinkCode(data.code) || referralLinkCode(data.code) !== data.code || typeof data.link !== "string") return false;
   try { return ["https:", "http:"].includes(new URL(data.link).protocol); } catch { return false; }
 }
 

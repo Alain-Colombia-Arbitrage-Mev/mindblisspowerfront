@@ -174,7 +174,7 @@ async function view(t, response, { deniedStorage = false, initialRef = '' } = {}
     },
   };
 }
-function response(path, session = { authenticated: true, mode: 'better-auth', email }) {
+function response(path, session = { authenticated: true, mode: 'better-auth', email, subject: 'synthetic-member' }) {
   if (path.endsWith('/send-verification-otp')) return Response.json({ ok: true });
   if (path === '/api/auth/sign-in/email-otp') return Response.json(proof());
   if (path === '/api/auth/session?view=access') return Response.json(session);
@@ -216,7 +216,7 @@ test('real React mobile login still confirms fresh proof and navigates with both
     assert.match(ui.container.textContent, /Correo verificado correctamente/);
     assert.deepEqual(ui.destinations, ['/dashboard']);
     assert.deepEqual(ui.navigationMethods, ['replace']);
-    assert.deepEqual(ui.paths, ['/api/auth/email-otp/send-verification-otp', '/api/auth/sign-in/email-otp', '/api/auth/session?view=access']);
+    assert.deepEqual(ui.paths, ['/api/auth/email-otp/send-verification-otp', '/api/auth/sign-in/email-otp', '/api/auth/session?view=access', '/api/member/referral-attribution']);
     assert.equal(nodes(ui.container, node => node.nodeName === 'A' && node.getAttribute('href') === '/dashboard').length, 1);
     await ui.unmount();
   } finally {
@@ -345,7 +345,7 @@ test('real React keeps its native fallback while one cookie check is pending, bl
   assert.equal(ui.paths.filter(path => path === '/api/auth/session?view=access').length, 1);
   await ui.unmount(); await pending;
   assert.equal(cookieSignal.aborted, true);
-  released.resolve(Response.json({ authenticated: true, mode: 'better-auth', email }));
+  released.resolve(Response.json({ authenticated: true, mode: 'better-auth', email, subject: 'synthetic-member' }));
   await Promise.resolve();
   assert.deepEqual(ui.destinations, []);
   assert.equal(ui.paths.length, 3);

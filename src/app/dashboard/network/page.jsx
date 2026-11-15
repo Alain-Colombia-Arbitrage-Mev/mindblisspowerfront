@@ -11,6 +11,10 @@ import NetworkTabs, { NETWORK_TABS } from "@/components/panel/network/NetworkTab
 import PositionCard from "@/components/panel/network/PositionCard";
 import { treeRefreshFailure } from "@/lib/tree-read-model.mjs";
 import { createMemberNetworkReader } from "@/lib/member-network-reader.mjs";
+import { readMemberJson } from '@/lib/member-read.mjs';
+import { readMemberReferral } from '@/lib/member-referral-client.mjs';
+import { useMemberSession } from '@/lib/member-session-context';
+import { memberSessionOwnerKey } from '@/lib/member-session-boundary.mjs';
 import { useI18n } from "@/i18n/LanguageProvider";
 
 // Keep the route shell and the data requests small. A view is downloaded only
@@ -150,6 +154,7 @@ function networkReadFailure(previous, error, t) {
 
 export default function NetworkPage() {
   const { t } = useI18n();
+  const session = useMemberSession(), owner = memberSessionOwnerKey(session);
   const searchParams = useSearchParams();
   const requestedTab = searchParams.get("tab");
   const validTabs = useMemo(() => new Set(NETWORK_TABS.map((item) => item.id)), []);
@@ -167,8 +172,11 @@ export default function NetworkPage() {
   }, [requestedTab, validTabs]);
 
   useEffect(() => {
+    if (!owner) return undefined;
     warmNetworkView(initialTab.current);
     const current = createMemberNetworkReader({
+      read: (url, options) => url === '/api/member/referral'
+        ? readMemberReferral(session, { signal: options.signal, refresh: true }) : readMemberJson(url, options),
       onStart: full => setState(prev => ({ ...prev, loading: !prev.data, refreshing: Boolean(prev.data), error: "", errorStatus: 0, refreshError: "",
         ...(full ? { summary: null, referral: null, summaryError: null, referralError: null } : {}), syncing: false })),
       onPart: (key, result) => setState(prev => key === "tree"
@@ -184,7 +192,7 @@ export default function NetworkPage() {
       current.dispose();
       if (reader.current === current) reader.current = null;
     };
-  }, [t]);
+  }, [t, owner]);
 
   const previousRefresh = useRef(refreshTick);
   useEffect(() => {

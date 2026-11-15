@@ -1,3 +1,4 @@
+import { authReferralHref } from '../../lib/referral-attribution.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
@@ -20,6 +21,7 @@ function gate({ token = 'synthetic-private-token', claims = null, tokenError,
     }).outputText;
     const module = { exports: {} };
     new Function('require', 'module', 'exports', compiled)(name => {
+    if (name === '@/lib/referral-attribution') return { authReferralHref };
       assert.ok(Object.hasOwn(mocks, name), `unexpected dashboard gate dependency ${name}`);
       return mocks[name];
     }, module, module.exports);

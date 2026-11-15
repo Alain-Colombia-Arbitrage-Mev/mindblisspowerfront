@@ -3,7 +3,8 @@ import { NextResponse } from "next/server";
 
 import { memberDb } from "@/lib/member-db";
 import { verifiedEmailFromIdTokenForSession as verifiedEmailFromIdToken } from "@/lib/verify-id-token";
-import { AuthServiceUnavailable } from "@/lib/better-auth-bridge.mjs";
+import { AuthServiceUnavailable, betterAuthEnabled } from "@/lib/better-auth-bridge.mjs";
+import { handleNativeMemberReferral } from '@/lib/member-referral-native-bff.mjs';
 import { runtimeEnvironment } from '@/lib/cloudflare-runtime.mjs';
 import { buildReferralLink, referralPublicOrigin } from '@/lib/referral-links.mjs';
 
@@ -20,7 +21,8 @@ function referralResponse(body, status = 200) {
  * recolocado), deriva un código estable y único desde el affiliate.id — sin
  * escribir (el rol web es de solo lectura).
  */
-export async function GET() {
+export async function GET(request) {
+  if (betterAuthEnabled(runtimeEnvironment())) return handleNativeMemberReferral(request);
   let idToken, email;
   try {
     idToken = await rawIdToken();

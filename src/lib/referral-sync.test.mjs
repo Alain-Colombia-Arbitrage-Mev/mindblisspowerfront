@@ -14,6 +14,62 @@ const browser = () => ({ localStorage: memory(), sessionStorage: memory() });
 const pending = () => { let resolve; return { promise: new Promise(done => { resolve = done; }), resolve: value => resolve(value) }; };
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
+test('company default is captured once only after a canonical subject and never inferred from a browser hint', async () => {
+  const owner = browser(), calls = [], subject = 'canonical-owner';
+  bindReferralCodeToEmail(email, 'OldBrowserHint', owner.localStorage);
+  const result = await beginVerifiedReferralSync(email, '', '', { browser: owner, subject, fetchImpl: async (_url, init) => {
+    calls.push(init); return Response.json({ ok: true, ref: 'MPCompany', preferred_side: '', positioned: false, immutable: true });
+  } });
+  assert.equal(result.ok, true); assert.deepEqual(JSON.parse(calls[0].body), { ref: '', preferred_side: '', expected_email: email });
+  assert.equal(calls[0].headers['x-mindbliss-referral-subject'], subject);
+  assert.equal(pendingVerifiedReferral(email, { browser: owner, subject }), null);
+  for (const ref of ['', ' ', 'bad code']) assert.deepEqual(await beginVerifiedReferralSync(email, ref, '', { browser: browser(),
+    fetchImpl: () => assert.fail('ownerless/invalid default cannot write') }), { ok: false });
+});
+
+test('immutable canonical sponsor acknowledgements settle an explicit stale hint without moving an unpositioned member', async () => {
+  const owner = browser(), subject = 'canonical-owner';
+  const result = await beginVerifiedReferralSync(email, 'AttemptedChange', '', { browser: owner, subject,
+    fetchImpl: async () => Response.json({ ok: true, ref: 'MPActualSponsor', preferred_side: '', positioned: false, immutable: true }) });
+  assert.deepEqual(result, { ok: true, ref: 'MPActualSponsor', preferred_side: '', positioned: false, immutable: true });
+  assert.equal(pendingVerifiedReferral(email, { browser: owner, subject }), null);
+});
+
+test('a read for a different mounted subject never waits for another subject\'s pending attribution write', async () => {
+  const owner = browser(), first = pending(); let gets = 0;
+  const write = beginVerifiedReferralSync(email, 'SponsorA', '', { browser: owner, subject: 'subject-A', fetchImpl: () => first.promise });
+  const result = await readVerifiedReferral(email, { browser: owner, subject: 'subject-B', fetchImpl: async () => {
+    gets++; return Response.json({ ok: true, ref: 'SponsorB', preferred_side: '', positioned: false, immutable: true });
+  } });
+  assert.equal(gets, 1); assert.equal(result.ref, 'SponsorB');
+  assert.equal(pendingVerifiedReferral(email, { browser: owner, subject: 'subject-B' }), null);
+  first.resolve(Response.json({ ok: true, ref: 'SponsorA', preferred_side: '', positioned: false, immutable: true })); await write;
+});
+
+test('one awaited auth capture is bounded at 8s through a non-cooperative fetch and cannot clear a late pending marker', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1800000000000 });
+  const owner = browser(), wait = pending(); let calls = 0;
+  const result = beginVerifiedReferralSync(email, 'ExplicitSponsor', '', { browser: owner, subject: 'canonical-owner', timeoutMs: 8000,
+    fetchImpl: () => { calls++; return wait.promise; } });
+  const sameFlight = retryVerifiedReferral(email, { browser: owner, subject: 'canonical-owner', fetchImpl: () => assert.fail('duplicate dispatched') });
+  t.mock.timers.tick(7999); assert.equal(calls, 1); t.mock.timers.tick(1); assert.deepEqual(await result, { ok: false });
+  assert.deepEqual(await sameFlight, { ok: false }, 'singleflight consumers share the bounded outcome');
+  assert.equal(pendingVerifiedReferral(email, { browser: owner, subject: 'canonical-owner' }).ref, 'ExplicitSponsor');
+  wait.resolve(Response.json({ ok: true, ref: 'ExplicitSponsor', preferred_side: '', positioned: false, immutable: true })); await settle();
+  assert.equal(pendingVerifiedReferral(email, { browser: owner, subject: 'canonical-owner' }).ref, 'ExplicitSponsor', 'late ACK after timeout is reconciled only by a new owned read');
+  assert.equal(calls, 1);
+});
+
+test('explicit retry of a legacy left/right marker preserves its referral but always delegates automatic placement', async () => {
+  const owner = browser(), now = Date.now();
+  owner.sessionStorage.setItem('mp_ref_verified_visit.v1', JSON.stringify({ email, id: 'legacy-choice', ref: 'RetainedSponsor', preferred_side: 'L', createdAt: now }));
+  const calls = [];
+  const result = await retryVerifiedReferral(email, { browser: owner, subject: 'canonical-owner', fetchImpl: async (_url, init) => {
+    calls.push(JSON.parse(init.body)); return Response.json({ ok: true, ref: 'RetainedSponsor', preferred_side: '', positioned: false, immutable: true });
+  } });
+  assert.equal(result.ok, true); assert.deepEqual(calls, [{ ref: 'RetainedSponsor', preferred_side: '', expected_email: email }]);
+});
+
 test('a mounted subject is a strict mismatch fence and scopes concurrent reads even when the email is the same', async () => {
   const owner = browser(), first = pending(), calls = [];
   const fetchImpl = async (_url, options) => {

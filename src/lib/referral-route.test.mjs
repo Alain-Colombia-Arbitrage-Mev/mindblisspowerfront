@@ -8,7 +8,7 @@ import { AuthServiceUnavailable } from './better-auth-bridge.mjs';
 function route({ token = 'synthetic-token', email = 'member@example.test', rows = [
   [{ status: 'active', blacklisted: false, listed_by_blacklist: false }],
   [{ id: 50793, invitation_link: 'OpaqueHandle' }], [],
-], env = { AUTH_PUBLIC_ORIGIN: 'https://mindblisspower.com' }, authError = false, databaseError = false } = {}) {
+], env = { AUTH_PUBLIC_ORIGIN: 'https://mindblisspower.com' }, authError = false, databaseError = false, nativeResponse = null } = {}) {
   let calls = 0;
   const source = readFileSync(new URL('../app/api/member/referral/route.js', import.meta.url), 'utf8');
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
@@ -19,7 +19,11 @@ function route({ token = 'synthetic-token', email = 'member@example.test', rows 
       const result = rows[calls++]; if (result instanceof Error) throw result; return result;
     }; } },
     '@/lib/verify-id-token': { verifiedEmailFromIdTokenForSession: async () => email },
-    '@/lib/better-auth-bridge.mjs': { AuthServiceUnavailable },
+    '@/lib/better-auth-bridge.mjs': { AuthServiceUnavailable, betterAuthEnabled: () => Boolean(nativeResponse) },
+    '@/lib/member-referral-native-bff.mjs': { handleNativeMemberReferral: request => {
+      if (!nativeResponse) assert.fail('legacy route must not use native identity');
+      assert.ok(request instanceof Request); return nativeResponse;
+    } },
     '@/lib/cloudflare-runtime.mjs': { runtimeEnvironment: () => env },
     '@/lib/referral-links.mjs': links,
   };
@@ -33,6 +37,13 @@ function privateResponse(response) {
   assert.equal(response.headers.get('vary'), 'Cookie');
   assert.equal(response.headers.get('set-cookie'), null);
 }
+
+test('the Better Auth route delegates directly to native ownership without legacy token or email SQL fallback', async () => {
+  const nativeResponse = Response.json({ positioned: false, code: 'PermanentCode' });
+  const fixture = route({ nativeResponse, authError: true, databaseError: true });
+  assert.equal(await fixture.get(new Request('https://app.mindblisspower.com/api/member/referral')), nativeResponse);
+  assert.equal(fixture.calls(), 0);
+});
 
 test('member referral generates one automatic-placement link from runtime configuration', async () => {
   for (const env of [{ AUTH_PUBLIC_ORIGIN: 'https://mindblisspower.com', REFERRAL_BASE_URL: 'https://app.mindblisspower.com' },

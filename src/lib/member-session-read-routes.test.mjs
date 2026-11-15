@@ -26,7 +26,7 @@ function token(change = {}) {
   return `${message}.${sign('RSA-SHA256', Buffer.from(message), privateKey).toString('base64url')}`;
 }
 
-function route(name, { rawToken, tokenError, calls }) {
+function route(name, { rawToken, tokenError, calls, native = false }) {
   const source = readFileSync(new URL(`../app/api/${name}/route.js`, import.meta.url), 'utf8');
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
   const denied = kind => () => { calls.push(kind); assert.fail(`authentication failure reached ${kind}`); };
@@ -34,11 +34,15 @@ function route(name, { rawToken, tokenError, calls }) {
     '@/lib/admin-bff': { rawIdToken: async () => { if (tokenError) throw tokenError; return rawToken; }, idTokenHeader: denied('service headers') },
     'next/server': { NextResponse: { json: (body, init) => Response.json(body, init) } },
     '@/lib/verify-id-token': { verifiedEmailFromIdTokenForSession },
-    '@/lib/better-auth-bridge.mjs': { AuthServiceUnavailable },
+    '@/lib/better-auth-bridge.mjs': { AuthServiceUnavailable, betterAuthEnabled: () => native },
+    '@/lib/member-referral-native-bff.mjs': { handleNativeMemberReferral: request => {
+      assert.equal(native, true, 'legacy proof tests cannot enter the native handler');
+      calls.push(request); return Response.json({ error: 'unauthenticated' }, { status: 401 });
+    } },
     '@/lib/member-db': { memberDb: denied('database') },
     '@/lib/member-read-policy.mjs': { memberReadLimit: denied('member budget'), withMemberTreeCapacity: denied('tree query') },
     '@/lib/tree-read-model.mjs': { childCoverage: denied('tree projection'), loadedChildCounts: denied('child projection') },
-    '@/lib/cloudflare-runtime.mjs': { coreFetch: denied('payments provider transport'), runtimeEnvironment: denied('runtime configuration') },
+    '@/lib/cloudflare-runtime.mjs': { coreFetch: denied('payments provider transport'), runtimeEnvironment: () => env },
     '@/lib/referral-links.mjs': { buildReferralLink: denied('referral link'), referralPublicOrigin: denied('referral origin') },
   };
   const module = { exports: {} };
@@ -95,3 +99,12 @@ for (const name of ['member/tree', 'member/referral', 'payments/me']) {
     });
   }
 }
+
+
+test('native own-link dispatch preserves native authentication denial without invoking the legacy token or database path', async () => {
+  const calls = [], input = new Request('https://portal.example.test/api/member/referral');
+  const handler = route('member/referral', { rawToken: '', tokenError: new Error('legacy proof must not be queried'), calls, native: true });
+  const response = await handler(input);
+  assert.equal(response.status, 401); assert.deepEqual(await response.json(), { error: 'unauthenticated' });
+  assert.deepEqual(calls, [input]);
+});

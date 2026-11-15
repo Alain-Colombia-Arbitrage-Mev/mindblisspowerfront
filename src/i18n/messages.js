@@ -76,7 +76,7 @@ export const messages = {
     community: {
       eyebrow: "Comunidad", title: "Comunidad", subtitle: "Conecta con personas y comparte a tu manera.", back: "Volver al resumen",
       inviteTitle: "Invita a tu manera", inviteCopy: "Comparte un solo enlace; el sistema ubicará automáticamente a cada referido en el árbol binario.", yourLink: "Tu enlace único confirmado",
-      branchLabel: "Rama del enlace", left: "Izquierda", right: "Derecha", loadingLink: "Consultando tu enlace…", pendingLink: "Disponible cuando se confirme tu posición",
+      branchLabel: "Rama del enlace", left: "Izquierda", right: "Derecha", loadingLink: "Consultando tu enlace…", pendingLink: "Enlace no disponible. Actualiza para volver a consultar.",
       errorLink: "No pudimos consultar el enlace", copyLink: "Copiar enlace", copied: "Copiado", copyError: "No se pudo copiar. Selecciona el texto y cópialo manualmente.", clipboardReady: "Copiado al portapapeles.",
       connectionTitle: "Conectar empieza\npor compartir.", connectionCopy: "Encuentra recursos para invitar con claridad y acompañar a quienes llegan.", motto: "Escucha. Comparte. Acompaña.",
       toolsTitle: "Herramientas para cada conversación", guideTitle: "Guía para invitar", guideCopy: "Conoce los pasos y las condiciones antes de hacer una invitación.", guideAction: "Ver guía",
@@ -164,7 +164,7 @@ export const messages = {
     community: {
       eyebrow: "Community", title: "Community", subtitle: "Connect with people and share in your own way.", back: "Back to overview",
       inviteTitle: "Invite your way", inviteCopy: "Share one link; the system will automatically place each referral in the binary tree.", yourLink: "Your confirmed unique link",
-      branchLabel: "Link branch", left: "Left", right: "Right", loadingLink: "Checking your link…", pendingLink: "Available once your position is confirmed",
+      branchLabel: "Link branch", left: "Left", right: "Right", loadingLink: "Checking your link…", pendingLink: "Link unavailable. Refresh to check again.",
       errorLink: "We could not check the link", copyLink: "Copy link", copied: "Copied", copyError: "Could not copy. Select the text and copy it manually.", clipboardReady: "Copied to clipboard.",
       connectionTitle: "Connection starts\nwith sharing.", connectionCopy: "Find clear invitation resources and support the people who join.", motto: "Listen. Share. Support.",
       toolsTitle: "Tools for every conversation", guideTitle: "Invitation guide", guideCopy: "Review the steps and conditions before sending an invitation.", guideAction: "View guide",
@@ -252,7 +252,7 @@ export const messages = {
     community: {
       eyebrow: "المجتمع", title: "المجتمع", subtitle: "تواصل مع الناس وشارك بطريقتك.", back: "العودة إلى الملخص",
       inviteTitle: "ادعُ بطريقتك", inviteCopy: "شارك رابطاً واحداً؛ سيضع النظام كل إحالة تلقائياً في الشجرة الثنائية.", yourLink: "رابطك الفريد المؤكد",
-      branchLabel: "فرع الرابط", left: "اليسار", right: "اليمين", loadingLink: "جارٍ التحقق من رابطك…", pendingLink: "يتاح بعد تأكيد موضعك",
+      branchLabel: "فرع الرابط", left: "اليسار", right: "اليمين", loadingLink: "جارٍ التحقق من رابطك…", pendingLink: "الرابط غير متاح. حدّث للتحقق مجدداً.",
       errorLink: "تعذر التحقق من الرابط", copyLink: "نسخ الرابط", copied: "تم النسخ", copyError: "تعذر النسخ. حدد النص وانسخه يدوياً.", clipboardReady: "تم النسخ إلى الحافظة.",
       connectionTitle: "التواصل يبدأ\nبالمشاركة.", connectionCopy: "اعثر على موارد واضحة للدعوة وساند الأشخاص الذين ينضمون.", motto: "استمع. شارك. ساند.",
       toolsTitle: "أدوات لكل محادثة", guideTitle: "دليل الدعوة", guideCopy: "راجع الخطوات والشروط قبل إرسال الدعوة.", guideAction: "عرض الدليل",
@@ -340,7 +340,7 @@ export const messages = {
     community: {
       eyebrow: "社区", title: "社区", subtitle: "与他人建立联系，并按自己的方式分享。", back: "返回概览",
       inviteTitle: "按你的方式邀请", inviteCopy: "分享一个链接；系统会自动将每位推荐用户安排到二叉树中。", yourLink: "已确认的唯一邀请链接",
-      branchLabel: "链接分支", left: "左侧", right: "右侧", loadingLink: "正在查询邀请链接…", pendingLink: "位置确认后即可使用",
+      branchLabel: "链接分支", left: "左侧", right: "右侧", loadingLink: "正在查询邀请链接…", pendingLink: "链接暂不可用，请刷新后重新查询。",
       errorLink: "无法查询邀请链接", copyLink: "复制链接", copied: "已复制", copyError: "无法复制，请选择文本后手动复制。", clipboardReady: "已复制到剪贴板。",
       connectionTitle: "连接始于\n分享。", connectionCopy: "查找清晰的邀请资源，并支持新加入的人。", motto: "倾听。分享。陪伴。",
       toolsTitle: "适用于每次沟通的工具", guideTitle: "邀请指南", guideCopy: "发送邀请前了解步骤和条件。", guideAction: "查看指南",

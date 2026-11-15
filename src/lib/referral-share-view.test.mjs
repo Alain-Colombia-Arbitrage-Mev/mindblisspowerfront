@@ -1,12 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import React from 'react';
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import ts from 'typescript';
+import { translateMessage } from '../i18n/translate.mjs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { registrationViewHarness, findRegistrationNode as find } from '../app/register/registration-view-test-harness.mjs';
 import * as links from './referral-links.mjs';
 import * as effects from './member-view-effects.mjs';
 
-const data = { positioned: true, code: 'OpaqueHandle', link: 'https://app.mindblisspower.com/register?ref=wrong',
+const data = { positioned: false, code: 'OpaqueHandle', link: 'https://app.mindblisspower.com/register?ref=wrong',
   links: { left: 'https://old.example/left', right: 'https://old.example/right' } };
 const icons = new Proxy({}, { get: () => () => null });
 const motion = new Proxy({}, { get: () => ({ children }) => React.createElement('div', null, children) });
@@ -20,25 +24,18 @@ function navigator(t, writeText) {
   t.after(() => { if (descriptor) Object.defineProperty(globalThis, 'navigator', descriptor); else delete globalThis.navigator; });
 }
 
-function view(filename) {
+function view(filename, referralState = { data, error: null, busy: false, canShare: () => true, refresh() {} }) {
   return registrationViewHarness(`../../components/${filename}`, {
     'next/link': { default: ({ children, ...attributes }) => React.createElement('a', attributes, children) },
     'lucide-react': icons, 'framer-motion': { motion, AnimatePresence: ({ children }) => children },
     '@/lib/referral-links.mjs': links, '@/lib/member-view-effects.mjs': effects,
-    '@/lib/member-read.mjs': { validMemberReferral: () => true, readMemberJson: async () => data },
-    '@/i18n/LanguageProvider': { useI18n: () => ({ t: (key, values) => ({
-      'referralCard.title': 'Tu enlace de red', 'referralCard.code': `Código: ${values?.code || ''}`,
-      'referralCard.loading': 'Consultando enlaces de red…', 'referralCard.ready': 'Comparte un solo enlace.',
-      'referralCard.pending': 'Pendiente de activación', 'referralCard.signIn': 'Iniciar sesión', 'referralCard.retry': 'Reintentar enlace',
-      'referralCard.automatic': 'Enlace automático', 'referralCard.automaticHint': 'El backend elige la posición',
-      'referralCard.inputLabel': 'Enlace automático', 'referralCard.copyLabel': 'Copiar enlace automático',
-      'referralCard.loadingValue': 'Cargando enlace…', 'referralCard.unavailable': 'No disponible en este momento',
-      'referralCard.pendingValue': 'Pendiente de activación',
-    }[key] || key) }) },
+    '@/components/member/useMemberReferral': { default: () => referralState },
+    './useMemberReferral': { default: () => referralState },
+    '@/i18n/LanguageProvider': { useI18n: () => ({ locale: 'es', t: (key, values) => translateMessage('es', key, values) }) },
   });
 }
 
-test('overview copies the canonical automatic link and reports a denied clipboard instead of claiming success', async t => {
+test('overview copies a canonical code before positioning and reports a denied clipboard instead of claiming success', async t => {
   const copied = [];
   navigator(t, async value => { copied.push(value); });
   const harness = view('panel/overview/ReferralLinkCard.jsx');
@@ -92,4 +89,60 @@ test('a rejected code copy in the share modal has a visible manual-copy fallback
   const html = renderToStaticMarkup(harness.render(props));
   assert.match(html, /manualmente/); assert.doesNotMatch(html, /Copiado|private-rejection/);
   harness.unmount();
+});
+
+
+test('community keeps its own canonical unpositioned link copyable after a reported transient refresh failure', async t => {
+  t.mock.method(globalThis, 'fetch', () => assert.fail('presentation delegates reads to the shared hook'));
+  const copied = []; let refreshes = 0;
+  navigator(t, async value => { copied.push(value); });
+  const state = { data, busy: false, error: { status: 503 }, canShare: () => true, refresh() { refreshes++; } };
+  const harness = view('../app/dashboard/_components/executive-pages/CommunityInviteCard.jsx', state);
+  const tree = harness.render();
+  const copy = find(tree, node => node?.type === 'button' && node.props.className.includes('mb-community-copy'));
+  assert.equal(copy.props.disabled, false); await copy.props.onClick();
+  assert.deepEqual(copied, [links.buildReferralLink(data.code)]);
+  const html = renderToStaticMarkup(harness.render());
+  assert.match(html, /OpaqueHandle/); assert.ok(html.includes(translateMessage('es', 'referralCard.refreshFailed')));
+  assert.doesNotMatch(html, /old\.example|app\.mindblisspower|ref=wrong/);
+  find(tree, node => node?.type === 'button' && node.props.className === 'mb-community-refresh').props.onClick();
+  assert.equal(refreshes, 1); harness.unmount();
+});
+
+test('the referral module presents an unpositioned backend code as copyable without sessions, placement or financial actions', t => {
+  t.mock.method(globalThis, 'fetch', () => assert.fail('a referral presentation cannot perform its own API or provider request'));
+  const require = createRequire(import.meta.url), module = { exports: {} };
+  const compiled = ts.transpileModule(readFileSync(new URL('../components/member/ReferralModule.jsx', import.meta.url), 'utf8'),
+    { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
+  const mocks = { react: React, 'react/jsx-runtime': require('react/jsx-runtime'), 'lucide-react': icons,
+    'framer-motion': { motion }, './ReferralShareModal': { default: () => null },
+    './useMemberReferral': { default: () => ({ data, busy: false, error: null, canShare: () => true, refresh() {} }) },
+    '@/lib/member-view-effects.mjs': effects, '@/lib/referral-links.mjs': links,
+    '@/i18n/LanguageProvider': { useI18n: () => ({ t: (key, values) => translateMessage('es', key, values) }) } };
+  new Function('require', 'module', 'exports', compiled)(id => {
+    assert.ok(Object.hasOwn(mocks, id), `referral presentation unexpectedly imported ${id}`); return mocks[id];
+  }, module, module.exports);
+  const html = renderToStaticMarkup(React.createElement(module.exports.default));
+  assert.match(html, /OpaqueHandle/); assert.match(html, /register\?ref=OpaqueHandle/);
+  for (const label of ['Copiar código', 'Copiar', 'Compartir']) {
+    const button = [...html.matchAll(/<button\b[^>]*>[\s\S]*?<\/button>/g)].map(match => match[0]).find(value => value.includes(label));
+    assert.ok(button, label); assert.doesNotMatch(button, /disabled/);
+  }
+  assert.doesNotMatch(html, /old\.example|app\.mindblisspower|ref=wrong/);
+});
+
+
+test('captured referral copy callbacks cannot expose a retired owner after the shared live share fence closes', async t => {
+  const copied = []; navigator(t, async value => { copied.push(value); });
+  for (const filename of ['panel/overview/ReferralLinkCard.jsx', '../app/dashboard/_components/executive-pages/CommunityInviteCard.jsx']) {
+    let allowed = true;
+    const harness = view(filename, { data, busy: false, error: null, canShare: () => allowed, refresh() {} });
+    const tree = harness.render();
+    const callback = filename.includes('ReferralLinkCard')
+      ? find(tree, node => node?.props?.label === 'Enlace automático').props.onCopy
+      : find(tree, node => node?.type === 'button' && node.props.className.includes('mb-community-copy')).props.onClick;
+    allowed = false;
+    await callback(); assert.deepEqual(copied, [], filename);
+    harness.unmount();
+  }
 });

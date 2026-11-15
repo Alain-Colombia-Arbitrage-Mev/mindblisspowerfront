@@ -116,6 +116,32 @@ test('Polygon authorization signs only the exact reviewed transfer from the boun
   assert.equal(calls.filter(method => method === 'eth_signTypedData_v4').length, 1);
   assert.ok(!calls.some(method => /send|requestAccounts|personal_sign/.test(method)));
 });
+
+test('external multi-account sessions sign only the selected bound EOA and reject account changes before or after the prompt', async () => {
+  const other = new Wallet(`0x${'35'.repeat(32)}`).address;
+  for (const initial of [[signer.address, other], [other, signer.address], [signer.address, signer.address], [signer.address, null], []]) {
+    const value = payment(); let prompts = 0;
+    const provider = { async request({ method }) {
+      if (method === 'eth_chainId') return '0x89';
+      if (method === 'eth_accounts') return initial;
+      assert.equal(method, 'eth_signTypedData_v4'); prompts++;
+      return signer.signTypedData(value.typedData.domain, value.typedData.types, value.typedData.message);
+    } };
+    if (initial[0] === signer.address && initial[1] === other) {
+      assert.equal((await signPolygonRelay(value, provider, address)).paymentId, id); assert.equal(prompts, 1);
+    } else {
+      await assert.rejects(signPolygonRelay(value, provider, address), { message: 'polygon_relay_wallet_changed' }); assert.equal(prompts, 0);
+    }
+  }
+  const value = payment(); let accounts = [signer.address, other];
+  const provider = { async request({ method }) {
+    if (method === 'eth_chainId') return '0x89';
+    if (method === 'eth_accounts') return accounts;
+    assert.equal(method, 'eth_signTypedData_v4'); accounts = [other, signer.address];
+    return signer.signTypedData(value.typedData.domain, value.typedData.types, value.typedData.message);
+  } };
+  await assert.rejects(signPolygonRelay(value, provider, address), { message: 'polygon_relay_wallet_changed' });
+});
 test('Wrong domain, different wallet/network, stale ownership and altered authorization digest stop before a signature request', async () => {
   let prompts = 0;
   const provider = { request: async ({ method }) => { if (method === 'eth_chainId') return '0x1'; if (method === 'eth_accounts') return [address]; prompts++; throw new Error('unexpected'); } };

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { authReferralHref } from "@/lib/referral-attribution";
 
 import LanguageSwitcher from "@/i18n/LanguageSwitcher";
 import { AuthIdentityCopy, AuthLegal } from "./AuthLocalizedContent";
@@ -19,6 +20,7 @@ export default function AuthShell({
   supportEmail: _supportEmail = "",
 }) {
   void [_activePath, _loginHref, _registrationHref, _eyebrow, _sideKpis, _visualPosition, _supportEmail];
+  const wordmarkHref = authReferralHref(_activePath, _activePath === "/register" ? _registrationHref : _loginHref);
   const shellLayout = ["default", "compact", "long"].includes(layout) ? layout : "default";
   return (
     <main className={`auth-shell auth-shell--${shellLayout}`}>
@@ -26,7 +28,7 @@ export default function AuthShell({
         <img src={visualSrc} alt={visualAlt} loading="eager" decoding="async" />
         <div className="auth-identity-scrim" aria-hidden="true" />
 
-        <Link className="auth-wordmark" href="/">Mindbliss</Link>
+        <Link className="auth-wordmark" href={wordmarkHref}>Mindbliss</Link>
 
         <AuthIdentityCopy title={title} description={description} />
       </aside>

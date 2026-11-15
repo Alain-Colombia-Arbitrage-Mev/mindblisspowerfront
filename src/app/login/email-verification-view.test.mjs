@@ -8,10 +8,12 @@ import * as emailOtp from '../../lib/email-otp-client.mjs';
 import { authSuccess } from '../../lib/auth-response.mjs';
 import * as auth from './better-auth-login.mjs';
 import * as referral from '../../lib/referral-attribution.js';
+import * as referralSync from '../../lib/referral-sync.mjs';
 
 const email = 'member@example.test';
 const props = { authMode: 'better-auth', initialEmail: email };
 const proof = () => authSuccess('sign-in/email-otp', { token: 'synthetic-private-token', user: { id: 'synthetic-member', email, emailVerified: true } });
+const captureProjection = calls => calls.map(([recipient, ref, side, options]) => { assert.ok(options.signal instanceof AbortSignal); return [recipient, ref, side, { subject: options.subject, timeoutMs: options.timeoutMs }]; });
 const submit = tree => find(tree, node => node?.type === 'form').props.onSubmit({ preventDefault() {} });
 const html = harness => renderToStaticMarkup(harness.render(props));
 function browser(t) {
@@ -91,7 +93,7 @@ test('fresh BFF-proven OTP session checks the browser cookie once before one har
   t.mock.method(globalThis, 'fetch', async path => {
     paths.push(path);
     return Response.json(path.endsWith('/send-verification-otp') ? { ok: true }
-      : path === '/api/auth/session?view=access' ? { authenticated: true, mode: 'better-auth', email } : proof());
+      : path === '/api/auth/session?view=access' ? { authenticated: true, mode: 'better-auth', email, subject: 'synthetic-member' } : proof());
   });
   const harness = view({ onSession: () => { notifications++; assert.equal(paths.at(-1), '/api/auth/sign-in/email-otp'); } });
   harness.replayEffects();
@@ -115,7 +117,7 @@ test('a dashboard continuation is a real same-origin anchor and never claims a n
   t.mock.method(globalThis, 'fetch', async path => {
     paths.push(path);
     return Response.json(path.endsWith('/send-verification-otp') ? { ok: true }
-      : path === '/api/auth/session?view=access' ? { authenticated: true, mode: 'better-auth', email } : proof());
+      : path === '/api/auth/session?view=access' ? { authenticated: true, mode: 'better-auth', email, subject: 'synthetic-member' } : proof());
   });
   const harness = view(); await enterCode(harness);
   const rendered = html(harness);
@@ -168,7 +170,7 @@ test('password login publishes fresh native proof and the parent checks its brow
   const waiting = new Promise(resolve => { started = resolve; });
   t.mock.method(globalThis, 'fetch', async path => {
     paths.push(path);
-    if (path === '/api/auth/session?view=access') return Response.json({ authenticated: true, mode: 'better-auth', email });
+    if (path === '/api/auth/session?view=access') return Response.json({ authenticated: true, mode: 'better-auth', email, subject: 'synthetic-member' });
     assert.equal(path, '/api/auth/sign-in/email');
     started(); return new Promise(resolve => { release = resolve; });
   });
@@ -239,7 +241,7 @@ test('an accepted OTP cannot trigger a second redemption or send when the verifi
   t.mock.method(globalThis, 'fetch', async path => {
     paths.push(path);
     return Response.json(path.endsWith('/send-verification-otp') ? { ok: true }
-      : path === '/api/auth/session?view=access' ? { authenticated: true, mode: 'better-auth', email } : proof());
+      : path === '/api/auth/session?view=access' ? { authenticated: true, mode: 'better-auth', email, subject: 'synthetic-member' } : proof());
   });
   const harness = view(); await enterCode(harness);
   for (let index = 0; index < 5; index++) harness.render(props);
@@ -285,15 +287,15 @@ test('automatic entry keeps this tab sponsor bound to its own email while discar
   window.localStorage = storage;
   window.location.search = '?ref=SponsorA&side=L';
   t.mock.method(globalThis, 'fetch', async path => Response.json(path.endsWith('/send-verification-otp') ? { ok: true }
-    : path === '/api/auth/session?view=access' ? { authenticated: true, mode: 'better-auth', email } : proof()));
+    : path === '/api/auth/session?view=access' ? { authenticated: true, mode: 'better-auth', email, subject: 'synthetic-member' } : proof()));
   const saves = [];
-  const harness = view({ attribution: referral, sync: (...values) => { saves.push(values); return new Promise(() => {}); } });
+  const harness = view({ attribution: referral, sync: (...values) => { saves.push(values); return Promise.resolve({ ok: true }); } });
   harness.render(props); harness.render(props);
   referral.captureReferralFromUrl('?ref=SponsorB&side=R', storage);
   referral.bindReferralCodeToEmail('other@example.test', 'SponsorOther', storage, undefined, 'login', 'R');
   await enterCode(harness);
   assert.deepEqual(destinations, ['/dashboard']);
-  assert.deepEqual(saves, [[email, 'SponsorA', '']], 'a pending background save never delays entry, uses another tab or selects a branch');
+  assert.deepEqual(captureProjection(saves), [[email, 'SponsorA', '', { subject: 'synthetic-member', timeoutMs: 8000 }]], 'a pending background save never delays entry, uses another tab or selects a branch');
   assert.deepEqual(referral.referralForCheckout(email, storage), { code: 'SponsorA', email });
   assert.deepEqual(referral.referralForCheckout('other@example.test', storage), { code: 'SponsorOther', email: 'other@example.test' });
   harness.unmount();
@@ -368,4 +370,80 @@ test('uncertain resend cannot erase an entered code or cause another email until
   await resend.props.onClick({ preventDefault() {} });
   assert.equal(paths.length, 2); assert.equal(find(harness.render(props), node => node?.props?.id === 'login-code').props.value, '001234');
   assert.equal(cooldowns.get('send').seconds, 621); harness.unmount();
+});
+
+
+test('a raw duplicated sponsor URL cannot reinstate a referral rejected by the server before verified access', async t => {
+  const destinations = browser(t), values = new Map();
+  const storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, String(value)), removeItem: key => values.delete(key) };
+  window.localStorage = storage;
+  window.location.search = '?ref=FirstSponsor&ref=SecondSponsor';
+  t.mock.method(globalThis, 'fetch', async path => Response.json(path.endsWith('/send-verification-otp') ? { ok: true }
+    : path === '/api/auth/session?view=access' ? { authenticated: true, mode: 'better-auth', email, subject: 'synthetic-member' } : proof()));
+  const saves = [], harness = view({ attribution: referral, sync: (...args) => { saves.push(args); return Promise.resolve({ ok: true }); } });
+  harness.render(props); harness.render(props);
+  assert.equal(values.size, 0, 'mount cannot store the first ambiguous sponsor');
+  await enterCode(harness);
+  assert.deepEqual(destinations, ['/dashboard']);
+  assert.deepEqual(captureProjection(saves), [[email, '', '', { subject: 'synthetic-member', timeoutMs: 8000 }]], 'only the native backend can select the company default');
+  assert.equal(values.size, 0, 'verified login still cannot invent a browser sponsor');
+  harness.unmount();
+});
+
+
+test('a missing canonical subject cannot capture a company sponsor, navigate or request another OTP', async t => {
+  const destinations = browser(t), paths = [], saves = [];
+  t.mock.method(globalThis, 'fetch', async path => {
+    paths.push(path);
+    return Response.json(path.endsWith('/send-verification-otp') ? { ok: true }
+      : path === '/api/auth/session?view=access' ? { authenticated: true, mode: 'better-auth', email } : proof());
+  });
+  const harness = view({ sync: (...args) => { saves.push(args); return Promise.resolve({ ok: true }); } });
+  await enterCode(harness);
+  assert.deepEqual(destinations, []); assert.deepEqual(saves, []);
+  assert.deepEqual(paths, ['/api/auth/email-otp/send-verification-otp', '/api/auth/sign-in/email-otp', '/api/auth/session?view=access']);
+  assert.match(html(harness), /No pudimos confirmar el estado de tu sesión/);
+  harness.render(props); assert.equal(paths.length, 3, 'another render cannot capture or resend');
+  harness.unmount();
+});
+
+
+test('verified login waits for one bounded referral ACK before navigation and ignores an ACK after cancellation', async t => {
+  for (const cancel of [false, true]) {
+    const destinations = browser(t), paths = [], saves = []; let release;
+    t.mock.method(globalThis, 'fetch', async path => { paths.push(path); return Response.json(path.endsWith('/send-verification-otp') ? { ok: true }
+      : path === '/api/auth/session?view=access' ? { authenticated: true, mode: 'better-auth', email, subject: 'synthetic-member' } : proof()); });
+    const harness = view({ sync: (...args) => { saves.push(args); return new Promise(resolve => { release = resolve; }); } });
+    const pending = enterCode(harness);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(saves.length, 1); assert.deepEqual(destinations, []);
+    assert.deepEqual(captureProjection(saves), [[email, '', '', { subject: 'synthetic-member', timeoutMs: 8000 }]]);
+    if (cancel) { harness.unmount(); assert.equal(saves[0][3].signal.aborted, true); }
+    release({ ok: true }); await pending;
+    assert.deepEqual(destinations, cancel ? [] : ['/dashboard']);
+    assert.deepEqual(paths, ['/api/auth/email-otp/send-verification-otp', '/api/auth/sign-in/email-otp', '/api/auth/session?view=access']);
+    if (!cancel) harness.unmount();
+  }
+});
+
+test('the eight-second capture timeout keeps completed login and its pending marker without another OTP or automatic save retry', async t => {
+  const destinations = browser(t), paths = [], captures = []; let expire;
+  const originalTimeout = globalThis.setTimeout, originalClear = globalThis.clearTimeout, timer = 987654321;
+  t.mock.method(globalThis, 'setTimeout', (callback, milliseconds, ...args) => {
+    if (milliseconds === 8000) { expire = callback; return timer; }
+    return originalTimeout(callback, milliseconds, ...args);
+  });
+  t.mock.method(globalThis, 'clearTimeout', handle => { if (handle !== timer) originalClear(handle); });
+  t.mock.method(globalThis, 'fetch', async path => { paths.push(path); return Response.json(path.endsWith('/send-verification-otp') ? { ok: true }
+    : path === '/api/auth/session?view=access' ? { authenticated: true, mode: 'better-auth', email, subject: 'synthetic-member' } : proof()); });
+  const harness = view({ sync: (recipient, ref, side, options) => referralSync.beginVerifiedReferralSync(recipient, ref, side, {
+    ...options, browser: window, fetchImpl: (_path, request) => { captures.push(request); return new Promise(() => {}); },
+  }) });
+  const pending = enterCode(harness); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(captures.length, 1); assert.deepEqual(destinations, []); assert.equal(typeof expire, 'function');
+  expire(); await pending;
+  assert.deepEqual(destinations, ['/dashboard']); assert.equal(captures[0].signal.aborted, true);
+  assert.ok(referralSync.pendingVerifiedReferral(email, { browser: window }));
+  harness.render(props); assert.equal(paths.length, 3); assert.equal(captures.length, 1);
+  assert.doesNotMatch(html(harness), /El código no es válido/); harness.unmount();
 });

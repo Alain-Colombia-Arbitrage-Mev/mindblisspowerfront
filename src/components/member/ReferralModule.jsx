@@ -2,9 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, ArrowRight, Check, Clock, Copy, Link2, Loader2, RotateCw, Share2, Users } from 'lucide-react';
 import { motion } from 'framer-motion';
 import ReferralShareModal from './ReferralShareModal';
-import { readMemberJson, validMemberReferral } from '@/lib/member-read.mjs';
-import { createClipboardFeedback, createLatestViewRequest } from '@/lib/member-view-effects.mjs';
+import useMemberReferral from './useMemberReferral';
+import { createClipboardFeedback } from '@/lib/member-view-effects.mjs';
 import { referralLinkFrom } from '@/lib/referral-links.mjs';
+import { useI18n } from '@/i18n/LanguageProvider';
 
 const EMPTY_METRICS = { total: 0, active: 0, pending: 0 };
 
@@ -42,69 +43,26 @@ const buttonBase = {
 };
 
 export default function ReferralModule() {
-  const [referralCode, setReferralCode] = useState('');
-  const [referralLink, setReferralLink] = useState('');
-  const [referrals, setReferrals] = useState([]);
-  const [metrics, setMetrics] = useState(EMPTY_METRICS);
-  const [status, setStatus] = useState('loading');
+  const { t } = useI18n(), { data, error, busy: refreshing, refresh, canShare } = useMemberReferral();
+  const referralLink = referralLinkFrom(data), referralCode = referralLink ? data.code : '';
+  const referrals = data?.referrals || [], metrics = data?.metrics || EMPTY_METRICS;
+  const status = referralLink ? 'ready' : refreshing ? 'loading' : error ? 'error' : 'pending';
   const [shareOpen, setShareOpen] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState({ pending: '', copied: '', error: '' });
-  const [refreshing, setRefreshing] = useState(false);
-  const request = useRef(null);
   const clipboard = useRef(null);
-  const codeCopied = copyFeedback.copied === 'code';
-  const linkCopied = copyFeedback.copied;
+  const codeCopied = Boolean(referralCode) && copyFeedback.copied === referralCode;
+  const linkCopied = Boolean(referralLink) && copyFeedback.copied === referralLink;
 
   const hasReferral = status === 'ready' && referralCode && referralLink;
 
   useEffect(() => {
-    const active = createLatestViewRequest(
-      signal => readMemberJson('/api/member/referral', { signal, validate: validMemberReferral }), {
-      onStart: () => { setRefreshing(true); setStatus('loading'); setShareOpen(false); },
-      onValue: applyReferral,
-      onError: () => applyReferral(null),
-      onSettled: () => setRefreshing(false),
-    });
-    request.current = active;
-    active.run();
-    return () => {
-      active.dispose();
-      if (request.current === active) request.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
+    setShareOpen(false); setCopyFeedback({ pending: '', copied: '', error: '' });
     const active = createClipboardFeedback(setCopyFeedback);
     clipboard.current = active;
     return () => { active.dispose(); if (clipboard.current === active) clipboard.current = null; };
-  }, []);
+  }, [referralLink]);
 
-  function applyReferral(data) {
-    if (!data) {
-      setStatus('error');
-      setReferralCode('');
-      setReferralLink('');
-      setReferrals([]);
-      setMetrics(EMPTY_METRICS);
-      return;
-    }
-    const link = referralLinkFrom(data);
-    if (!data.positioned || !data.code || !link) {
-      setStatus('pending');
-      setReferralCode('');
-      setReferralLink('');
-      setReferrals([]);
-      setMetrics(EMPTY_METRICS);
-      return;
-    }
-    setStatus('ready');
-    setReferralCode(data.code);
-    setReferralLink(link);
-    setReferrals(Array.isArray(data.referrals) ? data.referrals : []);
-    setMetrics(data.metrics || EMPTY_METRICS);
-  }
-
-  const refreshReferral = () => request.current?.run();
+  const refreshReferral = () => refresh();
 
   const metricCards = useMemo(() => ([
     { label: 'Total invitados', value: metrics.total, color: 'var(--vp-text)', note: 'directos', icon: Users },
@@ -113,22 +71,24 @@ export default function ReferralModule() {
   ]), [metrics]);
 
   const copyCode = async () => {
-    if (!referralCode) return;
-    await clipboard.current?.copy(referralCode, 'code');
+    if (!referralCode || !canShare()) return;
+    await clipboard.current?.copy(referralCode, referralCode);
   };
 
   const copyLink = async () => {
-    if (!referralLink) return;
-    await clipboard.current?.copy(referralLink, 'link');
+    if (!referralLink || !canShare()) return;
+    await clipboard.current?.copy(referralLink, referralLink);
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      {error && referralLink ? <p role="alert">{t('referralCard.refreshFailed')}</p> : null}
       {hasReferral ? (
         <ReferralShareModal
           isOpen={shareOpen}
           onClose={() => setShareOpen(false)}
           code={referralCode}
+          canShare={canShare}
         />
       ) : null}
 
@@ -224,7 +184,7 @@ export default function ReferralModule() {
             Icon={Link2}
             link={referralLink}
             status={status}
-            copied={linkCopied === 'link'}
+            copied={linkCopied}
             onCopy={copyLink}
             onShare={() => hasReferral && setShareOpen(true)}
           />
@@ -374,14 +334,14 @@ function SideShareCard({ title, direction, Icon, link, status, copied, onCopy, o
 function helperText(status) {
   if (status === 'loading') return 'Consultando tu enlace real en la base de datos.';
   if (status === 'error') return 'No se pudo consultar tu enlace. Intenta actualizar en unos segundos.';
-  if (status === 'pending') return 'El código se habilita cuando tu pago queda activado y tu cuenta entra al árbol binario.';
+  if (status === 'pending') return 'Actualiza la consulta para obtener tu código de referido.';
   return 'Código único, permanente y resoluble para nuevas activaciones.';
 }
 
 function sharePlaceholder(status) {
   if (status === 'loading') return 'Cargando link de referido...';
   if (status === 'error') return 'Link no disponible temporalmente';
-  return 'Pendiente de activación y ubicación en el árbol';
+  return 'Enlace pendiente de consulta';
 }
 
 function formatDate(value) {

@@ -20,10 +20,14 @@ function registrationInput(body) {
     error: 'El registro se valida con un código por correo, sin contraseña.', field: 'password',
   };
   if (!validEmail(email)) return { error: 'Ingresa un correo válido.', field: 'email' };
+  // Reject hostile control characters in public identity or invitation input.
+  // eslint-disable-next-line no-control-regex
   if (name.length < 2 || name.length > 120 || /[\u0000-\u001f\u007f]/.test(name)) return { error: 'Escribe tu nombre completo (2 a 120 caracteres).', field: 'fullName' };
   if (body.acceptsPrivacy !== true) return { error: 'Debes aceptar la política de privacidad para continuar.', field: 'acceptsPrivacy' };
   const referral = typeof body.referralCode === 'string' ? body.referralCode.trim() : '';
   const side = typeof body.preferredSide === 'string' ? body.preferredSide.trim().toUpperCase() : '';
+  // Reject hostile control characters in public identity or invitation input.
+  // eslint-disable-next-line no-control-regex
   if (referral.length > 64 || /[\u0000-\u0020\u007f]/.test(referral)) return { error: 'Revisa el código de referido.', field: 'referralCode' };
   if (side && !['L', 'R'].includes(side)) return { error: 'Revisa la preferencia de lado.', field: 'preferredSide' };
   const contacts = {};
@@ -172,7 +176,11 @@ export async function handleRegistration(request, action = 'register', dependenc
         code: 'REGISTRATION_SESSION_UNAVAILABLE', emailVerified: true, needsLogin: true,
       }, 503);
     }
-    const response = reply({ ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: false, sessionEstablished: true });
+    // Version only this additive public projection: cached clients require the
+    // historical exact five-field acknowledgement. The identity above was
+    // independently matched to the newly issued native session.
+    const context = request.headers.get('x-mindbliss-registration-context') === 'v2' ? { subject: verified.id } : {};
+    const response = reply({ ok: true, mode: 'better-auth', userConfirmed: true, needsLogin: false, sessionEstablished: true, ...context });
     for (const cookie of cookies) response.headers.append('set-cookie', cookie);
     return response;
   } catch { return reply({ error: 'El registro no está disponible temporalmente. Intenta de nuevo.', code: 'REGISTRATION_UNAVAILABLE' }, 503); }

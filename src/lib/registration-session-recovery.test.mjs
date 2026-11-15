@@ -57,7 +57,7 @@ test('only the same verified projection owner is accepted; absent subject, legac
   const invalid = [null, [], {}, { ...identity, authenticated: false }, { ...identity, authenticated: 'true' },
     { ...identity, mode: 'cognito' }, { ...identity, mode: 'BETTER-AUTH' }, { ...identity, email: 'another@example.test' },
     { ...identity, email: null }, { ...identity, subject: null }, { ...identity, subject: '' },
-    { ...identity, subject: ' owner' }, { ...identity, subject: 'owner\n' }, { ...identity, subject: 'x'.repeat(257) },
+    { ...identity, subject: ' owner' }, { ...identity, subject: 'owner\n' }, { ...identity, subject: 'x'.repeat(256) }, { ...identity, subject: '\ud800' },
     { ...identity, error: '' }, { ...identity, error: false }, { ...identity, code: 'INVALID_OTP' },
     { ...identity, code: null }];
   for (const payload of invalid) assert.equal(await recoverRegistrationSession(email, { fetchImpl: async () => json(payload) }), null);
