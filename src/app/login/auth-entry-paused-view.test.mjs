@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
-import * as policy from '../../lib/auth-entry-policy.mjs';
+import * as activePolicy from '../../lib/auth-entry-policy.mjs';
 import * as otp from '../../lib/email-otp-client.mjs';
 import * as auth from './better-auth-login.mjs';
 import * as registration from '../register/registration-model.mjs';
@@ -15,6 +15,10 @@ import { translateMessage } from '../../i18n/translate.mjs';
 import { registrationViewHarness, findRegistrationNode as find, registrationFieldStub, registrationButtonStub } from '../register/registration-view-test-harness.mjs';
 
 const require = createRequire(import.meta.url), email = 'entry-pause-fixture@example.test';
+// Retain pause regression coverage with an isolated copy of the policy while
+// the actual application allows login and registration again.
+const policy = await import(`data:text/javascript;base64,${Buffer.from(readFileSync(new URL('../../lib/auth-entry-policy.mjs', import.meta.url), 'utf8')
+  .replace('export const AUTH_ENTRY_PAUSED = false;', 'export const AUTH_ENTRY_PAUSED = true;')).toString('base64')}`);
 const all = node => [node, ...React.Children.toArray(node?.props?.children).flatMap(all)];
 const event = (key = 'Enter') => ({ key, defaultPrevented: false, stopped: false,
   preventDefault() { this.defaultPrevented = true; }, stopPropagation() { this.stopped = true; } });
@@ -75,7 +79,7 @@ async function assertSubmitBlocked(tree) {
   assert.equal(submission.stopped, true, 'Direct onSubmit/requestSubmit is guarded independently of the disabled button');
 }
 
-test('OTP sign-in keeps its input but disables sending and blocks Enter/direct submission under the actual pause policy', async t => {
+test('OTP sign-in keeps its input but disables sending and blocks Enter/direct submission under a simulated pause policy', async t => {
   for (const authMode of ['better-auth', 'cognito']) {
     const h = fixture(t, '../login/MagicLinkLoginForm.jsx');
     const tree = h.render({ authMode, initialEmail: email });
@@ -85,6 +89,26 @@ test('OTP sign-in keeps its input but disables sending and blocks Enter/direct s
     assert.doesNotMatch(html, /href="\/register/); if (authMode === 'better-auth') assert.match(html, /href="\/forgot-password/);
     assert.equal(h.calls.length, 0); assert.deepEqual(h.sideEffects, []);
   }
+});
+
+test('the active policy enables login and registration controls, restores entry links and hides the pause notice', t => {
+  const login = fixture(t, '../login/MagicLinkLoginForm.jsx', { currentPolicy: activePolicy });
+  const loginTree = login.render({ authMode: 'better-auth', initialEmail: email });
+  assert.equal(byText(loginTree, 'Enviar código').props.disabled, false);
+  const keyboard = event(); form(loginTree).props.onKeyDown(keyboard);
+  assert.equal(keyboard.defaultPrevented, false);
+  assert.equal(keyboard.stopped, false);
+  assert.doesNotMatch(renderToStaticMarkup(loginTree), /temporalmente no disponibles/);
+  const register = fixture(t, './BetterAuthRegisterForm.jsx', { currentPolicy: activePolicy });
+  const registerTree = register.render({ initialSearch: `email=${encodeURIComponent(email)}` });
+  assert.equal(byText(registerTree, 'Crear cuenta y verificar correo').props.disabled, false);
+  assert.doesNotMatch(renderToStaticMarkup(registerTree), /temporalmente no disponibles/);
+  const Links = moduleAt('./LoginLocalizedCopy.jsx', {
+    '@/lib/auth-entry-policy.mjs': activePolicy,
+    '@/i18n/LanguageProvider': { useI18n: () => ({ t: key => translateMessage('es', key) }) },
+    'next/link': { default: ({ children, ...props }) => React.createElement('a', props, children) },
+  }).LoginAccountLinks;
+  assert.match(renderToStaticMarkup(React.createElement(Links, { registrationHref: '/register', emailOtpOnly: true })), /href="\/register"/);
 });
 
 test('valid OTP confirmation and manual resend cannot sign in, generate another code or navigate while paused', async t => {

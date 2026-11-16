@@ -1,6 +1,6 @@
 // Temporary UI entry policy. It does not change an existing session or grant
 // access; every backend endpoint continues to enforce its own authorization.
-export const AUTH_ENTRY_PAUSED = true;
+export const AUTH_ENTRY_PAUSED = false;
 
 export function authEntryAllowed() {
   return !AUTH_ENTRY_PAUSED;
