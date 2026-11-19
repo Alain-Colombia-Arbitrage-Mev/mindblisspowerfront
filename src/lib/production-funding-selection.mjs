@@ -4,14 +4,14 @@ import { sandboxWalletAddress } from './sandbox-wallet-contract.mjs';
 export const PRODUCTION_QUOTE_DEBOUNCE_MS = 500;
 export const PRODUCTION_QUOTE_TTL_MS = 120000;
 
-/** Expose the actual local default and USD; an unknown default requires an explicit choice. */
+/** Discovery returns quote-verified fiat. Keep every offer and prefer the local default. */
 export function productionFundingCurrencies(discovery) {
   const offered = Array.isArray(discovery?.currencies) ? discovery.currencies : [];
   const local = offered.find(item => item.code === discovery.defaultCurrencyCode);
   const usd = offered.find(item => item.code === 'USD');
-  if (!local) return { currencies: offered.filter((item, index, items) => items.findIndex(other => other?.code === item.code) === index), defaultCurrencyCode: '' };
-  const currencies = [local, usd].filter((item, index, items) => item && items.findIndex(other => other?.code === item.code) === index);
-  return { currencies, defaultCurrencyCode: currencies[0]?.code || '' };
+  const preferred = local ? [local, usd, ...offered] : offered;
+  const currencies = preferred.filter((item, index) => item && preferred.findIndex(other => other?.code === item.code) === index);
+  return { currencies, defaultCurrencyCode: local?.code || '' };
 }
 
 /** Limits always retain their own fiat units. They never imply an FX rate. */

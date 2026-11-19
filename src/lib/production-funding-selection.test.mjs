@@ -10,22 +10,19 @@ const routes = (...paymentMethods) => [{ serviceProvider: 'TRANSAK', paymentMeth
 const owner = 'synthetic-wallet-owner', address = `0x${'aBcDeF12'.repeat(5)}`;
 const input = { country: 'US', sourceCurrencyCode: 'USD', amount: 50, paymentMethodType: 'CREDIT_DEBIT_CARD' };
 
-test('a large discovery catalog exposes only its actual local default and USD without leaking the other currencies', () => {
-  const currencies = [fiat('MXN'), fiat('USD'), ...Array.from({ length: 58 }, (_, index) =>
-    fiat(`Q${String.fromCharCode(65 + Math.floor(index / 26))}${String.fromCharCode(65 + index % 26)}`))];
-  const discovery = { country: 'MX', currencies, defaultCurrencyCode: 'MXN' };
+test('a local default does not hide a second verified bank currency', () => {
+  const currencies = [fiat('EUR'), fiat('SEK'), fiat('EUR')];
+  const discovery = { country: 'SE', currencies, defaultCurrencyCode: 'SEK' };
   const selected = productionFundingCurrencies(discovery);
-  assert.equal(currencies.length, 60);
-  assert.deepEqual(selected, { currencies: [fiat('MXN'), fiat('USD')], defaultCurrencyCode: 'MXN' });
-  assert.equal(discovery.currencies.length, 60);
-  assert.equal(discovery.defaultCurrencyCode, 'MXN');
+  assert.deepEqual(selected, { currencies: [fiat('SEK'), fiat('EUR')], defaultCurrencyCode: 'SEK' });
+  assert.deepEqual(discovery.currencies.map(item => item.code), ['EUR', 'SEK', 'EUR']);
 });
 
 test('an unavailable local default preserves actual offers and requires an explicit choice without inventing a default', () => {
   for (const [discovery, expected] of [
     [{ currencies: [fiat('USD'), fiat('EUR')], defaultCurrencyCode: 'COP' }, { currencies: [fiat('USD'), fiat('EUR')], defaultCurrencyCode: '' }],
     [{ currencies: [fiat('COP')], defaultCurrencyCode: 'COP' }, { currencies: [fiat('COP')], defaultCurrencyCode: 'COP' }],
-    [{ currencies: [fiat('USD'), fiat('MXN')], defaultCurrencyCode: 'USD' }, { currencies: [fiat('USD')], defaultCurrencyCode: 'USD' }],
+    [{ currencies: [fiat('USD'), fiat('MXN')], defaultCurrencyCode: 'USD' }, { currencies: [fiat('USD'), fiat('MXN')], defaultCurrencyCode: 'USD' }],
     [{ currencies: [fiat('CLP')], defaultCurrencyCode: null }, { currencies: [fiat('CLP')], defaultCurrencyCode: '' }],
     [{ currencies: [fiat('MXN'), fiat('USD')], defaultCurrencyCode: null }, { currencies: [fiat('MXN'), fiat('USD')], defaultCurrencyCode: '' }],
     [{ currencies: [fiat('EUR')], defaultCurrencyCode: 'COP' }, { currencies: [fiat('EUR')], defaultCurrencyCode: '' }],

@@ -1,5 +1,6 @@
 export const walletProductionMessages = {
   es: { walletProduction: {
+    openBanking: 'Banca abierta', mobileMoney: 'Dinero móvil',
     title: 'Billetera personal', copy: 'Recibe USDT en Polygon en la billetera vinculada a tu cuenta.', production: 'Pagos reales', operationsUnavailable: 'Los envíos y retiros todavía no están habilitados en este portal.',
     addFunds: 'Recargar fondos', provider: 'Proveedor de pago', chooseProvider: 'Elige un proveedor para continuar.',
     chooseMethod: 'Selecciona un método para ver el importe mínimo.', useMinimum: 'Usar mínimo: {amount} {currency}',
@@ -23,6 +24,7 @@ export const walletProductionMessages = {
     quoteExpired: 'Actualiza la cotización para continuar.', activationRequired: 'Activa tu billetera para elegir cómo recargarla.',
   } },
   en: { walletProduction: {
+    openBanking: 'Open banking', mobileMoney: 'Mobile money',
     title: 'Personal wallet', copy: 'Receive USDT on Polygon in the wallet linked to your account.', production: 'Live payments', operationsUnavailable: 'Sending and withdrawing funds are not yet enabled in this portal.', connection: 'Your wallet', active: 'Ready to receive funds',
     addFunds: 'Add funds', provider: 'Payment provider', chooseProvider: 'Choose a provider to continue.',
     chooseMethod: 'Select a payment method to see the minimum amount.', useMinimum: 'Use minimum: {amount} {currency}',
@@ -38,6 +40,7 @@ export const walletProductionMessages = {
     legacy: 'Previous test history — sandbox', legacyCopy: 'These are test records and do not represent live top-ups.', retry: 'Check again', quoteExpired: 'Refresh the quote to continue.', activationRequired: 'Activate your wallet to choose how to add funds.',
   } },
   ar: { walletProduction: {
+    openBanking: 'الخدمات المصرفية المفتوحة', mobileMoney: 'الأموال عبر الهاتف المحمول',
     title: 'المحفظة الشخصية', copy: 'استقبل USDT على Polygon في المحفظة المرتبطة بحسابك.', production: 'مدفوعات فعلية', operationsUnavailable: 'إرسال الأموال وسحبها غير مفعّلين بعد في هذه البوابة.', connection: 'محفظتك', active: 'جاهزة لاستقبال الأموال', connect: 'ربط المحفظة', activate: 'تفعيل المحفظة', activating: 'جارٍ التفعيل…',
     addFunds: 'إضافة أموال', provider: 'مقدم خدمة الدفع', chooseProvider: 'اختر مقدم خدمة للمتابعة.',
     chooseMethod: 'اختر طريقة دفع لعرض الحد الأدنى للمبلغ.', useMinimum: 'استخدام الحد الأدنى: {amount} {currency}',
@@ -50,6 +53,7 @@ export const walletProductionMessages = {
     confirmationCopy: 'فتح صفحة الدفع أو إغلاقها لا يؤكد الشحن. نتحقق من النتيجة مباشرة لدى MELD.', legacy: 'سجل الاختبارات السابق — sandbox', legacyCopy: 'هذه سجلات اختبار ولا تمثل شحنًا فعليًا.', retry: 'التحقق مجددًا', quoteExpired: 'حدّث العرض للمتابعة.', activationRequired: 'فعّل محفظتك لاختيار طريقة الشحن.',
   } },
   zh: { walletProduction: {
+    openBanking: '开放银行', mobileMoney: '移动钱包支付',
     title: '个人钱包', copy: '通过与你账户绑定的钱包接收 Polygon 网络的 USDT。', production: '真实支付', operationsUnavailable: '此门户尚未启用转账和提现。', connection: '你的钱包', active: '可接收资金', connect: '连接钱包', activate: '启用钱包', activating: '正在启用…', activationCopy: '连接钱包并通过一次签名确认所有权。启用不会转移资金。',
     addFunds: '充值', provider: '支付服务商', chooseProvider: '请选择服务商以继续。',
     chooseMethod: '选择支付方式以查看最低充值金额。', useMinimum: '使用最低金额：{amount} {currency}',

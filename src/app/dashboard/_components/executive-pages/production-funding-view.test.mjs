@@ -74,11 +74,11 @@ function fixture(t, config = {}) {
     async change(id, value) { const control = field(tree, id); control.props.onChange(control.type === 'country-selector-fixture' ? value : { target: { value } }); await flush(); return tree; } };
 }
 
-test('form retains the current design with country/currency/method/amount order and only local plus USD offered', async t => {
+test('form retains country, currency, method and amount order and shows every verified fiat from discovery', async t => {
   const h = fixture(t); await h.flush(); await h.change('production-country', 'MX');
   const inputs = all(h.tree).filter(node => node?.props?.id?.startsWith('production-') && ['input', 'select', 'country-selector-fixture'].includes(node.type));
   assert.deepEqual(inputs.map(node => node.props.id), ['production-country', 'production-currency', 'production-method', 'production-amount']);
-  assert.deepEqual(all(field(h.tree, 'production-currency')).filter(node => node?.type === 'option').map(node => node.props.value), ['', 'MXN', 'USD']);
+  assert.deepEqual(all(field(h.tree, 'production-currency')).filter(node => node?.type === 'option').map(node => node.props.value), ['', 'MXN', 'USD', 'COP', 'EUR', 'GBP']);
   assert.equal(field(h.tree, 'production-amount').props.value, ''); assert.equal(submit(h.tree).props.children.at(-1), 'Recargar fondos');
   assert.ok(!all(h.tree).some(node => node?.type === 'button' && node.props.children === 'Consultar opciones'));
   assert.equal(h.calls.connect, 0); assert.equal(h.calls.binding, 0); assert.equal(h.calls.session.length, 0);
