@@ -265,45 +265,52 @@ test('the actual production route passes the Cloudflare guard and maps its publi
   assert.equal(denied.status, 404); assert.equal(calls, 2);
 });
 
-test('RampNow US USD card catalog, quote and session preserve a bounded destination code through the signed native request', async () => {
+test('RampNow US USD catalog, quote and session for cards and mobile wallets preserve a bounded destination code through the signed native request', async () => {
   const networks = ['USDC_POLYGON', 'USDC_ARBITRUM', 'USDC'];
   const expected = { address, asset: 'USDC', network: 'polygon', chainId: 137 };
   const actual = { address, asset: 'USDC', network: 'ethereum', chainId: 1 };
   const existingMethod = options.routes[0].paymentMethods[0];
-  const card = { ...existingMethod, destinationCurrencyCodes: networks };
-  const catalog = { ...options, destinationCurrencyCode: 'USDC_POLYGON', routes: [{ serviceProvider: 'RAMPNOW', paymentMethods: [card] }] };
+  const allowedMethods = ['CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY'];
+  const paymentMethods = allowedMethods.map(method => ({ ...existingMethod, method, destinationCurrencyCodes: networks }));
+  const catalog = { ...options, destinationCurrencyCode: 'USDC_POLYGON', routes: [{ serviceProvider: 'RAMPNOW', paymentMethods }] };
   const routePath = 'options?country=US&sourceCurrencyCode=USD';
   const catalogResponse = await handleWalletProductionFunding(request(routePath), 'options', { env, serviceRequest: success(catalog) });
   assert.equal(catalogResponse.status, 200);
-  assert.deepEqual((await catalogResponse.json()).routes[0].paymentMethods[0].destinationCurrencyCodes, networks);
+  assert.deepEqual((await catalogResponse.json()).routes[0].paymentMethods, paymentMethods);
   const selection = { ...input, destinationCurrencyCode: 'USDC' };
   const checkout = { ...sessionInput, ...selection, serviceProvider: 'RAMPNOW' };
-  const price = { ...quote, destination: actual, quotes: [{ ...quote.quotes[0], serviceProvider: 'RAMPNOW', destinationCurrencyCode: 'USDC' }] };
-  const session = { ...ack, destination: actual, destinationCurrencyCode: 'USDC', serviceProvider: 'RAMPNOW' };
-  for (const [action, body, data] of [['quote', selection, price], ['session', checkout, session]]) {
-    const response = await handleWalletProductionFunding(request(action, body), action, { env, serviceRequest: async (_url, init) => {
-      assert.deepEqual(JSON.parse(init.body), body);
-      const headers = new Headers(init.headers);
-      const signed = createHmac('sha256', env.AUTH_BFF_SHARED_SECRET).update(['POST', internalBase + '/' + action, headers.get('x-vp-auth-timestamp'),
-        headers.get('x-vp-auth-client-ip'), hash(cookie), hash(init.body)].join('\n')).digest('hex');
-      assert.equal(headers.get('x-vp-auth-signature'), signed);
-      return { ok: true, status: action === 'session' ? 201 : 200, data };
-    } });
-    assert.equal(response.status, action === 'session' ? 201 : 200);
-    assert.deepEqual((await response.json()).destination, actual);
+  for (const paymentMethodType of allowedMethods) {
+    const price = { ...quote, paymentMethodType, destination: actual, quotes: [{ ...quote.quotes[0], serviceProvider: 'RAMPNOW', destinationCurrencyCode: 'USDC' }] };
+    const session = { ...ack, paymentMethodType, destination: actual, destinationCurrencyCode: 'USDC', serviceProvider: 'RAMPNOW' };
+    for (const [action, body, data] of [['quote', { ...selection, paymentMethodType }, price], ['session', { ...checkout, paymentMethodType }, session]]) {
+      const response = await handleWalletProductionFunding(request(action, body), action, { env, serviceRequest: async (_url, init) => {
+        assert.deepEqual(JSON.parse(init.body), body);
+        const headers = new Headers(init.headers);
+        const signed = createHmac('sha256', env.AUTH_BFF_SHARED_SECRET).update(['POST', internalBase + '/' + action, headers.get('x-vp-auth-timestamp'),
+          headers.get('x-vp-auth-client-ip'), hash(cookie), hash(init.body)].join('\n')).digest('hex');
+        assert.equal(headers.get('x-vp-auth-signature'), signed);
+        return { ok: true, status: action === 'session' ? 201 : 200, data };
+      } });
+      assert.equal(response.status, action === 'session' ? 201 : 200);
+      assert.deepEqual((await response.json()).destination, actual);
+    }
   }
   const never = async () => assert.fail('Invalid route reached the native service');
   for (const [action, body] of [['quote', { ...selection, country: 'MX' }], ['quote', { ...selection, paymentMethodType: 'ACH' }],
     ['session', { ...checkout, serviceProvider: 'BANXA' }], ['session', { ...checkout, destinationCurrencyCode: 'USDC_ETHEREUM' }],
-    ['session', { ...checkout, address }]]) {
+    ['session', { ...checkout, address }], ['session', { ...checkout, paymentMethodType: 'PAYPAL' }],
+    ['quote', { ...selection, sourceCurrencyCode: 'EUR', paymentMethodType: 'APPLE_PAY' }],
+    ['session', { ...checkout, country: 'MX', paymentMethodType: 'GOOGLE_PAY' }]]) {
     assert.equal((await handleWalletProductionFunding(request(action, body), action, { env, serviceRequest: never })).status, 400);
   }
-  const settled = { ...status, serviceProvider: 'RAMPNOW', destination: expected, confirmedDestination: actual,
-    confirmation: { state: 'confirmed', source: 'meld_production_api', testMode: false, receivedAmount: '46.500000',
-      confirmedAt: ack.createdAt, transactionId: 'settled-synthetic', providerStatus: 'SETTLED' } };
-  const transaction = await handleWalletProductionFunding(request('status?checkoutReference=' + reference), 'status', { env, serviceRequest: success(settled) });
-  assert.equal(transaction.status, 200);
-  const projected = await transaction.json();
-  assert.deepEqual(projected.destination, expected);
-  assert.deepEqual(projected.confirmedDestination, actual);
+  for (const paymentMethodType of allowedMethods) {
+    const settled = { ...status, paymentMethodType, serviceProvider: 'RAMPNOW', destination: expected, confirmedDestination: actual,
+      confirmation: { state: 'confirmed', source: 'meld_production_api', testMode: false, receivedAmount: '46.500000',
+        confirmedAt: ack.createdAt, transactionId: 'settled-synthetic', providerStatus: 'SETTLED' } };
+    const transaction = await handleWalletProductionFunding(request('status?checkoutReference=' + reference), 'status', { env, serviceRequest: success(settled) });
+    assert.equal(transaction.status, 200);
+    const projected = await transaction.json();
+    assert.deepEqual(projected.destination, expected);
+    assert.deepEqual(projected.confirmedDestination, actual);
+  }
 });

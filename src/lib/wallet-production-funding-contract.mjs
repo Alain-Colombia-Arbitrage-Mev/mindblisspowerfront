@@ -32,9 +32,10 @@ function destination(value) {
     ? { address: value.address.toLowerCase(), asset: asset.asset, network: asset.network, chainId: asset.chainId } : null;
 }
 const rampNowAssetCodes = new Set(['USDC_POLYGON', 'USDC_ARBITRUM', 'USDC']);
-const isRampNowCard = (country, fiat, method) => country === 'US' && fiat === 'USD' && method === 'CREDIT_DEBIT_CARD';
+const rampNowMethods = new Set(['CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY']);
+const isRampNowMethod = (country, fiat, method) => country === 'US' && fiat === 'USD' && rampNowMethods.has(method);
 function assetAllowed(code, country, fiat, provider, method) {
-  if (provider === 'RAMPNOW') return isRampNowCard(country, fiat, method) && rampNowAssetCodes.has(code);
+  if (provider === 'RAMPNOW') return isRampNowMethod(country, fiat, method) && rampNowAssetCodes.has(code);
   if (code === 'USDT_POLYGON') return true;
   if (code === 'USDC_ARBITRUM') return country === 'MX' && fiat === 'EUR' && provider === 'ALCHEMYPAY' && method === 'CREDIT_DEBIT_CARD';
   return code === 'USDC_POLYGON' && provider === 'ONRAMPMONEY'
@@ -67,8 +68,8 @@ export function walletProductionInput(value, session = false) {
   if (!exact(value, keys) || !code(value.country) || !currency(value.sourceCurrencyCode) || !amount(value.amount) || !token(value.paymentMethodType)
     || (value.sourceCurrencyCode === 'USD' && (value.amount < 50 || value.amount > 25000))
     || (session && (!FUNDING_UUID.test(value.requestId || '') || !checkoutProviders.has(value.serviceProvider)))
-    || (session && value.serviceProvider === 'RAMPNOW' && !isRampNowCard(value.country, value.sourceCurrencyCode, value.paymentMethodType))
-    || (hasDestination && (!isRampNowCard(value.country, value.sourceCurrencyCode, value.paymentMethodType)
+    || (session && value.serviceProvider === 'RAMPNOW' && !isRampNowMethod(value.country, value.sourceCurrencyCode, value.paymentMethodType))
+    || (hasDestination && (!isRampNowMethod(value.country, value.sourceCurrencyCode, value.paymentMethodType)
       || !rampNowAssetCodes.has(value.destinationCurrencyCode) || (session && value.serviceProvider !== 'RAMPNOW')))) return null;
   return { country: value.country, sourceCurrencyCode: value.sourceCurrencyCode, amount: value.amount, paymentMethodType: value.paymentMethodType,
     ...(hasDestination ? { destinationCurrencyCode: value.destinationCurrencyCode } : {}),
@@ -98,7 +99,7 @@ export function walletProductionOptions(value) {
   const destinationCode = value.destinationCurrencyCode === undefined ? 'USDT_POLYGON' : value.destinationCurrencyCode;
   if (!walletProductionAsset(destinationCode) || !value.routes.every(route => route.paymentMethods.every(item => {
     if (item.destinationCurrencyCodes === undefined) return assetAllowed(destinationCode, value.country, value.sourceCurrencyCode, route.serviceProvider, item.method);
-    return route.serviceProvider === 'RAMPNOW' && isRampNowCard(value.country, value.sourceCurrencyCode, item.method)
+    return route.serviceProvider === 'RAMPNOW' && isRampNowMethod(value.country, value.sourceCurrencyCode, item.method)
       && Array.isArray(item.destinationCurrencyCodes) && item.destinationCurrencyCodes.length > 0
       && new Set(item.destinationCurrencyCodes).size === item.destinationCurrencyCodes.length
       && item.destinationCurrencyCodes.every(code => rampNowAssetCodes.has(code)) && item.destinationCurrencyCodes.includes(destinationCode)

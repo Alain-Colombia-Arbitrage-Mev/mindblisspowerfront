@@ -1,6 +1,6 @@
 export const walletProductionMessages = {
   es: { walletProduction: {
-    receiveNetwork: 'Red de recepción', rampNowNetworkHint: 'Puedes cambiar la red en RampNow. Mantén USD, el pago con tarjeta y el importe elegido. Confirmaremos el USDC que llegue a tu billetera vinculada en Polygon, Arbitrum o Ethereum.',
+    receiveNetwork: 'Red de recepción', rampNowNetworkHint: 'Puedes cambiar la red en RampNow. Mantén USD, el método de pago y el importe elegidos. Confirmaremos el USDC que llegue a tu billetera vinculada en Polygon, Arbitrum o Ethereum.',
     quotedNetwork: 'Cotización en {network}', receivedNetwork: 'Recibido en {network}',
     depositQr: "Recibir con QR", depositTitle: "Recibir USDC en Polygon", depositInstructions: "Escanea el código o copia la dirección. Selecciona USDC y la red Polygon en la billetera de origen.", depositQrLabel: "Código QR de tu dirección en Polygon", depositQrFallback: "El código QR no está disponible. Puedes copiar la dirección.",
     usdcBalance: 'Saldo USDC en Polygon', usdcArbitrumBalance: 'Saldo USDC en Arbitrum', usdcEthereumBalance: 'Saldo USDC en Ethereum', usdcBalanceUnavailable: 'Saldo temporalmente no disponible.',
@@ -28,7 +28,7 @@ export const walletProductionMessages = {
     quoteExpired: "La cotización venció. Pulsa Recargar fondos para volver a cotizar.", activationRequired: 'Activa tu billetera para elegir cómo recargarla.',
   } },
   en: { walletProduction: {
-    receiveNetwork: 'Receiving network', rampNowNetworkHint: 'You can switch networks in RampNow. Keep USD, card payment and the selected amount. We confirm USDC received in your linked wallet on Polygon, Arbitrum or Ethereum.',
+    receiveNetwork: 'Receiving network', rampNowNetworkHint: 'You can switch networks in RampNow. Keep USD and the selected payment method and amount. We confirm USDC received in your linked wallet on Polygon, Arbitrum or Ethereum.',
     quotedNetwork: 'Quoted on {network}', receivedNetwork: 'Received on {network}',
     depositQr: "Receive with QR", depositTitle: "Receive USDC on Polygon", depositInstructions: "Scan the code or copy the address. Select USDC and the Polygon network in the sending wallet.", depositQrLabel: "QR code for your Polygon address", depositQrFallback: "The QR code is unavailable. You can copy the address.",
     usdcBalance: 'USDC balance on Polygon', usdcArbitrumBalance: 'USDC balance on Arbitrum', usdcEthereumBalance: 'USDC balance on Ethereum', usdcBalanceUnavailable: 'Balance temporarily unavailable.',
@@ -48,7 +48,7 @@ export const walletProductionMessages = {
     legacy: 'Previous test history — sandbox', legacyCopy: 'These are test records and do not represent live top-ups.', retry: 'Check again', quoteExpired: "Quote expired. Select Add funds for a current quote.", activationRequired: 'Activate your wallet to choose how to add funds.',
   } },
   ar: { walletProduction: {
-    receiveNetwork: 'شبكة الاستلام', rampNowNetworkHint: 'يمكنك تغيير الشبكة في RampNow. أبقِ الدولار الأمريكي والبطاقة والمبلغ المحدد. نؤكد وصول USDC إلى محفظتك المرتبطة عبر Polygon أو Arbitrum أو Ethereum.',
+    receiveNetwork: 'شبكة الاستلام', rampNowNetworkHint: 'يمكنك تغيير الشبكة في RampNow. أبقِ الدولار الأمريكي وطريقة الدفع والمبلغ المختارين. نؤكد وصول USDC إلى محفظتك المرتبطة عبر Polygon أو Arbitrum أو Ethereum.',
     quotedNetwork: 'عرض السعر على {network}', receivedNetwork: 'تم الاستلام على {network}',
     depositQr: "استقبال عبر رمز QR", depositTitle: "استقبال USDC على Polygon", depositInstructions: "امسح الرمز أو انسخ العنوان. اختر USDC وشبكة Polygon في المحفظة المرسلة.", depositQrLabel: "رمز QR لعنوانك على Polygon", depositQrFallback: "رمز QR غير متاح. يمكنك نسخ العنوان.",
     usdcBalance: 'رصيد USDC على Polygon', usdcArbitrumBalance: 'رصيد USDC على Arbitrum', usdcEthereumBalance: 'رصيد USDC على Ethereum', usdcBalanceUnavailable: 'الرصيد غير متاح مؤقتًا.',
@@ -65,7 +65,7 @@ export const walletProductionMessages = {
     confirmationCopy: 'فتح صفحة الدفع أو إغلاقها لا يؤكد الشحن. نتحقق من النتيجة مباشرة لدى MELD.', legacy: 'سجل الاختبارات السابق — sandbox', legacyCopy: 'هذه سجلات اختبار ولا تمثل شحنًا فعليًا.', retry: 'التحقق مجددًا', quoteExpired: "انتهت صلاحية عرض السعر. اضغط على إضافة أموال للحصول على عرض جديد.", activationRequired: 'فعّل محفظتك لاختيار طريقة الشحن.',
   } },
   zh: { walletProduction: {
-    receiveNetwork: '到账网络', rampNowNetworkHint: '可在 RampNow 切换网络。请保留 USD、银行卡和已选金额。我们会确认通过 Polygon、Arbitrum 或 Ethereum 到达绑定钱包的 USDC。',
+    receiveNetwork: '到账网络', rampNowNetworkHint: '可在 RampNow 切换网络。请保留 USD 以及已选的付款方式和金额。我们会确认通过 Polygon、Arbitrum 或 Ethereum 到达绑定钱包的 USDC。',
     quotedNetwork: '报价网络 {network}', receivedNetwork: '到账网络 {network}',
     depositQr: "二维码收款", depositTitle: "在 Polygon 上接收 USDC", depositInstructions: "扫描二维码或复制地址。请在转出钱包中选择 USDC 和 Polygon 网络。", depositQrLabel: "你的 Polygon 地址二维码", depositQrFallback: "二维码暂不可用。你可以复制地址。",
     usdcBalance: 'Polygon 网络 USDC 余额', usdcArbitrumBalance: 'Arbitrum 网络 USDC 余额', usdcEthereumBalance: 'Ethereum 网络 USDC 余额', usdcBalanceUnavailable: '暂时无法查询余额。',
