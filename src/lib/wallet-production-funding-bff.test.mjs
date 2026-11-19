@@ -15,16 +15,16 @@ const env = { AUTH_PUBLIC_ORIGIN: origin, AUTH_PROVIDER: 'better-auth', AUTH_BFF
 const destination = { address, asset: 'USDT', network: 'polygon', chainId: 137 };
 const capability = { flow: 'wallet_funding', configured: true, environment: 'production', asset: 'USDT', network: 'polygon', chainId: 137, canBroadcast: false };
 const input = { country: 'US', sourceCurrencyCode: 'USD', amount: 50, paymentMethodType: 'CREDIT_DEBIT_CARD' };
-const sessionInput = { ...input, requestId: reference, serviceProvider: 'TRANSAK' };
+const sessionInput = { ...input, requestId: reference, serviceProvider: 'ONRAMPMONEY' };
 const countries = { countries: [{ code: 'US', name: 'United States' }, { code: 'MX', name: 'Mexico' }] };
 const discovery = { country: 'US', currencies: [{ code: 'USD', name: 'US Dollar', decimalPlaces: 2 }], defaultCurrencyCode: 'USD' };
 const options = { environment: 'production', country: 'US', sourceCurrencyCode: 'USD',
-  routes: [{ serviceProvider: 'TRANSAK', paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount: 20, maximumAmount: 25000 }] }] };
+  routes: [{ serviceProvider: 'ONRAMPMONEY', paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount: 20, maximumAmount: 25000 }] }] };
 const quote = { walletKind: 'personal', environment: 'production', country: 'US', sourceCurrencyCode: 'USD', requestedAmount: 50, paymentMethodType: 'CREDIT_DEBIT_CARD', destination,
-  quotes: [{ serviceProvider: 'TRANSAK', sourceAmount: 50, destinationAmount: 46.5, totalFee: 3, networkFee: 0.5, sourceCurrencyCode: 'USD', destinationCurrencyCode: 'USDT_POLYGON' }] };
-const snapshot = { checkoutReference: reference, provider: 'meld', serviceProvider: 'TRANSAK', country: 'US', requestedAmount: 50, sourceCurrencyCode: 'USD', paymentMethodType: 'CREDIT_DEBIT_CARD', destination };
+  quotes: [{ serviceProvider: 'ONRAMPMONEY', sourceAmount: 50, destinationAmount: 46.5, totalFee: 3, networkFee: 0.5, sourceCurrencyCode: 'USD', destinationCurrencyCode: 'USDT_POLYGON' }] };
+const snapshot = { checkoutReference: reference, provider: 'meld', serviceProvider: 'ONRAMPMONEY', country: 'US', requestedAmount: 50, sourceCurrencyCode: 'USD', paymentMethodType: 'CREDIT_DEBIT_CARD', destination };
 const ack = { ...snapshot, walletKind: 'personal', environment: 'production', status: 'session_created', destinationCurrencyCode: 'USDT_POLYGON',
-  checkoutUrl: 'https://global.transak.com/?apiKey=synthetic&sessionId=synthetic', createdAt: '2026-11-19T12:00:00.000Z' };
+  checkoutUrl: 'https://meldcrypto.com/?token=synthetic_opaque', createdAt: '2026-11-19T12:00:00.000Z' };
 const status = { ...snapshot, walletKind: 'personal', environment: 'production', requestStatus: 'session_created', confirmation: { state: 'unconfirmed', source: 'none', testMode: false } };
 const history = { walletKind: 'personal', environment: 'production', settlement: 'unconfirmed', records: [{ ...snapshot, status: 'session_created', createdAt: ack.createdAt }] };
 const hash = value => createHash('sha256').update(value).digest('hex');
@@ -179,11 +179,11 @@ test('default transport can only use WALLET_CORE, never production app Core, san
   assert.deepEqual(calls, { wallet: 1, app: 0, public: 0 });
 });
 
-test('the observed Banxa production transit URL is bound to its provider and cannot be substituted into a Transak acknowledgement', async () => {
+test('the observed Banxa production transit URL is bound to its provider and rejects retired providers and mismatched hosts', async () => {
   const banxaUrl = 'https://meldshared.banxa.com/papi/transit/?initId=synthetic_opaque';
-  for (const [provider, checkoutUrl, expected] of [['BANXA', banxaUrl, 200], ['TRANSAK', banxaUrl, 502],
-    ['BANXA', ack.checkoutUrl, 502], ['TOPPER', banxaUrl, 502], ['BANXA', 'https://meldcrypto.com/?token=synthetic_opaque', 200],
-    ['TRANSAK', 'https://meldcrypto.com/?token=synthetic_opaque', 200],
+  for (const [provider, checkoutUrl, expected] of [['BANXA', banxaUrl, 200], ['TRANSAK', banxaUrl, 400],
+    ['ONRAMPMONEY', banxaUrl, 502], ['TOPPER', banxaUrl, 400], ['BANXA', 'https://meldcrypto.com/?token=synthetic_opaque', 200],
+    ['TRANSAK', 'https://meldcrypto.com/?token=synthetic_opaque', 400],
     ['BANXA', banxaUrl + '&walletAddress=foreign', 502], ['BANXA', banxaUrl + '&initId=second', 502],
     ['BANXA', 'https://meldshared.banxa.com/papi/transit?initId=synthetic_opaque', 502], ['BANXA', 'https://checkout.banxa-sandbox.com/?initId=synthetic_opaque', 502]]) {
     const body = { ...sessionInput, serviceProvider: provider }, value = { ...ack, serviceProvider: provider, checkoutUrl };

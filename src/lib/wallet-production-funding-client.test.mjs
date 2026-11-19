@@ -11,22 +11,22 @@ const address = `0x${'1'.repeat(40)}`, otherAddress = `0x${'2'.repeat(40)}`;
 const reference = '11111111-1111-4111-8111-111111111111';
 const otherReference = '22222222-2222-4222-8222-222222222222';
 const input = { country: 'US', sourceCurrencyCode: 'USD', amount: 50, paymentMethodType: 'CREDIT_DEBIT_CARD' };
-const sessionInput = { ...input, requestId: reference, serviceProvider: 'TRANSAK' };
+const sessionInput = { ...input, requestId: reference, serviceProvider: 'ONRAMPMONEY' };
 const destination = { address, asset: 'USDT', network: 'polygon', chainId: 137 };
-const quoteItem = { serviceProvider: 'TRANSAK', sourceAmount: 50, destinationAmount: 47.25, totalFee: 2.5,
+const quoteItem = { serviceProvider: 'ONRAMPMONEY', sourceAmount: 50, destinationAmount: 47.25, totalFee: 2.5,
   networkFee: 0.25, sourceCurrencyCode: 'USD', destinationCurrencyCode: 'USDT_POLYGON', rampScore: 90 };
 const quote = { walletKind: 'personal', environment: 'production', country: 'US', sourceCurrencyCode: 'USD',
   requestedAmount: 50, paymentMethodType: 'CREDIT_DEBIT_CARD', destination, quotes: [quoteItem] };
-const checkoutUrl = 'https://global.transak.com/?apiKey=synthetic&sessionId=synthetic-session';
+const checkoutUrl = 'https://meldcrypto.com/?token=synthetic_opaque';
 const ack = { checkoutReference: reference, walletKind: 'personal', environment: 'production', provider: 'meld',
-  serviceProvider: 'TRANSAK', country: 'US', sourceCurrencyCode: 'USD', requestedAmount: 50,
+  serviceProvider: 'ONRAMPMONEY', country: 'US', sourceCurrencyCode: 'USD', requestedAmount: 50,
   paymentMethodType: 'CREDIT_DEBIT_CARD', destinationCurrencyCode: 'USDT_POLYGON', destination,
   status: 'session_created', checkoutUrl, createdAt: '2026-11-19T12:00:00.000Z' };
 const discovery = { countries: [{ code: 'US', name: 'United States' }, { code: 'MX', name: 'Mexico' }, { code: 'CO', name: 'Colombia' }] };
 const mexico = { country: 'MX', currencies: [{ code: 'MXN', name: 'Mexican Peso', decimalPlaces: 2 },
   { code: 'USD', name: 'US Dollar', decimalPlaces: 2 }], defaultCurrencyCode: 'MXN' };
 const options = { environment: 'production', country: 'MX', sourceCurrencyCode: 'MXN',
-  routes: [{ serviceProvider: 'TRANSAK', paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', currencyCode: 'MXN', minimumAmount: 1000, maximumAmount: 100000 }] }] };
+  routes: [{ serviceProvider: 'ONRAMPMONEY', paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', currencyCode: 'MXN', minimumAmount: 1000, maximumAmount: 100000 }] }] };
 const status = { ...ack, requestStatus: 'session_created', confirmation: { state: 'unconfirmed', source: 'none', testMode: false } };
 const history = { walletKind: 'personal', environment: 'production', settlement: 'unconfirmed', records: [ack] };
 const context = { ownerSubject };
@@ -189,7 +189,7 @@ test('a foreign checkout destination is rejected after one manual session reques
   assert.equal(calls, 1);
 });
 
-test('checkout URLs allow only exact production MELD or Transak contracts, excluding sandbox and query injection', () => {
+test('checkout URLs allow only exact production MELD or Banxa contracts, excluding retired providers and query injection', () => {
   for (const url of [checkoutUrl, 'https://meldcrypto.com/?token=synthetic_token', 'https://meldcrypto.com/?wt=synthetic_token']) {
     assert.equal(walletProductionCheckoutUrl(url), url);
   }

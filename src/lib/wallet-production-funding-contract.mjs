@@ -8,7 +8,9 @@ export const walletProductionSubject = sandboxWalletSubjectHeader;
 const code = value => typeof value === 'string' && /^[A-Z]{2}$/.test(value);
 const currency = value => typeof value === 'string' && /^[A-Z]{3}$/.test(value);
 const token = value => typeof value === 'string' && /^[A-Z0-9_]{2,64}$/.test(value);
-const providers = new Set(['ALCHEMYPAY', 'BANXA', 'BLOCKCHAINDOTCOM', 'BTCDIRECT', 'GUARDARIAN', 'KOYWE', 'KRYPTONIM', 'ONMETA', 'ONRAMPMONEY', 'ROBINHOOD', 'STRIPE', 'TOPPER', 'TRANSAK', 'UNLIMIT']);
+const checkoutProviders = new Set(['ALCHEMYPAY', 'BANXA', 'ONMETA', 'ONRAMPMONEY']);
+const recordedProviders = new Set([...checkoutProviders, 'BLOCKCHAINDOTCOM', 'BTCDIRECT', 'GUARDARIAN', 'KOYWE',
+  'KRYPTONIM', 'ROBINHOOD', 'STRIPE', 'TOPPER', 'TRANSAK', 'UNLIMIT']);
 const plain = value => Boolean(value && typeof value === 'object' && !Array.isArray(value));
 const exact = (value, keys) => plain(value) && Object.keys(value).length === keys.length && Object.keys(value).every(key => keys.includes(key));
 const finite = value => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1e9;
@@ -18,7 +20,8 @@ const destination = value => plain(value) && sandboxWalletAddress(value.address)
   ? { address: value.address.toLowerCase(), asset: value.asset, network: 'polygon', chainId: 137 } : null;
 const assetAllowed = (asset, country, fiat, provider, method) => asset === 'USDT' || (provider === 'ONRAMPMONEY'
   && ((country === 'US' && fiat === 'USD' && ['ACH', 'LOCAL_BANK_TRANSFER'].includes(method))
-    || (country === 'MX' && fiat === 'MXN' && method === 'SPEI')));
+    || (country === 'MX' && fiat === 'MXN' && method === 'SPEI')
+    || (country === 'CO' && fiat === 'COP' && ['PSE', 'LOCAL_BANK_TRANSFER'].includes(method))));
 
 /** Project only bounded, non-identifying provider failure classifications. */
 export function walletProductionDiagnostic(value) {
@@ -40,7 +43,7 @@ export function walletProductionInput(value, session = false) {
   const keys = ['country', 'sourceCurrencyCode', 'amount', 'paymentMethodType', ...(session ? ['requestId', 'serviceProvider'] : [])];
   if (!exact(value, keys) || !code(value.country) || !currency(value.sourceCurrencyCode) || !amount(value.amount) || !token(value.paymentMethodType)
     || (value.sourceCurrencyCode === 'USD' && (value.amount < 50 || value.amount > 25000))
-    || (session && (!FUNDING_UUID.test(value.requestId || '') || !providers.has(value.serviceProvider)))) return null;
+    || (session && (!FUNDING_UUID.test(value.requestId || '') || !checkoutProviders.has(value.serviceProvider)))) return null;
   return { country: value.country, sourceCurrencyCode: value.sourceCurrencyCode, amount: value.amount, paymentMethodType: value.paymentMethodType,
     ...(session ? { requestId: value.requestId.toLowerCase(), serviceProvider: value.serviceProvider } : {}) };
 }
@@ -62,7 +65,7 @@ export function walletProductionDiscovery(value, country = '') {
 }
 export function walletProductionOptions(value) {
   if (!plain(value) || value.environment !== 'production' || !code(value.country) || !currency(value.sourceCurrencyCode)
-    || !Array.isArray(value.routes) || value.routes.length > 32 || !value.routes.every(route => plain(route) && providers.has(route.serviceProvider)
+    || !Array.isArray(value.routes) || value.routes.length > 32 || !value.routes.every(route => plain(route) && checkoutProviders.has(route.serviceProvider)
       && Array.isArray(route.paymentMethods) && route.paymentMethods.length <= 128 && route.paymentMethods.every(item => plain(item) && token(item.method) && item.currencyCode === value.sourceCurrencyCode
         && finite(item.minimumAmount) && finite(item.maximumAmount) && item.maximumAmount >= item.minimumAmount))) return null;
   const asset = value.destinationCurrencyCode === 'USDC_POLYGON' ? 'USDC' : 'USDT';
@@ -79,7 +82,7 @@ export function walletProductionQuote(value, input, expectedAddress = '') {
     || !amount(value.requestedAmount) || !token(value.paymentMethodType) || !Array.isArray(value.quotes) || !value.quotes.length || value.quotes.length > 4
     || (expectedAddress && dest.address !== expectedAddress.toLowerCase()) || (input && (value.country !== input.country || value.sourceCurrencyCode !== input.sourceCurrencyCode
       || value.requestedAmount !== input.amount || value.paymentMethodType !== input.paymentMethodType))
-    || !value.quotes.every(item => plain(item) && providers.has(item.serviceProvider) && item.sourceAmount === value.requestedAmount && finite(item.destinationAmount) && item.destinationAmount > 0
+    || !value.quotes.every(item => plain(item) && checkoutProviders.has(item.serviceProvider) && item.sourceAmount === value.requestedAmount && finite(item.destinationAmount) && item.destinationAmount > 0
       && finite(item.totalFee) && finite(item.networkFee) && item.sourceCurrencyCode === value.sourceCurrencyCode && item.destinationCurrencyCode === `${dest.asset}_POLYGON`
       && assetAllowed(dest.asset, value.country, value.sourceCurrencyCode, item.serviceProvider, value.paymentMethodType)
       && (item.rampScore === undefined || finite(item.rampScore)))) return null;
@@ -88,21 +91,21 @@ export function walletProductionQuote(value, input, expectedAddress = '') {
       destinationAmount: item.destinationAmount, totalFee: item.totalFee, networkFee: item.networkFee, sourceCurrencyCode: item.sourceCurrencyCode, destinationCurrencyCode: item.destinationCurrencyCode, ...(item.rampScore === undefined ? {} : { rampScore: item.rampScore }) })) };
 }
 export function walletProductionCheckoutUrl(value, serviceProvider = '') {
+  if (serviceProvider && !checkoutProviders.has(serviceProvider)) return null;
   try {
     // Reject controls before the URL parser can silently normalize them.
     // eslint-disable-next-line no-control-regex
-    if (typeof value !== 'string' || value.length > 8192 || /[\s\\\u0000-\u001f\u007f]/.test(value) || !/^https:\/\/(meldcrypto\.com|global\.transak\.com|meldshared\.banxa\.com)\//.test(value)) return null;
+    if (typeof value !== 'string' || value.length > 8192 || /[\s\\\u0000-\u001f\u007f]/.test(value) || !/^https:\/\/(meldcrypto\.com|meldshared\.banxa\.com)\//.test(value)) return null;
     const url = new URL(value), opaque = item => typeof item === 'string' && /^[A-Za-z0-9_.~+/-]{1,7800}={0,2}$/.test(item);
     if (url.protocol !== 'https:' || url.username || url.password || url.port || url.hash) return null;
     if (url.hostname === 'meldshared.banxa.com' && (!serviceProvider || serviceProvider === 'BANXA') && url.pathname === '/papi/transit/' && url.searchParams.size === 1 && url.searchParams.getAll('initId').length === 1 && opaque(url.searchParams.get('initId'))) return url.href;
     if (url.pathname !== '/') return null;
     if (url.hostname === 'meldcrypto.com' && [...url.searchParams.keys()].every(key => ['token', 'wt'].includes(key)) && url.searchParams.size === 1 && opaque(url.searchParams.get('token') || url.searchParams.get('wt'))) return url.href;
-    if (url.hostname === 'global.transak.com' && (!serviceProvider || serviceProvider === 'TRANSAK') && url.searchParams.size === 2 && url.searchParams.getAll('apiKey').length === 1 && url.searchParams.getAll('sessionId').length === 1 && opaque(url.searchParams.get('apiKey')) && opaque(url.searchParams.get('sessionId'))) return url.href;
   } catch { /* Reject malformed external checkout URLs. */ } return null;
 }
 function snapshot(value) {
   const dest = destination(value?.destination);
-  if (!plain(value) || !FUNDING_UUID.test(value.checkoutReference || '') || value.provider !== 'meld' || !providers.has(value.serviceProvider) || !code(value.country)
+  if (!plain(value) || !FUNDING_UUID.test(value.checkoutReference || '') || value.provider !== 'meld' || !recordedProviders.has(value.serviceProvider) || !code(value.country)
     || !currency(value.sourceCurrencyCode) || !amount(value.requestedAmount) || !token(value.paymentMethodType) || !dest
     || !assetAllowed(dest.asset, value.country, value.sourceCurrencyCode, value.serviceProvider, value.paymentMethodType)) return null;
   return { checkoutReference: value.checkoutReference.toLowerCase(), provider: 'meld', serviceProvider: value.serviceProvider, country: value.country,

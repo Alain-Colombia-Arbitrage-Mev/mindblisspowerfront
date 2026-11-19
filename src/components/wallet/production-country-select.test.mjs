@@ -24,7 +24,10 @@ function fixture(t) {
 test('search matches localized names, original names and ISO codes without adding unavailable countries or making network requests', () => {
   for (const query of ['México', 'mexico', 'MX']) assert.deepEqual(walletCountrySearch(countries, 'es', query).map(item => item.code), ['MX']);
   assert.deepEqual(walletCountrySearch(countries, 'es', 'estados').map(item => item.code), ['US']);
-  assert.deepEqual(walletCountrySearch(countries, 'es', 'united').map(item => item.code), ['US']);
+  for (const query of ['united', 'USA', 'U.S.', 'EE. UU.', 'United States of America']) {
+    assert.deepEqual(walletCountrySearch(countries, 'es', query).map(item => item.code), ['US']);
+  }
+  assert.deepEqual(walletCountrySearch(countries.filter(item => item.code !== 'US'), 'es', 'USA'), []);
   assert.deepEqual(walletCountrySearch(countries, 'zh', '美国').map(item => item.code), ['US']);
   assert.deepEqual(walletCountrySearch(countries, 'es', 'Costa Rica'), []);
   assert.equal(walletCountrySearch(countries, 'es').length, countries.length);
