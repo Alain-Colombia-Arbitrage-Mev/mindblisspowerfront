@@ -14,9 +14,10 @@ const all = node => [node, ...React.Children.toArray(node?.props?.children).flat
 const field = (tree, id) => all(tree).find(node => node?.props?.id === id);
 const submit = tree => all(tree).find(node => node?.type === 'button' && node.props.type === 'submit');
 const form = tree => all(tree).find(node => node?.type === 'form');
-const deferred = () => { let resolve; return { promise: new Promise(done => { resolve = done; }), resolve }; };
+const deferred = () => { let resolve, reject; return { promise: new Promise((done, fail) => { resolve = done; reject = fail; }), resolve, reject }; };
 function fixture(t) {
-  const cells = [], queue = [], cache = new Map(), calls = { session: [], opened: [], popups: [], retries: 0, quoteInputs: [], binding: 0, connect: 0 };
+  const cells = [], queue = [], cache = new Map(), calls = { session: [], opened: [], popups: [], retries: 0, quoteInputs: [], binding: 0, connect: 0, history: 0 };
+  let history = [];
   let cursor = 0, dirty = true, tree, mounted = true, props = { ownerSubject: 'fixture-owner' };
   const changed = (a, b) => !a || a.length !== b.length || a.some((item, index) => !Object.is(item, b[index]));
   const hooks = { useRef: value => cells[cursor++] ??= { current: value },
@@ -48,7 +49,7 @@ function fixture(t) {
       readProductionOptions: async (_country, currency) => ({ routes: [{ serviceProvider: 'TRANSAK', paymentMethods: [
         { method: 'CREDIT_DEBIT_CARD', currencyCode: currency, minimumAmount: currency === 'USD' ? 20 : 931, maximumAmount: currency === 'USD' ? 50000 : 500000 },
         { method: currency === 'COP' ? 'PSE' : 'SPEI', currencyCode: currency, minimumAmount: currency === 'COP' ? 42300 : 200, maximumAmount: 500000 }] }] }),
-      createProductionFunding: async (...args) => { calls.session.push(args); return waiting.promise; }, readProductionHistory: async () => ({ records: [] }), readProductionStatus: async () => assert.fail('no callback or user status request') },
+      createProductionFunding: async (...args) => { calls.session.push(args); return waiting.promise; }, readProductionHistory: async () => { calls.history++; return { records: history }; }, readProductionStatus: async () => assert.fail('no callback or user status request') },
     '@/lib/sandbox-wallet-client.mjs': { readSandboxWalletFundingHistory: async () => assert.fail('Legacy remains collapsed') },
     '@/i18n/LanguageProvider': { useI18n: () => ({ locale: 'es', t: (key, values) => translateMessage('es', key, values) }) },
     '@/components/ui/popover': { Popover: ({ children }) => children, PopoverTrigger: ({ children }) => children, PopoverContent: ({ children }) => children },
@@ -62,7 +63,7 @@ function fixture(t) {
   const stop = () => { mounted = false; cells.forEach(cell => cell?.cleanup?.()); };
   t.after(() => { stop(); if (savedWindow) Object.defineProperty(globalThis, 'window', savedWindow); else delete globalThis.window; });
   render();
-  return { calls, binding, waiting, render, flush, stop, get tree() { return tree; },
+  return { calls, binding, waiting, render, flush, stop, setHistory(records) { history = records; }, get tree() { return tree; },
     async change(id, value) { field(tree, id).props.onChange({ target: { value } }); await flush(); return tree; } };
 }
 
@@ -111,4 +112,19 @@ test('a captured old quote submit cannot open checkout after editing its amount,
   all(h.tree).find(node => node?.props?.name === 'production-provider').props.onChange(); await h.flush(); const old = form(h.tree).props.onSubmit;
   await h.change('production-amount', '100'); old({ preventDefault() {} }); assert.equal(h.calls.popups.length, 0);
   const current = form(h.tree).props.onSubmit; h.stop(); current({ preventDefault() {} }); assert.equal(h.calls.popups.length, 0); assert.equal(h.calls.session.length, 0);
+});
+
+test('failed preparation refreshes only owned history and displays unavailable attempts as not completed without retrying checkout', async t => {
+  const h = fixture(t); await h.flush(); await h.change('production-country', 'US'); await h.change('production-method', 'CREDIT_DEBIT_CARD');
+  all(h.tree).find(node => node?.props?.name === 'production-provider').props.onChange(); await h.flush();
+  form(h.tree).props.onSubmit({ preventDefault() {} });
+  assert.equal(h.calls.session.length, 1); assert.equal(h.calls.history, 1);
+  h.setHistory([{ checkoutReference: '11111111-1111-4111-8111-111111111111', serviceProvider: 'TRANSAK', requestedAmount: 50,
+    sourceCurrencyCode: 'USD', status: 'unavailable', destination: { address }, confirmation: { state: 'unconfirmed', source: 'none', testMode: false } }]);
+  h.waiting.reject(Error('wallet_production_unavailable')); await h.flush();
+  assert.equal(h.calls.history, 2); assert.equal(h.calls.popups[0].closed, true); assert.equal(h.calls.opened.length, 0);
+  const row = all(h.tree).find(node => node?.type === 'li');
+  assert.ok(row); assert.equal(all(row).find(node => node?.type === 'span').props.children.at(-1), translateMessage('es', 'walletProduction.failed'));
+  for (let index = 0; index < 3; index++) { h.render(); await h.flush(); }
+  assert.equal(h.calls.session.length, 1); assert.equal(h.calls.history, 2);
 });
