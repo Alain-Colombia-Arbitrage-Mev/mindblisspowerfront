@@ -6,7 +6,9 @@ import { useMemberSession } from '@/lib/member-session-context';
 import { useWalletReown } from '@/components/reown/WalletReownContext';
 import { useSandboxWalletBinding } from '@/components/reown/SandboxWalletBindingProvider';
 import { walletReownOwnerKey } from '@/lib/wallet-reown-connection.mjs';
-import { readProductionDiscovery, readProductionOptions, quoteProductionFunding, createProductionFunding, readProductionHistory, readProductionStatus } from '@/lib/wallet-production-funding-client.mjs';
+import { readProductionDiscovery, readProductionOptions, createProductionFunding, readProductionHistory, readProductionStatus } from '@/lib/wallet-production-funding-client.mjs';
+import useProductionFundingQuote from '@/components/wallet/useProductionFundingQuote';
+import { productionFundingCurrencies, productionFundingLimits, productionFundingValue, PRODUCTION_QUOTE_TTL_MS } from '@/lib/production-funding-selection.mjs';
 import { readSandboxWalletFundingHistory } from '@/lib/sandbox-wallet-client.mjs';
 import { FUNDING_UUID } from '@/lib/wallet-funding-contract.mjs';
 import { useI18n } from '@/i18n/LanguageProvider';
@@ -18,6 +20,7 @@ import local from './production-wallet.module.css';
 
 const names = { CREDIT_DEBIT_CARD: 'cardPayment', LOCAL_BANK_TRANSFER: 'bankTransfer' };
 const providerName = value => ({ ONRAMPMONEY: 'Onramp Money', ALCHEMYPAY: 'Alchemy Pay', BANXA: 'Banxa', TRANSAK: 'Transak', TOPPER: 'Topper' })[value] || value;
+const methodName = value => ({ APPLE_PAY: 'Apple Pay', GOOGLE_PAY: 'Google Pay', SPEI: 'SPEI', PSE: 'PSE', SEPA: 'SEPA', ACH: 'ACH' })[value] || value.replaceAll('_', ' ');
 export default function ProductionWalletFundingPage() {
   const session = useMemberSession(), owner = walletReownOwnerKey(session);
   return owner ? <ProductionWalletView key={owner} ownerSubject={session.subject} /> : null;
@@ -26,14 +29,15 @@ export function ProductionWalletView({ ownerSubject }) {
   const { t, locale } = useI18n(), binding = useSandboxWalletBinding(), reown = useWalletReown();
   const tr = (key, variables = undefined) => t(`walletProduction.${key}`, variables);
   const [countries, setCountries] = useState([]), [currencies, setCurrencies] = useState([]);
-  const [country, setCountry] = useState(''), [currency, setCurrency] = useState(''), [amount, setAmount] = useState('50'), [method, setMethod] = useState('');
+  const [country, setCountry] = useState(''), [currency, setCurrency] = useState(''), [amount, setAmount] = useState(''), [method, setMethod] = useState('');
+  const [amountMode, setAmountMode] = useState('unset'), [selectedProvider, setSelectedProvider] = useState('');
   const [routes, setRoutes] = useState([]), [loading, setLoading] = useState('countries'), [busy, setBusy] = useState(''), [error, setError] = useState('');
-  const [quote, setQuote] = useState(null), [revision, setRevision] = useState(0), [countryRevision, setCountryRevision] = useState(0), [history, setHistory] = useState([]), [selected, setSelected] = useState(null);
+  const [revision, setRevision] = useState(0), [countryRevision, setCountryRevision] = useState(0), [history, setHistory] = useState([]), [selected, setSelected] = useState(null);
   const [legacyOpen, setLegacyOpen] = useState(false), [historyError, setHistoryError] = useState(false);
   const [currencyRevision, setCurrencyRevision] = useState(0), [methodRevision, setMethodRevision] = useState(0);
   const [activationRequested, setActivationRequested] = useState(false);
   const mounted = useRef(false), operation = useRef(null), generation = useRef(0), live = useRef(null);
-  live.current = { binding, country, currency, amount, method, quote, routes };
+  live.current = { binding, country, currency, amount, method, quote: null, routes };
   const ready = binding.canReceive();
   const fail = useCallback(failure => {
     if (failure?.status === 401 || failure?.status === 403) live.current.binding.retire();
@@ -44,7 +48,7 @@ export function ProductionWalletView({ ownerSubject }) {
     generation.current++; operation.current?.controller.abort(); try { operation.current?.popup?.close(); } catch { /* cleanup */ }
     operation.current = null; if (mounted.current) setBusy('');
   }, []);
-  const reset = () => { cancel(); live.current.quote = null; setQuote(null); setError(''); };
+  const reset = () => { cancel(); live.current.quote = null; quoteState.invalidate(); setError(''); };
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; cancel(); }; }, [cancel]);
   useEffect(() => {
     const controller = new AbortController(); setLoading('countries');
@@ -53,24 +57,24 @@ export function ProductionWalletView({ ownerSubject }) {
     return () => controller.abort();
   }, [ownerSubject, countryRevision, fail]);
   useEffect(() => {
-    setCurrencies([]); setCurrency(''); setRoutes([]); setMethod(''); setQuote(null);
+    setCurrencies([]); setCurrency(''); setRoutes([]); setMethod('');
     if (!country) return undefined;
     const controller = new AbortController(); setLoading('currencies');
     readProductionDiscovery(country, { ownerSubject, signal: controller.signal }).then(value => {
-      if (controller.signal.aborted) return; setCurrencies(value.currencies);
-      const preferred = value.defaultCurrencyCode || (value.currencies.some(item => item.code === 'USD') ? 'USD' : value.currencies[0]?.code || ''); setCurrency(preferred);
+      if (controller.signal.aborted) return;
+      const offered = productionFundingCurrencies(value); setCurrencies(offered.currencies); setCurrency(offered.defaultCurrencyCode);
     }).catch(failure => { if (!controller.signal.aborted) setError(fail(failure)); }).finally(() => { if (!controller.signal.aborted) setLoading(''); });
     return () => controller.abort();
   }, [country, ownerSubject, currencyRevision, fail]);
   useEffect(() => {
-    setRoutes([]); setMethod(''); setQuote(null); if (!country || !currency) return undefined;
+    setRoutes([]); setMethod(''); if (!country || !currency) return undefined;
     const controller = new AbortController(); setLoading('methods');
     readProductionOptions(country, currency, { ownerSubject, signal: controller.signal }).then(value => {
       if (controller.signal.aborted) return; setRoutes(value.routes);
     }).catch(failure => { if (!controller.signal.aborted) setError(fail(failure)); }).finally(() => { if (!controller.signal.aborted) setLoading(''); });
     return () => controller.abort();
   }, [country, currency, ownerSubject, methodRevision, fail]);
-  useEffect(() => { cancel(); setQuote(null); setSelected(null); }, [binding.linkedAddress, cancel]);
+  useEffect(() => { cancel(); setSelected(null); }, [binding.linkedAddress, cancel]);
   useEffect(() => {
     const controller = new AbortController(); setHistoryError(false);
     readProductionHistory({ ownerSubject, signal: controller.signal }).then(value => { if (!controller.signal.aborted) setHistory(value.records); })
@@ -79,37 +83,34 @@ export function ProductionWalletView({ ownerSubject }) {
   }, [ownerSubject, revision, fail]);
   const number = value => new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(value);
   const methods = [...new Set(routes.flatMap(route => route.paymentMethods.map(item => item.method)))];
-  const limits = routes.flatMap(route => route.paymentMethods).filter(item => item.method === method)
-    .map(item => ({ ...item, minimumAmount: Math.max(item.minimumAmount, currency === 'USD' ? 50 : 0.01), maximumAmount: Math.min(item.maximumAmount, currency === 'USD' ? 25000 : 1e9) }))
-    .filter(item => item.minimumAmount <= item.maximumAmount);
-  const minimum = limits.length ? Math.min(...limits.map(item => item.minimumAmount)) : currency === 'USD' ? 50 : 0.01;
-  const maximum = limits.length ? Math.max(...limits.map(item => item.maximumAmount)) : currency === 'USD' ? 25000 : 1e9;
-  const value = Number(amount), decimals = currencies.find(item => item.code === currency)?.decimalPlaces ?? 2;
-  const eligible = limits.some(item => value >= item.minimumAmount && value <= item.maximumAmount) && Number.isFinite(value) && value > 0 && Math.abs(value * 10 ** Math.min(decimals, 2) - Math.round(value * 10 ** Math.min(decimals, 2))) < 0.000001;
+  const decimals = currencies.find(item => item.code === currency)?.decimalPlaces ?? 2;
+  const limits = productionFundingLimits(routes, currency, method, decimals), minimum = limits?.minimum, maximum = limits?.maximum;
+  const eligible = productionFundingValue(amount, limits, decimals) !== null;
+  useEffect(() => {
+    if (minimum !== undefined && amountMode !== 'manual') { setAmount(String(minimum)); setAmountMode('automatic'); }
+  }, [minimum, amountMode]);
+  const canQuote = useCallback(() => mounted.current && live.current.binding.canReceive(), []);
+  const quoteState = useProductionFundingQuote({ ownerSubject, address: binding.linkedAddress, ready, valid: eligible && !loading,
+    blocked: Boolean(busy), canRun: canQuote, failureKey: fail,
+    input: { country, sourceCurrencyCode: currency, amount: Number(amount), paymentMethodType: method } });
+  const quote = quoteState.quote; live.current.quote = quote;
+  const providerAvailable = Boolean(selectedProvider && quote?.quotes.some(item => item.serviceProvider === selectedProvider));
+  useEffect(() => { if (quote) setSelectedProvider(previous => quote.quotes.some(item => item.serviceProvider === previous) ? previous : ''); }, [quote]);
   const requestInput = () => ({ country: live.current.country, sourceCurrencyCode: live.current.currency, amount: Number(live.current.amount), paymentMethodType: live.current.method });
-  const consult = async event => {
-    event.preventDefault(); if (!mounted.current || !live.current.binding.canReceive() || !eligible || live.current.routes !== routes || operation.current || loading) return;
-    const controller = new AbortController(), epoch = ++generation.current, address = binding.linkedAddress;
-    operation.current = { controller }; setBusy('quote'); setError(''); setQuote(null);
-    try { const result = await quoteProductionFunding(requestInput(), address, { ownerSubject, signal: controller.signal });
-      if (mounted.current && !controller.signal.aborted && generation.current === epoch && live.current.binding.canReceive() && live.current.binding.linkedAddress === address) setQuote({ ...result, receivedAt: Date.now() });
-    } catch (failure) { if (mounted.current && !controller.signal.aborted && generation.current === epoch) setError(fail(failure)); }
-    finally { if (generation.current === epoch) { operation.current = null; if (mounted.current) setBusy(''); } }
-  };
   const open = async provider => {
     const current = live.current;
     if (!mounted.current || !current.binding.canReceive() || operation.current || !quote || current.quote !== quote || quote.destination.address !== current.binding.linkedAddress
       || quote.country !== current.country || quote.sourceCurrencyCode !== current.currency || quote.requestedAmount !== Number(current.amount)
       || quote.paymentMethodType !== current.method || !quote.quotes.some(item => item.serviceProvider === provider)) return;
-    if (Date.now() - quote.receivedAt > 120000) { setQuote(null); setError('quoteExpired'); return; }
+    if (Date.now() - quote.receivedAt >= PRODUCTION_QUOTE_TTL_MS) { quoteState.expire(); return; }
     let popup; try { popup = window.open('about:blank', '_blank'); if (popup) popup.opener = null; } catch { /* handled below */ }
     if (!popup) { setError('popup'); return; }
     const controller = new AbortController(), epoch = ++generation.current, address = binding.linkedAddress;
     operation.current = { controller, popup }; setBusy(provider); setError('');
     try { const result = await createProductionFunding({ ...requestInput(), serviceProvider: provider, requestId: crypto.randomUUID() }, address, { ownerSubject, signal: controller.signal });
       if (!mounted.current || controller.signal.aborted || generation.current !== epoch || !live.current.binding.canReceive() || live.current.binding.linkedAddress !== address) { popup.close(); return; }
-      if (popup.closed) { setError('popup'); return; } popup.location.replace(result.checkoutUrl); setQuote(null); setRevision(item => item + 1);
-    } catch (failure) { try { popup.close(); } catch { /* cleanup */ } if (mounted.current && !controller.signal.aborted && generation.current === epoch) { setQuote(null); setError(fail(failure)); } }
+      if (popup.closed) { setError('popup'); return; } popup.location.replace(result.checkoutUrl); quoteState.expire(); setRevision(item => item + 1);
+    } catch (failure) { try { popup.close(); } catch { /* cleanup */ } if (mounted.current && !controller.signal.aborted && generation.current === epoch) { quoteState.expire(); setError(fail(failure)); } }
     finally { if (generation.current === epoch) { operation.current = null; if (mounted.current) setBusy(''); } }
   };
   const checkStatus = useCallback(async reference => {
@@ -145,6 +146,8 @@ export function ProductionWalletView({ ownerSubject }) {
     catch { if (mounted.current) { setActivationRequested(false); setError('unavailable'); } }
   };
   const stateLabel = state => tr(({ confirmed: 'confirmed', failed: 'failed', pending: 'processing' })[state] || 'pending');
+  const countryName = item => { try { return new Intl.DisplayNames(locale, { type: 'region' }).of(item.code) || item.name; } catch { return item.name; } };
+  const displayError = error || quoteState.error;
   const readSandbox = useCallback((_kind, options) => readSandboxWalletFundingHistory({ ...options, ownerSubject }), [ownerSubject]);
   return <section className="executive-page"><div className={`executive-container ${styles.screen}`}>
     <header className={styles.pageHeading}><div><h1>{tr('title')}</h1><span>{tr('copy')}</span></div><p className={styles.providerBadge}>USDT · Polygon</p></header>
@@ -157,18 +160,26 @@ export function ProductionWalletView({ ownerSubject }) {
     </section>
     <section id="administrative-wallet" className={`executive-panel ${local.panel}`} aria-labelledby="production-funding-title">
       <div className={styles.sectionHeading}><CreditCard size={22} aria-hidden="true" /><div><h2 id="production-funding-title">{t('walletPage.addFundsAction')}</h2><p>{tr('production')} · USDT · Polygon</p></div></div>
-      {!ready ? <p className={styles.hint}>{tr('activationRequired')}</p> : <form onSubmit={event => void consult(event)} className={local.form}>
+      {!ready ? <p className={styles.hint}>{tr('activationRequired')}</p> : <form onSubmit={event => { event.preventDefault(); void open(selectedProvider); }} className={local.form}>
         <div className={local.fields}><div className={local.field}><div className={local.label}><label htmlFor="production-country">{tr('country')}</label><Popover><PopoverTrigger asChild><button type="button" className={local.info} aria-label={tr('residence')}><Info size={18} aria-hidden="true" /></button></PopoverTrigger><PopoverContent className={local.residence}>{tr('residence')}</PopoverContent></Popover></div>
-          <select id="production-country" value={country} disabled={Boolean(busy) || loading === 'countries'} required onChange={event => { reset(); setCountry(event.target.value); }}><option value="">{tr(loading === 'countries' ? 'loading' : 'chooseCountry')}</option>{countries.map(item => <option key={item.code} value={item.code}>{item.name}</option>)}</select></div>
-          <div className={local.field}><label htmlFor="production-currency">{tr('currency')}</label><select id="production-currency" value={currency} disabled={Boolean(busy) || !currencies.length || Boolean(loading)} required onChange={event => { reset(); setCurrency(event.target.value); }}><option value="">—</option>{currencies.map(item => <option key={item.code} value={item.code}>{item.code} · {item.name}</option>)}</select></div>
-          <div className={local.field}><label htmlFor="production-amount">{tr('amount')} {currency ? `(${currency})` : ''}</label><input id="production-amount" type="number" inputMode={decimals ? 'decimal' : 'numeric'} min={minimum} max={maximum} step={decimals ? '0.01' : '1'} value={amount} disabled={Boolean(busy) || !currency} required onChange={event => { reset(); setAmount(event.target.value); }} />{method ? <span className={styles.hint}>{tr('limits', { min: number(minimum), max: number(maximum), currency })}</span> : null}</div>
-          <div className={local.field}><label htmlFor="production-method">{tr('method')}</label><select id="production-method" value={method} disabled={Boolean(busy) || Boolean(loading) || !methods.length} required onChange={event => { reset(); setMethod(event.target.value); }}><option value="">{tr(loading === 'methods' ? 'loading' : 'selectMethod')}</option>{methods.map(item => <option key={item} value={item}>{names[item] ? t(`onramp.${names[item]}`) : item.replaceAll('_', ' ')}</option>)}</select></div>
+          <select id="production-country" value={country} disabled={Boolean(busy) || loading === 'countries'} required onChange={event => { reset(); setCountry(event.target.value); setCurrency(''); setMethod(''); setRoutes([]); setAmount(''); setAmountMode('unset'); setSelectedProvider(''); }}><option value="">{tr(loading === 'countries' ? 'loading' : 'chooseCountry')}</option>{countries.map(item => <option key={item.code} value={item.code}>{countryName(item)}</option>)}</select></div>
+          <div className={local.field}><label htmlFor="production-currency">{tr('currency')}</label><select id="production-currency" value={currency} disabled={Boolean(busy) || !currencies.length || Boolean(loading)} required onChange={event => { reset(); setCurrency(event.target.value); setMethod(''); setRoutes([]); setAmount(''); setAmountMode('unset'); setSelectedProvider(''); }}><option value="">—</option>{currencies.map(item => <option key={item.code} value={item.code}>{item.code} · {item.name}</option>)}</select></div>
+          <div className={local.field}><label htmlFor="production-method">{tr('method')}</label><select id="production-method" value={method} disabled={Boolean(busy) || Boolean(loading) || !methods.length} required onChange={event => { reset(); setMethod(event.target.value); }}><option value="">{tr(loading === 'methods' ? 'loading' : 'selectMethod')}</option>{methods.map(item => <option key={item} value={item}>{names[item] ? t(`onramp.${names[item]}`) : methodName(item)}</option>)}</select></div>
+          <div className={local.field}><label htmlFor="production-amount">{tr('amount')} {currency ? `(${currency})` : ''}</label><input id="production-amount" type="number" inputMode={decimals ? 'decimal' : 'numeric'} min={minimum} max={maximum} step={decimals ? '0.01' : '1'} value={amount} disabled={Boolean(busy) || !method || !limits} required placeholder={currency ? tr('amountPlaceholder', { currency }) : ''}
+            aria-describedby="production-amount-hint" aria-invalid={Boolean(amountMode === 'manual' && amount && !eligible)} onChange={event => { const next = event.target.value; if (!next || Number(next) !== Number(amount)) reset(); setAmount(next); setAmountMode('manual'); }} />
+            <span id="production-amount-hint" className={styles.hint}>{limits ? tr('limits', { min: number(minimum), max: number(maximum), currency }) : tr('chooseMethod')}</span>
+            {limits && amountMode === 'manual' && amount && !eligible ? <><span className={local.fieldError} role="alert">{tr('invalidAmount', { min: number(minimum), max: number(maximum), currency })}</span><button className={local.minimum} type="button" onClick={() => { reset(); setAmount(String(minimum)); setAmountMode('manual'); }}>{tr('useMinimum', { amount: number(minimum), currency })}</button></> : null}</div>
         </div>
         {country && currency && !loading && !methods.length ? <p role="status" className={styles.hint}>{tr('noRoute')}</p> : null}
-        <button type="submit" className="executive-button primary" disabled={!eligible || !ready || Boolean(loading) || Boolean(busy)}>{busy === 'quote' ? <Loader2 size={18} className="animate-spin" aria-hidden="true" /> : null}{tr(busy === 'quote' ? 'quoting' : 'quote')}</button>
+        {quoteState.loading ? <p role="status" className={local.quoteLoading}><Loader2 size={17} className="animate-spin" aria-hidden="true" />{tr('quoteLoading')}</p> : null}
+        {quote ? <fieldset className={local.providers}><legend>{tr('provider')}</legend><p className={styles.hint}>{tr('quoteReady', { amount: number(quote.requestedAmount), currency: quote.sourceCurrencyCode })}</p><div className={local.quotes}>{quote.quotes.map(item => <label key={item.serviceProvider} className={local.quote} data-selected={selectedProvider === item.serviceProvider}>
+          <input type="radio" name="production-provider" value={item.serviceProvider} checked={selectedProvider === item.serviceProvider} disabled={Boolean(busy)} aria-label={tr('quoteSelection', { provider: providerName(item.serviceProvider) })} onChange={() => { if (mounted.current && live.current.quote === quote && live.current.binding.canReceive()) setSelectedProvider(item.serviceProvider); }} />
+          <strong>{providerName(item.serviceProvider)}</strong><span>{tr('receive')}</span><bdi className={local.received}>{number(item.destinationAmount)} USDT</bdi><span>{tr('fees', { amount: number(item.totalFee), currency: quote.sourceCurrencyCode })}</span></label>)}</div>
+          {!providerAvailable ? <p className={styles.hint}>{tr('chooseProvider')}</p> : null}</fieldset> : null}
+        <button type="submit" className={`executive-button primary ${local.fund}`} disabled={!eligible || !ready || !quote || !providerAvailable || quoteState.loading || Boolean(loading) || Boolean(busy)}>{busy && busy !== 'status' ? <Loader2 size={18} className="animate-spin" aria-hidden="true" /> : null}{tr(busy && busy !== 'status' ? 'opening' : 'addFunds')}</button>
       </form>}
-      {quote && ready ? <div className={local.quotes} aria-live="polite">{quote.quotes.map(item => <article key={item.serviceProvider} className={local.quote}><strong>{providerName(item.serviceProvider)}</strong><span>{tr('receive')}</span><bdi className={local.received}>{number(item.destinationAmount)} USDT</bdi><span>{tr('fees', { amount: number(item.totalFee), currency })}</span><button type="button" className="executive-button primary" disabled={Boolean(busy)} onClick={() => void open(item.serviceProvider)}>{tr(busy === item.serviceProvider ? 'opening' : 'continue', { provider: providerName(item.serviceProvider) })}</button></article>)}</div> : null}
-      {error ? <p role="alert" className={local.error}>{tr(error)}</p> : null}
+      {displayError ? <p role="alert" className={local.error}>{tr(displayError)}</p> : null}
+      {eligible && ready && !quoteState.loading && (!quote || quoteState.error) ? <button type="button" className="executive-button" disabled={Boolean(busy) || Boolean(loading)} onClick={quoteState.retry}>{tr('quoteRefresh')}</button> : null}
       {error === 'activationRequired' ? <button type="button" className="executive-button" disabled={binding.loading || binding.busy || Boolean(busy)} onClick={() => void binding.refresh()}>{tr('refresh')}</button> : null}
       {error && !countries.length ? <button type="button" className="executive-button" disabled={Boolean(loading)} onClick={() => setCountryRevision(item => item + 1)}>{tr('retry')}</button> : null}
       {error && country && (!currencies.length || !methods.length) ? <button type="button" className="executive-button" disabled={Boolean(loading) || Boolean(busy)} onClick={() => { setError(''); if (!currencies.length) setCurrencyRevision(item => item + 1); else setMethodRevision(item => item + 1); }}>{tr('retry')}</button> : null}

@@ -6,7 +6,7 @@ export function walletReownMetadata(origin, { allowLocal = false } = {}) {
     const url = new URL(origin);
     const local = allowLocal && url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
     if (url.origin !== origin || url.username || url.password || (origin !== WALLET_REOWN_ORIGIN && !local)) return null;
-    return { name: 'Mindbliss Wallet · Sandbox', description: 'Wallet connection for the Mindbliss sandbox portal',
+    return { name: 'Mindbliss Wallet', description: 'Wallet connection for Mindbliss',
       url: origin, icons: [`${origin}/mindbliss/mindbliss-favicon.png`] };
   } catch { return null; }
 }

@@ -1,6 +1,10 @@
 export const walletProductionMessages = {
   es: { walletProduction: {
     title: 'Billetera personal', copy: 'Recibe USDT en Polygon en la billetera vinculada a tu cuenta.', production: 'Pagos reales', operationsUnavailable: 'Los envíos y retiros todavía no están habilitados en este portal.',
+    addFunds: 'Recargar fondos', provider: 'Proveedor de pago', chooseProvider: 'Elige un proveedor para continuar.',
+    chooseMethod: 'Selecciona un método para ver el importe mínimo.', useMinimum: 'Usar mínimo: {amount} {currency}',
+    invalidAmount: 'Introduce un importe entre {min} y {max} {currency}.', quoteLoading: 'Actualizando el importe que recibirás…',
+    quoteRefresh: 'Actualizar cotización', quoteReady: 'Cotización para {amount} {currency}', quoteSelection: 'Seleccionar {provider}', amountPlaceholder: 'Importe en {currency}',
     connection: 'Tu billetera', active: 'Lista para recibir fondos', connect: 'Conectar billetera', activate: 'Activar billetera', activating: 'Activando…',
     activationCopy: 'Conecta tu billetera y confirma una firma de propiedad una sola vez. Activarla no envía dinero.',
     receivingCopy: 'La dirección ya está vinculada. No necesitas volver a activarla para recibir una recarga.',
@@ -20,6 +24,10 @@ export const walletProductionMessages = {
   } },
   en: { walletProduction: {
     title: 'Personal wallet', copy: 'Receive USDT on Polygon in the wallet linked to your account.', production: 'Live payments', operationsUnavailable: 'Sending and withdrawing funds are not yet enabled in this portal.', connection: 'Your wallet', active: 'Ready to receive funds',
+    addFunds: 'Add funds', provider: 'Payment provider', chooseProvider: 'Choose a provider to continue.',
+    chooseMethod: 'Select a payment method to see the minimum amount.', useMinimum: 'Use minimum: {amount} {currency}',
+    invalidAmount: 'Enter an amount between {min} and {max} {currency}.', quoteLoading: 'Updating the amount you will receive…',
+    quoteRefresh: 'Refresh quote', quoteReady: 'Quote for {amount} {currency}', quoteSelection: 'Select {provider}', amountPlaceholder: 'Amount in {currency}',
     connect: 'Connect wallet', activate: 'Activate wallet', activating: 'Activating…', activationCopy: 'Connect your wallet and confirm ownership with a one-time signature. Activation does not send money.',
     receivingCopy: 'Your address is already linked. You do not need to activate it again to receive funds.', refresh: 'Refresh', loading: 'Loading…', country: 'Select your country of residence', chooseCountry: 'Select country',
     currency: 'Payment currency', residence: 'Choose your actual country of residence. The provider may request documents to verify your identity and residence.', amount: 'Amount to add', method: 'Payment method', selectMethod: 'Select method',
@@ -31,6 +39,10 @@ export const walletProductionMessages = {
   } },
   ar: { walletProduction: {
     title: 'المحفظة الشخصية', copy: 'استقبل USDT على Polygon في المحفظة المرتبطة بحسابك.', production: 'مدفوعات فعلية', operationsUnavailable: 'إرسال الأموال وسحبها غير مفعّلين بعد في هذه البوابة.', connection: 'محفظتك', active: 'جاهزة لاستقبال الأموال', connect: 'ربط المحفظة', activate: 'تفعيل المحفظة', activating: 'جارٍ التفعيل…',
+    addFunds: 'إضافة أموال', provider: 'مقدم خدمة الدفع', chooseProvider: 'اختر مقدم خدمة للمتابعة.',
+    chooseMethod: 'اختر طريقة دفع لعرض الحد الأدنى للمبلغ.', useMinimum: 'استخدام الحد الأدنى: {amount} {currency}',
+    invalidAmount: 'أدخل مبلغًا بين {min} و{max} {currency}.', quoteLoading: 'جارٍ تحديث المبلغ الذي ستستقبله…',
+    quoteRefresh: 'تحديث عرض السعر', quoteReady: 'عرض سعر لمبلغ {amount} {currency}', quoteSelection: 'اختيار {provider}', amountPlaceholder: 'المبلغ بعملة {currency}',
     activationCopy: 'اربط المحفظة وأكد ملكيتها بتوقيع لمرة واحدة. التفعيل لا يرسل أموالاً.', receivingCopy: 'عنوانك مرتبط بالفعل. لا يلزم التفعيل مجددًا لاستقبال الأموال.', refresh: 'تحديث', loading: 'جارٍ الاستعلام…', country: 'اختر بلد إقامتك', chooseCountry: 'اختر البلد', currency: 'عملة الدفع',
     residence: 'اختر بلد إقامتك الفعلي. قد يطلب مقدم الخدمة مستندات للتحقق من هويتك وإقامتك.', amount: 'مبلغ الشحن', method: 'طريقة الدفع', selectMethod: 'اختر طريقة', limits: 'متاح من {min} إلى {max} {currency}', quote: 'عرض الخيارات', quoting: 'جارٍ التحقق من العروض…', receive: 'ستستقبل تقريبًا', fees: 'الرسوم التقديرية: {amount} {currency}',
     continue: 'المتابعة مع {provider}', opening: 'جارٍ إعداد الدفع…', finalPrice: 'يؤكد مقدم الخدمة المبلغ النهائي ويتحقق من هويتك قبل الدفع.', noRoute: 'لا تتوفر طريقة لهذا البلد والعملة لدى مقدمي الخدمة المفعّلين. اختر عملة أخرى.', noQuote: 'لم يؤكد أي مقدم خدمة هذه الخيارات. جرّب طريقة أو مبلغًا آخر. لم يتم خصم أي مبلغ.',
@@ -39,6 +51,10 @@ export const walletProductionMessages = {
   } },
   zh: { walletProduction: {
     title: '个人钱包', copy: '通过与你账户绑定的钱包接收 Polygon 网络的 USDT。', production: '真实支付', operationsUnavailable: '此门户尚未启用转账和提现。', connection: '你的钱包', active: '可接收资金', connect: '连接钱包', activate: '启用钱包', activating: '正在启用…', activationCopy: '连接钱包并通过一次签名确认所有权。启用不会转移资金。',
+    addFunds: '充值', provider: '支付服务商', chooseProvider: '请选择服务商以继续。',
+    chooseMethod: '选择支付方式以查看最低充值金额。', useMinimum: '使用最低金额：{amount} {currency}',
+    invalidAmount: '请输入 {min} 至 {max} {currency} 之间的金额。', quoteLoading: '正在更新预计到账金额…',
+    quoteRefresh: '刷新报价', quoteReady: '{amount} {currency} 的报价', quoteSelection: '选择 {provider}', amountPlaceholder: '输入 {currency} 金额',
     receivingCopy: '你的地址已绑定，接收充值无需再次启用。', refresh: '刷新', loading: '正在查询…', country: '请选择居住国家或地区', chooseCountry: '选择国家或地区', currency: '付款货币', residence: '请选择实际居住国家。服务商可能要求提供身份与居住证明。', amount: '充值金额', method: '支付方式', selectMethod: '选择方式',
     limits: '可用范围 {min} 至 {max} {currency}', quote: '查看可用选项', quoting: '正在查询报价…', receive: '预计收到', fees: '预计手续费：{amount} {currency}', continue: '通过 {provider} 继续', opening: '正在准备付款…', finalPrice: '服务商将在付款前确认最终金额并验证你的身份。',
     noRoute: '已启用的服务商不支持此国家与货币组合，请选择其他货币。', noQuote: '没有服务商确认此组合。请尝试其他方式或金额，尚未产生扣款。', unavailable: '无法完成查询。已保留你的选择，请在此重试。', popup: '请允许弹出窗口以继续。', mismatch: '已连接钱包与此账户不一致，请连接正确的钱包。',
