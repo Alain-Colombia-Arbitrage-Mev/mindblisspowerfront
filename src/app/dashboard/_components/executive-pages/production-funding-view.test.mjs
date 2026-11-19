@@ -61,7 +61,8 @@ function fixture(t, config = {}) {
     '@/lib/sandbox-wallet-client.mjs': { readSandboxWalletFundingHistory: async () => assert.fail('Legacy remains collapsed') },
     '@/i18n/LanguageProvider': { useI18n: () => ({ locale: 'es', t: (key, values) => translateMessage('es', key, values) }) },
     '@/components/ui/popover': { Popover: ({ children }) => children, PopoverTrigger: ({ children }) => children, PopoverContent: ({ children }) => children },
-    './WalletFundingUI': { WalletAddress: () => null }, './WalletFundingHistory': { default: () => null }, './wallet-funding.module.css': { default: {} }, './production-wallet.module.css': { default: {} } };
+    './WalletFundingUI': { WalletAddress: () => null }, './WalletDepositQr': { default: 'wallet-deposit-qr-fixture' },
+    './WalletFundingHistory': { default: () => null }, './wallet-funding.module.css': { default: {} }, './production-wallet.module.css': { default: {} } };
   const module = { exports: {} }, code = ts.transpileModule(readFileSync(new URL('./ProductionWalletFundingPage.jsx', import.meta.url), 'utf8'),
     { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
   new Function('require', 'module', 'exports', code)(name => { assert.ok(Object.hasOwn(mocks, name), name); return mocks[name]; }, module, module.exports);
@@ -89,8 +90,10 @@ test('the USDC balance uses the verified wallet and disappears when its binding 
   const h = fixture(t);
   const findBalance = tree => all(tree).find(node => node?.type === 'wallet-usdc-balance-fixture');
   assert.equal(findBalance(await h.flush()).props.address, address);
+  assert.equal(all(h.tree).find(node => node?.type === 'wallet-deposit-qr-fixture').props.address, address);
   h.binding.retire();
   assert.equal(findBalance(h.render()), undefined);
+  assert.ok(!all(h.tree).some(node => node?.type === 'wallet-deposit-qr-fixture'));
 });
 
 test('new fiat initializes its own provider minimum and never carries USD 50 into MXN or COP', async t => {
@@ -146,8 +149,9 @@ test('failed preparation refreshes only owned history and displays unavailable a
   for (let index = 0; index < 3; index++) { h.render(); await h.flush(); }
   assert.equal(h.calls.session.length, 1); assert.equal(h.calls.history, 2);
   assert.ok(all(h.tree).some(node => node?.props?.role === 'alert' && node.props.children === translateMessage('es', 'walletProduction.unavailable')));
-  const refresh = all(h.tree).find(node => node?.type === 'button' && node.props.children === translateMessage('es', 'walletProduction.quoteRefresh'));
-  assert.ok(refresh); refresh.props.onClick(); await h.flush();
+  assert.ok(!all(h.tree).some(node => node?.type === 'button' && node.props.children === 'Actualizar cotización'));
+  assert.equal(submit(h.tree).props.disabled, false);
+  form(h.tree).props.onSubmit({ preventDefault() {} }); await h.flush();
   assert.equal(h.calls.retries, 1); assert.equal(h.calls.session.length, 1);
   assert.equal(all(h.tree).some(node => node?.props?.role === 'alert' && node.props.children === translateMessage('es', 'walletProduction.unavailable')), false);
 });
@@ -199,8 +203,10 @@ test('a fresh cached quote cannot display or submit a provider withdrawn from th
   retry(); await h.flush(); assert.equal(field(h.tree, 'production-method').props.value, 'SPEI');
   assert.equal(field(h.tree, 'production-amount').props.value, '250');
   assert.equal(all(h.tree).some(node => node?.props?.name === 'production-provider'), false);
-  assert.equal(submit(h.tree).props.disabled, true); oldSubmit({ preventDefault() {} });
-  assert.equal(h.calls.session.length, 0); assert.equal(h.calls.popups.length, 0); assert.equal(h.calls.retries, 0);
+  assert.equal(submit(h.tree).props.disabled, false); oldSubmit({ preventDefault() {} });
+  assert.equal(h.calls.retries, 0);
+  form(h.tree).props.onSubmit({ preventDefault() {} });
+  assert.equal(h.calls.session.length, 0); assert.equal(h.calls.popups.length, 0); assert.equal(h.calls.retries, 1);
 });
 
 test('a rejected old country catalog cannot paint an error or clear the new residence method loader', async t => {

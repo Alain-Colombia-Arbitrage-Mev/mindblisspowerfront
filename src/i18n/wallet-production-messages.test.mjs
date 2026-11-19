@@ -5,7 +5,8 @@ import { translateMessage } from './translate.mjs';
 
 const locales = ['es', 'en', 'ar', 'zh'];
 const keys = ['addFunds', 'provider', 'chooseProvider', 'chooseMethod', 'useMinimum', 'invalidAmount',
-  'quoteLoading', 'quoteRefresh', 'quoteReady', 'quoteSelection', 'amountPlaceholder'];
+  'quoteLoading', 'quoteReady', 'quoteSelection', 'amountPlaceholder',
+  'depositQr', 'depositTitle', 'depositInstructions', 'depositQrLabel', 'depositQrFallback'];
 const placeholders = text => [...text.matchAll(/\{([^{}]+)\}/g)].map(match => match[1]).sort();
 
 test('every production funding language includes the full catalog and new form states without fallback', () => {

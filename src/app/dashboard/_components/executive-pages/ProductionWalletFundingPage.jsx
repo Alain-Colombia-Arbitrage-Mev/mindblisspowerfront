@@ -17,6 +17,7 @@ import { FUNDING_UUID } from '@/lib/wallet-funding-contract.mjs';
 import { useI18n } from '@/i18n/LanguageProvider';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { WalletAddress } from './WalletFundingUI';
+import WalletDepositQr from './WalletDepositQr';
 import WalletFundingHistory from './WalletFundingHistory';
 import styles from './wallet-funding.module.css';
 import local from './production-wallet.module.css';
@@ -116,7 +117,7 @@ export function ProductionWalletView({ ownerSubject }) {
     if (minimum !== undefined && amountMode !== 'manual') { setAmount(String(minimum)); setAmountMode('automatic'); }
   }, [minimum, amountMode]);
   const canQuote = useCallback(() => mounted.current && live.current.binding.canReceive(), []);
-  const quoteState = useProductionFundingQuote({ ownerSubject, address: binding.linkedAddress, ready, valid: eligible && !loading,
+  const quoteState = useProductionFundingQuote({ ownerSubject, address: binding.linkedAddress, asset: fundingAsset, ready, valid: eligible && !loading,
     blocked: Boolean(busy), canRun: canQuote, failureKey: fail,
     input: { country, sourceCurrencyCode: currency, amount: Number(amount), paymentMethodType: method } });
   const quotedInput = { country, sourceCurrencyCode: currency, amount: Number(amount), paymentMethodType: method };
@@ -137,7 +138,7 @@ export function ProductionWalletView({ ownerSubject }) {
       || quote.country !== current.country || quote.sourceCurrencyCode !== current.currency || quote.requestedAmount !== Number(current.amount)
       || quote.paymentMethodType !== current.method || !quote.quotes.some(item => item.serviceProvider === provider)
       || !productionFundingProviderSupported(current.routes, provider, requestInput(), decimals)) return;
-    if (Date.now() - quote.receivedAt >= PRODUCTION_QUOTE_TTL_MS) { quoteState.expire(); return; }
+    if (Date.now() - quote.receivedAt >= PRODUCTION_QUOTE_TTL_MS) { quoteState.retry(); return; }
     let popup; try { popup = window.open('about:blank', '_blank'); if (popup) popup.opener = null; } catch { /* handled below */ }
     if (!popup) { setError('popup'); return; }
     const controller = new AbortController(), epoch = ++generation.current, address = binding.linkedAddress;
@@ -183,20 +184,28 @@ export function ProductionWalletView({ ownerSubject }) {
   };
   const stateLabel = state => tr(({ confirmed: 'confirmed', failed: 'failed', pending: 'processing' })[state] || 'pending');
   const displayError = error || quoteState.error;
+  const canRequestQuote = eligible && ready && !quote && Boolean(quoteState.error || error === 'quoteExpired');
   const readSandbox = useCallback((_kind, options) => readSandboxWalletFundingHistory({ ...options, ownerSubject }), [ownerSubject]);
   return <section className="executive-page"><div className={`executive-container ${styles.screen}`}>
     <header className={styles.pageHeading}><div><h1>{tr('title')}</h1><span>{tr('copy')}</span></div><p className={styles.providerBadge}>USDC · Polygon</p></header>
     <section className={`executive-panel ${local.panel}`} aria-busy={binding.loading || binding.busy}>
       <div className={styles.sectionHeading}>{ready ? <CheckCircle2 size={22} aria-hidden="true" /> : <Wallet size={22} aria-hidden="true" />}<div><h2>{tr('connection')}</h2><p>{tr(ready ? 'active' : binding.loading ? 'loading' : 'activationCopy')}</p></div></div>
       <WalletAddress address={binding.linkedAddress || binding.address} label={t('sandboxWallet.address')} loading={binding.loading} emptyLabel={t('sandboxWallet.noWallet')} />
-      {ready && binding.linkedAddress ? <WalletUsdcBalance key={binding.linkedAddress} address={binding.linkedAddress} refreshKey={revision} className={styles.hint} /> : null}
+      {ready && binding.linkedAddress ? <div className={local.walletTools}>
+        <WalletUsdcBalance key={binding.linkedAddress} address={binding.linkedAddress} refreshKey={revision} className={styles.hint} />
+        <WalletDepositQr key={binding.linkedAddress} address={binding.linkedAddress} />
+      </div> : null}
       {ready ? <p className={styles.hint}>{tr('receivingCopy')}</p> : <div className={local.actions}><button type="button" className="executive-button primary" disabled={binding.loading || binding.busy || reown.isRestoring || !reown.configured || binding.mismatch || binding.status === 'retired'} onClick={() => void activate()}>{binding.busy ? <Loader2 size={18} className="animate-spin" aria-hidden="true" /> : null}{tr(binding.busy ? 'activating' : reown.isConnected ? 'activate' : 'connect')}</button><button type="button" className="executive-button" disabled={binding.loading || binding.busy || binding.status === 'retired'} onClick={() => void binding.refresh()}><RefreshCw size={16} aria-hidden="true" />{tr('refresh')}</button></div>}
       {binding.mismatch || binding.error ? <p role="alert" className={local.error}>{binding.mismatch ? tr('mismatch') : t(`sandboxWallet.${binding.error}`)}</p> : null}
       {binding.mismatch ? <button type="button" className="executive-button" disabled={binding.busy || Boolean(busy)} onClick={() => { setActivationRequested(false); void reown.disconnectWallet().catch(() => { if (mounted.current) setError('unavailable'); }); }}>{t('sandboxWallet.choose')}</button> : null}
     </section>
     <section id="administrative-wallet" className={`executive-panel ${local.panel}`} aria-labelledby="production-funding-title">
       <div className={styles.sectionHeading}><CreditCard size={22} aria-hidden="true" /><div><h2 id="production-funding-title">{t('walletPage.addFundsAction')}</h2><p>{tr('production')} · {fundingAsset ? `${fundingAsset} · ` : ''}Polygon</p></div></div>
-      {!ready ? <p className={styles.hint}>{tr('activationRequired')}</p> : <form onSubmit={event => { event.preventDefault(); void open(selectedProvider); }} className={local.form}>
+      {!ready ? <p className={styles.hint}>{tr('activationRequired')}</p> : <form onSubmit={event => {
+        event.preventDefault();
+        if (canRequestQuote && !loading && !busy && !quoteState.loading) { setError(''); quoteState.retry(); return; }
+        void open(selectedProvider);
+      }} className={local.form}>
         <div className={local.fields}><div className={local.field}><div className={local.label}><label htmlFor="production-country">{tr('country')}</label><Popover><PopoverTrigger asChild><button type="button" className={local.info} aria-label={tr('residence')}><Info size={18} aria-hidden="true" /></button></PopoverTrigger><PopoverContent className={local.residence}>{tr('residence')}</PopoverContent></Popover></div>
           <ProductionCountrySelect id="production-country" value={country} countries={countries} disabled={Boolean(busy) || loading === 'countries'} onChange={changeCountry}
             locale={locale} label={tr('country')} placeholder={tr(loading === 'countries' ? 'loading' : 'chooseCountry')} searchLabel={tr('searchCountry')} emptyLabel={tr('emptyCountries')} /></div>
@@ -217,10 +226,9 @@ export function ProductionWalletView({ ownerSubject }) {
           <input type="radio" name="production-provider" value={item.serviceProvider} checked={selectedProvider === item.serviceProvider} disabled={Boolean(busy)} aria-label={tr('quoteSelection', { provider: providerName(item.serviceProvider) })} onChange={() => { if (mounted.current && live.current.quote === quote && live.current.binding.canReceive()) { providerChosen.current = true; setSelectedProvider(item.serviceProvider); } }} />
           <strong>{providerName(item.serviceProvider)}</strong><span>{tr('receive')}</span><bdi className={local.received}>{number(item.destinationAmount)} {quote.destination.asset}</bdi><span>{tr('fees', { amount: number(item.totalFee), currency: quote.sourceCurrencyCode })}</span></label>)}</div>
           {!providerAvailable ? <p className={styles.hint}>{tr('chooseProvider')}</p> : null}</fieldset> : null}
-        <button type="submit" className={`executive-button primary ${local.fund}`} disabled={!eligible || !ready || !quote || !providerAvailable || quoteState.loading || Boolean(loading) || Boolean(busy)}>{busy && busy !== 'status' ? <Loader2 size={18} className="animate-spin" aria-hidden="true" /> : null}{tr(busy && busy !== 'status' ? 'opening' : 'addFunds')}</button>
+        <button type="submit" className={`executive-button primary ${local.fund}`} disabled={!eligible || !ready || (!providerAvailable && !canRequestQuote) || quoteState.loading || Boolean(loading) || Boolean(busy)}>{busy && busy !== 'status' ? <Loader2 size={18} className="animate-spin" aria-hidden="true" /> : null}{tr(busy && busy !== 'status' ? 'opening' : 'addFunds')}</button>
       </form>}
       {displayError ? <p role="alert" className={local.error}>{tr(displayError)}</p> : null}
-      {eligible && ready && !quoteState.loading && (!quote || quoteState.error) ? <button type="button" className="executive-button" disabled={Boolean(busy) || Boolean(loading)} onClick={() => { setError(''); quoteState.retry(); }}>{tr('quoteRefresh')}</button> : null}
       {error === 'activationRequired' ? <button type="button" className="executive-button" disabled={binding.loading || binding.busy || Boolean(busy)} onClick={() => void binding.refresh()}>{tr('refresh')}</button> : null}
       {error && !countries.length ? <button type="button" className="executive-button" disabled={Boolean(loading)} onClick={() => setCountryRevision(item => item + 1)}>{tr('retry')}</button> : null}
       {error && country && (!currencies.length || !methods.length) ? <button type="button" className="executive-button" disabled={Boolean(loading) || Boolean(busy)} onClick={() => { setError(''); if (!currencies.length) setCurrencyRevision(item => item + 1); else setMethodRevision(item => item + 1); }}>{tr('retry')}</button> : null}

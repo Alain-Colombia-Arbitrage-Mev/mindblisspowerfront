@@ -2,6 +2,9 @@
 .panel h2 { margin: 0; font-size: 18px; color: var(--vp-text); }
 .panel summary { min-height: 44px; align-content: center; color: var(--vp-link); font-weight: 700; cursor: pointer; }
 .actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.walletTools { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.depositQrDialog { max-width: 440px; border-color: var(--vp-border); color: var(--vp-text); background: var(--vp-surface); }
+.depositQrCanvas { justify-self: center; inline-size: min(208px, 100%); block-size: auto; background: #fff; border: 1px solid var(--vp-border); border-radius: 12px; }
 .form { display: grid; gap: 20px; }
 .form > button { justify-self: start; }
 .fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }

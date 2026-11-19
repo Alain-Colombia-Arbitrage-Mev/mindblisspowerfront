@@ -35,8 +35,8 @@ export function productionFundingProviderSupported(routes, serviceProvider, inpu
   return (Array.isArray(routes) ? routes : []).some(route => route.serviceProvider === serviceProvider
     && productionFundingValue(String(input.amount), productionFundingLimits([route], input.sourceCurrencyCode, input.paymentMethodType, decimalPlaces), decimalPlaces) !== null);
 }
-export function productionFundingSelectionKey(ownerSubject, address, input) {
+export function productionFundingSelectionKey(ownerSubject, address, input, asset = 'USDT') {
   const safe = walletProductionInput(input);
-  return walletProductionSubject(ownerSubject) && sandboxWalletAddress(address) && safe
-    ? JSON.stringify([ownerSubject, address.toLowerCase(), safe.country, safe.sourceCurrencyCode, safe.paymentMethodType, safe.amount]) : '';
+  return walletProductionSubject(ownerSubject) && sandboxWalletAddress(address) && safe && ['USDC', 'USDT'].includes(asset)
+    ? JSON.stringify([ownerSubject, address.toLowerCase(), safe.country, safe.sourceCurrencyCode, safe.paymentMethodType, safe.amount, asset]) : '';
 }

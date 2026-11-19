@@ -90,7 +90,8 @@ test('amount precision rounds route bounds inwards and cannot grant a third deci
 test('quote identity binds the native owner, canonical address and exact financial selection while equivalent decimal formatting shares a key', () => {
   const key = productionFundingSelectionKey(owner, address, input);
   assert.ok(key);
-  assert.deepEqual(JSON.parse(key), [owner, address.toLowerCase(), 'US', 'USD', 'CREDIT_DEBIT_CARD', 50]);
+  assert.deepEqual(JSON.parse(key), [owner, address.toLowerCase(), 'US', 'USD', 'CREDIT_DEBIT_CARD', 50, 'USDT']);
+  assert.notEqual(productionFundingSelectionKey(owner, address, input, 'USDC'), key);
   assert.equal(productionFundingSelectionKey(owner, address.toLowerCase(), { ...input, amount: Number('50.00') }), key);
   for (const [subject, wallet, patch] of [
     ['different-owner', address, {}], [owner, `0x${'2'.repeat(40)}`, {}],
