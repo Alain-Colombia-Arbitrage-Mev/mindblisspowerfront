@@ -2,7 +2,7 @@ export const walletProductionMessages = {
   es: { walletProduction: {
     usdcBalance: 'Saldo USDC en Polygon', usdcBalanceUnavailable: 'Saldo temporalmente no disponible.',
     openBanking: 'Banca abierta', mobileMoney: 'Dinero móvil',
-    title: 'Billetera personal', copy: 'Recibe USDT en Polygon en la billetera vinculada a tu cuenta.', production: 'Pagos reales', operationsUnavailable: 'Los envíos y retiros todavía no están habilitados en este portal.',
+    title: 'Billetera personal', copy: 'Consulta el saldo de USDC en la billetera vinculada a tu cuenta.', production: 'Pagos reales', operationsUnavailable: 'Los envíos y retiros todavía no están habilitados en este portal.',
     addFunds: 'Recargar fondos', provider: 'Proveedor de pago', chooseProvider: 'Elige un proveedor para continuar.',
     chooseMethod: 'Selecciona un método para ver el importe mínimo.', useMinimum: 'Usar mínimo: {amount} {currency}',
     invalidAmount: 'Introduce un importe entre {min} y {max} {currency}.', quoteLoading: 'Actualizando el importe que recibirás…',
@@ -27,7 +27,7 @@ export const walletProductionMessages = {
   en: { walletProduction: {
     usdcBalance: 'USDC balance on Polygon', usdcBalanceUnavailable: 'Balance temporarily unavailable.',
     openBanking: 'Open banking', mobileMoney: 'Mobile money',
-    title: 'Personal wallet', copy: 'Receive USDT on Polygon in the wallet linked to your account.', production: 'Live payments', operationsUnavailable: 'Sending and withdrawing funds are not yet enabled in this portal.', connection: 'Your wallet', active: 'Ready to receive funds',
+    title: 'Personal wallet', copy: 'Check the USDC balance of the wallet linked to your account.', production: 'Live payments', operationsUnavailable: 'Sending and withdrawing funds are not yet enabled in this portal.', connection: 'Your wallet', active: 'Ready to receive funds',
     addFunds: 'Add funds', provider: 'Payment provider', chooseProvider: 'Choose a provider to continue.',
     chooseMethod: 'Select a payment method to see the minimum amount.', useMinimum: 'Use minimum: {amount} {currency}',
     invalidAmount: 'Enter an amount between {min} and {max} {currency}.', quoteLoading: 'Updating the amount you will receive…',
@@ -44,7 +44,7 @@ export const walletProductionMessages = {
   ar: { walletProduction: {
     usdcBalance: 'رصيد USDC على Polygon', usdcBalanceUnavailable: 'الرصيد غير متاح مؤقتًا.',
     openBanking: 'الخدمات المصرفية المفتوحة', mobileMoney: 'الأموال عبر الهاتف المحمول',
-    title: 'المحفظة الشخصية', copy: 'استقبل USDT على Polygon في المحفظة المرتبطة بحسابك.', production: 'مدفوعات فعلية', operationsUnavailable: 'إرسال الأموال وسحبها غير مفعّلين بعد في هذه البوابة.', connection: 'محفظتك', active: 'جاهزة لاستقبال الأموال', connect: 'ربط المحفظة', activate: 'تفعيل المحفظة', activating: 'جارٍ التفعيل…',
+    title: 'المحفظة الشخصية', copy: 'اطّلع على رصيد USDC في المحفظة المرتبطة بحسابك.', production: 'مدفوعات فعلية', operationsUnavailable: 'إرسال الأموال وسحبها غير مفعّلين بعد في هذه البوابة.', connection: 'محفظتك', active: 'جاهزة لاستقبال الأموال', connect: 'ربط المحفظة', activate: 'تفعيل المحفظة', activating: 'جارٍ التفعيل…',
     addFunds: 'إضافة أموال', provider: 'مقدم خدمة الدفع', chooseProvider: 'اختر مقدم خدمة للمتابعة.',
     chooseMethod: 'اختر طريقة دفع لعرض الحد الأدنى للمبلغ.', useMinimum: 'استخدام الحد الأدنى: {amount} {currency}',
     invalidAmount: 'أدخل مبلغًا بين {min} و{max} {currency}.', quoteLoading: 'جارٍ تحديث المبلغ الذي ستستقبله…',
@@ -58,7 +58,7 @@ export const walletProductionMessages = {
   zh: { walletProduction: {
     usdcBalance: 'Polygon 网络 USDC 余额', usdcBalanceUnavailable: '暂时无法查询余额。',
     openBanking: '开放银行', mobileMoney: '移动钱包支付',
-    title: '个人钱包', copy: '通过与你账户绑定的钱包接收 Polygon 网络的 USDT。', production: '真实支付', operationsUnavailable: '此门户尚未启用转账和提现。', connection: '你的钱包', active: '可接收资金', connect: '连接钱包', activate: '启用钱包', activating: '正在启用…', activationCopy: '连接钱包并通过一次签名确认所有权。启用不会转移资金。',
+    title: '个人钱包', copy: '查看与你账户绑定的钱包的 USDC 余额。', production: '真实支付', operationsUnavailable: '此门户尚未启用转账和提现。', connection: '你的钱包', active: '可接收资金', connect: '连接钱包', activate: '启用钱包', activating: '正在启用…', activationCopy: '连接钱包并通过一次签名确认所有权。启用不会转移资金。',
     addFunds: '充值', provider: '支付服务商', chooseProvider: '请选择服务商以继续。',
     chooseMethod: '选择支付方式以查看最低充值金额。', useMinimum: '使用最低金额：{amount} {currency}',
     invalidAmount: '请输入 {min} 至 {max} {currency} 之间的金额。', quoteLoading: '正在更新预计到账金额…',
