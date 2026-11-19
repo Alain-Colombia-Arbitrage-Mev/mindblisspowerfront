@@ -52,6 +52,7 @@ function fixture(t, config = {}) {
         invalidate() { cache.clear(); quoteExpired = false; }, retry() { calls.retries++; quoteExpired = false; }, expire() { cache.clear(); quoteExpired = true; dirty = true; } };
     } },
     '@/components/wallet/ProductionCountrySelect': { default: 'country-selector-fixture' },
+    '@/components/wallet/WalletUsdcBalance': { default: 'wallet-usdc-balance-fixture' },
     '@/lib/wallet-production-funding-client.mjs': { readProductionDiscovery: async country => config.discovery ? config.discovery(country) : discoveryValue(country),
       readProductionOptions: async (_country, currency) => config.options ? config.options(_country, currency) : ({ routes: ['TRANSAK', 'BANXA'].map(serviceProvider => ({ serviceProvider, paymentMethods: [
         { method: 'CREDIT_DEBIT_CARD', currencyCode: currency, minimumAmount: currency === 'USD' ? 20 : 931, maximumAmount: currency === 'USD' ? 50000 : 500000 },
@@ -82,6 +83,14 @@ test('form retains country, currency, method and amount order and shows every ve
   assert.equal(field(h.tree, 'production-amount').props.value, ''); assert.equal(submit(h.tree).props.children.at(-1), 'Recargar fondos');
   assert.ok(!all(h.tree).some(node => node?.type === 'button' && node.props.children === 'Consultar opciones'));
   assert.equal(h.calls.connect, 0); assert.equal(h.calls.binding, 0); assert.equal(h.calls.session.length, 0);
+});
+
+test('the USDC balance uses the verified wallet and disappears when its binding is retired', async t => {
+  const h = fixture(t);
+  const findBalance = tree => all(tree).find(node => node?.type === 'wallet-usdc-balance-fixture');
+  assert.equal(findBalance(await h.flush()).props.address, address);
+  h.binding.retire();
+  assert.equal(findBalance(h.render()), undefined);
 });
 
 test('new fiat initializes its own provider minimum and never carries USD 50 into MXN or COP', async t => {

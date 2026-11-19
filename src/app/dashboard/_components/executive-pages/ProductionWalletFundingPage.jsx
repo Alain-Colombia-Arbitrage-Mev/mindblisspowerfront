@@ -9,6 +9,7 @@ import { walletReownOwnerKey } from '@/lib/wallet-reown-connection.mjs';
 import { readProductionDiscovery, readProductionOptions, createProductionFunding, readProductionHistory, readProductionStatus } from '@/lib/wallet-production-funding-client.mjs';
 import useProductionFundingQuote from '@/components/wallet/useProductionFundingQuote';
 import ProductionCountrySelect from '@/components/wallet/ProductionCountrySelect';
+import WalletUsdcBalance from '@/components/wallet/WalletUsdcBalance';
 import { productionFundingCurrencies, productionFundingLimits, productionFundingValue, productionFundingProviderSupported, PRODUCTION_QUOTE_TTL_MS } from '@/lib/production-funding-selection.mjs';
 import { walletProductionFailureLog } from '@/lib/wallet-production-funding-contract.mjs';
 import { readSandboxWalletFundingHistory } from '@/lib/sandbox-wallet-client.mjs';
@@ -184,6 +185,7 @@ export function ProductionWalletView({ ownerSubject }) {
     <section className={`executive-panel ${local.panel}`} aria-busy={binding.loading || binding.busy}>
       <div className={styles.sectionHeading}>{ready ? <CheckCircle2 size={22} aria-hidden="true" /> : <Wallet size={22} aria-hidden="true" />}<div><h2>{tr('connection')}</h2><p>{tr(ready ? 'active' : binding.loading ? 'loading' : 'activationCopy')}</p></div></div>
       <WalletAddress address={binding.linkedAddress || binding.address} label={t('sandboxWallet.address')} loading={binding.loading} emptyLabel={t('sandboxWallet.noWallet')} />
+      {ready && binding.linkedAddress ? <WalletUsdcBalance key={binding.linkedAddress} address={binding.linkedAddress} refreshKey={revision} className={styles.hint} /> : null}
       {ready ? <p className={styles.hint}>{tr('receivingCopy')}</p> : <div className={local.actions}><button type="button" className="executive-button primary" disabled={binding.loading || binding.busy || reown.isRestoring || !reown.configured || binding.mismatch || binding.status === 'retired'} onClick={() => void activate()}>{binding.busy ? <Loader2 size={18} className="animate-spin" aria-hidden="true" /> : null}{tr(binding.busy ? 'activating' : reown.isConnected ? 'activate' : 'connect')}</button><button type="button" className="executive-button" disabled={binding.loading || binding.busy || binding.status === 'retired'} onClick={() => void binding.refresh()}><RefreshCw size={16} aria-hidden="true" />{tr('refresh')}</button></div>}
       {binding.mismatch || binding.error ? <p role="alert" className={local.error}>{binding.mismatch ? tr('mismatch') : t(`sandboxWallet.${binding.error}`)}</p> : null}
       {binding.mismatch ? <button type="button" className="executive-button" disabled={binding.busy || Boolean(busy)} onClick={() => { setActivationRequested(false); void reown.disconnectWallet().catch(() => { if (mounted.current) setError('unavailable'); }); }}>{t('sandboxWallet.choose')}</button> : null}
