@@ -244,3 +244,35 @@ test('cancellation before dispatch and during response parsing never hands off o
   await assert.rejects(createProductionFunding(sessionInput, address, { ...context, signal: during.signal }), { name: 'AbortError' });
   assert.equal(calls, 1);
 });
+
+test('Mexico EUR card accepts only Alchemy Pay with the exact Arbitrum USDC destination and an opaque MELD checkout', () => {
+  const route = { country: 'MX', sourceCurrencyCode: 'EUR', paymentMethodType: 'CREDIT_DEBIT_CARD' };
+  const request = { ...sessionInput, ...route, serviceProvider: 'ALCHEMYPAY' };
+  const arbDestination = { address, asset: 'USDC', network: 'arbitrum', chainId: 42161 };
+  const destinationCurrencyCode = 'USDC_ARBITRUM';
+  const card = { method: 'CREDIT_DEBIT_CARD', currencyCode: 'EUR', minimumAmount: 100, maximumAmount: 5000 };
+  const merchant = { serviceProvider: 'ALCHEMYPAY', paymentMethods: [card] };
+  const offer = { ...options, country: 'MX', sourceCurrencyCode: 'EUR', destinationCurrencyCode, routes: [merchant] };
+  const price = { ...quote, ...route, destination: arbDestination, quotes: [{ ...quoteItem, serviceProvider: 'ALCHEMYPAY', sourceCurrencyCode: 'EUR', destinationCurrencyCode }] };
+  const session = { ...ack, ...route, serviceProvider: 'ALCHEMYPAY', destinationCurrencyCode, destination: arbDestination };
+  assert.equal(walletProductionOptions(offer).destinationCurrencyCode, destinationCurrencyCode);
+  assert.deepEqual(walletProductionQuote(price, request, address).destination, arbDestination);
+  assert.equal(walletProductionQuote(price, request, otherAddress), null);
+  assert.deepEqual(walletProductionAcknowledgement(session, request).destination, arbDestination);
+  assert.deepEqual(walletProductionHistory({ ...history, records: [ack, { ...session, checkoutReference: otherReference }] }).records.map(item => item.destination.network), ['polygon', 'arbitrum']);
+  assert.deepEqual(walletProductionStatus({ ...status, ...session }).destination, arbDestination);
+  assert.equal(walletProductionStatus({ ...status, ...session, destinationCurrencyCode: 'USDC_POLYGON' }), null);
+  for (const unexpected of [{ country: 'US' }, { routes: [{ ...merchant, serviceProvider: 'BANXA' }] },
+    { sourceCurrencyCode: 'MXN', routes: [{ ...merchant, paymentMethods: [{ ...card, currencyCode: 'MXN' }] }] },
+    { routes: [{ ...merchant, paymentMethods: [{ ...card, method: 'APPLE_PAY' }] }] }]) {
+    assert.equal(walletProductionOptions({ ...offer, ...unexpected }), null);
+  }
+  for (const unexpected of [{ country: 'US' }, { sourceCurrencyCode: 'MXN' }, { paymentMethodType: 'APPLE_PAY' },
+    { destination: { ...arbDestination, network: 'polygon', chainId: 137 } }, { destination: { ...arbDestination, chainId: 137 } }]) {
+    assert.equal(walletProductionQuote({ ...price, ...unexpected }, undefined, address), null);
+    assert.equal(walletProductionAcknowledgement({ ...session, ...unexpected }, undefined), null);
+  }
+  assert.equal(walletProductionAcknowledgement({ ...session, destinationCurrencyCode: 'USDC_POLYGON' }, request), null);
+  assert.equal(walletProductionAcknowledgement({ ...session, checkoutUrl: 'https://meldcrypto.com/?wt=synthetic' }, request), null);
+  assert.equal(walletProductionAcknowledgement({ ...session, checkoutUrl: 'https://ramp.alchemypay.org/?token=synthetic' }, request), null);
+});

@@ -5,8 +5,8 @@ import { quoteProductionFunding } from '@/lib/wallet-production-funding-client.m
 import { productionFundingSelectionKey, PRODUCTION_QUOTE_DEBOUNCE_MS, PRODUCTION_QUOTE_TTL_MS } from '@/lib/production-funding-selection.mjs';
 
 /** One estimate per stable owned selection. Only retry() can repeat a failure. */
-export default function useProductionFundingQuote({ ownerSubject, address, input, asset, valid, ready, blocked, canRun, failureKey }) {
-  const key = valid && ready ? productionFundingSelectionKey(ownerSubject, address, input, asset) : '';
+export default function useProductionFundingQuote({ ownerSubject, address, input, destinationCurrencyCode, valid, ready, blocked, canRun, failureKey }) {
+  const key = valid && ready ? productionFundingSelectionKey(ownerSubject, address, input, destinationCurrencyCode) : '';
   const [state, setState] = useState({ key: '', quote: null, loading: false, error: '' });
   const [revision, setRevision] = useState(0);
   const mounted = useRef(false), epoch = useRef(0), pending = useRef(null), cache = useRef(new Map()), live = useRef(null);

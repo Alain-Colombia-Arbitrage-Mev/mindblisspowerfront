@@ -8,9 +8,10 @@ import { translateMessage } from '../../../../i18n/translate.mjs';
 import * as selection from '../../../../lib/production-funding-selection.mjs';
 import * as connection from '../../../../lib/wallet-reown-connection.mjs';
 import { FUNDING_UUID } from '../../../../lib/wallet-funding-contract.mjs';
-import { walletProductionFailureLog } from '../../../../lib/wallet-production-funding-contract.mjs';
+import * as fundingContract from '../../../../lib/wallet-production-funding-contract.mjs';
 
 const require = createRequire(import.meta.url), address = `0x${'1'.repeat(40)}`;
+const polygonDestination = { address, asset: 'USDT', network: 'polygon', chainId: 137 };
 const all = node => [node, ...React.Children.toArray(node?.props?.children).flatMap(all)];
 const field = (tree, id) => all(tree).find(node => node?.props?.id === id);
 const submit = tree => all(tree).find(node => node?.type === 'button' && node.props.type === 'submit');
@@ -22,7 +23,7 @@ const discoveryValue = country => country ? { country, defaultCurrencyCode: { US
 const retryButton = tree => all(tree).find(node => node?.type === 'button' && node.props.children === translateMessage('es', 'walletProduction.retry'));
 function fixture(t, config = {}) {
   const cells = [], queue = [], cache = new Map(), calls = { session: [], opened: [], popups: [], retries: 0, quoteInputs: [], binding: 0, connect: 0, history: 0 };
-  let history = [], quoteExpired = false;
+  let history = config.history ?? [], quoteExpired = false;
   let cursor = 0, dirty = true, tree, mounted = true, props = { ownerSubject: 'fixture-owner' };
   const changed = (a, b) => !a || a.length !== b.length || a.some((item, index) => !Object.is(item, b[index]));
   const hooks = { useRef: value => cells[cursor++] ??= { current: value },
@@ -42,12 +43,15 @@ function fixture(t, config = {}) {
     '@/components/reown/WalletReownContext': { useWalletReown: () => ({ configured: true, isConnected: false, isRestoring: false, connectWallet: async () => { calls.connect++; } }) },
     '@/components/reown/SandboxWalletBindingProvider': { useSandboxWalletBinding: () => binding }, '@/lib/wallet-reown-connection.mjs': connection,
     '@/lib/production-funding-selection.mjs': selection, '@/lib/wallet-funding-contract.mjs': { FUNDING_UUID },
-    '@/lib/wallet-production-funding-contract.mjs': { walletProductionFailureLog },
+    '@/lib/wallet-production-funding-contract.mjs': fundingContract,
     '@/components/wallet/useProductionFundingQuote': { default: options => {
       calls.quoteInputs.push(options);
-      const key = options.valid && options.ready ? JSON.stringify([options.ownerSubject, options.address, options.input]) : '';
-      if (key && !cache.has(key)) cache.set(key, { ...options.input, requestedAmount: options.input.amount, destination: { address, asset: 'USDT' }, receivedAt: Date.now(),
-        quotes: config.quotes ? config.quotes(options.input) : [{ serviceProvider: 'TRANSAK', destinationAmount: 48, totalFee: 2 }, { serviceProvider: 'BANXA', destinationAmount: 47, totalFee: 3 }] });
+      const key = options.valid && options.ready ? selection.productionFundingSelectionKey(options.ownerSubject, options.address, options.input, options.destinationCurrencyCode) : '';
+      if (key && !cache.has(key)) {
+        const { asset, network, chainId } = fundingContract.walletProductionAsset(options.destinationCurrencyCode);
+        cache.set(key, { ...options.input, requestedAmount: options.input.amount, destination: { address, asset, network, chainId }, receivedAt: Date.now(),
+          quotes: config.quotes ? config.quotes(options.input) : [{ serviceProvider: 'TRANSAK', destinationAmount: 48, totalFee: 2 }, { serviceProvider: 'BANXA', destinationAmount: 47, totalFee: 3 }] });
+      }
       return { quote: key && !quoteExpired ? cache.get(key) : null, loading: false, error: quoteExpired ? 'quoteExpired' : '',
         invalidate() { cache.clear(); quoteExpired = false; }, retry() { calls.retries++; quoteExpired = false; }, expire() { cache.clear(); quoteExpired = true; dirty = true; } };
     } },
@@ -86,14 +90,48 @@ test('form retains country, currency, method and amount order and shows every ve
   assert.equal(h.calls.connect, 0); assert.equal(h.calls.binding, 0); assert.equal(h.calls.session.length, 0);
 });
 
-test('the USDC balance uses the verified wallet and disappears when its binding is retired', async t => {
+test('both USDC balances use the verified wallet and disappear when its binding is retired', async t => {
   const h = fixture(t);
-  const findBalance = tree => all(tree).find(node => node?.type === 'wallet-usdc-balance-fixture');
-  assert.equal(findBalance(await h.flush()).props.address, address);
+  const findBalances = tree => all(tree).filter(node => node?.type === 'wallet-usdc-balance-fixture');
+  assert.deepEqual(findBalances(await h.flush()).map(({ props }) => [props.address, props.network ?? 'polygon']),
+    [[address, 'polygon'], [address, 'arbitrum']]);
   assert.equal(all(h.tree).find(node => node?.type === 'wallet-deposit-qr-fixture').props.address, address);
   h.binding.retire();
-  assert.equal(findBalance(h.render()), undefined);
+  assert.deepEqual(findBalances(h.render()), []);
   assert.ok(!all(h.tree).some(node => node?.type === 'wallet-deposit-qr-fixture'));
+});
+
+test('Mexico EUR shows USDC on Arbitrum and does not open a checkout reporting the same token on Polygon', async t => {
+  const config = {
+    options: async (country, currency) => country === 'MX' && currency === 'EUR' ? {
+      destinationCurrencyCode: 'USDC_ARBITRUM',
+      routes: [{ serviceProvider: 'ALCHEMYPAY', paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', currencyCode: 'EUR', minimumAmount: 100, maximumAmount: 5000 }] }]
+    } : { routes: [] },
+    quotes: () => [{ serviceProvider: 'ALCHEMYPAY', destinationAmount: 110, totalFee: 3 }],
+    history: [{ checkoutReference: '11111111-1111-4111-8111-111111111111', serviceProvider: 'ALCHEMYPAY', requestedAmount: 100,
+      sourceCurrencyCode: 'EUR', status: 'session_created', destination: { address, asset: 'USDC', network: 'arbitrum', chainId: 42161 },
+      confirmation: { state: 'unconfirmed', source: 'none', testMode: false } }],
+  };
+  const h = fixture(t, config);
+  await h.flush(); await h.change('production-country', 'MX'); await h.change('production-currency', 'EUR');
+  assert.equal(field(h.tree, 'production-method').props.value, translateMessage('es', 'onramp.cardPayment'));
+  assert.equal(field(h.tree, 'production-method').props.readOnly, true);
+  assert.ok(all(all(h.tree).find(node => node?.type === 'li')).includes('USDC · Arbitrum'));
+  assert.equal(field(h.tree, 'production-amount').props.value, '100');
+  assert.equal(h.calls.quoteInputs.at(-1).destinationCurrencyCode, 'USDC_ARBITRUM');
+  assert.ok(all(h.tree).includes('Importe a pagar 100 EUR'));
+  assert.ok(all(h.tree).includes('Arbitrum'));
+  assert.equal(submit(h.tree).props.disabled, false);
+  form(h.tree).props.onSubmit({ preventDefault() {} });
+  assert.equal(h.calls.session.length, 1);
+  const [request] = h.calls.session[0];
+  assert.equal(request.serviceProvider, 'ALCHEMYPAY');
+  assert.equal(request.sourceCurrencyCode, 'EUR');
+  assert.equal(Object.hasOwn(request, 'destination'), false);
+  h.waiting.resolve({ checkoutUrl: 'https://meldcrypto.com/?token=synthetic_opaque', destination: { ...polygonDestination, asset: 'USDC' } });
+  await h.flush();
+  assert.equal(h.calls.popups[0].closed, true);
+  assert.deepEqual(h.calls.opened, []);
 });
 
 test('new fiat initializes its own provider minimum and never carries USD 50 into MXN or COP', async t => {
@@ -122,7 +160,7 @@ test('provider choice and an explicit Recargar fondos gesture are required; acti
   assert.equal(h.calls.session.length, 1); assert.equal(h.calls.popups.length, 1); assert.equal(h.calls.popups[0].opener, null);
   assert.equal(h.calls.session[0][1], address); assert.equal(h.calls.session[0][0].amount, 50); assert.equal(h.calls.session[0][0].serviceProvider, 'TRANSAK');
   assert.equal(Object.hasOwn(h.calls.session[0][0], 'address'), false);
-  h.waiting.resolve({ checkoutUrl: 'https://global.transak.com/?apiKey=fixture&sessionId=fixture', destination: { asset: 'USDT' } }); await h.flush();
+  h.waiting.resolve({ checkoutUrl: 'https://global.transak.com/?apiKey=fixture&sessionId=fixture', destination: polygonDestination }); await h.flush();
   assert.equal(h.calls.opened.length, 1);
 });
 
@@ -140,7 +178,7 @@ test('failed preparation refreshes only owned history and displays unavailable a
   form(h.tree).props.onSubmit({ preventDefault() {} });
   assert.equal(h.calls.session.length, 1); assert.equal(h.calls.history, 1);
   h.setHistory([{ checkoutReference: '11111111-1111-4111-8111-111111111111', serviceProvider: 'TRANSAK', requestedAmount: 50,
-    sourceCurrencyCode: 'USD', status: 'unavailable', destination: { address }, confirmation: { state: 'unconfirmed', source: 'none', testMode: false } }]);
+    sourceCurrencyCode: 'USD', status: 'unavailable', destination: polygonDestination, confirmation: { state: 'unconfirmed', source: 'none', testMode: false } }]);
   h.waiting.reject(Error('wallet_production_unavailable')); await h.flush();
   assert.equal(h.calls.history, 2); assert.equal(h.calls.popups[0].closed, true); assert.equal(h.calls.opened.length, 0);
   assert.deepEqual(warnings, [['wallet_production_checkout_failed', { error: 'wallet_production_unavailable' }]]);
@@ -167,7 +205,7 @@ test('an authoritative removed country clears its complete selection and aborts 
   retry(); await h.flush();
   for (const id of ['production-country', 'production-currency', 'production-method', 'production-amount']) assert.equal(field(h.tree, id).props.value, '');
   assert.equal(h.calls.session[0][2].signal.aborted, true); assert.equal(h.calls.popups[0].closed, true);
-  h.waiting.resolve({ checkoutUrl: 'https://global.transak.com/?apiKey=fixture&sessionId=fixture', destination: { asset: 'USDT' } }); await h.flush();
+  h.waiting.resolve({ checkoutUrl: 'https://global.transak.com/?apiKey=fixture&sessionId=fixture', destination: polygonDestination }); await h.flush();
   assert.equal(h.calls.opened.length, 0); assert.equal(h.calls.session.length, 1); assert.equal(submit(h.tree).props.disabled, true);
 });
 
@@ -245,9 +283,12 @@ test('a sole real fiat, valid method and quoted provider remove redundant choice
     quotes: () => [{ serviceProvider: 'ONRAMPMONEY', destinationAmount: 10.18, totalFee: 2 }] };
   const h = fixture(t, config); await h.flush(); assert.equal(field(h.tree, 'production-country').props.value, '');
   await h.change('production-country', 'MX');
-  for (const [id, value] of [['production-currency', 'MXN'], ['production-method', 'SPEI']]) {
-    assert.equal(field(h.tree, id).type, 'input'); assert.equal(field(h.tree, id).props.readOnly, true); assert.equal(field(h.tree, id).props.value, value); assert.equal(field(h.tree, id).props.onChange, undefined);
-  }
+  const fiatField = field(h.tree, 'production-currency');
+  assert.equal(fiatField.type, 'output');
+  assert.deepEqual(all(fiatField).filter(node => typeof node === 'string'), ['MXN', ' · ', 'Mexican Peso']);
+  assert.equal(all(h.tree).find(node => node?.type === 'label' && node.props.htmlFor === 'production-currency').props.children, 'Moneda de pago');
+  const methodField = field(h.tree, 'production-method');
+  assert.equal(methodField.type, 'input'); assert.equal(methodField.props.readOnly, true); assert.equal(methodField.props.value, 'SPEI');
   assert.equal(field(h.tree, 'production-amount').props.value, '200');
   assert.equal(all(h.tree).find(node => node?.props?.name === 'production-provider').props.checked, true);
   assert.equal(submit(h.tree).props.disabled, false); assert.equal(h.calls.session.length, 0); assert.equal(h.calls.popups.length, 0);

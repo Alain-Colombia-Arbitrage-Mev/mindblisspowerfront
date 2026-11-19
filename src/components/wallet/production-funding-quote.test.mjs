@@ -68,6 +68,24 @@ test('cached owned prices expire without polling, and exact selection reuse does
   assert.equal(expired.quote, null); assert.equal(expired.error, 'quoteExpired'); assert.equal(h.calls.length, 2);
 });
 
+test('cached USDC estimates are separated when only the destination network changes', async t => {
+  const h = fixture(t);
+  const selection = { ...base, input: { country: 'MX', sourceCurrencyCode: 'EUR', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' } };
+  const polygon = { ...selection, destinationCurrencyCode: 'USDC_POLYGON' };
+  h.render(polygon);
+  const first = (await h.tick(500)).quote;
+  assert.ok(first);
+  h.render({ ...selection, destinationCurrencyCode: 'USDC_ARBITRUM' });
+  assert.equal(h.render().quote, null);
+  const second = (await h.tick(500)).quote;
+  assert.ok(second);
+  assert.notEqual(first.receivedAt, second.receivedAt);
+  assert.equal(h.calls.length, 2);
+  h.render(polygon);
+  assert.equal(h.render().quote.receivedAt, first.receivedAt);
+  assert.equal(h.calls.length, 2);
+});
+
 test('an already dispatched quote interrupted by another action cannot silently repeat when that action finishes', async t => {
   const wait = deferred(), h = fixture(t, () => wait.promise); h.render(); await h.tick(500);
   h.render({ ...base, blocked: true }); assert.equal(h.calls[0][2].signal.aborted, true);

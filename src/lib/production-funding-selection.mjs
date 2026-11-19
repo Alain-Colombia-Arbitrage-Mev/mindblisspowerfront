@@ -1,4 +1,4 @@
-import { walletProductionInput, walletProductionSubject } from './wallet-production-funding-contract.mjs';
+import { walletProductionAsset, walletProductionInput, walletProductionSubject } from './wallet-production-funding-contract.mjs';
 import { sandboxWalletAddress } from './sandbox-wallet-contract.mjs';
 
 export const PRODUCTION_QUOTE_DEBOUNCE_MS = 500;
@@ -35,8 +35,8 @@ export function productionFundingProviderSupported(routes, serviceProvider, inpu
   return (Array.isArray(routes) ? routes : []).some(route => route.serviceProvider === serviceProvider
     && productionFundingValue(String(input.amount), productionFundingLimits([route], input.sourceCurrencyCode, input.paymentMethodType, decimalPlaces), decimalPlaces) !== null);
 }
-export function productionFundingSelectionKey(ownerSubject, address, input, asset = 'USDT') {
+export function productionFundingSelectionKey(ownerSubject, address, input, destinationCurrencyCode = 'USDT_POLYGON') {
   const safe = walletProductionInput(input);
-  return walletProductionSubject(ownerSubject) && sandboxWalletAddress(address) && safe && ['USDC', 'USDT'].includes(asset)
-    ? JSON.stringify([ownerSubject, address.toLowerCase(), safe.country, safe.sourceCurrencyCode, safe.paymentMethodType, safe.amount, asset]) : '';
+  return walletProductionSubject(ownerSubject) && sandboxWalletAddress(address) && safe && walletProductionAsset(destinationCurrencyCode)
+    ? JSON.stringify([ownerSubject, address.toLowerCase(), safe.country, safe.sourceCurrencyCode, safe.paymentMethodType, safe.amount, destinationCurrencyCode]) : '';
 }

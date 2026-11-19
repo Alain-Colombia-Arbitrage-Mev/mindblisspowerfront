@@ -11,7 +11,7 @@ import useProductionFundingQuote from '@/components/wallet/useProductionFundingQ
 import ProductionCountrySelect from '@/components/wallet/ProductionCountrySelect';
 import WalletUsdcBalance from '@/components/wallet/WalletUsdcBalance';
 import { productionFundingCurrencies, productionFundingLimits, productionFundingValue, productionFundingProviderSupported, PRODUCTION_QUOTE_TTL_MS } from '@/lib/production-funding-selection.mjs';
-import { walletProductionFailureLog } from '@/lib/wallet-production-funding-contract.mjs';
+import { walletProductionAsset, walletProductionDestinationCode, walletProductionFailureLog } from '@/lib/wallet-production-funding-contract.mjs';
 import { readSandboxWalletFundingHistory } from '@/lib/sandbox-wallet-client.mjs';
 import { FUNDING_UUID } from '@/lib/wallet-funding-contract.mjs';
 import { useI18n } from '@/i18n/LanguageProvider';
@@ -26,6 +26,10 @@ const names = { CREDIT_DEBIT_CARD: 'onramp.cardPayment', LOCAL_BANK_TRANSFER: 'o
 const providerName = value => ({ ONRAMPMONEY: 'Onramp Money', ALCHEMYPAY: 'Alchemy Pay', BANXA: 'Banxa', ONMETA: 'Onmeta',
   YELLOWCARD: 'Yellow Card', RAMPNOW: 'RampNow', TRANSAK: 'Transak', TOPPER: 'Topper' })[value] || value;
 const methodName = value => ({ APPLE_PAY: 'Apple Pay', GOOGLE_PAY: 'Google Pay', SPEI: 'SPEI', PSE: 'PSE', SEPA: 'SEPA', ACH: 'ACH' })[value] || value.replaceAll('_', ' ');
+const destinationLabel = destination => {
+  const asset = walletProductionAsset(walletProductionDestinationCode(destination));
+  return asset ? asset.asset + ' · ' + asset.networkName : '';
+};
 const availableMethods = (routes, currency, decimals) => [...new Set(routes.flatMap(route => route.paymentMethods.map(item => item.method)))]
   .filter(method => productionFundingLimits(routes, currency, method, decimals));
 export default function ProductionWalletFundingPage() {
@@ -39,7 +43,8 @@ export function ProductionWalletView({ ownerSubject }) {
   const [country, setCountry] = useState(''), [currency, setCurrency] = useState(''), [amount, setAmount] = useState(''), [method, setMethod] = useState('');
   const [amountMode, setAmountMode] = useState('unset'), [selectedProvider, setSelectedProvider] = useState('');
   const [routes, setRoutes] = useState([]), [loading, setLoading] = useState('countries'), [busy, setBusy] = useState(''), [error, setError] = useState('');
-  const [fundingAsset, setFundingAsset] = useState('');
+  const [fundingDestinationCode, setFundingDestinationCode] = useState('');
+  const fundingAsset = walletProductionAsset(fundingDestinationCode);
   const [revision, setRevision] = useState(0), [countryRevision, setCountryRevision] = useState(0), [history, setHistory] = useState([]), [selected, setSelected] = useState(null);
   const [legacyOpen, setLegacyOpen] = useState(false), [historyError, setHistoryError] = useState(false);
   const [currencyRevision, setCurrencyRevision] = useState(0), [methodRevision, setMethodRevision] = useState(0);
@@ -47,7 +52,7 @@ export function ProductionWalletView({ ownerSubject }) {
   const mounted = useRef(false), operation = useRef(null), generation = useRef(0), live = useRef(null);
   const catalogVersion = useRef(0), currencyChosen = useRef(false);
   const methodChosen = useRef(false), providerChosen = useRef(false);
-  live.current = { binding, country, currency, amount, method, quote: null, routes };
+  live.current = { binding, country, currency, amount, method, quote: null, routes, fundingDestinationCode };
   const ready = binding.canReceive();
   const fail = useCallback(failure => {
     if (failure?.status === 401 || failure?.status === 403) live.current.binding.retire();
@@ -90,11 +95,11 @@ export function ProductionWalletView({ ownerSubject }) {
     return () => controller.abort();
   }, [country, ownerSubject, currencyRevision, fail]);
   useEffect(() => {
-    setRoutes([]); setFundingAsset(''); if (!country || !currency) return undefined;
+    setRoutes([]); setFundingDestinationCode(''); if (!country || !currency) return undefined;
     const controller = new AbortController(); setLoading('methods');
     readProductionOptions(country, currency, { ownerSubject, signal: controller.signal }).then(value => {
       if (controller.signal.aborted) return; setRoutes(value.routes);
-      if (value.routes.length) setFundingAsset(value.destinationCurrencyCode === 'USDC_POLYGON' ? 'USDC' : 'USDT');
+      if (value.routes.length) setFundingDestinationCode(value.destinationCurrencyCode ?? 'USDT_POLYGON');
       const methods = availableMethods(value.routes, currency, currencies.find(item => item.code === currency)?.decimalPlaces ?? 2);
       if (live.current.method && !methods.includes(live.current.method)) { methodChosen.current = true; reset(); setMethod(''); }
       else if (!live.current.method && !methodChosen.current && methods.length === 1) { methodChosen.current = true; setMethod(methods[0]); }
@@ -117,11 +122,12 @@ export function ProductionWalletView({ ownerSubject }) {
     if (minimum !== undefined && amountMode !== 'manual') { setAmount(String(minimum)); setAmountMode('automatic'); }
   }, [minimum, amountMode]);
   const canQuote = useCallback(() => mounted.current && live.current.binding.canReceive(), []);
-  const quoteState = useProductionFundingQuote({ ownerSubject, address: binding.linkedAddress, asset: fundingAsset, ready, valid: eligible && !loading,
+  const quoteState = useProductionFundingQuote({ ownerSubject, address: binding.linkedAddress, destinationCurrencyCode: fundingDestinationCode, ready, valid: eligible && Boolean(fundingAsset) && !loading,
     blocked: Boolean(busy), canRun: canQuote, failureKey: fail,
     input: { country, sourceCurrencyCode: currency, amount: Number(amount), paymentMethodType: method } });
   const quotedInput = { country, sourceCurrencyCode: currency, amount: Number(amount), paymentMethodType: method };
-  const quoteCompatible = quoteState.quote && quoteState.quote.destination.asset === fundingAsset &&
+  const quotedDestinationCode = walletProductionDestinationCode(quoteState.quote?.destination);
+  const quoteCompatible = quoteState.quote && quotedDestinationCode && quotedDestinationCode === fundingDestinationCode &&
     quoteState.quote.quotes.every(item => productionFundingProviderSupported(routes, item.serviceProvider, quotedInput, decimals));
   const quote = quoteCompatible ? quoteState.quote : null; live.current.quote = quote;
   useEffect(() => { if (quoteState.quote && !loading && !quoteCompatible) quoteState.expire(); }, [quoteState.quote, quoteCompatible, loading, quoteState.expire]);
@@ -136,7 +142,7 @@ export function ProductionWalletView({ ownerSubject }) {
     const current = live.current;
     if (!mounted.current || !current.binding.canReceive() || operation.current || !quote || current.quote !== quote || quote.destination.address !== current.binding.linkedAddress
       || quote.country !== current.country || quote.sourceCurrencyCode !== current.currency || quote.requestedAmount !== Number(current.amount)
-      || quote.paymentMethodType !== current.method || !quote.quotes.some(item => item.serviceProvider === provider)
+      || quote.paymentMethodType !== current.method || quotedDestinationCode !== current.fundingDestinationCode || !quote.quotes.some(item => item.serviceProvider === provider)
       || !productionFundingProviderSupported(current.routes, provider, requestInput(), decimals)) return;
     if (Date.now() - quote.receivedAt >= PRODUCTION_QUOTE_TTL_MS) { quoteState.retry(); return; }
     let popup; try { popup = window.open('about:blank', '_blank'); if (popup) popup.opener = null; } catch { /* handled below */ }
@@ -145,7 +151,9 @@ export function ProductionWalletView({ ownerSubject }) {
     operation.current = { controller, popup }; setBusy(provider); setError('');
     try { const result = await createProductionFunding({ ...requestInput(), serviceProvider: provider, requestId: crypto.randomUUID() }, address, { ownerSubject, signal: controller.signal });
       if (!mounted.current || controller.signal.aborted || generation.current !== epoch || !live.current.binding.canReceive() || live.current.binding.linkedAddress !== address) { popup.close(); return; }
-      if (result.destination.asset !== quote.destination.asset) { popup.close(); quoteState.expire(); setError('quoteExpired'); return; }
+      if (walletProductionDestinationCode(result.destination) !== quotedDestinationCode || live.current.fundingDestinationCode !== quotedDestinationCode) {
+        popup.close(); quoteState.expire(); setError('quoteExpired'); return;
+      }
       if (popup.closed) { setError('popup'); return; } popup.location.replace(result.checkoutUrl); quoteState.expire(); setRevision(item => item + 1);
     } catch (failure) { try { popup.close(); } catch { /* cleanup */ } if (mounted.current && !controller.signal.aborted && generation.current === epoch) { console.warn('wallet_production_checkout_failed', walletProductionFailureLog(failure)); quoteState.expire(); setError(fail(failure)); setRevision(item => item + 1); } }
     finally { if (generation.current === epoch) { operation.current = null; if (mounted.current) setBusy(''); } }
@@ -184,15 +192,17 @@ export function ProductionWalletView({ ownerSubject }) {
   };
   const stateLabel = state => tr(({ confirmed: 'confirmed', failed: 'failed', pending: 'processing' })[state] || 'pending');
   const displayError = error || quoteState.error;
+  const selectedDestination = destinationLabel(selected?.destination);
   const canRequestQuote = eligible && ready && !quote && Boolean(quoteState.error || error === 'quoteExpired');
   const readSandbox = useCallback((_kind, options) => readSandboxWalletFundingHistory({ ...options, ownerSubject }), [ownerSubject]);
   return <section className="executive-page"><div className={`executive-container ${styles.screen}`}>
-    <header className={styles.pageHeading}><div><h1>{tr('title')}</h1><span>{tr('copy')}</span></div><p className={styles.providerBadge}>USDC · Polygon</p></header>
+    <header className={styles.pageHeading}><div><h1>{tr('title')}</h1><span>{tr('copy')}</span></div><p className={styles.providerBadge}>USDC</p></header>
     <section className={`executive-panel ${local.panel}`} aria-busy={binding.loading || binding.busy}>
       <div className={styles.sectionHeading}>{ready ? <CheckCircle2 size={22} aria-hidden="true" /> : <Wallet size={22} aria-hidden="true" />}<div><h2>{tr('connection')}</h2><p>{tr(ready ? 'active' : binding.loading ? 'loading' : 'activationCopy')}</p></div></div>
       <WalletAddress address={binding.linkedAddress || binding.address} label={t('sandboxWallet.address')} loading={binding.loading} emptyLabel={t('sandboxWallet.noWallet')} />
       {ready && binding.linkedAddress ? <div className={local.walletTools}>
-        <WalletUsdcBalance key={binding.linkedAddress} address={binding.linkedAddress} refreshKey={revision} className={styles.hint} />
+        <WalletUsdcBalance key={binding.linkedAddress + '-polygon'} address={binding.linkedAddress} refreshKey={revision} className={styles.hint} />
+        <WalletUsdcBalance key={binding.linkedAddress + '-arbitrum'} address={binding.linkedAddress} network="arbitrum" refreshKey={revision} className={styles.hint} />
         <WalletDepositQr key={binding.linkedAddress} address={binding.linkedAddress} />
       </div> : null}
       {ready ? <p className={styles.hint}>{tr('receivingCopy')}</p> : <div className={local.actions}><button type="button" className="executive-button primary" disabled={binding.loading || binding.busy || reown.isRestoring || !reown.configured || binding.mismatch || binding.status === 'retired'} onClick={() => void activate()}>{binding.busy ? <Loader2 size={18} className="animate-spin" aria-hidden="true" /> : null}{tr(binding.busy ? 'activating' : reown.isConnected ? 'activate' : 'connect')}</button><button type="button" className="executive-button" disabled={binding.loading || binding.busy || binding.status === 'retired'} onClick={() => void binding.refresh()}><RefreshCw size={16} aria-hidden="true" />{tr('refresh')}</button></div>}
@@ -200,7 +210,7 @@ export function ProductionWalletView({ ownerSubject }) {
       {binding.mismatch ? <button type="button" className="executive-button" disabled={binding.busy || Boolean(busy)} onClick={() => { setActivationRequested(false); void reown.disconnectWallet().catch(() => { if (mounted.current) setError('unavailable'); }); }}>{t('sandboxWallet.choose')}</button> : null}
     </section>
     <section id="administrative-wallet" className={`executive-panel ${local.panel}`} aria-labelledby="production-funding-title">
-      <div className={styles.sectionHeading}><CreditCard size={22} aria-hidden="true" /><div><h2 id="production-funding-title">{t('walletPage.addFundsAction')}</h2><p>{tr('production')} · {fundingAsset ? `${fundingAsset} · ` : ''}Polygon</p></div></div>
+      <div className={styles.sectionHeading}><CreditCard size={22} aria-hidden="true" /><div><h2 id="production-funding-title">{tr('addFunds')}</h2><p>{tr('production')}{fundingAsset ? <> · {fundingAsset.asset} · {fundingAsset.networkName}</> : null}</p></div></div>
       {!ready ? <p className={styles.hint}>{tr('activationRequired')}</p> : <form onSubmit={event => {
         event.preventDefault();
         if (canRequestQuote && !loading && !busy && !quoteState.loading) { setError(''); quoteState.retry(); return; }
@@ -210,8 +220,8 @@ export function ProductionWalletView({ ownerSubject }) {
           <ProductionCountrySelect id="production-country" value={country} countries={countries} disabled={Boolean(busy) || loading === 'countries'} onChange={changeCountry}
             locale={locale} label={tr('country')} placeholder={tr(loading === 'countries' ? 'loading' : 'chooseCountry')} searchLabel={tr('searchCountry')} emptyLabel={tr('emptyCountries')} /></div>
           <div className={local.field}><label htmlFor="production-currency">{tr('currency')}</label>{currencies.length === 1 && currency === currencies[0].code
-            ? <input id="production-currency" value={currency} title={currencies[0].name} readOnly className={local.fixedValue} />
-            : <select id="production-currency" value={currency} disabled={Boolean(busy) || !currencies.length || Boolean(loading)} required onChange={event => { catalogVersion.current++; currencyChosen.current = true; methodChosen.current = false; providerChosen.current = false; reset(); setCurrency(event.target.value); setMethod(''); setRoutes([]); setAmount(''); setAmountMode('unset'); setSelectedProvider(''); }}><option value="">—</option>{currencies.map(item => <option key={item.code} value={item.code}>{item.code} · {item.name}</option>)}</select>}</div>
+            ? <output id="production-currency" className={local.fixedValue}><bdi>{currency} · {currencies[0].name}</bdi></output>
+            : <select id="production-currency" value={currency} disabled={Boolean(busy) || !currencies.length || Boolean(loading)} required onChange={event => { catalogVersion.current++; currencyChosen.current = true; methodChosen.current = false; providerChosen.current = false; reset(); setCurrency(event.target.value); setMethod(''); setRoutes([]); setAmount(''); setAmountMode('unset'); setSelectedProvider(''); }}><option value="">{tr('selectCurrency')}</option>{currencies.map(item => <option key={item.code} value={item.code}>{item.code} · {item.name}</option>)}</select>}</div>
           <div className={local.field}><label htmlFor="production-method">{tr('method')}</label>{methods.length === 1 && method === methods[0]
             ? <input id="production-method" value={names[method] ? t(names[method]) : methodName(method)} readOnly className={local.fixedValue} />
             : <select id="production-method" value={method} disabled={Boolean(busy) || Boolean(loading) || !methods.length} required onChange={event => { methodChosen.current = true; reset(); setMethod(event.target.value); }}><option value="">{tr(loading === 'methods' ? 'loading' : 'selectMethod')}</option>{methods.map(item => <option key={item} value={item}>{names[item] ? t(names[item]) : methodName(item)}</option>)}</select>}</div>
@@ -224,7 +234,7 @@ export function ProductionWalletView({ ownerSubject }) {
         {quoteState.loading ? <p role="status" className={local.quoteLoading}><Loader2 size={17} className="animate-spin" aria-hidden="true" />{tr('quoteLoading')}</p> : null}
         {quote ? <fieldset className={local.providers}><legend>{tr('provider')}</legend><p className={styles.hint}>{tr('quoteReady', { amount: number(quote.requestedAmount), currency: quote.sourceCurrencyCode })}</p><div className={local.quotes}>{quote.quotes.map(item => <label key={item.serviceProvider} className={local.quote} data-selected={selectedProvider === item.serviceProvider}>
           <input type="radio" name="production-provider" value={item.serviceProvider} checked={selectedProvider === item.serviceProvider} disabled={Boolean(busy)} aria-label={tr('quoteSelection', { provider: providerName(item.serviceProvider) })} onChange={() => { if (mounted.current && live.current.quote === quote && live.current.binding.canReceive()) { providerChosen.current = true; setSelectedProvider(item.serviceProvider); } }} />
-          <strong>{providerName(item.serviceProvider)}</strong><span>{tr('receive')}</span><bdi className={local.received}>{number(item.destinationAmount)} {quote.destination.asset}</bdi><span>{tr('fees', { amount: number(item.totalFee), currency: quote.sourceCurrencyCode })}</span></label>)}</div>
+          <strong>{providerName(item.serviceProvider)}</strong><span>{tr('receive')}</span><bdi className={local.received}>{number(item.destinationAmount)} {quote.destination.asset}</bdi><span>{fundingAsset.networkName}</span><span>{tr('fees', { amount: number(item.totalFee), currency: quote.sourceCurrencyCode })}</span></label>)}</div>
           {!providerAvailable ? <p className={styles.hint}>{tr('chooseProvider')}</p> : null}</fieldset> : null}
         <button type="submit" className={`executive-button primary ${local.fund}`} disabled={!eligible || !ready || (!providerAvailable && !canRequestQuote) || quoteState.loading || Boolean(loading) || Boolean(busy)}>{busy && busy !== 'status' ? <Loader2 size={18} className="animate-spin" aria-hidden="true" /> : null}{tr(busy && busy !== 'status' ? 'opening' : 'addFunds')}</button>
       </form>}
@@ -235,8 +245,8 @@ export function ProductionWalletView({ ownerSubject }) {
       <p className={styles.hint}>{tr('finalPrice')}</p>
     </section>
     <section className={`executive-panel ${local.panel}`}><div className={local.historyHeading}><h2>{tr('history')}</h2><button type="button" className="executive-button" disabled={Boolean(busy)} onClick={() => setRevision(item => item + 1)}><RefreshCw size={16} aria-hidden="true" />{tr('refresh')}</button></div><p className={styles.hint}>{tr('confirmationCopy')}</p>
-      {historyError ? <p className={local.error} role="alert">{tr('unavailable')}</p> : !history.length ? <p className={styles.hint}>{tr('empty')}</p> : <ul className={local.history}>{history.filter(item => item.destination.address === binding.linkedAddress).map(item => <li key={item.checkoutReference}><div><strong><bdi>{number(item.requestedAmount)} {item.sourceCurrencyCode}</bdi></strong><span>{providerName(item.serviceProvider)} · {stateLabel(item.status === 'unavailable' ? 'failed' : item.confirmation?.state)}</span></div><button type="button" className="executive-button" disabled={Boolean(busy)} onClick={() => void checkStatus(item.checkoutReference)}>{tr('review')}</button></li>)}</ul>}
-      {selected?.destination.address === binding.linkedAddress ? <div className={local.status} role="status"><strong>{stateLabel(selected.confirmation.state)}</strong>{selected.confirmation.state === 'confirmed' ? <bdi>{number(selected.confirmation.receivedAmount)} {selected.destination.asset}</bdi> : <p>{tr('confirmationCopy')}</p>}</div> : null}
+      {historyError ? <p className={local.error} role="alert">{tr('unavailable')}</p> : !history.length ? <p className={styles.hint}>{tr('empty')}</p> : <ul className={local.history}>{history.filter(item => item.destination.address === binding.linkedAddress).map(item => <li key={item.checkoutReference}><div><strong><bdi>{number(item.requestedAmount)} {item.sourceCurrencyCode}</bdi></strong><span>{providerName(item.serviceProvider)} · {stateLabel(item.status === 'unavailable' ? 'failed' : item.confirmation?.state)}</span><span>{destinationLabel(item.destination)}</span></div><button type="button" className="executive-button" disabled={Boolean(busy)} onClick={() => void checkStatus(item.checkoutReference)}>{tr('review')}</button></li>)}</ul>}
+      {selected && selected.destination.address === binding.linkedAddress ? <div className={local.status} role="status"><strong>{stateLabel(selected.confirmation.state)}</strong>{selected.confirmation.state === 'confirmed' ? <bdi>{number(selected.confirmation.receivedAmount)} {selectedDestination}</bdi> : <><p>{selectedDestination}</p><p>{tr('confirmationCopy')}</p></>}</div> : null}
     </section>
     <details id="administrative-send" className={`executive-panel ${local.panel}`}><summary>{t('administrativeSigning.sendAction')}</summary><p className={styles.hint}>{tr('operationsUnavailable')}</p></details>
     <details id="administrative-offramp" className={`executive-panel ${local.panel}`}><summary>{t('administrativeSigning.withdrawAction')}</summary><p className={styles.hint}>{tr('operationsUnavailable')}</p></details>

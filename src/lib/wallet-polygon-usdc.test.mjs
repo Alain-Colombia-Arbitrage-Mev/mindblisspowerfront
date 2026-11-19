@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readPolygonUsdcBalance } from './wallet-polygon-usdc.mjs';
+import { readArbitrumUsdcBalance, readPolygonUsdcBalance } from './wallet-polygon-usdc.mjs';
 
 const projectVariable = 'NEXT_PUBLIC_WALLET_REOWN_PROJECT_ID';
 const project = '1'.repeat(32);
@@ -33,12 +33,30 @@ test('reads Circle USDC on Polygon without wallet permissions and preserves its 
   assert.equal(balance, '1.234567');
 });
 
+test('reads native USDC on Arbitrum One from the public RPC without project credentials', async t => {
+  withProject(t, '');
+  const balance = await readArbitrumUsdcBalance(wallet, { fetchImpl: async (url, init) => {
+    assert.equal(url.href, 'https://arb1.arbitrum.io/rpc');
+    assert.equal(init.credentials, 'omit');
+    assert.equal(init.redirect, 'error');
+    assert.deepEqual(init.headers, { 'Content-Type': 'application/json' });
+    assert.deepEqual(JSON.parse(init.body), {
+      jsonrpc: '2.0', id: 1, method: 'eth_call',
+      params: [{ to: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', data: '0x70a08231' + wallet.slice(2).padStart(64, '0') }, 'latest'],
+    });
+    return Response.json({ jsonrpc: '2.0', id: 1, result: '0x' + (12000001).toString(16).padStart(64, '0') });
+  } });
+  assert.equal(balance, '12.000001');
+});
+
 test('missing configuration or an invalid address makes no request', async t => {
   withProject(t, '');
   const fetchImpl = () => assert.fail('invalid input must not be sent');
   await assert.rejects(readPolygonUsdcBalance(wallet, { fetchImpl }), /balance_unavailable/);
   process.env[projectVariable] = project;
   await assert.rejects(readPolygonUsdcBalance('invalid-address', { fetchImpl }), /balance_unavailable/);
+  await assert.rejects(readArbitrumUsdcBalance('invalid-address', { fetchImpl }), /balance_unavailable/);
+  await assert.rejects(readArbitrumUsdcBalance(wallet, { fetchImpl, signal: AbortSignal.abort() }), /balance_unavailable/);
 });
 
 test('a foreign reply, malformed amount or cancelled read cannot display a balance', async t => {
