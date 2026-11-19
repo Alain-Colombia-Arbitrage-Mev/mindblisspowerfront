@@ -2,7 +2,7 @@ import { browserRequestDeadline } from './browser-request-deadline.mjs';
 import { FUNDING_UUID } from './wallet-funding-contract.mjs';
 import { sandboxWalletAddress } from './sandbox-wallet-contract.mjs';
 import { WALLET_PRODUCTION_PATH as base, walletProductionSubject, walletProductionInput, walletProductionDiscovery, walletProductionOptions,
-  walletProductionQuote, walletProductionAcknowledgement, walletProductionStatus, walletProductionHistory } from './wallet-production-funding-contract.mjs';
+  walletProductionQuote, walletProductionAcknowledgement, walletProductionStatus, walletProductionHistory, walletProductionDiagnostic } from './wallet-production-funding-contract.mjs';
 const check = value => { if (!value) throw Error('wallet_production_unavailable'); return value; };
 /** @typedef {{ signal?: AbortSignal, body?: unknown, ownerSubject?: string }} ProductionWalletRequest */
 /** @param {string} suffix @param {ProductionWalletRequest} [options] */
@@ -16,7 +16,10 @@ async function request(suffix, { signal, body, ownerSubject } = {}) {
     const text = await response.text(); if (deadline.signal.aborted) throw new DOMException('Aborted', 'AbortError');
     if (text.length > 131072) throw Error('wallet_production_unavailable');
     let value; try { value = JSON.parse(text); } catch { throw Error('wallet_production_unavailable'); }
-    if (!response.ok) throw Object.assign(Error(typeof value?.error === 'string' && /^[a-z0-9_]{1,80}$/.test(value.error) ? value.error : 'wallet_production_unavailable'), { status: response.status });
+    if (!response.ok) {
+      const diagnostic = suffix === '/session' ? walletProductionDiagnostic(value?.diagnostic) : undefined;
+      throw Object.assign(Error(typeof value?.error === 'string' && /^[a-z0-9_]{1,80}$/.test(value.error) ? value.error : 'wallet_production_unavailable'), { status: response.status, ...(diagnostic ? { diagnostic } : {}) });
+    }
     return value;
   } finally { deadline.dispose(); }
 }

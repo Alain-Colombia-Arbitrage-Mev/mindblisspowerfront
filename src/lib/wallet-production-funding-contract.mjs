@@ -17,6 +17,22 @@ const instant = value => typeof value === 'string' && Number.isFinite(Date.parse
 const destination = value => plain(value) && sandboxWalletAddress(value.address) && value.asset === 'USDT' && value.network === 'polygon' && value.chainId === 137
   ? { address: value.address.toLowerCase(), asset: 'USDT', network: 'polygon', chainId: 137 } : null;
 
+/** Project only bounded, non-identifying provider failure classifications. */
+export function walletProductionDiagnostic(value) {
+  if (!plain(value) || !['widget_transport', 'widget_http', 'widget_schema', 'widget_url', 'widget_finish'].includes(value.stage)) return undefined;
+  const safe = { stage: value.stage };
+  if (Number.isInteger(value.upstreamStatus) && value.upstreamStatus >= 100 && value.upstreamStatus <= 599) safe.upstreamStatus = value.upstreamStatus;
+  for (const key of ['providerCode', 'serviceProviderCode']) if (typeof value[key] === 'string' && /^[A-Z0-9_]{2,80}$/.test(value[key])
+    && !/^0X[0-9A-F]{40}$/i.test(value[key]) && !/^[0-9A-F]{32,80}$/.test(value[key])) safe[key] = value[key];
+  return safe;
+}
+export function walletProductionFailureLog(failure) {
+  const error = typeof failure?.message === 'string' && /^(?:wallet_production_[a-z_]{1,60}|wallet_funding_[a-z_]{1,60}|unauthenticated|invalid_request|invalid_origin|invalid_auth_proxy)$/.test(failure.message)
+    ? failure.message : 'wallet_production_unavailable';
+  const diagnostic = walletProductionDiagnostic(failure?.diagnostic);
+  return { error, ...(Number.isInteger(failure?.status) && failure.status >= 100 && failure.status <= 599 ? { status: failure.status } : {}), ...(diagnostic ? { diagnostic } : {}) };
+}
+
 export function walletProductionInput(value, session = false) {
   const keys = ['country', 'sourceCurrencyCode', 'amount', 'paymentMethodType', ...(session ? ['requestId', 'serviceProvider'] : [])];
   if (!exact(value, keys) || !code(value.country) || !currency(value.sourceCurrencyCode) || !amount(value.amount) || !token(value.paymentMethodType)

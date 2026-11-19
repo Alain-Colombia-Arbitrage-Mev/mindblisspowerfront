@@ -6,7 +6,7 @@ import { readBoundedRequestJson } from './bounded-request-json.mjs';
 import { boundedServiceRequest } from './private-service-request.mjs';
 import { FUNDING_UUID } from './wallet-funding-contract.mjs';
 import { WALLET_PRODUCTION_PATH as base, WALLET_PRODUCTION_INTERNAL_PATH as internalBase, WALLET_PRODUCTION_ORIGIN as origin, walletProductionSubject, walletProductionInput, walletProductionCapabilities,
-  walletProductionDiscovery, walletProductionOptions, walletProductionQuote, walletProductionAcknowledgement, walletProductionStatus, walletProductionHistory } from './wallet-production-funding-contract.mjs';
+  walletProductionDiscovery, walletProductionOptions, walletProductionQuote, walletProductionAcknowledgement, walletProductionStatus, walletProductionHistory, walletProductionDiagnostic } from './wallet-production-funding-contract.mjs';
 
 const routes = { capabilities: ['GET', walletProductionCapabilities], discovery: ['GET', walletProductionDiscovery], options: ['GET', walletProductionOptions],
   quote: ['POST', walletProductionQuote], session: ['POST', walletProductionAcknowledgement], status: ['GET', walletProductionStatus], history: ['GET', walletProductionHistory] };
@@ -63,7 +63,10 @@ export async function handleWalletProductionFunding(request, action, { env = run
     }
     const result = await serviceRequest(`https://wallet.core.internal${internalPath}${url.search}`, { method: route[0], headers,
       ...(body === undefined ? {} : { body: serialized }), signal: request.signal }, fetchImpl);
-    if (!result.ok) return reply({ error: safeErrors.has(result.data?.error) ? result.data.error : 'wallet_production_unavailable' }, [400, 401, 403, 404, 409, 413, 429, 503].includes(result.status) ? result.status : 502);
+    if (!result.ok) {
+      const known = safeErrors.has(result.data?.error), diagnostic = action === 'session' && known ? walletProductionDiagnostic(result.data?.diagnostic) : undefined;
+      return reply({ error: known ? result.data.error : 'wallet_production_unavailable', ...(diagnostic ? { diagnostic } : {}) }, [400, 401, 403, 404, 409, 413, 429, 503].includes(result.status) ? result.status : 502);
+    }
     const safe = action === 'discovery' ? walletProductionDiscovery(result.data, url.searchParams.get('country') || '')
       : action === 'session' ? walletProductionAcknowledgement(result.data, body) : action === 'quote' ? walletProductionQuote(result.data, body) : route[1](result.data);
     if (action === 'options' && safe && (safe.country !== url.searchParams.get('country') || safe.sourceCurrencyCode !== url.searchParams.get('sourceCurrencyCode'))) return reply({ error: 'wallet_production_unavailable' }, 502);

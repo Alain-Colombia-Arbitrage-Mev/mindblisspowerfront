@@ -30,6 +30,11 @@ export function productionFundingValue(raw, limits, decimalPlaces = 2) {
   return Number.isFinite(value) && value > 0 && Math.abs(value * precision - Math.round(value * precision)) < 0.000001
     && limits.ranges.some(item => value >= item.minimum && value <= item.maximum) ? value : null;
 }
+export function productionFundingProviderSupported(routes, serviceProvider, input, decimalPlaces = 2) {
+  if (!input || !walletProductionInput(input)) return false;
+  return (Array.isArray(routes) ? routes : []).some(route => route.serviceProvider === serviceProvider
+    && productionFundingValue(String(input.amount), productionFundingLimits([route], input.sourceCurrencyCode, input.paymentMethodType, decimalPlaces), decimalPlaces) !== null);
+}
 export function productionFundingSelectionKey(ownerSubject, address, input) {
   const safe = walletProductionInput(input);
   return walletProductionSubject(ownerSubject) && sandboxWalletAddress(address) && safe

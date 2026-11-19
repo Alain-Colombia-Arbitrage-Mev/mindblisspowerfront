@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { productionFundingCurrencies, productionFundingLimits, productionFundingValue,
+import { productionFundingCurrencies, productionFundingLimits, productionFundingValue, productionFundingProviderSupported,
   productionFundingSelectionKey } from './production-funding-selection.mjs';
 
 const fiat = code => ({ code, name: `Synthetic ${code}`, decimalPlaces: 2 });
@@ -113,4 +113,18 @@ test('invalid owner, address and injected input cannot create a usable quote ide
     { ownerSubject: owner }, { environment: 'sandbox' }, { serviceProvider: 'TRANSAK' }, { chainId: 1 }]) {
     assert.equal(productionFundingSelectionKey(owner, address, { ...input, ...patch }), '');
   }
+});
+
+test('a quoted provider must still support the exact fiat, rail and amount in its own current range', () => {
+  const current = [{ serviceProvider: 'TRANSAK', paymentMethods: [method('MXN', 200, 500, 'SPEI'), method('MXN', 1000, 2000, 'SPEI')] },
+    { serviceProvider: 'ONRAMPMONEY', paymentMethods: [method('MXN', 200, 500000, 'SPEI')] }];
+  const selection = { country: 'MX', sourceCurrencyCode: 'MXN', amount: 750, paymentMethodType: 'SPEI' };
+  assert.equal(productionFundingProviderSupported(current, 'TRANSAK', selection), false);
+  assert.equal(productionFundingProviderSupported(current, 'ONRAMPMONEY', selection), true);
+  for (const patch of [{ sourceCurrencyCode: 'USD' }, { paymentMethodType: 'CREDIT_DEBIT_CARD' }, { amount: 500001 }]) {
+    assert.equal(productionFundingProviderSupported(current, 'ONRAMPMONEY', { ...selection, ...patch }), false);
+  }
+  assert.equal(productionFundingProviderSupported(current, 'BANXA', { ...selection, amount: 200 }), false);
+  assert.equal(productionFundingProviderSupported(current, 'TRANSAK', { ...selection, amount: 1000 }), true);
+  assert.equal(productionFundingProviderSupported([], 'TRANSAK', selection), false);
 });
