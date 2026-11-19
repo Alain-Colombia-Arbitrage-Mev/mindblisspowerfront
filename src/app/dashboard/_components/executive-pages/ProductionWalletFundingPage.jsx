@@ -10,7 +10,7 @@ import { readProductionDiscovery, readProductionOptions, createProductionFunding
 import useProductionFundingQuote from '@/components/wallet/useProductionFundingQuote';
 import ProductionCountrySelect from '@/components/wallet/ProductionCountrySelect';
 import WalletUsdcBalance from '@/components/wallet/WalletUsdcBalance';
-import { productionFundingCurrencies, productionFundingLimits, productionFundingValue, productionFundingProviderSupported, PRODUCTION_QUOTE_TTL_MS } from '@/lib/production-funding-selection.mjs';
+import { productionFundingCurrencies, productionFundingDestinationChoices, productionFundingLimits, productionFundingValue, productionFundingProviderSupported, PRODUCTION_QUOTE_TTL_MS } from '@/lib/production-funding-selection.mjs';
 import { walletProductionAsset, walletProductionDestinationCode, walletProductionFailureLog } from '@/lib/wallet-production-funding-contract.mjs';
 import { readSandboxWalletFundingHistory } from '@/lib/sandbox-wallet-client.mjs';
 import { FUNDING_UUID } from '@/lib/wallet-funding-contract.mjs';
@@ -43,8 +43,12 @@ export function ProductionWalletView({ ownerSubject }) {
   const [country, setCountry] = useState(''), [currency, setCurrency] = useState(''), [amount, setAmount] = useState(''), [method, setMethod] = useState('');
   const [amountMode, setAmountMode] = useState('unset'), [selectedProvider, setSelectedProvider] = useState('');
   const [routes, setRoutes] = useState([]), [loading, setLoading] = useState('countries'), [busy, setBusy] = useState(''), [error, setError] = useState('');
-  const [fundingDestinationCode, setFundingDestinationCode] = useState('');
+  const [catalogDestinationCode, setCatalogDestinationCode] = useState('');
+  const [preferredDestinationCode, setPreferredDestinationCode] = useState('');
+  const destinationChoices = productionFundingDestinationChoices(routes, currency, method);
+  const fundingDestinationCode = destinationChoices.includes(preferredDestinationCode) ? preferredDestinationCode : catalogDestinationCode;
   const fundingAsset = walletProductionAsset(fundingDestinationCode);
+  const explicitDestinationCode = destinationChoices.includes(fundingDestinationCode) ? fundingDestinationCode : '';
   const [revision, setRevision] = useState(0), [countryRevision, setCountryRevision] = useState(0), [history, setHistory] = useState([]), [selected, setSelected] = useState(null);
   const [legacyOpen, setLegacyOpen] = useState(false), [historyError, setHistoryError] = useState(false);
   const [currencyRevision, setCurrencyRevision] = useState(0), [methodRevision, setMethodRevision] = useState(0);
@@ -52,7 +56,7 @@ export function ProductionWalletView({ ownerSubject }) {
   const mounted = useRef(false), operation = useRef(null), generation = useRef(0), live = useRef(null);
   const catalogVersion = useRef(0), currencyChosen = useRef(false);
   const methodChosen = useRef(false), providerChosen = useRef(false);
-  live.current = { binding, country, currency, amount, method, quote: null, routes, fundingDestinationCode };
+  live.current = { binding, country, currency, amount, method, quote: null, routes, fundingDestinationCode, explicitDestinationCode };
   const ready = binding.canReceive();
   const fail = useCallback(failure => {
     if (failure?.status === 401 || failure?.status === 403) live.current.binding.retire();
@@ -68,7 +72,7 @@ export function ProductionWalletView({ ownerSubject }) {
     if (value === live.current.country) return;
     catalogVersion.current++; currencyChosen.current = false; methodChosen.current = false; providerChosen.current = false;
     reset(); setLoading(''); setSelected(null); setCountry(value); setCurrencies([]); setCurrency('');
-    setMethod(''); setRoutes([]); setAmount(''); setAmountMode('unset'); setSelectedProvider('');
+    setMethod(''); setRoutes([]); setAmount(''); setAmountMode('unset'); setSelectedProvider(''); setPreferredDestinationCode('');
   };
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; cancel(); }; }, [cancel]);
   useEffect(() => {
@@ -89,17 +93,17 @@ export function ProductionWalletView({ ownerSubject }) {
       if (!current()) return;
       const offered = productionFundingCurrencies(value); setCurrencies(offered.currencies);
       if (live.current.currency && !offered.currencies.some(item => item.code === live.current.currency)) {
-        reset(); setCurrency(''); setRoutes([]); setMethod(''); setAmount(''); setAmountMode('unset'); setSelectedProvider('');
+        reset(); setCurrency(''); setRoutes([]); setMethod(''); setAmount(''); setAmountMode('unset'); setSelectedProvider(''); setPreferredDestinationCode('');
       } else if (!live.current.currency && !currencyChosen.current) setCurrency(offered.currencies.length === 1 ? offered.currencies[0].code : offered.defaultCurrencyCode);
     }).catch(failure => { if (current()) setError(fail(failure)); }).finally(() => { if (current()) setLoading(''); });
     return () => controller.abort();
   }, [country, ownerSubject, currencyRevision, fail]);
   useEffect(() => {
-    setRoutes([]); setFundingDestinationCode(''); if (!country || !currency) return undefined;
+    setRoutes([]); setCatalogDestinationCode(''); if (!country || !currency) return undefined;
     const controller = new AbortController(); setLoading('methods');
     readProductionOptions(country, currency, { ownerSubject, signal: controller.signal }).then(value => {
       if (controller.signal.aborted) return; setRoutes(value.routes);
-      if (value.routes.length) setFundingDestinationCode(value.destinationCurrencyCode ?? 'USDT_POLYGON');
+      if (value.routes.length) setCatalogDestinationCode(value.destinationCurrencyCode ?? 'USDT_POLYGON');
       const methods = availableMethods(value.routes, currency, currencies.find(item => item.code === currency)?.decimalPlaces ?? 2);
       if (live.current.method && !methods.includes(live.current.method)) { methodChosen.current = true; reset(); setMethod(''); }
       else if (!live.current.method && !methodChosen.current && methods.length === 1) { methodChosen.current = true; setMethod(methods[0]); }
@@ -116,16 +120,18 @@ export function ProductionWalletView({ ownerSubject }) {
   const number = value => new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(value);
   const decimals = currencies.find(item => item.code === currency)?.decimalPlaces ?? 2;
   const methods = availableMethods(routes, currency, decimals);
-  const limits = productionFundingLimits(routes, currency, method, decimals), minimum = limits?.minimum, maximum = limits?.maximum;
+  const amountRoutes = explicitDestinationCode ? routes.filter(route => route.serviceProvider === 'RAMPNOW') : routes;
+  const limits = productionFundingLimits(amountRoutes, currency, method, decimals), minimum = limits?.minimum, maximum = limits?.maximum;
   const eligible = productionFundingValue(amount, limits, decimals) !== null;
   useEffect(() => {
     if (minimum !== undefined && amountMode !== 'manual') { setAmount(String(minimum)); setAmountMode('automatic'); }
   }, [minimum, amountMode]);
   const canQuote = useCallback(() => mounted.current && live.current.binding.canReceive(), []);
+  const quotedInput = { country, sourceCurrencyCode: currency, amount: Number(amount), paymentMethodType: method,
+    ...(explicitDestinationCode ? { destinationCurrencyCode: explicitDestinationCode } : {}) };
   const quoteState = useProductionFundingQuote({ ownerSubject, address: binding.linkedAddress, destinationCurrencyCode: fundingDestinationCode, ready, valid: eligible && Boolean(fundingAsset) && !loading,
     blocked: Boolean(busy), canRun: canQuote, failureKey: fail,
-    input: { country, sourceCurrencyCode: currency, amount: Number(amount), paymentMethodType: method } });
-  const quotedInput = { country, sourceCurrencyCode: currency, amount: Number(amount), paymentMethodType: method };
+    input: quotedInput });
   const quotedDestinationCode = walletProductionDestinationCode(quoteState.quote?.destination);
   const quoteCompatible = quoteState.quote && quotedDestinationCode && quotedDestinationCode === fundingDestinationCode &&
     quoteState.quote.quotes.every(item => productionFundingProviderSupported(routes, item.serviceProvider, quotedInput, decimals));
@@ -137,7 +143,11 @@ export function ProductionWalletView({ ownerSubject }) {
     if (!providerChosen.current && quote.quotes.length === 1) { providerChosen.current = true; setSelectedProvider(quote.quotes[0].serviceProvider); }
     else if (selectedProvider) setSelectedProvider('');
   }, [quote, selectedProvider]);
-  const requestInput = () => ({ country: live.current.country, sourceCurrencyCode: live.current.currency, amount: Number(live.current.amount), paymentMethodType: live.current.method });
+  const requestInput = () => {
+    const current = live.current;
+    return { country: current.country, sourceCurrencyCode: current.currency, amount: Number(current.amount), paymentMethodType: current.method,
+      ...(current.explicitDestinationCode ? { destinationCurrencyCode: current.explicitDestinationCode } : {}) };
+  };
   const open = async provider => {
     const current = live.current;
     if (!mounted.current || !current.binding.canReceive() || operation.current || !quote || current.quote !== quote || quote.destination.address !== current.binding.linkedAddress
@@ -161,7 +171,13 @@ export function ProductionWalletView({ ownerSubject }) {
   const checkStatus = useCallback(async reference => {
     if (!mounted.current || operation.current || !FUNDING_UUID.test(reference)) return;
     const controller = new AbortController(), epoch = ++generation.current; operation.current = { controller }; setBusy('status'); setError(''); setSelected(null);
-    try { const result = await readProductionStatus(reference, { ownerSubject, signal: controller.signal }); if (mounted.current && generation.current === epoch && !controller.signal.aborted && result.destination.address === live.current.binding.linkedAddress) setSelected(result); }
+    try {
+      const result = await readProductionStatus(reference, { ownerSubject, signal: controller.signal });
+      if (mounted.current && generation.current === epoch && !controller.signal.aborted && result.destination.address === live.current.binding.linkedAddress) {
+        setSelected(result);
+        if (result.confirmation.state === 'confirmed') setRevision(item => item + 1);
+      }
+    }
     catch (failure) { if (mounted.current && generation.current === epoch && !controller.signal.aborted) setError(fail(failure)); }
     finally { if (generation.current === epoch) { operation.current = null; if (mounted.current) setBusy(''); } }
   }, [ownerSubject, fail]);
@@ -192,7 +208,7 @@ export function ProductionWalletView({ ownerSubject }) {
   };
   const stateLabel = state => tr(({ confirmed: 'confirmed', failed: 'failed', pending: 'processing' })[state] || 'pending');
   const displayError = error || quoteState.error;
-  const selectedDestination = destinationLabel(selected?.destination);
+  const selectedDestination = destinationLabel(selected?.confirmedDestination ?? selected?.destination);
   const canRequestQuote = eligible && ready && !quote && Boolean(quoteState.error || error === 'quoteExpired');
   const readSandbox = useCallback((_kind, options) => readSandboxWalletFundingHistory({ ...options, ownerSubject }), [ownerSubject]);
   return <section className="executive-page"><div className={`executive-container ${styles.screen}`}>
@@ -203,6 +219,7 @@ export function ProductionWalletView({ ownerSubject }) {
       {ready && binding.linkedAddress ? <div className={local.walletTools}>
         <WalletUsdcBalance key={binding.linkedAddress + '-polygon'} address={binding.linkedAddress} refreshKey={revision} className={styles.hint} />
         <WalletUsdcBalance key={binding.linkedAddress + '-arbitrum'} address={binding.linkedAddress} network="arbitrum" refreshKey={revision} className={styles.hint} />
+        <WalletUsdcBalance key={binding.linkedAddress + '-ethereum'} address={binding.linkedAddress} network="ethereum" refreshKey={revision} className={styles.hint} />
         <WalletDepositQr key={binding.linkedAddress} address={binding.linkedAddress} />
       </div> : null}
       {ready ? <p className={styles.hint}>{tr('receivingCopy')}</p> : <div className={local.actions}><button type="button" className="executive-button primary" disabled={binding.loading || binding.busy || reown.isRestoring || !reown.configured || binding.mismatch || binding.status === 'retired'} onClick={() => void activate()}>{binding.busy ? <Loader2 size={18} className="animate-spin" aria-hidden="true" /> : null}{tr(binding.busy ? 'activating' : reown.isConnected ? 'activate' : 'connect')}</button><button type="button" className="executive-button" disabled={binding.loading || binding.busy || binding.status === 'retired'} onClick={() => void binding.refresh()}><RefreshCw size={16} aria-hidden="true" />{tr('refresh')}</button></div>}
@@ -221,20 +238,29 @@ export function ProductionWalletView({ ownerSubject }) {
             locale={locale} label={tr('country')} placeholder={tr(loading === 'countries' ? 'loading' : 'chooseCountry')} searchLabel={tr('searchCountry')} emptyLabel={tr('emptyCountries')} /></div>
           <div className={local.field}><label htmlFor="production-currency">{tr('currency')}</label>{currencies.length === 1 && currency === currencies[0].code
             ? <output id="production-currency" className={local.fixedValue}><bdi>{currency} · {currencies[0].name}</bdi></output>
-            : <select id="production-currency" value={currency} disabled={Boolean(busy) || !currencies.length || Boolean(loading)} required onChange={event => { catalogVersion.current++; currencyChosen.current = true; methodChosen.current = false; providerChosen.current = false; reset(); setCurrency(event.target.value); setMethod(''); setRoutes([]); setAmount(''); setAmountMode('unset'); setSelectedProvider(''); }}><option value="">{tr('selectCurrency')}</option>{currencies.map(item => <option key={item.code} value={item.code}>{item.code} · {item.name}</option>)}</select>}</div>
+            : <select id="production-currency" value={currency} disabled={Boolean(busy) || !currencies.length || Boolean(loading)} required onChange={event => { catalogVersion.current++; currencyChosen.current = true; methodChosen.current = false; providerChosen.current = false; reset(); setCurrency(event.target.value); setMethod(''); setRoutes([]); setAmount(''); setAmountMode('unset'); setSelectedProvider(''); setPreferredDestinationCode(''); }}><option value="">{tr('selectCurrency')}</option>{currencies.map(item => <option key={item.code} value={item.code}>{item.code} · {item.name}</option>)}</select>}</div>
           <div className={local.field}><label htmlFor="production-method">{tr('method')}</label>{methods.length === 1 && method === methods[0]
             ? <input id="production-method" value={names[method] ? t(names[method]) : methodName(method)} readOnly className={local.fixedValue} />
-            : <select id="production-method" value={method} disabled={Boolean(busy) || Boolean(loading) || !methods.length} required onChange={event => { methodChosen.current = true; reset(); setMethod(event.target.value); }}><option value="">{tr(loading === 'methods' ? 'loading' : 'selectMethod')}</option>{methods.map(item => <option key={item} value={item}>{names[item] ? t(names[item]) : methodName(item)}</option>)}</select>}</div>
+            : <select id="production-method" value={method} disabled={Boolean(busy) || Boolean(loading) || !methods.length} required onChange={event => { methodChosen.current = true; reset(); setMethod(event.target.value); setPreferredDestinationCode(''); }}><option value="">{tr(loading === 'methods' ? 'loading' : 'selectMethod')}</option>{methods.map(item => <option key={item} value={item}>{names[item] ? t(names[item]) : methodName(item)}</option>)}</select>}</div>
+          {destinationChoices.length > 1 ? <div className={local.field}><label htmlFor="production-network">{tr('receiveNetwork')}</label>
+            <select id="production-network" value={fundingDestinationCode} disabled={Boolean(busy) || Boolean(loading)} aria-describedby="production-network-hint" onChange={event => {
+              const code = event.target.value;
+              if (code === live.current.fundingDestinationCode || !destinationChoices.includes(code)) return;
+              reset(); setPreferredDestinationCode(code);
+            }}>
+              {destinationChoices.map(code => <option key={code} value={code}>{walletProductionAsset(code).networkName}</option>)}
+            </select><span id="production-network-hint" className={styles.hint}>{tr('rampNowNetworkHint')}</span></div> : null}
           <div className={local.field}><label htmlFor="production-amount">{tr('amount')} {currency ? `(${currency})` : ''}</label><input id="production-amount" type="number" inputMode={decimals ? 'decimal' : 'numeric'} min={minimum} max={maximum} step={decimals ? '0.01' : '1'} value={amount} disabled={Boolean(busy) || !method || !limits} required placeholder={currency ? tr('amountPlaceholder', { currency }) : ''}
             aria-describedby="production-amount-hint" aria-invalid={Boolean(amountMode === 'manual' && amount && !eligible)} onChange={event => { const next = event.target.value; if (!next || Number(next) !== Number(amount)) reset(); setAmount(next); setAmountMode('manual'); }} />
             <span id="production-amount-hint" className={styles.hint}>{limits ? tr('limits', { min: number(minimum), max: number(maximum), currency }) : tr('chooseMethod')}</span>
             {limits && amountMode === 'manual' && amount && !eligible ? <><span className={local.fieldError} role="alert">{tr('invalidAmount', { min: number(minimum), max: number(maximum), currency })}</span><button className={local.minimum} type="button" onClick={() => { reset(); setAmount(String(minimum)); setAmountMode('manual'); }}>{tr('useMinimum', { amount: number(minimum), currency })}</button></> : null}</div>
         </div>
+        {explicitDestinationCode && destinationChoices.length === 1 ? <p className={styles.hint}>{tr('rampNowNetworkHint')}</p> : null}
         {country && currency && !loading && !methods.length ? <p role="status" className={styles.hint}>{tr('noRoute')}</p> : null}
         {quoteState.loading ? <p role="status" className={local.quoteLoading}><Loader2 size={17} className="animate-spin" aria-hidden="true" />{tr('quoteLoading')}</p> : null}
         {quote ? <fieldset className={local.providers}><legend>{tr('provider')}</legend><p className={styles.hint}>{tr('quoteReady', { amount: number(quote.requestedAmount), currency: quote.sourceCurrencyCode })}</p><div className={local.quotes}>{quote.quotes.map(item => <label key={item.serviceProvider} className={local.quote} data-selected={selectedProvider === item.serviceProvider}>
           <input type="radio" name="production-provider" value={item.serviceProvider} checked={selectedProvider === item.serviceProvider} disabled={Boolean(busy)} aria-label={tr('quoteSelection', { provider: providerName(item.serviceProvider) })} onChange={() => { if (mounted.current && live.current.quote === quote && live.current.binding.canReceive()) { providerChosen.current = true; setSelectedProvider(item.serviceProvider); } }} />
-          <strong>{providerName(item.serviceProvider)}</strong><span>{tr('receive')}</span><bdi className={local.received}>{number(item.destinationAmount)} {quote.destination.asset}</bdi><span>{fundingAsset.networkName}</span><span>{tr('fees', { amount: number(item.totalFee), currency: quote.sourceCurrencyCode })}</span></label>)}</div>
+          <strong>{providerName(item.serviceProvider)}</strong><span>{tr('receive')}</span><bdi className={local.received}>{number(item.destinationAmount)} {quote.destination.asset}</bdi><span>{explicitDestinationCode ? tr('quotedNetwork', { network: fundingAsset.networkName }) : fundingAsset.networkName}</span><span>{tr('fees', { amount: number(item.totalFee), currency: quote.sourceCurrencyCode })}</span></label>)}</div>
           {!providerAvailable ? <p className={styles.hint}>{tr('chooseProvider')}</p> : null}</fieldset> : null}
         <button type="submit" className={`executive-button primary ${local.fund}`} disabled={!eligible || !ready || (!providerAvailable && !canRequestQuote) || quoteState.loading || Boolean(loading) || Boolean(busy)}>{busy && busy !== 'status' ? <Loader2 size={18} className="animate-spin" aria-hidden="true" /> : null}{tr(busy && busy !== 'status' ? 'opening' : 'addFunds')}</button>
       </form>}
@@ -245,8 +271,25 @@ export function ProductionWalletView({ ownerSubject }) {
       <p className={styles.hint}>{tr('finalPrice')}</p>
     </section>
     <section className={`executive-panel ${local.panel}`}><div className={local.historyHeading}><h2>{tr('history')}</h2><button type="button" className="executive-button" disabled={Boolean(busy)} onClick={() => setRevision(item => item + 1)}><RefreshCw size={16} aria-hidden="true" />{tr('refresh')}</button></div><p className={styles.hint}>{tr('confirmationCopy')}</p>
-      {historyError ? <p className={local.error} role="alert">{tr('unavailable')}</p> : !history.length ? <p className={styles.hint}>{tr('empty')}</p> : <ul className={local.history}>{history.filter(item => item.destination.address === binding.linkedAddress).map(item => <li key={item.checkoutReference}><div><strong><bdi>{number(item.requestedAmount)} {item.sourceCurrencyCode}</bdi></strong><span>{providerName(item.serviceProvider)} · {stateLabel(item.status === 'unavailable' ? 'failed' : item.confirmation?.state)}</span><span>{destinationLabel(item.destination)}</span></div><button type="button" className="executive-button" disabled={Boolean(busy)} onClick={() => void checkStatus(item.checkoutReference)}>{tr('review')}</button></li>)}</ul>}
-      {selected && selected.destination.address === binding.linkedAddress ? <div className={local.status} role="status"><strong>{stateLabel(selected.confirmation.state)}</strong>{selected.confirmation.state === 'confirmed' ? <bdi>{number(selected.confirmation.receivedAmount)} {selectedDestination}</bdi> : <><p>{selectedDestination}</p><p>{tr('confirmationCopy')}</p></>}</div> : null}
+      {historyError ? <p className={local.error} role="alert">{tr('unavailable')}</p> : !history.length ? <p className={styles.hint}>{tr('empty')}</p> : <ul className={local.history}>
+        {history.filter(item => item.destination.address === binding.linkedAddress).map(item => <li key={item.checkoutReference}>
+          <div><strong><bdi>{number(item.requestedAmount)} {item.sourceCurrencyCode}</bdi></strong>
+            <span>{providerName(item.serviceProvider)} · {stateLabel(item.status === 'unavailable' ? 'failed' : item.confirmation?.state)}</span>
+            {item.confirmedDestination ? <span>{tr('receivedNetwork', { network: destinationLabel(item.confirmedDestination) })}</span> : null}
+            {(!item.confirmedDestination || item.confirmedDestination.chainId !== item.destination.chainId) ? <span>{item.serviceProvider === 'RAMPNOW'
+              ? tr('quotedNetwork', { network: destinationLabel(item.destination) }) : destinationLabel(item.destination)}</span> : null}
+          </div>
+          <button type="button" className="executive-button" disabled={Boolean(busy)} onClick={() => void checkStatus(item.checkoutReference)}>{tr('review')}</button>
+        </li>)}
+      </ul>}
+      {selected && selected.destination.address === binding.linkedAddress ? <div className={local.status} role="status">
+        <strong>{stateLabel(selected.confirmation.state)}</strong>
+        {selected.confirmation.state === 'confirmed' ? <>
+          <bdi>{number(selected.confirmation.receivedAmount)} {selectedDestination}</bdi>
+          {selected.confirmedDestination && selected.confirmedDestination.chainId !== selected.destination.chainId
+            ? <p>{tr('quotedNetwork', { network: destinationLabel(selected.destination) })}</p> : null}
+        </> : <><p>{selected.serviceProvider === 'RAMPNOW' ? tr('quotedNetwork', { network: selectedDestination }) : selectedDestination}</p><p>{tr('confirmationCopy')}</p></>}
+      </div> : null}
     </section>
     <details id="administrative-send" className={`executive-panel ${local.panel}`}><summary>{t('administrativeSigning.sendAction')}</summary><p className={styles.hint}>{tr('operationsUnavailable')}</p></details>
     <details id="administrative-offramp" className={`executive-panel ${local.panel}`}><summary>{t('administrativeSigning.withdrawAction')}</summary><p className={styles.hint}>{tr('operationsUnavailable')}</p></details>

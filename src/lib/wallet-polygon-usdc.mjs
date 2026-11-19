@@ -6,6 +6,7 @@ import { walletReownAddress } from './wallet-reown-connection.mjs';
 // Circle-issued USDC contracts.
 const polygonUsdc = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359';
 const arbitrumUsdc = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831';
+const ethereumUsdc = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
 const token = new Interface(['function balanceOf(address) view returns (uint256)']);
 
 /**
@@ -41,13 +42,23 @@ async function readUsdcBalance(address, url, tokenAddress, { signal, fetchImpl =
   }
 }
 
-/** @param {string} address @param {{signal?: AbortSignal, fetchImpl?: typeof fetch}} [options] */
-export async function readPolygonUsdcBalance(address, options) {
+/** @param {string} address @param {number} chainId @param {string} contractAddress @param {{signal?: AbortSignal, fetchImpl?: typeof fetch}} [options] */
+async function readWalletConnectUsdcBalance(address, chainId, contractAddress, options) {
   const projectId = process.env.NEXT_PUBLIC_WALLET_REOWN_PROJECT_ID;
   if (!projectId || !/^[a-f0-9]{32}$/i.test(projectId)) throw Error('wallet_usdc_balance_unavailable');
   const url = new URL('https://rpc.walletconnect.org/v1');
-  url.search = new URLSearchParams({ chainId: `eip155:${WALLET_REOWN_CHAIN_ID}`, projectId }).toString();
-  return readUsdcBalance(address, url, polygonUsdc, options);
+  url.search = new URLSearchParams({ chainId: `eip155:${chainId}`, projectId }).toString();
+  return readUsdcBalance(address, url, contractAddress, options);
+}
+
+/** @param {string} address @param {{signal?: AbortSignal, fetchImpl?: typeof fetch}} [options] */
+export function readPolygonUsdcBalance(address, options) {
+  return readWalletConnectUsdcBalance(address, WALLET_REOWN_CHAIN_ID, polygonUsdc, options);
+}
+
+/** @param {string} address @param {{signal?: AbortSignal, fetchImpl?: typeof fetch}} [options] */
+export function readEthereumUsdcBalance(address, options) {
+  return readWalletConnectUsdcBalance(address, 1, ethereumUsdc, options);
 }
 
 /** @param {string} address @param {{signal?: AbortSignal, fetchImpl?: typeof fetch}} [options] */

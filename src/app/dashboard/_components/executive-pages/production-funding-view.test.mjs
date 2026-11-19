@@ -90,11 +90,11 @@ test('form retains country, currency, method and amount order and shows every ve
   assert.equal(h.calls.connect, 0); assert.equal(h.calls.binding, 0); assert.equal(h.calls.session.length, 0);
 });
 
-test('both USDC balances use the verified wallet and disappear when its binding is retired', async t => {
+test('all USDC balances use the verified wallet and disappear when its binding is retired', async t => {
   const h = fixture(t);
   const findBalances = tree => all(tree).filter(node => node?.type === 'wallet-usdc-balance-fixture');
   assert.deepEqual(findBalances(await h.flush()).map(({ props }) => [props.address, props.network ?? 'polygon']),
-    [[address, 'polygon'], [address, 'arbitrum']]);
+    [[address, 'polygon'], [address, 'arbitrum'], [address, 'ethereum']]);
   assert.equal(all(h.tree).find(node => node?.type === 'wallet-deposit-qr-fixture').props.address, address);
   h.binding.retire();
   assert.deepEqual(findBalances(h.render()), []);
@@ -132,6 +132,52 @@ test('Mexico EUR shows USDC on Arbitrum and does not open a checkout reporting t
   await h.flush();
   assert.equal(h.calls.popups[0].closed, true);
   assert.deepEqual(h.calls.opened, []);
+});
+
+test('RampNow US card offers three USDC networks, defaults to Polygon and uses the selected network to open checkout', async t => {
+  const networks = ['USDC_POLYGON', 'USDC_ARBITRUM', 'USDC'];
+  const ethereumDestination = { address, asset: 'USDC', network: 'ethereum', chainId: 1 };
+  const config = {
+    options: async (country, currency) => country === 'US' && currency === 'USD' ? {
+      destinationCurrencyCode: 'USDC_POLYGON',
+      routes: [{ serviceProvider: 'RAMPNOW', paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount: 50, maximumAmount: 5000, destinationCurrencyCodes: networks }] }],
+    } : { routes: [] },
+    quotes: () => [{ serviceProvider: 'RAMPNOW', destinationAmount: 47, totalFee: 3 }],
+    history: [{ checkoutReference: '11111111-1111-4111-8111-111111111111', serviceProvider: 'RAMPNOW', requestedAmount: 50,
+      sourceCurrencyCode: 'USD', status: 'session_created', destination: { ...polygonDestination, asset: 'USDC' }, confirmedDestination: ethereumDestination,
+      confirmation: { state: 'confirmed', source: 'meld_production_api', testMode: false } }],
+  };
+  const h = fixture(t, config); await h.flush();
+  assert.equal(field(h.tree, 'production-network'), undefined);
+  await h.change('production-country', 'US');
+  assert.equal(field(h.tree, 'production-network').props.value, 'USDC_POLYGON');
+  assert.deepEqual(all(field(h.tree, 'production-network')).filter(node => node?.type === 'option').map(node => node.props.value), networks);
+  assert.equal(h.calls.quoteInputs.at(-1).input.destinationCurrencyCode, 'USDC_POLYGON');
+  const historyRow = all(h.tree).find(node => node?.type === 'li');
+  assert.ok(all(historyRow).includes('Cotización en USDC · Polygon'));
+  assert.ok(all(historyRow).includes('Recibido en USDC · Ethereum'));
+  await h.change('production-amount', '70');
+  await h.change('production-network', 'USDC_ETHEREUM');
+  assert.equal(field(h.tree, 'production-network').props.value, 'USDC_POLYGON');
+  await h.change('production-network', 'USDC_ARBITRUM');
+  await h.change('production-network', 'USDC');
+  assert.equal(h.calls.quoteInputs.at(-1).input.destinationCurrencyCode, 'USDC');
+  assert.equal(h.calls.quoteInputs.at(-1).input.amount, 70);
+  assert.ok(all(h.tree).includes('Cotización en Ethereum'));
+  assert.equal(h.calls.session.length, 0);
+  form(h.tree).props.onSubmit({ preventDefault() {} });
+  assert.equal(h.calls.session.length, 1);
+  const [request, expectedAddress] = h.calls.session[0];
+  assert.equal(expectedAddress, address);
+  assert.equal(request.serviceProvider, 'RAMPNOW');
+  assert.equal(request.destinationCurrencyCode, 'USDC');
+  assert.equal(request.amount, 70);
+  assert.equal(Object.hasOwn(request, 'address'), false);
+  h.waiting.resolve({ checkoutUrl: 'https://meldcrypto.com/?token=synthetic_opaque', destination: ethereumDestination });
+  await h.flush();
+  assert.deepEqual(h.calls.opened, ['https://meldcrypto.com/?token=synthetic_opaque']);
+  await h.change('production-country', 'MX');
+  assert.equal(field(h.tree, 'production-network'), undefined);
 });
 
 test('new fiat initializes its own provider minimum and never carries USD 50 into MXN or COP', async t => {

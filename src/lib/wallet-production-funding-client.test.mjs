@@ -276,3 +276,38 @@ test('Mexico EUR card accepts only Alchemy Pay with the exact Arbitrum USDC dest
   assert.equal(walletProductionAcknowledgement({ ...session, checkoutUrl: 'https://meldcrypto.com/?wt=synthetic' }, request), null);
   assert.equal(walletProductionAcknowledgement({ ...session, checkoutUrl: 'https://ramp.alchemypay.org/?token=synthetic' }, request), null);
 });
+
+test('RampNow preserves the quoted chain and accepts only a settled native USDC change to the same wallet', () => {
+  const networks = [
+    ['USDC_POLYGON', { address, asset: 'USDC', network: 'polygon', chainId: 137 }],
+    ['USDC_ARBITRUM', { address, asset: 'USDC', network: 'arbitrum', chainId: 42161 }],
+    ['USDC', { address, asset: 'USDC', network: 'ethereum', chainId: 1 }],
+  ];
+  const priced = { ...quote, destination: networks[0][1], quotes: [{ ...quoteItem, serviceProvider: 'RAMPNOW', destinationCurrencyCode: 'USDC_POLYGON' }] };
+  for (const [destinationCurrencyCode, requestedDestination] of networks) {
+    const selection = { ...sessionInput, destinationCurrencyCode, serviceProvider: 'RAMPNOW' };
+    const price = { ...priced, destination: requestedDestination, quotes: [{ ...priced.quotes[0], destinationCurrencyCode }] };
+    const session = { ...ack, destinationCurrencyCode, destination: requestedDestination, serviceProvider: 'RAMPNOW' };
+    assert.deepEqual(walletProductionQuote(price, selection, address).destination, requestedDestination);
+    assert.deepEqual(walletProductionAcknowledgement(session, selection).destination, requestedDestination);
+    assert.equal(walletProductionQuote(price, { ...selection, destinationCurrencyCode: 'USDT_POLYGON' }, address), null);
+    assert.equal(walletProductionAcknowledgement(session, { ...selection, destinationCurrencyCode: 'USDT_POLYGON' }), null);
+  }
+  const [expected, , actual] = networks.map(([, destination]) => destination);
+  const confirmation = { state: 'confirmed', source: 'meld_production_api', testMode: false, receivedAmount: '44.123456',
+    providerStatus: 'SETTLED', confirmedAt: ack.createdAt, transactionId: 'synthetic-transfer' };
+  const settled = { ...status, serviceProvider: 'RAMPNOW', destinationCurrencyCode: 'USDC_POLYGON', destination: expected, confirmedDestination: actual, confirmation };
+  assert.deepEqual(walletProductionStatus(settled).confirmedDestination, actual);
+  assert.deepEqual(walletProductionStatus(settled).destination, expected);
+  assert.deepEqual(walletProductionStatus({ ...settled, confirmedDestination: expected }).confirmedDestination, expected);
+  assert.deepEqual(walletProductionHistory({ ...history, records: [settled] }).records[0].confirmedDestination, actual);
+  for (const change of [{ serviceProvider: 'ONRAMPMONEY' }, { requestedAmount: 0 }, { country: 'MX' }, { paymentMethodType: 'ACH' },
+    { confirmedDestination: undefined }, { confirmedDestination: null },
+    { confirmation: { state: 'pending', source: 'meld_production_api', testMode: false } },
+    { confirmedDestination: { ...actual, address: otherAddress } }, { confirmedDestination: { ...actual, asset: 'USDT' } },
+    { confirmedDestination: { ...actual, chainId: 137 } }, { confirmedDestination: { ...actual, network: 'base', chainId: 8453 } }]) {
+    const invalid = { ...settled, ...change };
+    assert.equal(walletProductionStatus(invalid), null);
+    assert.equal(walletProductionHistory({ ...history, records: [invalid] }), null);
+  }
+});

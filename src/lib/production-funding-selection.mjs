@@ -30,13 +30,20 @@ export function productionFundingValue(raw, limits, decimalPlaces = 2) {
   return Number.isFinite(value) && value > 0 && Math.abs(value * precision - Math.round(value * precision)) < 0.000001
     && limits.ranges.some(item => value >= item.minimum && value <= item.maximum) ? value : null;
 }
+export function productionFundingDestinationChoices(routes, currency, method) {
+  return routes.find(route => route.serviceProvider === 'RAMPNOW')?.paymentMethods
+    .find(item => item.currencyCode === currency && item.method === method)?.destinationCurrencyCodes ?? [];
+}
 export function productionFundingProviderSupported(routes, serviceProvider, input, decimalPlaces = 2) {
   if (!input || !walletProductionInput(input)) return false;
   return (Array.isArray(routes) ? routes : []).some(route => route.serviceProvider === serviceProvider
+    && (!input.destinationCurrencyCode || (serviceProvider === 'RAMPNOW'
+      && productionFundingDestinationChoices([route], input.sourceCurrencyCode, input.paymentMethodType).includes(input.destinationCurrencyCode)))
     && productionFundingValue(String(input.amount), productionFundingLimits([route], input.sourceCurrencyCode, input.paymentMethodType, decimalPlaces), decimalPlaces) !== null);
 }
 export function productionFundingSelectionKey(ownerSubject, address, input, destinationCurrencyCode = 'USDT_POLYGON') {
   const safe = walletProductionInput(input);
   return walletProductionSubject(ownerSubject) && sandboxWalletAddress(address) && safe && walletProductionAsset(destinationCurrencyCode)
+    && (!safe.destinationCurrencyCode || safe.destinationCurrencyCode === destinationCurrencyCode)
     ? JSON.stringify([ownerSubject, address.toLowerCase(), safe.country, safe.sourceCurrencyCode, safe.paymentMethodType, safe.amount, destinationCurrencyCode]) : '';
 }

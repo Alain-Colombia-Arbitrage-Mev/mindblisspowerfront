@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readArbitrumUsdcBalance, readPolygonUsdcBalance } from './wallet-polygon-usdc.mjs';
+import { readArbitrumUsdcBalance, readEthereumUsdcBalance, readPolygonUsdcBalance } from './wallet-polygon-usdc.mjs';
 
 const projectVariable = 'NEXT_PUBLIC_WALLET_REOWN_PROJECT_ID';
 const project = '1'.repeat(32);
@@ -47,6 +47,21 @@ test('reads native USDC on Arbitrum One from the public RPC without project cred
     return Response.json({ jsonrpc: '2.0', id: 1, result: '0x' + (12000001).toString(16).padStart(64, '0') });
   } });
   assert.equal(balance, '12.000001');
+});
+
+test('reads Circle USDC on Ethereum mainnet using its own chain and token contract', async t => {
+  withProject(t);
+  const balance = await readEthereumUsdcBalance(wallet, { fetchImpl: async (url, init) => {
+    assert.equal(url.origin, 'https://rpc.walletconnect.org');
+    assert.equal(url.searchParams.get('chainId'), 'eip155:1');
+    assert.equal(init.credentials, 'omit');
+    assert.deepEqual(JSON.parse(init.body), {
+      jsonrpc: '2.0', id: 1, method: 'eth_call',
+      params: [{ to: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', data: '0x70a08231' + wallet.slice(2).padStart(64, '0') }, 'latest'],
+    });
+    return Response.json({ jsonrpc: '2.0', id: 1, result: '0x' + (23000009).toString(16).padStart(64, '0') });
+  } });
+  assert.equal(balance, '23.000009');
 });
 
 test('missing configuration or an invalid address makes no request', async t => {

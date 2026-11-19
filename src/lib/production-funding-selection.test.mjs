@@ -97,7 +97,10 @@ test('quote identity binds the native owner, canonical address and exact financi
   assert.notEqual(polygonKey, arbitrumKey);
   assert.equal(JSON.parse(polygonKey).at(-1), 'USDC_POLYGON');
   assert.equal(JSON.parse(arbitrumKey).at(-1), 'USDC_ARBITRUM');
-  assert.equal(productionFundingSelectionKey(owner, address, input, 'USDC'), '');
+  const ethereum = { ...input, destinationCurrencyCode: 'USDC' };
+  assert.equal(JSON.parse(productionFundingSelectionKey(owner, address, ethereum, 'USDC')).at(-1), 'USDC');
+  assert.equal(productionFundingSelectionKey(owner, address, ethereum, 'USDC_POLYGON'), '');
+  assert.equal(productionFundingSelectionKey(owner, address, input, 'USDC_ETHEREUM'), '');
   assert.equal(productionFundingSelectionKey(owner, address.toLowerCase(), { ...input, amount: Number('50.00') }), key);
   for (const [subject, wallet, patch] of [
     ['different-owner', address, {}], [owner, `0x${'2'.repeat(40)}`, {}],

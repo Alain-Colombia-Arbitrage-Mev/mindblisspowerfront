@@ -8,7 +8,7 @@ export const walletProductionSubject = sandboxWalletSubjectHeader;
 const code = value => typeof value === 'string' && /^[A-Z]{2}$/.test(value);
 const currency = value => typeof value === 'string' && /^[A-Z]{3}$/.test(value);
 const token = value => typeof value === 'string' && /^[A-Z0-9_]{2,64}$/.test(value);
-const checkoutProviders = new Set(['ALCHEMYPAY', 'BANXA', 'ONMETA', 'ONRAMPMONEY']);
+const checkoutProviders = new Set(['ALCHEMYPAY', 'BANXA', 'ONMETA', 'ONRAMPMONEY', 'RAMPNOW']);
 const recordedProviders = new Set([...checkoutProviders, 'BLOCKCHAINDOTCOM', 'BTCDIRECT', 'GUARDARIAN', 'KOYWE',
   'KRYPTONIM', 'ROBINHOOD', 'STRIPE', 'TOPPER', 'TRANSAK', 'UNLIMIT']);
 const plain = value => Boolean(value && typeof value === 'object' && !Array.isArray(value));
@@ -20,6 +20,7 @@ const fundingAssets = Object.freeze([
   Object.freeze({ code: 'USDT_POLYGON', asset: 'USDT', network: 'polygon', chainId: 137, networkName: 'Polygon' }),
   Object.freeze({ code: 'USDC_POLYGON', asset: 'USDC', network: 'polygon', chainId: 137, networkName: 'Polygon' }),
   Object.freeze({ code: 'USDC_ARBITRUM', asset: 'USDC', network: 'arbitrum', chainId: 42161, networkName: 'Arbitrum' }),
+  Object.freeze({ code: 'USDC', asset: 'USDC', network: 'ethereum', chainId: 1, networkName: 'Ethereum' }),
 ]);
 export const walletProductionAsset = code => fundingAssets.find(item => item.code === code) ?? null;
 export function walletProductionDestinationCode(value) {
@@ -30,7 +31,10 @@ function destination(value) {
   return asset && sandboxWalletAddress(value.address)
     ? { address: value.address.toLowerCase(), asset: asset.asset, network: asset.network, chainId: asset.chainId } : null;
 }
+const rampNowAssetCodes = new Set(['USDC_POLYGON', 'USDC_ARBITRUM', 'USDC']);
+const isRampNowCard = (country, fiat, method) => country === 'US' && fiat === 'USD' && method === 'CREDIT_DEBIT_CARD';
 function assetAllowed(code, country, fiat, provider, method) {
+  if (provider === 'RAMPNOW') return isRampNowCard(country, fiat, method) && rampNowAssetCodes.has(code);
   if (code === 'USDT_POLYGON') return true;
   if (code === 'USDC_ARBITRUM') return country === 'MX' && fiat === 'EUR' && provider === 'ALCHEMYPAY' && method === 'CREDIT_DEBIT_CARD';
   return code === 'USDC_POLYGON' && provider === 'ONRAMPMONEY'
@@ -56,11 +60,18 @@ export function walletProductionFailureLog(failure) {
 }
 
 export function walletProductionInput(value, session = false) {
-  const keys = ['country', 'sourceCurrencyCode', 'amount', 'paymentMethodType', ...(session ? ['requestId', 'serviceProvider'] : [])];
+  if (!plain(value)) return null;
+  const hasDestination = Object.hasOwn(value, 'destinationCurrencyCode');
+  const keys = ['country', 'sourceCurrencyCode', 'amount', 'paymentMethodType', ...(session ? ['requestId', 'serviceProvider'] : []),
+    ...(hasDestination ? ['destinationCurrencyCode'] : [])];
   if (!exact(value, keys) || !code(value.country) || !currency(value.sourceCurrencyCode) || !amount(value.amount) || !token(value.paymentMethodType)
     || (value.sourceCurrencyCode === 'USD' && (value.amount < 50 || value.amount > 25000))
-    || (session && (!FUNDING_UUID.test(value.requestId || '') || !checkoutProviders.has(value.serviceProvider)))) return null;
+    || (session && (!FUNDING_UUID.test(value.requestId || '') || !checkoutProviders.has(value.serviceProvider)))
+    || (session && value.serviceProvider === 'RAMPNOW' && !isRampNowCard(value.country, value.sourceCurrencyCode, value.paymentMethodType))
+    || (hasDestination && (!isRampNowCard(value.country, value.sourceCurrencyCode, value.paymentMethodType)
+      || !rampNowAssetCodes.has(value.destinationCurrencyCode) || (session && value.serviceProvider !== 'RAMPNOW')))) return null;
   return { country: value.country, sourceCurrencyCode: value.sourceCurrencyCode, amount: value.amount, paymentMethodType: value.paymentMethodType,
+    ...(hasDestination ? { destinationCurrencyCode: value.destinationCurrencyCode } : {}),
     ...(session ? { requestId: value.requestId.toLowerCase(), serviceProvider: value.serviceProvider } : {}) };
 }
 export function walletProductionCapabilities(value) {
@@ -85,9 +96,18 @@ export function walletProductionOptions(value) {
       && Array.isArray(route.paymentMethods) && route.paymentMethods.length <= 128 && route.paymentMethods.every(item => plain(item) && token(item.method) && item.currencyCode === value.sourceCurrencyCode
         && finite(item.minimumAmount) && finite(item.maximumAmount) && item.maximumAmount >= item.minimumAmount))) return null;
   const destinationCode = value.destinationCurrencyCode === undefined ? 'USDT_POLYGON' : value.destinationCurrencyCode;
-  if (!walletProductionAsset(destinationCode)
-    || !value.routes.every(route => route.paymentMethods.every(item => assetAllowed(destinationCode, value.country, value.sourceCurrencyCode, route.serviceProvider, item.method)))) return null;
-  const routes = value.routes.map(route => ({ serviceProvider: route.serviceProvider, paymentMethods: route.paymentMethods.map(item => ({ method: item.method, currencyCode: item.currencyCode, minimumAmount: item.minimumAmount, maximumAmount: item.maximumAmount })) }));
+  if (!walletProductionAsset(destinationCode) || !value.routes.every(route => route.paymentMethods.every(item => {
+    if (item.destinationCurrencyCodes === undefined) return assetAllowed(destinationCode, value.country, value.sourceCurrencyCode, route.serviceProvider, item.method);
+    return route.serviceProvider === 'RAMPNOW' && isRampNowCard(value.country, value.sourceCurrencyCode, item.method)
+      && Array.isArray(item.destinationCurrencyCodes) && item.destinationCurrencyCodes.length > 0
+      && new Set(item.destinationCurrencyCodes).size === item.destinationCurrencyCodes.length
+      && item.destinationCurrencyCodes.every(code => rampNowAssetCodes.has(code)) && item.destinationCurrencyCodes.includes(destinationCode)
+      && (!item.destinationCurrencyCodes.includes('USDC_POLYGON') || destinationCode === 'USDC_POLYGON');
+  }))) return null;
+  const routes = value.routes.map(route => ({ serviceProvider: route.serviceProvider, paymentMethods: route.paymentMethods.map(item => ({
+    method: item.method, currencyCode: item.currencyCode, minimumAmount: item.minimumAmount, maximumAmount: item.maximumAmount,
+    ...(route.serviceProvider === 'RAMPNOW' ? { destinationCurrencyCodes: [...(item.destinationCurrencyCodes ?? [destinationCode])] } : {}),
+  })) }));
   return { environment: 'production', country: value.country, sourceCurrencyCode: value.sourceCurrencyCode, routes,
     ...(value.destinationCurrencyCode ? { destinationCurrencyCode: value.destinationCurrencyCode } : {}),
     paymentMethods: [...new Set(routes.flatMap(route => route.paymentMethods.map(item => item.method)))] };
@@ -96,12 +116,15 @@ export function walletProductionQuote(value, input, expectedAddress = '') {
   const dest = destination(value?.destination);
   const destinationCode = walletProductionDestinationCode(dest);
   if (!plain(value) || value.walletKind !== 'personal' || value.environment !== 'production' || !dest || !code(value.country) || !currency(value.sourceCurrencyCode)
+    || (value.destinationCurrencyCode !== undefined && value.destinationCurrencyCode !== destinationCode)
     || !amount(value.requestedAmount) || !token(value.paymentMethodType) || !Array.isArray(value.quotes) || !value.quotes.length || value.quotes.length > 4
     || (expectedAddress && dest.address !== expectedAddress.toLowerCase()) || (input && (value.country !== input.country || value.sourceCurrencyCode !== input.sourceCurrencyCode
-      || value.requestedAmount !== input.amount || value.paymentMethodType !== input.paymentMethodType))
+      || value.requestedAmount !== input.amount || value.paymentMethodType !== input.paymentMethodType
+      || (input.destinationCurrencyCode !== undefined && input.destinationCurrencyCode !== destinationCode)))
     || !value.quotes.every(item => plain(item) && checkoutProviders.has(item.serviceProvider) && item.sourceAmount === value.requestedAmount && finite(item.destinationAmount) && item.destinationAmount > 0
       && finite(item.totalFee) && finite(item.networkFee) && item.sourceCurrencyCode === value.sourceCurrencyCode && item.destinationCurrencyCode === destinationCode
       && assetAllowed(destinationCode, value.country, value.sourceCurrencyCode, item.serviceProvider, value.paymentMethodType)
+      && (input?.destinationCurrencyCode === undefined || item.serviceProvider === 'RAMPNOW')
       && (item.rampScore === undefined || finite(item.rampScore)))) return null;
   return { walletKind: 'personal', environment: 'production', country: value.country, sourceCurrencyCode: value.sourceCurrencyCode, requestedAmount: value.requestedAmount,
     paymentMethodType: value.paymentMethodType, destination: dest, quotes: value.quotes.map(item => ({ serviceProvider: item.serviceProvider, sourceAmount: item.sourceAmount,
@@ -135,7 +158,8 @@ export function walletProductionAcknowledgement(value, input) {
   const destinationCode = walletProductionDestinationCode(safe?.destination);
   if (!safe || value.walletKind !== 'personal' || value.environment !== 'production' || value.status !== 'session_created' || value.destinationCurrencyCode !== destinationCode
     || !url || (destinationCode === 'USDC_ARBITRUM' && !new URL(url).searchParams.has('token')) || !instant(value.createdAt) || (input && (safe.checkoutReference !== input.requestId || safe.country !== input.country || safe.requestedAmount !== input.amount
-      || safe.sourceCurrencyCode !== input.sourceCurrencyCode || safe.paymentMethodType !== input.paymentMethodType || safe.serviceProvider !== input.serviceProvider))) return null;
+      || safe.sourceCurrencyCode !== input.sourceCurrencyCode || safe.paymentMethodType !== input.paymentMethodType || safe.serviceProvider !== input.serviceProvider
+      || (input.destinationCurrencyCode !== undefined && input.destinationCurrencyCode !== destinationCode)))) return null;
   return { ...safe, walletKind: 'personal', environment: 'production', status: 'session_created', destinationCurrencyCode: value.destinationCurrencyCode, checkoutUrl: url, createdAt: value.createdAt };
 }
 const states = new Set(['initiated', 'session_created', 'unavailable']);
@@ -149,14 +173,26 @@ function confirmation(value) {
     ...(value.state === 'confirmed' ? { providerStatus: 'SETTLED' } : {}),
     ...(cryptoAmount(value.receivedAmount) ? { receivedAmount: value.receivedAmount } : {}), ...(instant(value.confirmedAt) ? { confirmedAt: value.confirmedAt } : {}) };
 }
+function confirmedRampNowDestination(value, safe, proof) {
+  if (!safe || safe.serviceProvider !== 'RAMPNOW' || proof?.state !== 'confirmed') return value === undefined ? undefined : null;
+  const actual = destination(value);
+  return actual?.address === safe.destination.address && rampNowAssetCodes.has(walletProductionDestinationCode(actual)) ? actual : null;
+}
 export function walletProductionStatus(value) {
   const safe = snapshot(value), proof = confirmation(value?.confirmation);
+  const actual = confirmedRampNowDestination(value?.confirmedDestination, safe, proof);
   return safe && proof && value.walletKind === 'personal' && value.environment === 'production' && states.has(value.requestStatus)
-    ? { ...safe, walletKind: 'personal', environment: 'production', requestStatus: value.requestStatus, confirmation: proof } : null;
+    && actual !== null
+    ? { ...safe, walletKind: 'personal', environment: 'production', requestStatus: value.requestStatus, confirmation: proof, ...(actual ? { confirmedDestination: actual } : {}) } : null;
 }
 export function walletProductionHistory(value) {
   if (!plain(value) || value.walletKind !== 'personal' || value.environment !== 'production' || value.settlement !== 'unconfirmed' || !Array.isArray(value.records) || value.records.length > 50) return null;
-  const records = value.records.map(item => { const safe = snapshot(item), proof = item.confirmation === undefined ? undefined : confirmation(item.confirmation);
-    return safe && states.has(item.status) && instant(item.createdAt) && (item.confirmation === undefined || proof) ? { ...safe, status: item.status, createdAt: item.createdAt, ...(proof ? { confirmation: proof } : {}) } : null; });
+  const records = value.records.map(item => {
+    const safe = snapshot(item), proof = item?.confirmation === undefined ? undefined : confirmation(item.confirmation);
+    const actual = confirmedRampNowDestination(item?.confirmedDestination, safe, proof);
+    return safe && states.has(item.status) && instant(item.createdAt) && (item.confirmation === undefined || proof)
+      && actual !== null
+      ? { ...safe, status: item.status, createdAt: item.createdAt, ...(proof ? { confirmation: proof } : {}), ...(actual ? { confirmedDestination: actual } : {}) } : null;
+  });
   return records.every(Boolean) ? { walletKind: 'personal', environment: 'production', settlement: 'unconfirmed', records } : null;
 }

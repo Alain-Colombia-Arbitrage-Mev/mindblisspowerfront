@@ -1,7 +1,9 @@
 export const walletProductionMessages = {
   es: { walletProduction: {
+    receiveNetwork: 'Red de recepción', rampNowNetworkHint: 'Puedes cambiar la red en RampNow. Mantén USD, el pago con tarjeta y el importe elegido. Confirmaremos el USDC que llegue a tu billetera vinculada en Polygon, Arbitrum o Ethereum.',
+    quotedNetwork: 'Cotización en {network}', receivedNetwork: 'Recibido en {network}',
     depositQr: "Recibir con QR", depositTitle: "Recibir USDC en Polygon", depositInstructions: "Escanea el código o copia la dirección. Selecciona USDC y la red Polygon en la billetera de origen.", depositQrLabel: "Código QR de tu dirección en Polygon", depositQrFallback: "El código QR no está disponible. Puedes copiar la dirección.",
-    usdcBalance: 'Saldo USDC en Polygon', usdcArbitrumBalance: 'Saldo USDC en Arbitrum', usdcBalanceUnavailable: 'Saldo temporalmente no disponible.',
+    usdcBalance: 'Saldo USDC en Polygon', usdcArbitrumBalance: 'Saldo USDC en Arbitrum', usdcEthereumBalance: 'Saldo USDC en Ethereum', usdcBalanceUnavailable: 'Saldo temporalmente no disponible.',
     openBanking: 'Banca abierta', mobileMoney: 'Dinero móvil',
     title: 'Billetera personal', copy: 'Consulta el saldo de USDC en la billetera vinculada a tu cuenta.', production: 'Pagos reales', operationsUnavailable: 'Los envíos y retiros todavía no están habilitados en este portal.',
     addFunds: 'Recargar fondos', provider: 'Proveedor de pago', chooseProvider: 'Elige un proveedor para continuar.',
@@ -26,8 +28,10 @@ export const walletProductionMessages = {
     quoteExpired: "La cotización venció. Pulsa Recargar fondos para volver a cotizar.", activationRequired: 'Activa tu billetera para elegir cómo recargarla.',
   } },
   en: { walletProduction: {
+    receiveNetwork: 'Receiving network', rampNowNetworkHint: 'You can switch networks in RampNow. Keep USD, card payment and the selected amount. We confirm USDC received in your linked wallet on Polygon, Arbitrum or Ethereum.',
+    quotedNetwork: 'Quoted on {network}', receivedNetwork: 'Received on {network}',
     depositQr: "Receive with QR", depositTitle: "Receive USDC on Polygon", depositInstructions: "Scan the code or copy the address. Select USDC and the Polygon network in the sending wallet.", depositQrLabel: "QR code for your Polygon address", depositQrFallback: "The QR code is unavailable. You can copy the address.",
-    usdcBalance: 'USDC balance on Polygon', usdcArbitrumBalance: 'USDC balance on Arbitrum', usdcBalanceUnavailable: 'Balance temporarily unavailable.',
+    usdcBalance: 'USDC balance on Polygon', usdcArbitrumBalance: 'USDC balance on Arbitrum', usdcEthereumBalance: 'USDC balance on Ethereum', usdcBalanceUnavailable: 'Balance temporarily unavailable.',
     openBanking: 'Open banking', mobileMoney: 'Mobile money',
     title: 'Personal wallet', copy: 'Check the USDC balance of the wallet linked to your account.', production: 'Live payments', operationsUnavailable: 'Sending and withdrawing funds are not yet enabled in this portal.', connection: 'Your wallet', active: 'Ready to receive funds',
     addFunds: 'Add funds', provider: 'Payment provider', chooseProvider: 'Choose a provider to continue.',
@@ -44,8 +48,10 @@ export const walletProductionMessages = {
     legacy: 'Previous test history — sandbox', legacyCopy: 'These are test records and do not represent live top-ups.', retry: 'Check again', quoteExpired: "Quote expired. Select Add funds for a current quote.", activationRequired: 'Activate your wallet to choose how to add funds.',
   } },
   ar: { walletProduction: {
+    receiveNetwork: 'شبكة الاستلام', rampNowNetworkHint: 'يمكنك تغيير الشبكة في RampNow. أبقِ الدولار الأمريكي والبطاقة والمبلغ المحدد. نؤكد وصول USDC إلى محفظتك المرتبطة عبر Polygon أو Arbitrum أو Ethereum.',
+    quotedNetwork: 'عرض السعر على {network}', receivedNetwork: 'تم الاستلام على {network}',
     depositQr: "استقبال عبر رمز QR", depositTitle: "استقبال USDC على Polygon", depositInstructions: "امسح الرمز أو انسخ العنوان. اختر USDC وشبكة Polygon في المحفظة المرسلة.", depositQrLabel: "رمز QR لعنوانك على Polygon", depositQrFallback: "رمز QR غير متاح. يمكنك نسخ العنوان.",
-    usdcBalance: 'رصيد USDC على Polygon', usdcArbitrumBalance: 'رصيد USDC على Arbitrum', usdcBalanceUnavailable: 'الرصيد غير متاح مؤقتًا.',
+    usdcBalance: 'رصيد USDC على Polygon', usdcArbitrumBalance: 'رصيد USDC على Arbitrum', usdcEthereumBalance: 'رصيد USDC على Ethereum', usdcBalanceUnavailable: 'الرصيد غير متاح مؤقتًا.',
     openBanking: 'الخدمات المصرفية المفتوحة', mobileMoney: 'الأموال عبر الهاتف المحمول',
     title: 'المحفظة الشخصية', copy: 'اطّلع على رصيد USDC في المحفظة المرتبطة بحسابك.', production: 'مدفوعات فعلية', operationsUnavailable: 'إرسال الأموال وسحبها غير مفعّلين بعد في هذه البوابة.', connection: 'محفظتك', active: 'جاهزة لاستقبال الأموال', connect: 'ربط المحفظة', activate: 'تفعيل المحفظة', activating: 'جارٍ التفعيل…',
     addFunds: 'إضافة أموال', provider: 'مقدم خدمة الدفع', chooseProvider: 'اختر مقدم خدمة للمتابعة.',
@@ -59,8 +65,10 @@ export const walletProductionMessages = {
     confirmationCopy: 'فتح صفحة الدفع أو إغلاقها لا يؤكد الشحن. نتحقق من النتيجة مباشرة لدى MELD.', legacy: 'سجل الاختبارات السابق — sandbox', legacyCopy: 'هذه سجلات اختبار ولا تمثل شحنًا فعليًا.', retry: 'التحقق مجددًا', quoteExpired: "انتهت صلاحية عرض السعر. اضغط على إضافة أموال للحصول على عرض جديد.", activationRequired: 'فعّل محفظتك لاختيار طريقة الشحن.',
   } },
   zh: { walletProduction: {
+    receiveNetwork: '到账网络', rampNowNetworkHint: '可在 RampNow 切换网络。请保留 USD、银行卡和已选金额。我们会确认通过 Polygon、Arbitrum 或 Ethereum 到达绑定钱包的 USDC。',
+    quotedNetwork: '报价网络 {network}', receivedNetwork: '到账网络 {network}',
     depositQr: "二维码收款", depositTitle: "在 Polygon 上接收 USDC", depositInstructions: "扫描二维码或复制地址。请在转出钱包中选择 USDC 和 Polygon 网络。", depositQrLabel: "你的 Polygon 地址二维码", depositQrFallback: "二维码暂不可用。你可以复制地址。",
-    usdcBalance: 'Polygon 网络 USDC 余额', usdcArbitrumBalance: 'Arbitrum 网络 USDC 余额', usdcBalanceUnavailable: '暂时无法查询余额。',
+    usdcBalance: 'Polygon 网络 USDC 余额', usdcArbitrumBalance: 'Arbitrum 网络 USDC 余额', usdcEthereumBalance: 'Ethereum 网络 USDC 余额', usdcBalanceUnavailable: '暂时无法查询余额。',
     openBanking: '开放银行', mobileMoney: '移动钱包支付',
     title: '个人钱包', copy: '查看与你账户绑定的钱包的 USDC 余额。', production: '真实支付', operationsUnavailable: '此门户尚未启用转账和提现。', connection: '你的钱包', active: '可接收资金', connect: '连接钱包', activate: '启用钱包', activating: '正在启用…', activationCopy: '连接钱包并通过一次签名确认所有权。启用不会转移资金。',
     addFunds: '充值', provider: '支付服务商', chooseProvider: '请选择服务商以继续。',
