@@ -5,7 +5,7 @@ import { memberMutationError } from './member-mutation-policy.mjs';
 import { readBoundedRequestJson } from './bounded-request-json.mjs';
 import { boundedServiceRequest } from './private-service-request.mjs';
 import { FUNDING_UUID } from './wallet-funding-contract.mjs';
-import { WALLET_PRODUCTION_PATH as base, WALLET_PRODUCTION_ORIGIN as origin, walletProductionSubject, walletProductionInput, walletProductionCapabilities,
+import { WALLET_PRODUCTION_PATH as base, WALLET_PRODUCTION_INTERNAL_PATH as internalBase, WALLET_PRODUCTION_ORIGIN as origin, walletProductionSubject, walletProductionInput, walletProductionCapabilities,
   walletProductionDiscovery, walletProductionOptions, walletProductionQuote, walletProductionAcknowledgement, walletProductionStatus, walletProductionHistory } from './wallet-production-funding-contract.mjs';
 
 const routes = { capabilities: ['GET', walletProductionCapabilities], discovery: ['GET', walletProductionDiscovery], options: ['GET', walletProductionOptions],
@@ -19,13 +19,15 @@ const safeErrors = new Set(['unauthenticated', 'invalid_request', 'invalid_origi
   'wallet_funding_request_pending', 'wallet_funding_request_already_used', 'wallet_funding_rate_limited', 'wallet_funding_method_unavailable', 'wallet_funding_amount_unavailable']);
 export async function productionWalletCoreFetch(input, init) {
   const scope = getCloudflareScope(), url = new URL(input instanceof Request ? input.url : input);
-  if (!scope || url.origin !== 'https://wallet.core.internal' || !url.pathname.startsWith(`${base}/`) || url.hash || url.username || url.password
+  const action = url.pathname.startsWith(`${internalBase}/`) ? url.pathname.slice(internalBase.length + 1) : '';
+  if (!scope || url.origin !== 'https://wallet.core.internal' || !Object.hasOwn(routes, action) || url.hash || url.username || url.password
     || typeof scope.env.WALLET_CORE?.fetch !== 'function') throw Error('wallet_production_unavailable');
   return scope.env.WALLET_CORE.fetch(input, { ...init, cache: 'no-store', redirect: 'manual' });
 }
 export async function handleWalletProductionFunding(request, action, { env = runtimeEnvironment(), fetchImpl = productionWalletCoreFetch, serviceRequest = boundedServiceRequest } = {}) {
   const route = Object.hasOwn(routes, action) ? routes[action] : null, url = new URL(request.url);
   if (!route || url.origin !== origin || env.AUTH_PUBLIC_ORIGIN !== origin || url.pathname !== `${base}/${action}`) return reply({ error: 'not_found' }, 404);
+  const internalPath = `${internalBase}/${action}`;
   if (request.method !== route[0]) return reply({ error: 'method_not_allowed' }, 405);
   if (url.hash || request.headers.has('x-vp-act-as')) return reply({ error: 'wallet_production_forbidden' }, 403);
   const subjectHeader = request.headers.get('x-mindbliss-wallet-subject');
@@ -57,9 +59,9 @@ export async function handleWalletProductionFunding(request, action, { env = run
       if (typeof env.AUTH_BFF_SHARED_SECRET !== 'string' || env.AUTH_BFF_SHARED_SECRET.length < 32) throw Error('wallet_production_unconfigured');
       const timestamp = String(Math.floor(Date.now() / 1000)), ip = trustedAuthClientIp(request.headers, env);
       Object.assign(headers, { 'content-type': 'application/json', 'x-vp-auth-client-ip': ip, 'x-vp-auth-timestamp': timestamp,
-        'x-vp-auth-signature': createHmac('sha256', env.AUTH_BFF_SHARED_SECRET).update(['POST', url.pathname, timestamp, ip, hash(cookie), hash(serialized)].join('\n')).digest('hex') });
+        'x-vp-auth-signature': createHmac('sha256', env.AUTH_BFF_SHARED_SECRET).update(['POST', internalPath, timestamp, ip, hash(cookie), hash(serialized)].join('\n')).digest('hex') });
     }
-    const result = await serviceRequest(`https://wallet.core.internal${url.pathname}${url.search}`, { method: route[0], headers,
+    const result = await serviceRequest(`https://wallet.core.internal${internalPath}${url.search}`, { method: route[0], headers,
       ...(body === undefined ? {} : { body: serialized }), signal: request.signal }, fetchImpl);
     if (!result.ok) return reply({ error: safeErrors.has(result.data?.error) ? result.data.error : 'wallet_production_unavailable' }, [400, 401, 403, 404, 409, 413, 429, 503].includes(result.status) ? result.status : 502);
     const safe = action === 'discovery' ? walletProductionDiscovery(result.data, url.searchParams.get('country') || '')

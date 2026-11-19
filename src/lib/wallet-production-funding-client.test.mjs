@@ -1,12 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { walletProductionInput, walletProductionCapabilities, walletProductionDiscovery, walletProductionOptions,
+import { WALLET_PRODUCTION_PATH as base, walletProductionInput, walletProductionCapabilities, walletProductionDiscovery, walletProductionOptions,
   walletProductionQuote, walletProductionAcknowledgement, walletProductionCheckoutUrl,
   walletProductionStatus, walletProductionHistory } from './wallet-production-funding-contract.mjs';
 import { readProductionDiscovery, readProductionOptions, quoteProductionFunding, createProductionFunding,
   readProductionStatus, readProductionHistory } from './wallet-production-funding-client.mjs';
 
-const base = '/api/member/wallet-funding';
 const ownerSubject = 'synthetic-wallet-owner';
 const address = `0x${'1'.repeat(40)}`, otherAddress = `0x${'2'.repeat(40)}`;
 const reference = '11111111-1111-4111-8111-111111111111';
@@ -34,6 +33,7 @@ const context = { ownerSubject };
 const clone = value => structuredClone(value);
 
 test('production capabilities remain explicit about the environment, token, chain and absence of broadcasting', () => {
+  assert.equal(base, '/api/member/wallet-funding/production', 'public production requests must not collide with legacy administrative history');
   const capability = { flow: 'wallet_funding', configured: true, environment: 'production', asset: 'USDT',
     network: 'polygon', chainId: 137, canBroadcast: false };
   assert.deepEqual(walletProductionCapabilities(capability), capability);

@@ -1,5 +1,6 @@
 import { handleWalletProductionFunding } from '@/lib/wallet-production-funding-bff.mjs';
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 export async function GET(request, context) {
   const { action } = await context.params;
   return handleWalletProductionFunding(request, action.join('/'));

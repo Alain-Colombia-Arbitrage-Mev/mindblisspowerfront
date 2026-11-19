@@ -55,6 +55,24 @@ test('administrative history accepts exactly one owned administrative selector a
   }
 });
 
+test('the actual Cloudflare guard separates production funding from the legacy administrative history namespace', async () => {
+  const env = { AUTH_PROVIDER: 'better-auth', AUTH_PUBLIC_ORIGIN: WALLET_PORTAL_ORIGIN };
+  const legacy = cloudflarePortalGuard(new Request(url('/api/member/wallet-funding/history')), env);
+  assert.equal(legacy.status, 404);
+  assert.equal(legacy.headers.get('cache-control'), 'private, no-store');
+  assert.deepEqual(await legacy.json(), { error: 'not_found' });
+  assert.equal(cloudflarePortalGuard(new Request(url('/api/member/wallet-funding/production/history')), env), null);
+  assert.equal(cloudflarePortalGuard(new Request(url('/api/member/wallet-funding/history?walletKind=administrative')), env), null);
+  const session = new Request(url('/api/member/wallet-funding/production/session'), {
+    method: 'POST', headers: { origin: WALLET_PORTAL_ORIGIN, 'content-type': 'application/json' },
+    body: JSON.stringify({ requestId: '11111111-1111-4111-8111-111111111111' }),
+  });
+  assert.equal(cloudflarePortalGuard(session, env), null);
+  const retiredPersonal = cloudflarePortalGuard(new Request(url('/api/member/wallet-funding/personal/history')), env);
+  assert.equal(retiredPersonal.status, 404);
+  assert.deepEqual(await retiredPersonal.json(), { error: 'not_found' });
+});
+
 test('profile, native authentication and referral attribution stay available without widening administrative access', async () => {
   for (const pathname of ['/login', '/register', '/dashboard/profile',
     '/api/auth/get-session', '/api/auth/logout', '/api/auth/better-auth/email-otp/verify-email',

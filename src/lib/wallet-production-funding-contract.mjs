@@ -1,7 +1,8 @@
 import { FUNDING_UUID } from './wallet-funding-contract.mjs';
 import { sandboxWalletSubjectHeader, sandboxWalletAddress } from './sandbox-wallet-contract.mjs';
 
-export const WALLET_PRODUCTION_PATH = '/api/member/wallet-funding';
+export const WALLET_PRODUCTION_PATH = '/api/member/wallet-funding/production';
+export const WALLET_PRODUCTION_INTERNAL_PATH = '/api/member/wallet-funding';
 export const WALLET_PRODUCTION_ORIGIN = 'https://wallet.mindblisspower.com';
 export const walletProductionSubject = sandboxWalletSubjectHeader;
 const code = value => typeof value === 'string' && /^[A-Z]{2}$/.test(value);

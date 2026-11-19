@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createHash, createHmac } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
 import { handleWalletProductionFunding, productionWalletCoreFetch } from './wallet-production-funding-bff.mjs';
 import { runCloudflareRequest } from './cloudflare-runtime.mjs';
-import { WALLET_PRODUCTION_PATH as base, WALLET_PRODUCTION_ORIGIN as origin } from './wallet-production-funding-contract.mjs';
+import { WALLET_PRODUCTION_PATH as base, WALLET_PRODUCTION_INTERNAL_PATH as internalBase, WALLET_PRODUCTION_ORIGIN as origin } from './wallet-production-funding-contract.mjs';
 import { walletProductionStatus, walletProductionHistory } from './wallet-production-funding-contract.mjs';
 import { readProductionStatus, readProductionHistory } from './wallet-production-funding-client.mjs';
+import { cloudflarePortalGuard } from './cloudflare-portal-guard.mjs';
 
 const owner = 'synthetic-production-owner', reference = '11111111-1111-4111-8111-111111111111', otherReference = '22222222-2222-4222-8222-222222222222';
 const address = `0x${'1'.repeat(40)}`, cookie = 'better-auth.session_token=synthetic';
@@ -42,13 +44,13 @@ test('seven production actions pin the Wallet private service, native cookies, c
   for (const [path, body, data] of cases) {
     const action = path.split('?')[0];
     const response = await handleWalletProductionFunding(request(path, body), action, { env, serviceRequest: async (url, init) => {
-      calls++; assert.equal(url, `https://wallet.core.internal${base}/${path}`); assert.equal(init.method, body === undefined ? 'GET' : 'POST');
+      calls++; assert.equal(url, `https://wallet.core.internal${internalBase}/${path}`); assert.equal(init.method, body === undefined ? 'GET' : 'POST');
       const headers = new Headers(init.headers); assert.equal(headers.get('cookie'), cookie); assert.equal(headers.get('origin'), origin);
       assert.equal(headers.get('x-mindbliss-wallet-subject'), encodeURIComponent(owner)); assert.equal(headers.get('authorization'), null);
       assert.equal(headers.get('x-vp-act-as'), null); assert.equal(headers.get('x-mindbliss-sandbox-subject'), null);
       if (body === undefined) { assert.equal(init.body, undefined); assert.equal(headers.get('x-vp-auth-signature'), null); }
       else { assert.deepEqual(JSON.parse(init.body), body);
-        const expected = createHmac('sha256', env.AUTH_BFF_SHARED_SECRET).update(['POST', `${base}/${action}`, headers.get('x-vp-auth-timestamp'),
+        const expected = createHmac('sha256', env.AUTH_BFF_SHARED_SECRET).update(['POST', `${internalBase}/${action}`, headers.get('x-vp-auth-timestamp'),
           headers.get('x-vp-auth-client-ip'), hash(cookie), hash(init.body)].join('\n')).digest('hex');
         assert.equal(headers.get('x-vp-auth-signature'), expected); }
       return { ok: true, status: action === 'session' ? 201 : 200, data };
@@ -162,7 +164,7 @@ test('private errors and ambiguous writes are sanitized with one transport attem
 test('default transport can only use WALLET_CORE, never production app Core, sandbox/public DNS or another native path', async t => {
   const calls = { wallet: 0, app: 0, public: 0 };
   t.mock.method(globalThis, 'fetch', () => { calls.public++; assert.fail('No public service fallback'); });
-  const scopeEnv = { ...env, WALLET_CORE: { fetch: async (url, init) => { calls.wallet++; assert.equal(String(url), `https://wallet.core.internal${base}/capabilities`);
+  const scopeEnv = { ...env, WALLET_CORE: { fetch: async (url, init) => { calls.wallet++; assert.equal(String(url), `https://wallet.core.internal${internalBase}/capabilities`);
     assert.equal(init.redirect, 'manual'); return Response.json(capability); } }, CORE_API: { fetch: async () => { calls.app++; assert.fail('No app production Core'); } } };
   const result = await runCloudflareRequest(request('capabilities'), scopeEnv, { waitUntil() {} }, req => handleWalletProductionFunding(req, 'capabilities'));
   assert.equal(result.status, 200); assert.deepEqual(await result.json(), capability);
@@ -170,7 +172,8 @@ test('default transport can only use WALLET_CORE, never production app Core, san
   assert.equal(missing.status, 503);
   await runCloudflareRequest(request('capabilities'), scopeEnv, { waitUntil() {} }, async () => {
     for (const url of ['https://app.mindblisspower.com/api/member/wallet-funding/capabilities', 'https://auth.core.internal/api/member/wallet-funding/capabilities',
-      'https://wallet.core.internal/api/member/sandbox-wallet/status', 'https://wallet.core.internal/api/member/profile']) await assert.rejects(productionWalletCoreFetch(url));
+      'https://wallet.core.internal/api/member/sandbox-wallet/status', 'https://wallet.core.internal/api/member/profile',
+      `https://wallet.core.internal${base}/history`]) await assert.rejects(productionWalletCoreFetch(url));
     return Response.json({ ok: true });
   });
   assert.deepEqual(calls, { wallet: 1, app: 0, public: 0 });
@@ -233,4 +236,31 @@ test('current Native business errors remain actionable without leaking private m
     } }); assert.deepEqual(await result.json(), { error });
   }
   assert.equal(calls, codes.length);
+});
+
+test('the actual production route passes the Cloudflare guard and maps its public namespace to the unchanged private path and POST signature', async () => {
+  assert.equal(base, '/api/member/wallet-funding/production'); assert.equal(internalBase, '/api/member/wallet-funding');
+  assert.equal(existsSync(new URL('../app/api/member/wallet-funding/[...action]/route.js', import.meta.url)), false,
+    'The retired catch-all cannot collide with the exact legacy history route');
+  const source = readFileSync(new URL('../app/api/member/wallet-funding/production/[...action]/route.js', import.meta.url), 'utf8')
+    .replaceAll('@/lib/wallet-production-funding-bff.mjs', new URL('./wallet-production-funding-bff.mjs', import.meta.url).href);
+  const route = await import(`data:text/javascript,${encodeURIComponent(source)}`); assert.equal(route.dynamic, 'force-dynamic');
+  let calls = 0;
+  const scope = { ...env, WALLET_CORE: { fetch: async (url, init) => {
+    calls++; const target = new URL(url), headers = new Headers(init.headers);
+    assert.equal(target.origin, 'https://wallet.core.internal'); assert.equal(headers.get('x-mindbliss-wallet-subject'), encodeURIComponent(owner));
+    if (init.method === 'GET') { assert.equal(target.pathname, `${internalBase}/history`); return Response.json(history); }
+    assert.equal(target.pathname, `${internalBase}/session`);
+    const expected = createHmac('sha256', env.AUTH_BFF_SHARED_SECRET).update(['POST', `${internalBase}/session`, headers.get('x-vp-auth-timestamp'),
+      headers.get('x-vp-auth-client-ip'), hash(cookie), hash(init.body)].join('\n')).digest('hex');
+    assert.equal(headers.get('x-vp-auth-signature'), expected); assert.deepEqual(JSON.parse(init.body), sessionInput);
+    return Response.json(ack, { status: 201 });
+  } } };
+  for (const [action, method, body, expected] of [['history', 'GET', undefined, 200], ['session', 'POST', sessionInput, 201]]) {
+    const input = request(action, body); assert.equal(cloudflarePortalGuard(input, env), null);
+    const response = await runCloudflareRequest(input, scope, { waitUntil() {} }, req => route[method](req, { params: Promise.resolve({ action: [action] }) }));
+    assert.equal(response.status, expected); await response.json();
+  }
+  const denied = cloudflarePortalGuard(new Request(`${origin}${internalBase}/history`), env);
+  assert.equal(denied.status, 404); assert.equal(calls, 2);
 });
