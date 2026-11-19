@@ -75,6 +75,7 @@ function fixture(t, { member = a, connected = false, fingerprint = '', projectId
     assert.equal(value.isRestoring, false); return value;
   };
   return { calls, browser, raw, sdk, source, ready, render, unmount, events,
+    renderOuter: () => { si = ri = ei = ci = mi = 0; const tree = source.default({ children: 'native content' }); while (queue.length) queue.shift()(); return tree; },
     initialRenderer: window => compile('./WalletReownProvider.jsx', { ...dependencies, react: React }, { window, process: environment }).default,
     replay: () => { for (const effect of effects) effect?.cleanup?.(); for (const effect of effects) if (effect) effect.cleanup = effect.effect(); },
     setMember: next => { currentMember = next; }, connect: () => { account.address = address; account.isConnected = true; provider = raw; },
@@ -104,6 +105,19 @@ test('SSR and the first browser render expose the same safe context and markup b
   const render = Component => renderToStaticMarkup(React.createElement(Component, null, React.createElement(Probe)));
   assert.equal(render(Server), '<p>unavailable::false</p>'); assert.equal(render(Browser), render(Server));
   assert.equal(h.calls.open, 0); assert.equal(h.calls.disconnect, 0); assert.equal(h.calls.rpc.length, 0);
+});
+
+test('native-session hydration cannot mount ownerless SDK effects or erase the saved same-owner connection', async t => {
+  const fingerprint = await connection.walletReownOwnerFingerprint(connection.walletReownOwnerKey(a));
+  const h = fixture(t, { member: null, connected: true, fingerprint });
+  assert.equal(h.renderOuter().props.value, context.WALLET_REOWN_UNAVAILABLE);
+  assert.equal(h.renderOuter().props.value, context.WALLET_REOWN_UNAVAILABLE, 'Client mount alone is not a known native owner');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(connection.readWalletReownOwner(h.browser), fingerprint);
+  assert.equal(h.calls.disconnect, 0); assert.equal(h.calls.open, 0); assert.equal(h.calls.rpc.length, 0);
+  h.setMember(a); const ready = h.renderOuter();
+  assert.equal(ready.type, h.source.ConfiguredWalletReownProvider, 'Only the confirmed native owner mounts the SDK lease');
+  assert.equal(connection.readWalletReownOwner(h.browser), fingerprint); assert.equal(h.calls.disconnect, 0);
 });
 
 test('StrictMode effect replay preserves a same-owner active session without opening or resetting the wallet', async t => {

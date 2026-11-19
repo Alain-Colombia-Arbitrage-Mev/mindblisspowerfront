@@ -8,7 +8,31 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 <!-- END:nextjs-agent-rules -->
 
-## MELD administrative sandbox (`wallet` branch)
+## MELD production funding (`wallet`, November 19, 2026)
+
+- The owner explicitly migrated NEW personal-wallet deposits to MELD production
+  White-Label API. This supersedes the sandbox-only restrictions below for the
+  new `/api/member/wallet-funding/*` flow. Historical sandbox activity remains
+  separately labelled and read-only; never turn test results into real funds.
+- Only deploy `mindbliss-wallet` and its dedicated `mindbliss-wallet-core`, using
+  `wallet.wrangler.jsonc`. Do not deploy the shared production Core, `rewon` or
+  `main`. Keep production API credentials strictly in that private backend.
+- Use `MELD_PRODUCTION_API_KEYS` with `https://api.meld.io`, dated OpenAPI and
+  account-scoped transaction verification. No sandbox credential fallback.
+- Use the persisted, backend ownership-verified Reown address for receiving.
+  Receiving does not require a fresh signing lease or another wallet unlock.
+  It does not authorize sending funds. Never reuse another owner's SDK session.
+- Discover countries, currencies and payment methods from actual production
+  routes. Exclude Mercuryo and Binance Connect. Check a real quote before
+  offering checkout; catalogue availability alone does not prove a valid quote.
+- Record production attempts separately in SQL121, with immutable owner, amount,
+  provider and USDT Polygon destination. A checkout callback never proves a
+  payment; verify with an independent authenticated production transaction read.
+- Do not connect the sandbox webhook/signing key to production. Without a
+  separately configured production webhook, status checks are explicit reads.
+- Never make real payments or submit identity documents during agent testing.
+
+## Historical MELD administrative sandbox (`wallet` branch)
 
 - Use the official MELD documentation MCP (`https://docs.meld.io/mcp`) and read
   `https://docs.meld.io/skill.md` before changing the integration. The connected

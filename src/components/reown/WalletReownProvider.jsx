@@ -50,11 +50,15 @@ async function bounded(operation, signal) {
 }
 
 export default function WalletReownProvider({ children }) {
+  const owner = walletReownOwnerKey(useMemberSession());
   const [clientMounted, setClientMounted] = useState(false);
   useEffect(() => { setClientMounted(true); }, []);
   // SSR and the first hydration pass expose the same safe context. SDK creation
   // remains at module scope, not in this mounted-state effect.
-  return clientMounted && walletAppKit ? <ConfiguredWalletReownProvider>{children}</ConfiguredWalletReownProvider>
+  // The native member is loaded asynchronously by DashboardShell. Mounting SDK
+  // owner effects while it is still null would erase a valid restore marker and
+  // disconnect the wallet before the same authenticated owner becomes known.
+  return clientMounted && walletAppKit && owner ? <ConfiguredWalletReownProvider>{children}</ConfiguredWalletReownProvider>
     : <WalletReownContext.Provider value={WALLET_REOWN_UNAVAILABLE}>{children}</WalletReownContext.Provider>;
 }
 

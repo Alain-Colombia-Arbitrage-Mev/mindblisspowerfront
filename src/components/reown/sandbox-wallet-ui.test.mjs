@@ -36,18 +36,26 @@ function harness(path, exportName, mocks) {
     get value() { return tree.props.value; }, get tree() { return tree; } };
 }
 
-function bindingFixture(t, { initial = status(), walletAddress = address, challengePromise = null } = {}) {
-  const calls = { status: 0, challenge: 0, signature: 0, verify: 0, reads: 0 }, wallet = { isConnected: true, address: walletAddress, chainId: 137, provider: { request: async () => [] } };
+function bindingFixture(t, { initial = status(), walletAddress = address, challengePromise = null, providerChain = '0x89', switchedChain = '0x89',
+  switchedAddress = walletAddress, switchPromise = null, walletConnected = true, statusReader = null } = {}) {
+  let observedChain = providerChain, observedAddress = walletAddress;
+  const signals = { logout: new Set(), replacement: new Set() };
+  const subscribe = type => callback => { signals[type].add(callback); return () => signals[type].delete(callback); };
+  const calls = { status: 0, challenge: 0, signature: 0, verify: 0, reads: 0 }, wallet = { isConnected: walletConnected,
+    address: walletConnected ? walletAddress : '', chainId: walletConnected ? Number(providerChain) : null, provider: walletConnected ? { request: async () => [] } : null };
   const h = harness('./SandboxWalletBindingProvider.jsx', 'OwnedSandboxWalletBinding', {
     '@/lib/member-session-context': { useMemberSession: () => ({ subject, email: 'owner@example.test' }) }, '@/lib/wallet-reown-connection.mjs': connection,
-    './WalletReownContext': { useWalletReown: () => wallet }, '@/lib/member-logout-sync.mjs': { subscribeMemberLogout: () => () => {} }, '@/lib/member-session-sync.mjs': { subscribeMemberSessionReplacement: () => () => {} },
-    '@/lib/sandbox-wallet-client.mjs': { readSandboxWalletStatus: async options => { calls.status++; assert.equal(options.ownerSubject, subject); return initial; },
+    './WalletReownContext': { useWalletReown: () => wallet }, '@/lib/member-logout-sync.mjs': { subscribeMemberLogout: subscribe('logout') }, '@/lib/member-session-sync.mjs': { subscribeMemberSessionReplacement: subscribe('replacement') },
+    '@/lib/sandbox-wallet-client.mjs': { readSandboxWalletStatus: async options => { calls.status++; assert.equal(options.ownerSubject, subject); return statusReader ? statusReader(options) : initial; },
       requestSandboxWalletChallenge: async (value, options) => { calls.challenge++; assert.equal(value, walletAddress); assert.equal(options.ownerSubject, subject); return challengePromise || { challengeId: 'fixture', message: 'validated ownership fixture' }; },
       verifySandboxWallet: async (input, value, options) => { calls.verify++; assert.deepEqual(Object.keys(input), ['challengeId', 'signature']); assert.equal(value, walletAddress); assert.equal(options.ownerSubject, subject); return proof(); } },
-    '@/lib/administrative-injected-provider.mjs': { readAdministrativeProvider: async () => { calls.reads++; return { address: walletAddress, chainId: '0x89' }; }, switchAdministrativeProviderNetwork: async () => assert.fail('no automatic network switch'),
+    '@/lib/administrative-injected-provider.mjs': { readAdministrativeProvider: async () => { calls.reads++; return { address: observedAddress, chainId: observedChain }; },
+      switchAdministrativeProviderNetwork: async () => { assert.notEqual(providerChain, '0x89', 'No automatic network switch');
+        if (switchPromise) await switchPromise; observedChain = switchedChain; observedAddress = switchedAddress; wallet.chainId = Number(switchedChain); },
       administrativeProviderMatches: (value, expected) => value.address === expected && value.chainId === '0x89', signAdministrativeOwnership: async () => { calls.signature++; return 'synthetic-proof'; } },
   });
-  h.render({ owner, ownerSubject: subject }); t.after(() => h.unmount()); return { h, calls, wallet };
+  h.render({ owner, ownerSubject: subject }); t.after(() => h.unmount()); return { h, calls, wallet,
+    signal(type) { for (const callback of [...signals[type]]) callback(); } };
 }
 
 test('one shared owned status read never activates automatically; explicit activation is duplicate locked', async t => {
@@ -60,6 +68,29 @@ test('immutable linked-address mismatch blocks challenge and signatures', async 
   const { h, calls } = bindingFixture(t, { initial: proof(), walletAddress: other }); await h.settle(); assert.equal(h.value.mismatch, true);
   await h.value.activate(); assert.equal(calls.challenge, 0); assert.equal(calls.signature, 0); assert.equal(h.value.canFund(), false);
 });
+
+test('one explicit activation confirms a requested Polygon switch and continues the same owned verification without a second click', async t => {
+  const { h, calls } = bindingFixture(t, { providerChain: '0x1' }); await h.settle();
+  assert.equal(calls.reads, 0); assert.equal(calls.challenge, 0, 'Mount never switches, signs or challenges');
+  await h.value.activate(); await h.settle();
+  assert.equal(calls.reads, 2); assert.equal(calls.challenge, 1); assert.equal(calls.signature, 1); assert.equal(calls.verify, 1);
+  assert.equal(h.value.canFund(), true);
+});
+
+test('a switch result is reread: wrong network or a different account cannot create a challenge or reuse an ownership message', async t => {
+  for (const changed of [{ switchedChain: '0x1' }, { switchedAddress: other }]) {
+    const { h, calls } = bindingFixture(t, { providerChain: '0x1', ...changed }); await h.settle();
+    await h.value.activate(); await h.settle();
+    assert.equal(calls.reads, 2); assert.equal(calls.challenge, 0); assert.equal(calls.signature, 0); assert.equal(calls.verify, 0);
+    assert.equal(h.value.canFund(), false);
+  }
+});
+
+test('unmount or wallet replacement while its explicit network switch is pending cannot continue to a signature', async t => {
+  const wait = deferred(), { h, calls, wallet } = bindingFixture(t, { providerChain: '0x1', switchPromise: wait.promise }); await h.settle();
+  const pending = h.value.activate(); await settle(); wallet.address = other; h.render(); wait.resolve(); await pending;
+  assert.equal(calls.challenge, 0); assert.equal(calls.signature, 0); assert.equal(calls.verify, 0);
+});
 test('expiry is checked live by captured canFund without another render', async t => {
   const initial = proof(), { h } = bindingFixture(t, { initial }); await h.settle(); const allowed = h.value.canFund; assert.equal(allowed(), true);
   t.mock.method(Date, 'now', () => Date.parse(initial.expiresAt) + 1); assert.equal(allowed(), false);
@@ -68,6 +99,58 @@ test('a late challenge after unmount cannot start a signature or verification', 
   const wait = deferred(), { h, calls } = bindingFixture(t, { challengePromise: wait.promise }); await h.settle();
   const pending = h.value.activate(); await settle(); h.unmount(); wait.resolve({ challengeId: 'fixture', message: 'validated ownership fixture' }); await pending;
   assert.equal(calls.signature, 0); assert.equal(calls.verify, 0);
+});
+
+test('a new account cannot receive until its one explicit ownership proof stores the immutable native binding', async t => {
+  const { h, calls } = bindingFixture(t); await h.settle();
+  assert.equal(h.value.linkedAddress, ''); assert.equal(h.value.canReceive(), false);
+  assert.equal(h.value.address, address, 'An SDK candidate is displayable but is not a stored backend link');
+  await h.value.activate(); await h.settle();
+  assert.equal(h.value.linkedAddress, address); assert.equal(h.value.canReceive(), true);
+  assert.equal(calls.challenge, 1); assert.equal(calls.signature, 1); assert.equal(calls.verify, 1);
+});
+
+test('reloading an existing native link restores its address for receiving even if its signing lease and SDK connection are inactive', async t => {
+  const { h, calls } = bindingFixture(t, { initial: status({ status: 'linked', address, verified: false }), walletConnected: false }); await h.settle();
+  assert.equal(h.value.address, address); assert.equal(h.value.linkedAddress, address); assert.equal(h.value.verified, false);
+  assert.equal(h.value.canReceive(), true); assert.equal(h.value.canFund(), false);
+  await h.value.activate(); assert.deepEqual(calls, { status: 1, challenge: 0, signature: 0, verify: 0, reads: 0 });
+});
+
+test('a transient refresh preserves only the same owner canonical address and disables readiness until one manual read succeeds', async t => {
+  let unavailable = false;
+  const { h, calls } = bindingFixture(t, { initial: proof(), statusReader: async () => {
+    if (unavailable) throw Object.assign(Error('sandbox_wallet_unavailable'), { status: 503 }); return proof();
+  } }); await h.settle(); assert.equal(h.value.canReceive(), true);
+  unavailable = true; const refresh = h.value.refresh(); assert.equal(h.value.canReceive(), false); await refresh; await h.settle();
+  assert.equal(h.value.linkedAddress, address); assert.equal(h.value.address, address);
+  assert.equal(h.value.verified, false); assert.equal(h.value.canReceive(), false); assert.equal(h.value.canFund(), false); assert.equal(h.value.error, 'unavailable');
+  assert.equal(calls.status, 2); await h.settle(); assert.equal(calls.status, 2, 'No automatic retry or repeated ownership requests');
+  unavailable = false; await h.value.refresh(); await h.settle(); assert.equal(h.value.canReceive(), true); assert.equal(calls.status, 3);
+  assert.equal(calls.challenge, 0); assert.equal(calls.signature, 0); assert.equal(calls.verify, 0);
+});
+
+test('session denial, owner conflict and logout retire both display and captured receiving readiness', async t => {
+  for (const code of [401, 403, 409, 'logout', 'replacement']) {
+    let denied = false;
+    const f = bindingFixture(t, { initial: proof(), statusReader: async () => {
+      if (denied) throw Object.assign(Error('owner_changed'), { status: code }); return proof();
+    } }); await f.h.settle(); const captured = f.h.value.canReceive; assert.equal(captured(), true);
+    if (typeof code === 'number') { denied = true; await f.h.value.refresh(); } else f.signal(code);
+    await f.h.settle(); assert.equal(captured(), false); assert.equal(f.h.value.canReceive(), false);
+    assert.equal(f.h.value.address, ''); assert.equal(f.h.value.linkedAddress, ''); assert.equal(f.h.value.status, 'retired');
+    await f.h.value.refresh(); await f.h.value.activate(); assert.equal(f.calls.challenge, 0); assert.equal(f.calls.signature, 0);
+  }
+});
+
+test('signing expiry updates the view once without erasing the permanent link, reconnecting or silently creating another challenge', async t => {
+  const now = Date.now(); t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now });
+  const initial = proof(); initial.expiresAt = new Date(now + 1000).toISOString();
+  const { h, calls } = bindingFixture(t, { initial }); await h.settle(); assert.equal(h.value.canFund(), true);
+  t.mock.timers.tick(1001); h.render();
+  assert.equal(h.value.verified, false); assert.equal(h.value.canFund(), false); assert.equal(h.value.canReceive(), true);
+  assert.equal(h.value.linkedAddress, address); assert.equal(h.value.expiresAt, '');
+  assert.equal(calls.status, 1); assert.equal(calls.challenge, 0); assert.equal(calls.signature, 0); assert.equal(calls.verify, 0);
 });
 
 function pageFixture(t, search = '') {

@@ -24,9 +24,12 @@ export function sandboxWalletStatus(value, now = Date.now()) {
   if (!capability || !['linked', 'unlinked'].includes(value.status) || typeof value.verified !== 'boolean') return null;
   if (value.status === 'unlinked') return !value.verified && value.address === undefined && value.expiresAt === undefined
     ? { ...capability, status: 'unlinked', verified: false } : null;
-  if (!sandboxWalletAddress(value.address) || (value.verified && (!instant(value.expiresAt) || Date.parse(value.expiresAt) <= now))
+  if (!sandboxWalletAddress(value.address) || (value.verified && !instant(value.expiresAt))
     || (!value.verified && value.expiresAt !== undefined)) return null;
-  return { ...capability, status: 'linked', verified: value.verified, address: value.address.toLowerCase(), ...(value.verified ? { expiresAt: value.expiresAt } : {}) };
+  // A grant can expire while its status response travels. The immutable link
+  // still exists; retire the signing lease without inventing a new expiry.
+  const verified = value.verified && Date.parse(value.expiresAt) > now;
+  return { ...capability, status: 'linked', verified, address: value.address.toLowerCase(), ...(verified ? { expiresAt: value.expiresAt } : {}) };
 }
 export function sandboxWalletChallengeInput(value) {
   return exact(value, ['address']) && sandboxWalletAddress(value.address) ? { address: value.address.toLowerCase() } : null;

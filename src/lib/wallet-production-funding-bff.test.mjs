@@ -1,0 +1,236 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { createHash, createHmac } from 'node:crypto';
+import { handleWalletProductionFunding, productionWalletCoreFetch } from './wallet-production-funding-bff.mjs';
+import { runCloudflareRequest } from './cloudflare-runtime.mjs';
+import { WALLET_PRODUCTION_PATH as base, WALLET_PRODUCTION_ORIGIN as origin } from './wallet-production-funding-contract.mjs';
+import { walletProductionStatus, walletProductionHistory } from './wallet-production-funding-contract.mjs';
+import { readProductionStatus, readProductionHistory } from './wallet-production-funding-client.mjs';
+
+const owner = 'synthetic-production-owner', reference = '11111111-1111-4111-8111-111111111111', otherReference = '22222222-2222-4222-8222-222222222222';
+const address = `0x${'1'.repeat(40)}`, cookie = 'better-auth.session_token=synthetic';
+const env = { AUTH_PUBLIC_ORIGIN: origin, AUTH_PROVIDER: 'better-auth', AUTH_BFF_SHARED_SECRET: 's'.repeat(48), NODE_ENV: 'production' };
+const destination = { address, asset: 'USDT', network: 'polygon', chainId: 137 };
+const capability = { flow: 'wallet_funding', configured: true, environment: 'production', asset: 'USDT', network: 'polygon', chainId: 137, canBroadcast: false };
+const input = { country: 'US', sourceCurrencyCode: 'USD', amount: 50, paymentMethodType: 'CREDIT_DEBIT_CARD' };
+const sessionInput = { ...input, requestId: reference, serviceProvider: 'TRANSAK' };
+const countries = { countries: [{ code: 'US', name: 'United States' }, { code: 'MX', name: 'Mexico' }] };
+const discovery = { country: 'US', currencies: [{ code: 'USD', name: 'US Dollar', decimalPlaces: 2 }], defaultCurrencyCode: 'USD' };
+const options = { environment: 'production', country: 'US', sourceCurrencyCode: 'USD',
+  routes: [{ serviceProvider: 'TRANSAK', paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount: 20, maximumAmount: 25000 }] }] };
+const quote = { walletKind: 'personal', environment: 'production', country: 'US', sourceCurrencyCode: 'USD', requestedAmount: 50, paymentMethodType: 'CREDIT_DEBIT_CARD', destination,
+  quotes: [{ serviceProvider: 'TRANSAK', sourceAmount: 50, destinationAmount: 46.5, totalFee: 3, networkFee: 0.5, sourceCurrencyCode: 'USD', destinationCurrencyCode: 'USDT_POLYGON' }] };
+const snapshot = { checkoutReference: reference, provider: 'meld', serviceProvider: 'TRANSAK', country: 'US', requestedAmount: 50, sourceCurrencyCode: 'USD', paymentMethodType: 'CREDIT_DEBIT_CARD', destination };
+const ack = { ...snapshot, walletKind: 'personal', environment: 'production', status: 'session_created', destinationCurrencyCode: 'USDT_POLYGON',
+  checkoutUrl: 'https://global.transak.com/?apiKey=synthetic&sessionId=synthetic', createdAt: '2026-11-19T12:00:00.000Z' };
+const status = { ...snapshot, walletKind: 'personal', environment: 'production', requestStatus: 'session_created', confirmation: { state: 'unconfirmed', source: 'none', testMode: false } };
+const history = { walletKind: 'personal', environment: 'production', settlement: 'unconfirmed', records: [{ ...snapshot, status: 'session_created', createdAt: ack.createdAt }] };
+const hash = value => createHash('sha256').update(value).digest('hex');
+function request(action, body = undefined, headers = {}) {
+  return new Request(`${origin}${base}/${action}`, { method: body === undefined ? 'GET' : 'POST', headers: {
+    cookie: `${cookie}; unrelated=never-forward`, origin, 'sec-fetch-site': 'same-origin', 'cf-connecting-ip': '192.0.2.7',
+    'x-mindbliss-wallet-subject': encodeURIComponent(owner), ...(body === undefined ? {} : { 'content-type': 'application/json' }), ...headers,
+  }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+}
+const success = data => async () => ({ ok: true, status: 200, data });
+
+test('seven production actions pin the Wallet private service, native cookies, canonical owner fence and fixed origin', async () => {
+  const cases = [['capabilities', undefined, capability], ['discovery', undefined, countries], ['discovery?country=US', undefined, discovery],
+    ['options?country=US&sourceCurrencyCode=USD', undefined, options], ['quote', input, quote], ['session', sessionInput, ack],
+    [`status?checkoutReference=${reference}`, undefined, status], ['history', undefined, history]];
+  let calls = 0;
+  for (const [path, body, data] of cases) {
+    const action = path.split('?')[0];
+    const response = await handleWalletProductionFunding(request(path, body), action, { env, serviceRequest: async (url, init) => {
+      calls++; assert.equal(url, `https://wallet.core.internal${base}/${path}`); assert.equal(init.method, body === undefined ? 'GET' : 'POST');
+      const headers = new Headers(init.headers); assert.equal(headers.get('cookie'), cookie); assert.equal(headers.get('origin'), origin);
+      assert.equal(headers.get('x-mindbliss-wallet-subject'), encodeURIComponent(owner)); assert.equal(headers.get('authorization'), null);
+      assert.equal(headers.get('x-vp-act-as'), null); assert.equal(headers.get('x-mindbliss-sandbox-subject'), null);
+      if (body === undefined) { assert.equal(init.body, undefined); assert.equal(headers.get('x-vp-auth-signature'), null); }
+      else { assert.deepEqual(JSON.parse(init.body), body);
+        const expected = createHmac('sha256', env.AUTH_BFF_SHARED_SECRET).update(['POST', `${base}/${action}`, headers.get('x-vp-auth-timestamp'),
+          headers.get('x-vp-auth-client-ip'), hash(cookie), hash(init.body)].join('\n')).digest('hex');
+        assert.equal(headers.get('x-vp-auth-signature'), expected); }
+      return { ok: true, status: action === 'session' ? 201 : 200, data };
+    } });
+    assert.equal(response.status, action === 'session' ? 201 : 200, path); assert.match(response.headers.get('cache-control'), /private.*no-store/); assert.equal(response.headers.get('vary'), 'Cookie');
+  }
+  assert.equal(calls, 8);
+});
+
+test('a foreign portal, impersonation, absent native cookie or malformed owner fence cannot reach production Core', async () => {
+  const never = async () => assert.fail('Unsafe owner/portal reached transport');
+  for (const headers of [{ 'x-mindbliss-wallet-subject': '' }, { 'x-mindbliss-wallet-subject': '%' },
+    { 'x-mindbliss-wallet-subject': '%73ynthetic-production-owner' }, { 'x-mindbliss-wallet-subject': 'synthetic%00owner' }, { 'x-vp-act-as': '' }]) {
+    assert.equal((await handleWalletProductionFunding(request('history', undefined, headers), 'history', { env, serviceRequest: never })).status, 403);
+  }
+  assert.equal((await handleWalletProductionFunding(request('history', undefined, { cookie: '' }), 'history', { env, serviceRequest: never })).status, 401);
+  const foreign = new Request(`https://app.mindblisspower.com${base}/history`, { headers: request('history').headers });
+  assert.equal((await handleWalletProductionFunding(foreign, 'history', { env, serviceRequest: never })).status, 404);
+  assert.equal((await handleWalletProductionFunding(request('history'), 'history', { env: { ...env, AUTH_PUBLIC_ORIGIN: 'https://app.mindblisspower.com' }, serviceRequest: never })).status, 404);
+  assert.equal((await handleWalletProductionFunding(request('session', sessionInput, { origin: 'https://app.mindblisspower.com' }), 'session', { env, serviceRequest: never })).status, 403);
+});
+
+test('strict POST schemas reject destination, environment, provider and owner injection before one Native call', async () => {
+  const never = async () => assert.fail('Injected input reached Native');
+  for (const action of ['quote', 'session']) {
+    const valid = action === 'session' ? sessionInput : input;
+    for (const extra of [{ address: `0x${'2'.repeat(40)}` }, { destination }, { destinationCurrencyCode: 'USDT_ETHEREUM' }, { chainId: 1 },
+      { environment: 'sandbox' }, { ownerSubject: 'foreign' }, { email: 'foreign@example.test' }, { checkoutUrl: 'https://evil.example/' }, { preferred_side: 'R' }]) {
+      assert.equal((await handleWalletProductionFunding(request(action, { ...valid, ...extra }), action, { env, serviceRequest: never })).status, 400);
+    }
+    for (const change of [{ amount: 49.99 }, { amount: 25000.01 }, { amount: '50' }, { amount: 50.001 }, { country: 'us' }, { sourceCurrencyCode: 'usd' }]) {
+      assert.equal((await handleWalletProductionFunding(request(action, { ...valid, ...change }), action, { env, serviceRequest: never })).status, 400);
+    }
+  }
+  assert.equal((await handleWalletProductionFunding(request('quote', { ...input, serviceProvider: 'TRANSAK' }), 'quote', { env, serviceRequest: never })).status, 400);
+  assert.equal((await handleWalletProductionFunding(request('session', { ...sessionInput, serviceProvider: 'BINANCECONNECT' }), 'session', { env, serviceRequest: never })).status, 400);
+  assert.equal((await handleWalletProductionFunding(request('session', { ...sessionInput, requestId: 'not-a-reference' }), 'session', { env, serviceRequest: never })).status, 400);
+});
+
+test('read-only query selectors and duplicate country, fiat or request IDs cannot select another owner or endpoint', async () => {
+  const never = async () => assert.fail('Injected selector reached Native');
+  for (const [action, path] of [['history', 'history?address=foreign'], ['capabilities', 'capabilities?environment=sandbox'],
+    ['discovery', 'discovery?country=US&country=MX'], ['discovery', 'discovery?email=foreign@example.test'],
+    ['options', 'options?country=US&sourceCurrencyCode=USD&sourceCurrencyCode=MXN'], ['options', 'options?country=US&sourceCurrencyCode=USD&serviceProvider=TRANSAK'],
+    ['status', `status?checkoutReference=${reference}&checkoutReference=${otherReference}`], ['status', `status?checkoutReference=${reference}&subject=foreign`]]) {
+    assert.equal((await handleWalletProductionFunding(request(path), action, { env, serviceRequest: never })).status, 400, path);
+  }
+  assert.equal((await handleWalletProductionFunding(request('history', {}), 'history', { env, serviceRequest: never })).status, 405);
+  assert.equal((await handleWalletProductionFunding(request('session'), 'session', { env, serviceRequest: never })).status, 405);
+});
+
+test('discovery and options correlate actual country and fiat without fabricating a default or remapping unavailable routes', async () => {
+  const empty = { country: 'CO', currencies: [], defaultCurrencyCode: null };
+  const result = await handleWalletProductionFunding(request('discovery?country=CO'), 'discovery', { env, serviceRequest: success(empty) });
+  assert.equal(result.status, 200); assert.deepEqual(await result.json(), empty);
+  for (const [action, path, data] of [['discovery', 'discovery?country=US', { ...discovery, country: 'MX' }],
+    ['options', 'options?country=US&sourceCurrencyCode=USD', { ...options, country: 'CO' }],
+    ['options', 'options?country=US&sourceCurrencyCode=USD', { ...options, sourceCurrencyCode: 'MXN' }],
+    ['options', 'options?country=US&sourceCurrencyCode=USD', { ...options, routes: [{ ...options.routes[0], paymentMethods: [{ ...options.routes[0].paymentMethods[0], currencyCode: 'COP' }] }] }]]) {
+    assert.equal((await handleWalletProductionFunding(request(path), action, { env, serviceRequest: success(data) })).status, 502);
+  }
+});
+
+test('quote and session responses cannot cross source context, request reference, provider or USDT Polygon destination', async () => {
+  const cases = [['quote', input, { ...quote, country: 'MX' }], ['quote', input, { ...quote, requestedAmount: 100 }], ['quote', input, { ...quote, paymentMethodType: 'APPLE_PAY' }],
+    ['session', sessionInput, { ...ack, checkoutReference: otherReference }], ['session', sessionInput, { ...ack, sourceCurrencyCode: 'MXN' }],
+    ['session', sessionInput, { ...ack, serviceProvider: 'TOPPER' }], ['session', sessionInput, { ...ack, paymentMethodType: 'GOOGLE_PAY' }]];
+  for (const [action, body, value] of cases) assert.equal((await handleWalletProductionFunding(request(action, body), action, { env, serviceRequest: success(value) })).status, 502);
+  for (const change of [{ asset: 'USDC' }, { network: 'ethereum', chainId: 1 }, { address: '0xinvalid' }, { chainId: 10 }]) {
+    for (const [action, body, value] of [['quote', input, quote], ['session', sessionInput, ack]]) {
+      const result = await handleWalletProductionFunding(request(action, body), action, { env, serviceRequest: success({ ...value, destination: { ...destination, ...change } }) });
+      assert.equal(result.status, 502);
+    }
+  }
+});
+
+test('checkout handoff rejects sandbox, arbitrary hosts and injected provider parameters rather than opening them', async () => {
+  for (const checkoutUrl of ['https://sb.meldcrypto.com/?token=synthetic', 'https://global-stg.transak.com/?apiKey=synthetic&sessionId=synthetic',
+    'https://evil.example/?token=synthetic', 'https://global.transak.com/?apiKey=synthetic&sessionId=synthetic&walletAddress=evil',
+    'https://global.transak.com/?apiKey=synthetic&sessionId=synthetic&redirectURL=https%3A%2F%2Fevil.example',
+    'https://global.transak.com/?apiKey=synthetic&apiKey=other&sessionId=synthetic', 'https://meldcrypto.com/?wt=synthetic&token=other']) {
+    const result = await handleWalletProductionFunding(request('session', sessionInput), 'session', { env, serviceRequest: success({ ...ack, checkoutUrl }) });
+    assert.equal(result.status, 502, checkoutUrl);
+  }
+});
+
+test('session creation and return-style success selectors cannot become payment confirmation', async () => {
+  const created = await handleWalletProductionFunding(request('session', sessionInput), 'session', { env, serviceRequest: success({ ...ack,
+    paid: true, success: true, confirmation: { state: 'confirmed', source: 'redirect', receivedAmount: 999 } }) });
+  assert.equal(created.status, 200); const createdBody = await created.json(); assert.equal(createdBody.status, 'session_created');
+  assert.equal(createdBody.confirmation, undefined); assert.equal(createdBody.paid, undefined);
+  for (const confirmation of [{ state: 'confirmed', source: 'none', testMode: false, receivedAmount: 46.5, transactionId: 'synthetic', confirmedAt: ack.createdAt },
+    { state: 'confirmed', source: 'meld_sandbox_api', testMode: true }, { state: 'paid', source: 'meld_production_api', testMode: false },
+    { state: 'confirmed', source: 'meld_production_api', testMode: false, receivedAmount: 0, transactionId: 'synthetic', confirmedAt: ack.createdAt }]) {
+    const result = await handleWalletProductionFunding(request(`status?checkoutReference=${reference}`), 'status', { env, serviceRequest: success({ ...status, confirmation }) });
+    assert.equal(result.status, 502);
+  }
+});
+
+test('private errors and ambiguous writes are sanitized with one transport attempt and never trigger a retry or fake success', async () => {
+  let calls = 0;
+  for (const [code, expected] of [['wallet_production_binding_required', 'wallet_production_binding_required'], ['private secret SQL provider error', 'wallet_production_unavailable']]) {
+    const result = await handleWalletProductionFunding(request('session', sessionInput), 'session', { env, serviceRequest: async () => {
+      calls++; return { ok: false, status: 409, data: { error: code, signature: 'private', wallet: 'foreign' } };
+    } }); assert.equal(result.status, 409); assert.deepEqual(await result.json(), { error: expected });
+  }
+  const failure = await handleWalletProductionFunding(request('session', sessionInput), 'session', { env, serviceRequest: async () => { calls++; throw Error('network ended after a possible write'); } });
+  assert.equal(failure.status, 503); assert.equal(calls, 3); assert.deepEqual(await failure.json(), { error: 'wallet_production_unavailable' });
+});
+
+test('default transport can only use WALLET_CORE, never production app Core, sandbox/public DNS or another native path', async t => {
+  const calls = { wallet: 0, app: 0, public: 0 };
+  t.mock.method(globalThis, 'fetch', () => { calls.public++; assert.fail('No public service fallback'); });
+  const scopeEnv = { ...env, WALLET_CORE: { fetch: async (url, init) => { calls.wallet++; assert.equal(String(url), `https://wallet.core.internal${base}/capabilities`);
+    assert.equal(init.redirect, 'manual'); return Response.json(capability); } }, CORE_API: { fetch: async () => { calls.app++; assert.fail('No app production Core'); } } };
+  const result = await runCloudflareRequest(request('capabilities'), scopeEnv, { waitUntil() {} }, req => handleWalletProductionFunding(req, 'capabilities'));
+  assert.equal(result.status, 200); assert.deepEqual(await result.json(), capability);
+  const missing = await runCloudflareRequest(request('capabilities'), { ...scopeEnv, WALLET_CORE: undefined }, { waitUntil() {} }, req => handleWalletProductionFunding(req, 'capabilities'));
+  assert.equal(missing.status, 503);
+  await runCloudflareRequest(request('capabilities'), scopeEnv, { waitUntil() {} }, async () => {
+    for (const url of ['https://app.mindblisspower.com/api/member/wallet-funding/capabilities', 'https://auth.core.internal/api/member/wallet-funding/capabilities',
+      'https://wallet.core.internal/api/member/sandbox-wallet/status', 'https://wallet.core.internal/api/member/profile']) await assert.rejects(productionWalletCoreFetch(url));
+    return Response.json({ ok: true });
+  });
+  assert.deepEqual(calls, { wallet: 1, app: 0, public: 0 });
+});
+
+test('the observed Banxa production transit URL is bound to its provider and cannot be substituted into a Transak acknowledgement', async () => {
+  const banxaUrl = 'https://meldshared.banxa.com/papi/transit/?initId=synthetic_opaque';
+  for (const [provider, checkoutUrl, expected] of [['BANXA', banxaUrl, 200], ['TRANSAK', banxaUrl, 502],
+    ['BANXA', ack.checkoutUrl, 502], ['TOPPER', banxaUrl, 502], ['BANXA', 'https://meldcrypto.com/?token=synthetic_opaque', 200],
+    ['TRANSAK', 'https://meldcrypto.com/?token=synthetic_opaque', 200],
+    ['BANXA', banxaUrl + '&walletAddress=foreign', 502], ['BANXA', banxaUrl + '&initId=second', 502],
+    ['BANXA', 'https://meldshared.banxa.com/papi/transit?initId=synthetic_opaque', 502], ['BANXA', 'https://checkout.banxa-sandbox.com/?initId=synthetic_opaque', 502]]) {
+    const body = { ...sessionInput, serviceProvider: provider }, value = { ...ack, serviceProvider: provider, checkoutUrl };
+    const result = await handleWalletProductionFunding(request('session', body), 'session', { env, serviceRequest: success(value) });
+    assert.equal(result.status, expected, `${provider}:${checkoutUrl}`);
+  }
+});
+
+test('an actual production SETTLED proof retains exact USDT string and required evidence through Native, BFF and browser parsing', async t => {
+  const confirmation = { state: 'confirmed', source: 'meld_production_api', testMode: false, providerStatus: 'SETTLED',
+    receivedAmount: '46.123456', transactionId: 'synthetic-production-transaction', confirmedAt: ack.createdAt };
+  const values = { status: { ...status, confirmation }, history: { ...history, records: [{ ...history.records[0], confirmation }] } };
+  const responses = new Map();
+  for (const action of ['status', 'history']) {
+    const suffix = action === 'status' ? `${action}?checkoutReference=${reference}` : action;
+    const result = await handleWalletProductionFunding(request(suffix), action, { env, serviceRequest: success(values[action]) });
+    assert.equal(result.status, 200); const body = await result.json(); responses.set(action, body);
+    const proof = action === 'status' ? body.confirmation : body.records[0].confirmation;
+    assert.equal(proof.state, 'confirmed'); assert.equal(proof.source, 'meld_production_api'); assert.equal(proof.testMode, false);
+    assert.equal(proof.receivedAmount, '46.123456'); assert.equal(proof.providerStatus, 'SETTLED', 'The browser parser needs this evidence too');
+    assert.equal(proof.transactionId, confirmation.transactionId); assert.equal(proof.confirmedAt, confirmation.confirmedAt);
+    assert.ok(action === 'status' ? walletProductionStatus(body) : walletProductionHistory(body), 'Sanitized DTO remains valid on a second parse');
+  }
+  t.mock.method(globalThis, 'fetch', async path => Response.json(responses.get(path.includes('/status?') ? 'status' : 'history')));
+  const clientStatus = await readProductionStatus(reference, { ownerSubject: owner }), clientHistory = await readProductionHistory({ ownerSubject: owner });
+  assert.equal(clientStatus.confirmation.receivedAmount, '46.123456'); assert.equal(clientHistory.records[0].confirmation.state, 'confirmed');
+  assert.equal(clientHistory.settlement, 'unconfirmed', 'A verified provider receipt never activates an internal financial ledger');
+});
+
+test('production confirmation cannot be forged with numeric or malformed amounts, missing SETTLED proof or unbounded transaction metadata', async () => {
+  const valid = { state: 'confirmed', source: 'meld_production_api', testMode: false, providerStatus: 'SETTLED',
+    receivedAmount: '46.123456', transactionId: 'synthetic-production-transaction', confirmedAt: ack.createdAt };
+  for (const change of [{ receivedAmount: 46.123456 }, { receivedAmount: '0' }, { receivedAmount: '0.000000' }, { receivedAmount: '-1' },
+    { receivedAmount: '1e2' }, { receivedAmount: '1.1234567' }, { receivedAmount: 'NaN' }, { receivedAmount: '1000000000000' },
+    { transactionId: '' }, { transactionId: 'x'.repeat(129) }, { transactionId: '../foreign' }, { confirmedAt: 'not-a-date' },
+    { providerStatus: 'SETTLING' }, { providerStatus: undefined }, { source: 'none' }, { source: 'meld_sandbox_api' }, { testMode: true }]) {
+    const value = { ...status, confirmation: { ...valid, ...change } };
+    const result = await handleWalletProductionFunding(request(`status?checkoutReference=${reference}`), 'status', { env, serviceRequest: success(value) });
+    assert.equal(result.status, 502, JSON.stringify(change));
+  }
+});
+
+test('current Native business errors remain actionable without leaking private metadata or retrying writes', async () => {
+  const codes = ['wallet_production_verification_required', 'wallet_production_method_unavailable', 'wallet_production_amount_unavailable',
+    'wallet_production_rate_limited', 'wallet_production_request_already_used', 'wallet_production_request_pending'];
+  let calls = 0;
+  for (const error of codes) {
+    const result = await handleWalletProductionFunding(request('session', sessionInput), 'session', { env, serviceRequest: async () => {
+      calls++; return { ok: false, status: error.includes('rate_limited') ? 429 : 409, data: { error, private: 'not-public' } };
+    } }); assert.deepEqual(await result.json(), { error });
+  }
+  assert.equal(calls, codes.length);
+});

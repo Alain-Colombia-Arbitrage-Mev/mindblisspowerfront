@@ -47,12 +47,13 @@ test('the administrative branch retains its native assignment and sandbox fundin
   assert.deepEqual(calls, ['status', 'ensure', 'options', 'administrative', 'administrative-status']);
 });
 
-test('the wallet page mounts the dedicated sandbox wallet flow and never the old assignment or production wallet page', () => {
-  const SandboxWalletFundingPage = () => assert.fail('The route only returns its component');
+test('the wallet page mounts its dedicated native production flow instead of sandbox or old pool assignment', () => {
+  const ProductionWalletFundingPage = () => assert.fail('The route only returns its component');
   const page = route('../app/dashboard/wallet-administrative/page.jsx', {
-    '../_components/executive-pages/SandboxWalletFundingPage': { default: SandboxWalletFundingPage },
+    '../_components/executive-pages/ProductionWalletFundingPage': { default: ProductionWalletFundingPage },
   });
   const element = page.default();
-  assert.equal(element.type, SandboxWalletFundingPage);
+  assert.equal(page.dynamic, 'force-dynamic');
+  assert.equal(element.type, ProductionWalletFundingPage);
   assert.deepEqual(element.props, {});
 });

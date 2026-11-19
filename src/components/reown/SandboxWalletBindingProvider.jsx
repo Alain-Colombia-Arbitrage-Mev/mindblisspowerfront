@@ -10,20 +10,22 @@ import { subscribeMemberLogout } from '@/lib/member-logout-sync.mjs';
 import { subscribeMemberSessionReplacement } from '@/lib/member-session-sync.mjs';
 
 /** @type {{loading: boolean, configured: boolean, status: string, address: string, linkedAddress: string, verified: boolean,
- * expiresAt: string, error: string, busy: boolean, mismatch: boolean, canFund: () => boolean,
+ * expiresAt: string, error: string, busy: boolean, mismatch: boolean, canFund: () => boolean, canReceive: () => boolean,
  * refresh: () => Promise<void>, activate: () => Promise<void>, retire: () => void, invalidateActivation: () => void}} */
 const empty = Object.freeze({ loading: false, configured: false, status: 'unlinked', address: '', linkedAddress: '', verified: false,
-  expiresAt: '', error: '', busy: false, mismatch: false, canFund: () => false, refresh: async () => {}, activate: async () => {}, retire: () => {}, invalidateActivation: () => {} });
+  expiresAt: '', error: '', busy: false, mismatch: false, canFund: () => false, canReceive: () => false,
+  refresh: async () => {}, activate: async () => {}, retire: () => {}, invalidateActivation: () => {} });
 export const SandboxWalletBindingContext = createContext(empty);
 export function useSandboxWalletBinding() { return useContext(SandboxWalletBindingContext); }
 const sameAddress = (a, b) => Boolean(a && b && a.toLowerCase() === b.toLowerCase());
 export function sandboxWalletBindingError(error) {
   const code = error?.message;
-  if (['unauthenticated', 'sandbox_wallet_forbidden', 'wallet_reown_session_changed'].includes(code)) return 'sessionChanged';
+  if ([401, 403].includes(error?.status) || ['unauthenticated', 'sandbox_wallet_forbidden', 'wallet_reown_session_changed'].includes(code)) return 'sessionChanged';
   if (code === 'sandbox_wallet_unconfigured') return 'unconfigured';
   if (code === 'sandbox_wallet_address_in_use') return 'addressUsed';
   if (code === 'sandbox_wallet_already_linked') return 'mismatch';
   if (code === 'sandbox_wallet_invalid_challenge' || code === 'sandbox_wallet_verification_required') return 'expired';
+  if (error?.status === 409) return 'sessionChanged';
   if (code === 'sandbox_wallet_rate_limited') return 'rateLimited';
   return 'unavailable';
 }
@@ -38,6 +40,7 @@ export function OwnedSandboxWalletBinding({ owner, ownerSubject, children }) {
   const reown = useWalletReown(), mounted = useRef(false), epoch = useRef(0), request = useRef(null), locked = useRef(false);
   const [data, setData] = useState(null), [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [error, setError] = useState('');
   const [retired, setRetired] = useState(false);
+  const receiveReady = useRef(false);
   const live = useRef(null);
   live.current = { owner, ownerSubject, reown, data, retired };
   const current = useCallback((generation, address = '', provider = null) => mounted.current && !locked.current && epoch.current === generation
@@ -49,25 +52,48 @@ export function OwnedSandboxWalletBinding({ owner, ownerSubject, children }) {
       && binding.status === 'linked' && binding.verified && Date.parse(binding.expiresAt) > Date.now()
       && wallet?.isConnected && wallet.chainId === 137 && wallet.provider && sameAddress(wallet.address, binding.address));
   }, [owner]);
+  // Receiving into a previously verified, immutable backend binding does not
+  // require an unlocked signing provider. This is UI readiness only: every new
+  // funding endpoint still proves the native owner and rereads its destination.
+  const canReceive = useCallback(() => {
+    const state = live.current, wallet = state?.reown, binding = state?.data;
+    return Boolean(mounted.current && !locked.current && !request.current && receiveReady.current && state?.owner === owner
+      && !state.retired && binding?.configured && binding.status === 'linked' && binding.address
+      && (!wallet?.isConnected || sameAddress(wallet.address, binding.address)));
+  }, [owner]);
   const retire = useCallback(() => {
-    locked.current = true; epoch.current++; request.current?.controller.abort(); request.current = null;
+    locked.current = true; receiveReady.current = false; epoch.current++; request.current?.controller.abort(); request.current = null;
     if (mounted.current) { setData(null); setLoading(false); setBusy(false); setRetired(true); setError('sessionChanged'); }
   }, []);
   const fail = useCallback(failure => { const reason = sandboxWalletBindingError(failure); if (reason === 'sessionChanged') retire(); else setError(reason); }, [retire]);
   const refresh = useCallback(async () => {
     if (!mounted.current || locked.current || request.current) return;
     const controller = new AbortController(), generation = ++epoch.current, operation = { controller };
-    request.current = operation; setLoading(true); setError('');
+    request.current = operation; receiveReady.current = false; setLoading(true); setError('');
     try { const next = await readSandboxWalletStatus({ signal: controller.signal, ownerSubject });
-      if (current(generation) && !controller.signal.aborted) setData(next);
-    } catch (failure) { if (current(generation) && !controller.signal.aborted) { setData(null); fail(failure); } }
+      if (current(generation) && !controller.signal.aborted) { receiveReady.current = true; setData(next); }
+    } catch (failure) { if (current(generation) && !controller.signal.aborted) {
+      // Preserve only the same owner's canonical address for display. An outage
+      // cannot preserve an active signing grant or authorize another recarga.
+      setData(previous => previous?.status === 'linked' ? { ...previous, verified: false, expiresAt: undefined } : null);
+      fail(failure);
+    } }
     finally { if (request.current === operation) { request.current = null; if (mounted.current) setLoading(false); } }
   }, [ownerSubject, current, fail]);
   useEffect(() => {
     mounted.current = true; void refresh();
     const stopLogout = subscribeMemberLogout(retire), stopReplacement = subscribeMemberSessionReplacement(retire);
-    return () => { mounted.current = false; epoch.current++; request.current?.controller.abort(); request.current = null; stopLogout(); stopReplacement(); };
+    return () => { mounted.current = false; receiveReady.current = false; epoch.current++; request.current?.controller.abort(); request.current = null; stopLogout(); stopReplacement(); };
   }, [refresh, retire]);
+  useEffect(() => {
+    if (!data?.verified || !data.expiresAt) return undefined;
+    const remaining = Date.parse(data.expiresAt) - Date.now();
+    const expire = () => { if (mounted.current) setData(previous => previous?.expiresAt === data.expiresAt
+      ? { ...previous, verified: false, expiresAt: undefined } : previous); };
+    if (remaining <= 0) { expire(); return undefined; }
+    const timer = setTimeout(expire, Math.min(remaining, 2147483647));
+    return () => clearTimeout(timer);
+  }, [data?.verified, data?.expiresAt]);
   useEffect(() => {
     const operation = request.current;
     if (operation?.address && (!sameAddress(operation.address, reown.address) || operation.provider !== reown.provider || !reown.isConnected)) {
@@ -82,12 +108,16 @@ export function OwnedSandboxWalletBinding({ owner, ownerSubject, children }) {
     const address = wallet.address, provider = wallet.provider, controller = new AbortController(), generation = ++epoch.current;
     const operation = { controller, address, provider }; request.current = operation; setBusy(true); setError('');
     try {
-      const before = await readAdministrativeProvider(provider, { signal: controller.signal });
+      let before = await readAdministrativeProvider(provider, { signal: controller.signal });
       if (!current(generation, address, provider) || controller.signal.aborted) return;
       if (before.chainId !== '0x89') {
         await switchAdministrativeProviderNetwork(provider, { signal: controller.signal });
-        if (current(generation, address, provider) && !controller.signal.aborted) setError('networkUpdated');
-        return;
+        if (!current(generation, address, provider) || controller.signal.aborted) return;
+        // The user already requested activation. Confirm the selected account
+        // and network after their explicit switch before requesting ownership;
+        // a resolved switch call alone never proves that the wallet changed.
+        before = await readAdministrativeProvider(provider, { signal: controller.signal });
+        if (!current(generation, address, provider) || controller.signal.aborted) return;
       }
       if (!administrativeProviderMatches(before, address)) throw Error('wallet_reown_session_changed');
       const challenge = await requestSandboxWalletChallenge(address, { signal: controller.signal, ownerSubject });
@@ -95,7 +125,7 @@ export function OwnedSandboxWalletBinding({ owner, ownerSubject, children }) {
       const signature = await signAdministrativeOwnership(provider, challenge.message, address, { signal: controller.signal });
       if (!current(generation, address, provider) || controller.signal.aborted) return;
       const next = await verifySandboxWallet({ challengeId: challenge.challengeId, signature }, address, { signal: controller.signal, ownerSubject });
-      if (current(generation, address, provider) && !controller.signal.aborted) setData(next);
+      if (current(generation, address, provider) && !controller.signal.aborted) { receiveReady.current = true; setData(next); }
     } catch (failure) { if (current(generation, address, provider) && !controller.signal.aborted) fail(failure); }
     finally { if (request.current === operation) { request.current = null; if (mounted.current) setBusy(false); } }
   }, [ownerSubject, current, fail]);
@@ -105,7 +135,7 @@ export function OwnedSandboxWalletBinding({ owner, ownerSubject, children }) {
   const invalidateActivation = useCallback(() => { setData(previous => previous ? { ...previous, verified: false, expiresAt: undefined } : previous); }, []);
   const value = useMemo(() => ({ loading, configured: data?.configured === true, status: retired ? 'retired' : data?.status || 'unlinked',
     address: retired ? '' : data?.address || (reown.isConnected ? reown.address : ''), linkedAddress: retired ? '' : data?.address || '',
-    verified, expiresAt: data?.expiresAt || '', error, busy, mismatch, canFund, refresh, activate, retire, invalidateActivation }),
-  [loading, data, retired, reown.isConnected, reown.address, verified, error, busy, mismatch, canFund, refresh, activate, retire, invalidateActivation]);
+    verified, expiresAt: data?.expiresAt || '', error, busy, mismatch, canFund, canReceive, refresh, activate, retire, invalidateActivation }),
+  [loading, data, retired, reown.isConnected, reown.address, verified, error, busy, mismatch, canFund, canReceive, refresh, activate, retire, invalidateActivation]);
   return <SandboxWalletBindingContext.Provider value={value}>{children}</SandboxWalletBindingContext.Provider>;
 }

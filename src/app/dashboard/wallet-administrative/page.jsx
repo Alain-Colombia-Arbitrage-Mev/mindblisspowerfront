@@ -1,7 +1,7 @@
-import SandboxWalletFundingPage from "../_components/executive-pages/SandboxWalletFundingPage";
+import ProductionWalletFundingPage from "../_components/executive-pages/ProductionWalletFundingPage";
 
 export const dynamic = "force-dynamic";
 
 export default function AdministrativeWalletPage() {
-  return <SandboxWalletFundingPage />;
+  return <ProductionWalletFundingPage />;
 }
