@@ -7,6 +7,7 @@
 .fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 .field { display: flex; flex-direction: column; min-width: 0; gap: 8px; }
 .field label { font-weight: 650; font-size: 13px; color: var(--vp-text); }
+.fixedValue { display: flex; align-items: center; min-height: 48px; padding: 10px 12px; border-radius: 10px; background: var(--vp-field); color: var(--vp-text); font-size: 15px; overflow-wrap: anywhere; }
 .label { display: flex; align-items: center; gap: 6px; min-height: 24px; }
 .info { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 44px; height: 44px; border: 0; border-radius: 50%; background: var(--vp-accent-muted); color: var(--vp-link); cursor: pointer; }
 .residence { max-width: min(320px, calc(100vw - 32px)); background: var(--vp-surface); color: var(--vp-text); font-size: 13px; line-height: 1.6; }
