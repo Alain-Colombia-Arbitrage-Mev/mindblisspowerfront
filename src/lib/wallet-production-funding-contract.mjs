@@ -14,8 +14,11 @@ const exact = (value, keys) => plain(value) && Object.keys(value).length === key
 const finite = value => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1e9;
 const amount = value => finite(value) && value >= 0.01 && Math.abs(value * 100 - Math.round(value * 100)) < 0.000001;
 const instant = value => typeof value === 'string' && Number.isFinite(Date.parse(value)) && /^\d{4}-\d{2}-\d{2}T/.test(value);
-const destination = value => plain(value) && sandboxWalletAddress(value.address) && value.asset === 'USDT' && value.network === 'polygon' && value.chainId === 137
-  ? { address: value.address.toLowerCase(), asset: 'USDT', network: 'polygon', chainId: 137 } : null;
+const destination = value => plain(value) && sandboxWalletAddress(value.address) && ['USDT', 'USDC'].includes(value.asset) && value.network === 'polygon' && value.chainId === 137
+  ? { address: value.address.toLowerCase(), asset: value.asset, network: 'polygon', chainId: 137 } : null;
+const assetAllowed = (asset, country, fiat, provider, method) => asset === 'USDT' || (provider === 'ONRAMPMONEY'
+  && ((country === 'US' && fiat === 'USD' && ['ACH', 'LOCAL_BANK_TRANSFER'].includes(method))
+    || (country === 'MX' && fiat === 'MXN' && method === 'SPEI')));
 
 /** Project only bounded, non-identifying provider failure classifications. */
 export function walletProductionDiagnostic(value) {
@@ -62,8 +65,12 @@ export function walletProductionOptions(value) {
     || !Array.isArray(value.routes) || value.routes.length > 32 || !value.routes.every(route => plain(route) && providers.has(route.serviceProvider)
       && Array.isArray(route.paymentMethods) && route.paymentMethods.length <= 128 && route.paymentMethods.every(item => plain(item) && token(item.method) && item.currencyCode === value.sourceCurrencyCode
         && finite(item.minimumAmount) && finite(item.maximumAmount) && item.maximumAmount >= item.minimumAmount))) return null;
+  const asset = value.destinationCurrencyCode === 'USDC_POLYGON' ? 'USDC' : 'USDT';
+  if (value.destinationCurrencyCode !== undefined && !['USDC_POLYGON', 'USDT_POLYGON'].includes(value.destinationCurrencyCode)
+    || !value.routes.every(route => route.paymentMethods.every(item => assetAllowed(asset, value.country, value.sourceCurrencyCode, route.serviceProvider, item.method)))) return null;
   const routes = value.routes.map(route => ({ serviceProvider: route.serviceProvider, paymentMethods: route.paymentMethods.map(item => ({ method: item.method, currencyCode: item.currencyCode, minimumAmount: item.minimumAmount, maximumAmount: item.maximumAmount })) }));
   return { environment: 'production', country: value.country, sourceCurrencyCode: value.sourceCurrencyCode, routes,
+    ...(value.destinationCurrencyCode ? { destinationCurrencyCode: value.destinationCurrencyCode } : {}),
     paymentMethods: [...new Set(routes.flatMap(route => route.paymentMethods.map(item => item.method)))] };
 }
 export function walletProductionQuote(value, input, expectedAddress = '') {
@@ -73,11 +80,12 @@ export function walletProductionQuote(value, input, expectedAddress = '') {
     || (expectedAddress && dest.address !== expectedAddress.toLowerCase()) || (input && (value.country !== input.country || value.sourceCurrencyCode !== input.sourceCurrencyCode
       || value.requestedAmount !== input.amount || value.paymentMethodType !== input.paymentMethodType))
     || !value.quotes.every(item => plain(item) && providers.has(item.serviceProvider) && item.sourceAmount === value.requestedAmount && finite(item.destinationAmount) && item.destinationAmount > 0
-      && finite(item.totalFee) && finite(item.networkFee) && item.sourceCurrencyCode === value.sourceCurrencyCode && item.destinationCurrencyCode === 'USDT_POLYGON'
+      && finite(item.totalFee) && finite(item.networkFee) && item.sourceCurrencyCode === value.sourceCurrencyCode && item.destinationCurrencyCode === `${dest.asset}_POLYGON`
+      && assetAllowed(dest.asset, value.country, value.sourceCurrencyCode, item.serviceProvider, value.paymentMethodType)
       && (item.rampScore === undefined || finite(item.rampScore)))) return null;
   return { walletKind: 'personal', environment: 'production', country: value.country, sourceCurrencyCode: value.sourceCurrencyCode, requestedAmount: value.requestedAmount,
     paymentMethodType: value.paymentMethodType, destination: dest, quotes: value.quotes.map(item => ({ serviceProvider: item.serviceProvider, sourceAmount: item.sourceAmount,
-      destinationAmount: item.destinationAmount, totalFee: item.totalFee, networkFee: item.networkFee, sourceCurrencyCode: item.sourceCurrencyCode, destinationCurrencyCode: 'USDT_POLYGON', ...(item.rampScore === undefined ? {} : { rampScore: item.rampScore }) })) };
+      destinationAmount: item.destinationAmount, totalFee: item.totalFee, networkFee: item.networkFee, sourceCurrencyCode: item.sourceCurrencyCode, destinationCurrencyCode: item.destinationCurrencyCode, ...(item.rampScore === undefined ? {} : { rampScore: item.rampScore }) })) };
 }
 export function walletProductionCheckoutUrl(value, serviceProvider = '') {
   try {
@@ -95,16 +103,17 @@ export function walletProductionCheckoutUrl(value, serviceProvider = '') {
 function snapshot(value) {
   const dest = destination(value?.destination);
   if (!plain(value) || !FUNDING_UUID.test(value.checkoutReference || '') || value.provider !== 'meld' || !providers.has(value.serviceProvider) || !code(value.country)
-    || !currency(value.sourceCurrencyCode) || !amount(value.requestedAmount) || !token(value.paymentMethodType) || !dest) return null;
+    || !currency(value.sourceCurrencyCode) || !amount(value.requestedAmount) || !token(value.paymentMethodType) || !dest
+    || !assetAllowed(dest.asset, value.country, value.sourceCurrencyCode, value.serviceProvider, value.paymentMethodType)) return null;
   return { checkoutReference: value.checkoutReference.toLowerCase(), provider: 'meld', serviceProvider: value.serviceProvider, country: value.country,
     sourceCurrencyCode: value.sourceCurrencyCode, requestedAmount: value.requestedAmount, paymentMethodType: value.paymentMethodType, destination: dest };
 }
 export function walletProductionAcknowledgement(value, input) {
   const safe = snapshot(value), url = walletProductionCheckoutUrl(value?.checkoutUrl, value?.serviceProvider);
-  if (!safe || value.walletKind !== 'personal' || value.environment !== 'production' || value.status !== 'session_created' || value.destinationCurrencyCode !== 'USDT_POLYGON'
+  if (!safe || value.walletKind !== 'personal' || value.environment !== 'production' || value.status !== 'session_created' || value.destinationCurrencyCode !== `${safe.destination.asset}_POLYGON`
     || !url || !instant(value.createdAt) || (input && (safe.checkoutReference !== input.requestId || safe.country !== input.country || safe.requestedAmount !== input.amount
       || safe.sourceCurrencyCode !== input.sourceCurrencyCode || safe.paymentMethodType !== input.paymentMethodType || safe.serviceProvider !== input.serviceProvider))) return null;
-  return { ...safe, walletKind: 'personal', environment: 'production', status: 'session_created', destinationCurrencyCode: 'USDT_POLYGON', checkoutUrl: url, createdAt: value.createdAt };
+  return { ...safe, walletKind: 'personal', environment: 'production', status: 'session_created', destinationCurrencyCode: value.destinationCurrencyCode, checkoutUrl: url, createdAt: value.createdAt };
 }
 const states = new Set(['initiated', 'session_created', 'unavailable']);
 const cryptoAmount = value => typeof value === 'string' && /^\d{1,12}(?:\.\d{1,6})?$/.test(value);

@@ -46,7 +46,7 @@ function fixture(t, config = {}) {
     '@/components/wallet/useProductionFundingQuote': { default: options => {
       calls.quoteInputs.push(options);
       const key = options.valid && options.ready ? JSON.stringify([options.ownerSubject, options.address, options.input]) : '';
-      if (key && !cache.has(key)) cache.set(key, { ...options.input, requestedAmount: options.input.amount, destination: { address }, receivedAt: Date.now(),
+      if (key && !cache.has(key)) cache.set(key, { ...options.input, requestedAmount: options.input.amount, destination: { address, asset: 'USDT' }, receivedAt: Date.now(),
         quotes: config.quotes ? config.quotes(options.input) : [{ serviceProvider: 'TRANSAK', destinationAmount: 48, totalFee: 2 }, { serviceProvider: 'BANXA', destinationAmount: 47, totalFee: 3 }] });
       return { quote: key && !quoteExpired ? cache.get(key) : null, loading: false, error: quoteExpired ? 'quoteExpired' : '',
         invalidate() { cache.clear(); quoteExpired = false; }, retry() { calls.retries++; quoteExpired = false; }, expire() { cache.clear(); quoteExpired = true; dirty = true; } };
@@ -119,7 +119,7 @@ test('provider choice and an explicit Recargar fondos gesture are required; acti
   assert.equal(h.calls.session.length, 1); assert.equal(h.calls.popups.length, 1); assert.equal(h.calls.popups[0].opener, null);
   assert.equal(h.calls.session[0][1], address); assert.equal(h.calls.session[0][0].amount, 50); assert.equal(h.calls.session[0][0].serviceProvider, 'TRANSAK');
   assert.equal(Object.hasOwn(h.calls.session[0][0], 'address'), false);
-  h.waiting.resolve({ checkoutUrl: 'https://global.transak.com/?apiKey=fixture&sessionId=fixture' }); await h.flush();
+  h.waiting.resolve({ checkoutUrl: 'https://global.transak.com/?apiKey=fixture&sessionId=fixture', destination: { asset: 'USDT' } }); await h.flush();
   assert.equal(h.calls.opened.length, 1);
 });
 
@@ -163,7 +163,7 @@ test('an authoritative removed country clears its complete selection and aborts 
   retry(); await h.flush();
   for (const id of ['production-country', 'production-currency', 'production-method', 'production-amount']) assert.equal(field(h.tree, id).props.value, '');
   assert.equal(h.calls.session[0][2].signal.aborted, true); assert.equal(h.calls.popups[0].closed, true);
-  h.waiting.resolve({ checkoutUrl: 'https://global.transak.com/?apiKey=fixture&sessionId=fixture' }); await h.flush();
+  h.waiting.resolve({ checkoutUrl: 'https://global.transak.com/?apiKey=fixture&sessionId=fixture', destination: { asset: 'USDT' } }); await h.flush();
   assert.equal(h.calls.opened.length, 0); assert.equal(h.calls.session.length, 1); assert.equal(submit(h.tree).props.disabled, true);
 });
 
