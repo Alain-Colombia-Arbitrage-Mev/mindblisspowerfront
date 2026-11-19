@@ -63,3 +63,51 @@ test('an account changed while the signature popup was open cannot produce an ac
   h.provider.request = async input => { h.calls.push(input); return input.method === 'eth_chainId' ? '0x89' : input.method === 'personal_sign' ? sign : [++accountReads === 1 ? assigned : other]; };
   await assert.rejects(signAdministrativeOwnership(h.provider, message, assigned), /administrative_signer_mismatch/);
 });
+
+test('AppKit W3mFrameProvider numeric and decimal chain responses normalize to the same Polygon identity as injected hex', async () => {
+  for (const chain of [137, '137', '0x89', '0X89', '0x00089']) {
+    const h = wallet({ chain });
+    assert.deepEqual(await readAdministrativeProvider(h.provider), { address: assigned, chainId: '0x89' });
+    assert.equal(administrativeProviderMatches(await switchAdministrativeProviderNetwork(h.provider), assigned), true);
+    assert.equal(await signAdministrativeOwnership(h.provider, message, assigned), sign);
+    assert.equal(h.calls.filter(call => call.method === 'personal_sign').length, 1);
+    assert.deepEqual(h.calls.find(call => call.method === 'wallet_switchEthereumChain').params, [{ chainId: '0x89' }]);
+    assert.ok(h.calls.every(call => ['eth_accounts', 'eth_chainId', 'wallet_switchEthereumChain', 'personal_sign'].includes(call.method)));
+  }
+});
+
+test('chain normalization preserves exact integer bounds and does not silently turn another network into Polygon', async () => {
+  for (const [chain, expected] of [[1, '0x1'], ['1', '0x1'], [Number.MAX_SAFE_INTEGER, '0x1fffffffffffff'],
+    ['18446744073709551615', '0xffffffffffffffff'], ['0xffffffffffffffff', '0xffffffffffffffff']]) {
+    const h = wallet({ chain }); assert.equal((await readAdministrativeProvider(h.provider)).chainId, expected);
+    assert.equal(administrativeProviderMatches(await readAdministrativeProvider(h.provider), assigned), false);
+    await assert.rejects(signAdministrativeOwnership(h.provider, message, assigned), /administrative_signer_mismatch/);
+    assert.ok(!h.calls.some(call => call.method === 'personal_sign'));
+  }
+});
+
+test('invalid, lossy, padded or nonprimitive chain values fail closed without signing or falling back to a configured network', async () => {
+  for (const chain of [undefined, null, false, true, [], {}, { chainId: 137 }, 0, -1, 1.37, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1,
+    '', '0', '0x0', '0x', '0xGG', '137.0', '1e2', ' 137', '137 ', '0137', 'eip155:137', '-1', '0x89junk',
+    '0xfffffffffffffffff', '18446744073709551616']) {
+    const h = wallet(); h.provider.request = async input => { h.calls.push(input); return input.method === 'eth_chainId' ? chain : [assigned]; };
+    await assert.rejects(readAdministrativeProvider(h.provider), /administrative_provider_unavailable/);
+    assert.ok(!h.calls.some(call => call.method === 'personal_sign'));
+  }
+});
+
+test('an empty or malformed account response is rejected before chain lookup and never supplies an SDK address fallback', async () => {
+  for (const accounts of [[], null, {}, [null], [''], ['0xinvalid'], [assigned, 'malformed']]) {
+    const calls = [], provider = { request: async input => { calls.push(input.method); return input.method === 'eth_accounts' ? accounts : 137; } };
+    await assert.rejects(readAdministrativeProvider(provider), /administrative_provider_unavailable/);
+    assert.deepEqual(calls, ['eth_accounts']);
+  }
+});
+
+test('a numeric chain changed after ownership signing cannot publish an accepted proof', async () => {
+  const h = wallet(); let chainReads = 0;
+  h.provider.request = async input => { h.calls.push(input); return input.method === 'eth_chainId' ? ++chainReads === 1 ? 137 : 1
+    : input.method === 'personal_sign' ? sign : [assigned]; };
+  await assert.rejects(signAdministrativeOwnership(h.provider, message, assigned), /administrative_signer_mismatch/);
+  assert.equal(h.calls.filter(call => call.method === 'personal_sign').length, 1);
+});

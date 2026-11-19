@@ -4,6 +4,20 @@ export const ADMINISTRATIVE_CHAIN = '0x89';
 const abort = () => { throw new DOMException('Aborted', 'AbortError'); };
 const active = signal => { if (signal?.aborted) abort(); };
 const providerValid = provider => provider && typeof provider.request === 'function';
+function providerChainId(value) {
+  // AppKit 1.8.24's W3mFrameProvider.request('eth_chainId') returns the numeric
+  // last-used chain, while injected wallets normally return an EIP-1193 hex
+  // string. Normalize only those primitive integer forms, never coerce objects,
+  // rounded numbers, whitespace, exponent notation or a CAIP identifier.
+  let parsed;
+  if (typeof value === 'number') {
+    if (!Number.isSafeInteger(value) || value <= 0) return '';
+    parsed = BigInt(value);
+  } else if (typeof value === 'string' && (/^0x[0-9a-f]{1,16}$/i.test(value) || /^[1-9][0-9]{0,19}$/.test(value))) {
+    parsed = BigInt(value);
+  } else return '';
+  return parsed > 0n && parsed <= 0xffffffffffffffffn ? `0x${parsed.toString(16)}` : '';
+}
 // Reject control characters in untrusted extension display names.
 // eslint-disable-next-line no-control-regex
 const displayNameControls = /[\u0000-\u001f\u007f]/;
@@ -42,10 +56,10 @@ async function rpc(provider, method, params, signal) {
 /** Both account access and read-only checks are invoked only by explicit UI actions. */
 export async function readAdministrativeProvider(provider, { requestAccess = false, signal = undefined } = {}) {
   const accounts = await rpc(provider, requestAccess ? 'eth_requestAccounts' : 'eth_accounts', undefined, signal);
-  if (!Array.isArray(accounts) || accounts.length > 100 || accounts.some(value => typeof value !== 'string' || !evmAddress.test(value))) throw Error('administrative_provider_unavailable');
-  const chainId = await rpc(provider, 'eth_chainId', undefined, signal);
-  if (typeof chainId !== 'string' || !/^0x[0-9a-f]{1,16}$/i.test(chainId)) throw Error('administrative_provider_unavailable');
-  return { address: accounts[0] || '', chainId: `0x${BigInt(chainId).toString(16)}` };
+  if (!Array.isArray(accounts) || !accounts.length || accounts.length > 100 || accounts.some(value => typeof value !== 'string' || !evmAddress.test(value))) throw Error('administrative_provider_unavailable');
+  const chainId = providerChainId(await rpc(provider, 'eth_chainId', undefined, signal));
+  if (!chainId) throw Error('administrative_provider_unavailable');
+  return { address: accounts[0], chainId };
 }
 
 export async function switchAdministrativeProviderNetwork(provider, { signal = undefined } = {}) {

@@ -107,10 +107,12 @@ export function OwnedSandboxWalletBinding({ owner, ownerSubject, children }) {
     if (binding.status === 'linked' && !sameAddress(binding.address, wallet.address)) { setError('mismatch'); return; }
     const address = wallet.address, provider = wallet.provider, controller = new AbortController(), generation = ++epoch.current;
     const operation = { controller, address, provider }; request.current = operation; setBusy(true); setError('');
+    let stage = 'read_provider';
     try {
       let before = await readAdministrativeProvider(provider, { signal: controller.signal });
       if (!current(generation, address, provider) || controller.signal.aborted) return;
       if (before.chainId !== '0x89') {
+        stage = 'switch_network';
         await switchAdministrativeProviderNetwork(provider, { signal: controller.signal });
         if (!current(generation, address, provider) || controller.signal.aborted) return;
         // The user already requested activation. Confirm the selected account
@@ -120,13 +122,23 @@ export function OwnedSandboxWalletBinding({ owner, ownerSubject, children }) {
         if (!current(generation, address, provider) || controller.signal.aborted) return;
       }
       if (!administrativeProviderMatches(before, address)) throw Error('wallet_reown_session_changed');
+      stage = 'challenge';
       const challenge = await requestSandboxWalletChallenge(address, { signal: controller.signal, ownerSubject });
       if (!current(generation, address, provider) || controller.signal.aborted) return;
+      stage = 'sign_ownership';
       const signature = await signAdministrativeOwnership(provider, challenge.message, address, { signal: controller.signal });
       if (!current(generation, address, provider) || controller.signal.aborted) return;
+      stage = 'verify_ownership';
       const next = await verifySandboxWallet({ challengeId: challenge.challengeId, signature }, address, { signal: controller.signal, ownerSubject });
       if (current(generation, address, provider) && !controller.signal.aborted) { receiveReady.current = true; setData(next); }
-    } catch (failure) { if (current(generation, address, provider) && !controller.signal.aborted) fail(failure); }
+    } catch (failure) { if (current(generation, address, provider) && !controller.signal.aborted) {
+      // Diagnostic codes only: never log addresses, messages, signatures,
+      // cookies, provider payloads or authentication/checkout tokens.
+      const code = typeof failure?.message === 'string' && /^(?:sandbox_wallet|wallet_reown|administrative)_[a-z_]{1,60}$/.test(failure.message)
+        ? failure.message : 'wallet_provider_request_failed';
+      console.warn('wallet_activation_failed', { stage, code, status: Number.isInteger(failure?.status) ? failure.status : null });
+      fail(failure);
+    } }
     finally { if (request.current === operation) { request.current = null; if (mounted.current) setBusy(false); } }
   }, [ownerSubject, current, fail]);
 
