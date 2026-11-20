@@ -44,7 +44,8 @@ function loadPages({ summary = { loading: true, data: null, error: '' }, health 
     '@/hooks/useMemberSummary': { useMemberSummary: () => ({ state: summary, reload: () => {} }) },
     '@/lib/payment-display.mjs': paymentDisplay,
     '@/lib/personal-company-payment-values.mjs': paymentValues,
-    '@/hooks/usePersonalWalletBalance': { usePersonalWalletBalance: (_address, network = 'ethereum') => walletBalances?.[network] || walletBalance },
+    '@/hooks/usePersonalWalletBalance': { usePersonalWalletBalance: (_address, network = 'ethereum', _enabled, asset = 'USDT') =>
+      walletBalances?.[asset === 'USDC' ? `${network}:USDC` : network] || walletBalance },
     '@/lib/browser-request-deadline.mjs': deadline,
     '@/lib/member-read.mjs': { isRecoverySummary: data => data?.recovery_mode === true },
     '@/lib/personal-wallet.mjs': {
@@ -228,21 +229,23 @@ test('finance renders only the independent Ethereum USDT read and never falls ba
   }
 });
 
-test('finance shows the active Polygon balance without adding or displaying historical Ethereum funds', () => {
+test('finance shows separate Polygon USDT and USDC balances and omits historical Ethereum funds', () => {
   const walletAddress = `0x${'1'.repeat(40)}`;
   const base = { loading: false, error: '', walletAddress, nativeBalanceAtomic: '0', refresh() {} };
   const html = render(loadPages({ summary: { loading: false, error: '', data: { wallet_balance_usd: '987654.32' } },
-    walletBalances: { ethereum: { ...base, balanceAtomic: '10000000' }, polygon: { ...base, balanceAtomic: '28433366' } } }).FinanceDashboardPage);
+    walletBalances: { ethereum: { ...base, balanceAtomic: '10000000' }, polygon: { ...base, balanceAtomic: '28433366' },
+      'polygon:USDC': { ...base, balanceAtomic: '46900000' } } }).FinanceDashboardPage);
   assert.doesNotMatch(html, /data-wallet-network="ethereum"/);
   assert.match(html, /data-wallet-network="polygon"[^]*?28\.433366 <span>USDT/);
   assert.equal((html.match(/data-wallet-network="ethereum"/g) || []).length, 0);
-  assert.equal((html.match(/data-wallet-network="polygon"/g) || []).length, 1);
+  assert.match(html, /data-wallet-network="polygon"[^]*?46\.9 <span>USDC/);
+  assert.equal((html.match(/data-wallet-network="polygon"/g) || []).length, 2);
   assert.equal((html.match(/class="executive-card-label"/g) || []).length, 3);
   assert.match(html, /class="executive-grid three mb-6"/);
   for (const label of ['walletPage.activeMemberships', 'walletPage.registeredPayments', 'walletPage.pendingPayments']) {
     assert.match(html, new RegExp(translateMessage('es', label)));
   }
-  assert.doesNotMatch(html, /38\.433366|987654|987,654/);
+  assert.doesNotMatch(html, /38\.433366|75\.333366|987654|987,654/);
 });
 
 test('advisor failure and member support loading still render their existing states after extraction', () => {
