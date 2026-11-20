@@ -18,7 +18,11 @@ new Function('require', 'module', 'exports', compiled)(id => {
   if (id === 'react/jsx-runtime') return require(id);
   if (id === 'lucide-react') return { RefreshCw: () => null };
   if (id === '@/i18n/LanguageProvider') return { useI18n: () => ({ locale, t: key => translateMessage(locale, key) }) };
-  if (id === '@/hooks/usePersonalWalletBalance') return { usePersonalWalletBalance: (value, network) => { expected = value; selectedNetwork = network; return stateByNetwork?.[network] || state; } };
+  if (id === '@/hooks/usePersonalWalletBalance') return { usePersonalWalletBalance: (value, network, enabled, asset) => {
+    expected = value;
+    selectedNetwork = network;
+    return stateByNetwork?.[asset === 'USDC' ? `${network}:USDC` : network] || state;
+  } };
   if (id === '@/lib/personal-company-payment-values.mjs') return values;
   if (id.endsWith('.module.css')) return { default: new Proxy({}, { get: (_target, name) => name }) };
   assert.fail(`Unexpected balance dependency ${id}`);
@@ -74,7 +78,7 @@ test('the refresh control is read-only, explicit and disabled while loading; an 
   assert.equal(refreshed, 0);
   const button = findAll(tree, node => node?.type === 'button')[0];
   assert.equal(button.props.type, 'button');
-  assert.equal(button.props['aria-label'], translateMessage('es', 'funding.personalBalanceRefresh') + ' · ' + translateMessage('es', 'funding.personalBalanceNetwork'));
+  assert.equal(button.props['aria-label'], translateMessage('es', 'funding.personalBalanceRefresh') + ' · ' + translateMessage('es', 'funding.personalBalanceNetwork') + ' · USDT');
   button.props.onClick(); assert.equal(refreshed, 1);
   state = fixture({ loading: true });
   assert.equal(findAll(Balance({}), node => node?.type === 'button')[0].props.disabled, true);
@@ -117,6 +121,26 @@ test('the current wallet shows only Polygon while retaining the Ethereum balance
   assert.ok(!html.includes('17 USDT'));
   assert.ok(!html.includes('10 ETH'));
   assert.ok(html.includes(translateMessage('es', 'funding.personalBalanceTransferNetwork')));
+  stateByNetwork = null;
+});
+
+test('the Polygon summary displays USDC separately and leaves additional deposit networks to the wallet page', () => {
+  stateByNetwork = {
+    ethereum: fixture(), polygon: fixture({ balanceAtomic: '0' }),
+    'polygon:USDC': fixture({ balanceAtomic: '46900000' }), 'arbitrum:USDC': fixture(), 'ethereum:USDC': fixture(),
+  };
+  const summary = Balances({ expectedAddress: address, compact: true, showPolygonUsdc: true });
+  const cards = findAll(summary, node => node?.type === Balance);
+  assert.deepEqual(cards.map(card => [card.props.network, card.props.asset, card.props.expectedAddress]), [
+    ['polygon', undefined, address], ['polygon', 'USDC', address],
+  ]);
+  const html = renderToStaticMarkup(summary);
+  assert.match(html, /0 <span>USDT/);
+  assert.match(html, /46\.9 <span>USDC/);
+  assert.doesNotMatch(html, /data-wallet-network="(?:ethereum|arbitrum)"/);
+  assert.match(html, /Actualizar saldo de la billetera · Polygon · ERC-20 · USDC/);
+  const funding = Balances({ expectedAddress: address, showFundingNetworks: true });
+  assert.deepEqual(findAll(funding, node => node?.type === Balance).map(card => card.props.network), ['polygon', 'polygon', 'arbitrum', 'ethereum']);
   stateByNetwork = null;
 });
 

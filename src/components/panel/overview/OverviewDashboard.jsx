@@ -35,14 +35,22 @@ const QUICK_ACTIONS = [
 const RECHARGE_SEEN_KEY = "mindbliss:first-recharge-popup:v1";
 const ReownRechargeDialog = dynamic(() => import("./ReownRechargeDialog"), { ssr: false });
 
+function confirmedAmount(balance) {
+  if (balance.loading || balance.error || typeof balance.walletAddress !== "string"
+    || !/^0x[0-9a-f]{40}$/i.test(balance.walletAddress)) return null;
+  return personalCompanyPaymentAtomic(balance.balanceAtomic, true);
+}
+
 export default function OverviewDashboard() {
   const { t } = useI18n();
   const historicalRights = useHistoricalPackageRights(useMemberSession());
-  const polygonWallet = usePersonalWalletBalance('', 'polygon');
-  const polygonBalance = personalCompanyPaymentAtomic(polygonWallet.balanceAtomic, true);
-  const polygonReady = !polygonWallet.loading && !polygonWallet.error && /^0x[0-9a-f]{40}$/i.test(polygonWallet.walletAddress || "") && polygonBalance !== null;
-  const emptyWallet = polygonReady && polygonBalance === 0n;
-  const fundedWallet = polygonReady && polygonBalance > 0n;
+  const polygonUsdt = usePersonalWalletBalance("", "polygon");
+  const polygonUsdc = usePersonalWalletBalance("", "polygon", true, "USDC");
+  const usdtAmount = confirmedAmount(polygonUsdt);
+  const usdcAmount = confirmedAmount(polygonUsdc);
+  const emptyWallet = usdtAmount === 0n && usdcAmount === 0n
+    && polygonUsdt.walletAddress.toLowerCase() === polygonUsdc.walletAddress.toLowerCase();
+  const fundedWallet = (usdtAmount ?? 0n) > 0n || (usdcAmount ?? 0n) > 0n;
   const [summary, setSummary] = useState(null);
   const [network, setNetwork] = useState(null);
   const [summaryStatus, setSummaryStatus] = useState("loading");
@@ -130,8 +138,8 @@ export default function OverviewDashboard() {
       <div className="mb-overview-primary">
         <div className="mb-overview-main-column">
           <section className="mb-wallet-card">
-            <div className="mb-wallet-heading"><h2>{t("overview.wallet")}</h2><span>USDT</span></div>
-            <PersonalWalletBalances showGasNotice={false} />
+            <div className="mb-wallet-heading"><h2>{t("overview.wallet")}</h2><span>Polygon</span></div>
+            <PersonalWalletBalances showGasNotice={false} showPolygonUsdc />
             <div className="mb-wallet-actions">
               <button className="executive-button primary" type="button" onClick={() => openRecharge("methods")}><Plus size={14} />{t("overview.topUp")}</button>
               <button className="executive-button" type="button" onClick={() => openRecharge("welcome")}>{t("overview.howItWorks")}<ArrowUpRight size={14} /></button>

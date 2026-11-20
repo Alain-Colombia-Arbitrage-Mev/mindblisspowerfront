@@ -35,7 +35,7 @@ export default function SidebarWalletCard({ onNavigate }) {
         </span>
         <Wallet size={18} aria-hidden="true" />
       </div>
-      <PersonalWalletBalances expectedAddress={status === "linked" ? address : ""} compact showGasNotice={false} />
+      <PersonalWalletBalances expectedAddress={status === "linked" ? address : ""} compact showGasNotice={false} showPolygonUsdc />
       <div className="vp-sidebar-wallet-address" style={{ flexWrap: "wrap" }}>
         <code title={address || undefined}>{address ? compactAddress(address) : t(status === "loading" ? "walletPage.checking" : status === "error" ? "walletPage.checkFailed" : "funding.noPersonalAddress")}</code>
         {address ? <WalletAddressCopyButton address={address} size={12} /> : null}

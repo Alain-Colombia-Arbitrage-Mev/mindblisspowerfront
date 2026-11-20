@@ -65,6 +65,8 @@ test('all four locales show distinct top-up and pay links beside one bound perso
     const balance = findAll(tree, node => node.type === Balance)[0];
     assert.equal(balance.props.expectedAddress, address);
     assert.equal(balance.props.compact, true);
+    assert.equal(balance.props.showPolygonUsdc, true);
+    assert.equal(balance.props.showFundingNetworks, undefined);
     const actions = findAll(tree, node => node.type === Link);
     assert.deepEqual(actions.map(node => node.props.href), ['/dashboard/wallet-personal', '/dashboard/wallet-personal/pay']);
     assert.equal(text(actions[0]), translateMessage(locale, 'nav.addFunds'));

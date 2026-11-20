@@ -122,6 +122,7 @@ test('a confirmed empty wallet opens the welcome popup once per tab and keeps ma
   t.after(() => { if (originalStorage === undefined) delete globalThis.sessionStorage; else globalThis.sessionStorage = originalStorage; });
   const Balance = () => React.createElement('output', { 'data-personal-balance': true }, '0 USDT');
   const Popup = props => React.createElement('recharge-popup', props);
+  let usdcBalance = '0';
   const harness = registrationViewHarness('../../components/panel/overview/OverviewDashboard.jsx', {
       ...historicalMocks,
     'next/link': { default: link }, 'next/dynamic': { default: () => Popup }, 'lucide-react': icons,
@@ -133,7 +134,9 @@ test('a confirmed empty wallet opens the welcome popup once per tab and keeps ma
         onPart('network', { data: { positioned: false, tree: [] }, error: null });
       },
     },
-    '@/hooks/usePersonalWalletBalance': { usePersonalWalletBalance: () => ({ loading: false, error: '', walletAddress: `0x${'1'.repeat(40)}`, balanceAtomic: '0' }) },
+    '@/hooks/usePersonalWalletBalance': { usePersonalWalletBalance: (_wallet, _network, _enabled, asset) => ({
+      loading: false, error: '', walletAddress: `0x${'1'.repeat(40)}`, balanceAtomic: asset === 'USDC' ? usdcBalance : '0',
+    }) },
     '@/lib/personal-company-payment-values.mjs': paymentValues,
     '@/components/wallet/PersonalWalletBalances': { default: Balance },
     './OverviewDiscoveryCard': { default: () => null }, './PositionSnapshotCard': { default: () => null },
@@ -156,6 +159,10 @@ test('a confirmed empty wallet opens the welcome popup once per tab and keeps ma
   popup = find(tree, node => node?.type === Popup);
   assert.equal(popup.props.open, true);
   assert.equal(popup.props.initialStep, 'methods');
+  assert.equal(find(tree, node => node?.type === Balance).props.showPolygonUsdc, true);
+  usdcBalance = '46900000';
+  harness.render();
+  assert.equal(find(harness.render(), node => node?.type === Popup).props.open, false);
   harness.unmount();
 });
 
@@ -192,15 +199,17 @@ test('overview never substitutes the internal USD ledger for an unavailable pers
   }
 });
 
-test('the active Polygon wallet opens no empty-wallet popup when its funds are positive or unknown', () => {
+test('the Polygon wallet opens no empty-wallet popup while either asset is funded, unknown or from a different wallet', () => {
   const address = `0x${'1'.repeat(40)}`;
   const empty = { loading: false, error: '', walletAddress: address, balanceAtomic: '0' };
-  for (const polygon of [
-    { ...empty, balanceAtomic: '28433366' },
-    { ...empty, loading: true, balanceAtomic: null },
-    { ...empty, error: 'company_payment_rpc_unavailable', balanceAtomic: null },
+  for (const [usdt, usdc] of [
+    [{ ...empty, balanceAtomic: '28433366' }, empty],
+    [empty, { ...empty, balanceAtomic: '46900000' }],
+    [empty, { ...empty, loading: true, balanceAtomic: null }],
+    [{ ...empty, error: 'company_payment_rpc_unavailable', balanceAtomic: null }, empty],
+    [empty, { ...empty, walletAddress: `0x${'2'.repeat(40)}` }],
   ]) {
-    const Popup = props => React.createElement('recharge-popup', props), calledNetworks = [];
+    const Popup = props => React.createElement('recharge-popup', props), requestedAssets = [];
     const harness = registrationViewHarness('../../components/panel/overview/OverviewDashboard.jsx', {
       ...historicalMocks,
       'next/link': { default: link }, 'next/dynamic': { default: () => Popup }, 'lucide-react': icons,
@@ -208,14 +217,18 @@ test('the active Polygon wallet opens no empty-wallet popup when its funds are p
       '@/lib/member-read.mjs': { validMemberSummary: () => true, validMemberTree: () => true,
         readMemberParts(_parts, { onPart }) { onPart('summary', { data: { wallet_balance_usd: '0', active_packages: 0 }, error: null });
           onPart('network', { data: { positioned: false, tree: [] }, error: null }); } },
-      '@/hooks/usePersonalWalletBalance': { usePersonalWalletBalance: (_address, network) => { calledNetworks.push(network); return network === 'polygon' ? polygon : empty; } },
+      '@/hooks/usePersonalWalletBalance': { usePersonalWalletBalance: (_address, network, _enabled, asset = 'USDT') => {
+        assert.equal(network, 'polygon');
+        requestedAssets.push(asset);
+        return asset === 'USDC' ? usdc : usdt;
+      } },
       '@/lib/personal-company-payment-values.mjs': paymentValues,
       '@/components/wallet/PersonalWalletBalances': { default: () => null },
       './OverviewDiscoveryCard': { default: () => null }, './PositionSnapshotCard': { default: () => null },
       '@/i18n/LanguageProvider': i18n, '@/i18n/LanguageSwitcher': { default: () => null },
     });
     harness.render(); harness.render(); const tree = harness.render();
-    assert.deepEqual([...new Set(calledNetworks)], ['polygon']);
+    assert.deepEqual([...new Set(requestedAssets)], ['USDT', 'USDC']);
     assert.equal(find(tree, node => node?.type === Popup), undefined);
     harness.unmount();
   }

@@ -19,8 +19,8 @@ function WalletDestination({ icon: Icon, title, copy, network, href }) {
   const { t } = useI18n();
   return <section className={`executive-panel ${styles.destination}`}>
     <div className={styles.destinationHeading}><span className="mb-wallet-funding-icon"><Icon size={20} aria-hidden="true" /></span>
-      <div><h2>{title}</h2><span className={styles.provider}>{network} · USDT</span></div></div>
-    <PersonalWalletBalances />
+      <div><h2>{title}</h2><span className={styles.provider}>{network}</span></div></div>
+    <PersonalWalletBalances showPolygonUsdc />
     <p>{copy}</p>
     <Link className="executive-button primary" href={href} prefetch={false}>{t("walletPage.addFundsAction")}<ArrowUpRight size={17} aria-hidden="true" /></Link>
   </section>;

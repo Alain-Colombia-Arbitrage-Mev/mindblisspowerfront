@@ -532,6 +532,7 @@ test("personal portal renders only its personal wallet and preserves native memb
  const policy=read("./personal-wallet.mjs");
  assert.match(card,/nav\.personalWallet/);assert.match(card,/\/dashboard\/wallet-personal/);
  assert.match(finance,/WalletFundingPanels/);assert.match(personal,/id="personal-wallet"/);assert.match(personal,/<PersonalFundingForm/);
+ assert.match(funding,/<PersonalWalletBalances showPolygonUsdc \/>/);
  assert.doesNotMatch(sidebar,/AdministrativeWallet|wallet-administrative/);
  assert.doesNotMatch(funding,/MELD|administrative|ReownProvider|FundingForm|useState|useEffect/);
  assert.match(retired,/notFound\(\)/);assert.doesNotMatch(retired,/AdministrativeWalletFundingPage|runtimeEnvironment/);
