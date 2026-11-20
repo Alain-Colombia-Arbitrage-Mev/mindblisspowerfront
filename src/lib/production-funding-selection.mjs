@@ -4,6 +4,11 @@ import { sandboxWalletAddress } from './sandbox-wallet-contract.mjs';
 export const PRODUCTION_QUOTE_DEBOUNCE_MS = 500;
 export const PRODUCTION_QUOTE_TTL_MS = 120000;
 
+export const MEXICO_FUNDING_METHODS = [
+  { currency: 'EUR', method: 'CREDIT_DEBIT_CARD', serviceProvider: 'ALCHEMYPAY', destinationCurrencyCode: 'USDC_ARBITRUM' },
+  { currency: 'MXN', method: 'SPEI', serviceProvider: 'ONRAMPMONEY', destinationCurrencyCode: 'USDC_POLYGON' },
+];
+
 /** Discovery returns quote-verified fiat. Keep every offer and prefer the local default. */
 export function productionFundingCurrencies(discovery) {
   const offered = Array.isArray(discovery?.currencies) ? discovery.currencies : [];
@@ -29,6 +34,13 @@ export function productionFundingValue(raw, limits, decimalPlaces = 2) {
   const value = Number(raw), precision = 10 ** Math.max(0, Math.min(2, decimalPlaces));
   return Number.isFinite(value) && value > 0 && Math.abs(value * precision - Math.round(value * precision)) < 0.000001
     && limits.ranges.some(item => value >= item.minimum && value <= item.maximum) ? value : null;
+}
+export function mexicoFundingOption(choice, options, decimalPlaces) {
+  if (options.destinationCurrencyCode !== choice.destinationCurrencyCode) return null;
+  const route = options.routes.find(item => item.serviceProvider === choice.serviceProvider);
+  if (!route) return null;
+  const routes = [{ ...route, paymentMethods: route.paymentMethods.filter(item => item.method === choice.method && item.currencyCode === choice.currency) }];
+  return productionFundingLimits(routes, choice.currency, choice.method, decimalPlaces) ? { ...choice, routes } : null;
 }
 export function productionFundingDestinationChoices(routes, currency, method) {
   return routes.find(route => route.serviceProvider === 'RAMPNOW')?.paymentMethods

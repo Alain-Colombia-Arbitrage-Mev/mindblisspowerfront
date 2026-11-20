@@ -12,14 +12,25 @@ import * as fundingContract from '../../../../lib/wallet-production-funding-cont
 
 const require = createRequire(import.meta.url), address = `0x${'1'.repeat(40)}`;
 const polygonDestination = { address, asset: 'USDT', network: 'polygon', chainId: 137 };
+const genericCountry = 'CA';
+const mexicoRoutes = {
+  EUR: { serviceProvider: 'ALCHEMYPAY', method: 'CREDIT_DEBIT_CARD', destinationCurrencyCode: 'USDC_ARBITRUM', minimumAmount: 100, maximumAmount: 5000 },
+  MXN: { serviceProvider: 'ONRAMPMONEY', method: 'SPEI', destinationCurrencyCode: 'USDC_POLYGON', minimumAmount: 200, maximumAmount: 500000 },
+};
+const mexicoCatalog = currency => {
+  const route = mexicoRoutes[currency];
+  if (!route) return { routes: [] };
+  const { serviceProvider, method, destinationCurrencyCode, minimumAmount, maximumAmount } = route;
+  return { destinationCurrencyCode, routes: [{ serviceProvider, paymentMethods: [{ method, currencyCode: currency, minimumAmount, maximumAmount }] }] };
+};
 const all = node => [node, ...React.Children.toArray(node?.props?.children).flatMap(all)];
 const field = (tree, id) => all(tree).find(node => node?.props?.id === id);
 const submit = tree => all(tree).find(node => node?.type === 'button' && node.props.type === 'submit');
 const form = tree => all(tree).find(node => node?.type === 'form');
 const deferred = () => { let resolve, reject; return { promise: new Promise((done, fail) => { resolve = done; reject = fail; }), resolve, reject }; };
-const discoveryValue = country => country ? { country, defaultCurrencyCode: { US: 'USD', MX: 'MXN', CO: 'COP' }[country],
+const discoveryValue = country => country ? { country, defaultCurrencyCode: { US: 'USD', MX: 'MXN', CO: 'COP', [genericCountry]: 'MXN' }[country],
   currencies: ['USD', 'MXN', 'COP', 'EUR', 'GBP'].map(code => ({ code, name: code, decimalPlaces: 2 })) }
-  : { countries: [{ code: 'US', name: 'United States' }, { code: 'MX', name: 'Mexico' }, { code: 'CO', name: 'Colombia' }] };
+  : { countries: [{ code: 'US', name: 'United States' }, { code: 'MX', name: 'Mexico' }, { code: 'CO', name: 'Colombia' }, { code: genericCountry, name: 'Canada' }] };
 const retryButton = tree => all(tree).find(node => node?.type === 'button' && node.props.children === translateMessage('es', 'walletProduction.retry'));
 function fixture(t, config = {}) {
   const cells = [], queue = [], cache = new Map(), calls = { session: [], opened: [], popups: [], retries: 0, quoteInputs: [], binding: 0, connect: 0, history: 0 };
@@ -50,7 +61,9 @@ function fixture(t, config = {}) {
       if (key && !cache.has(key)) {
         const { asset, network, chainId } = fundingContract.walletProductionAsset(options.destinationCurrencyCode);
         cache.set(key, { ...options.input, requestedAmount: options.input.amount, destination: { address, asset, network, chainId }, receivedAt: Date.now(),
-          quotes: config.quotes ? config.quotes(options.input) : [{ serviceProvider: 'TRANSAK', destinationAmount: 48, totalFee: 2 }, { serviceProvider: 'BANXA', destinationAmount: 47, totalFee: 3 }] });
+          quotes: config.quotes ? config.quotes(options.input) : options.input.country === 'MX'
+            ? [{ serviceProvider: mexicoRoutes[options.input.sourceCurrencyCode].serviceProvider, destinationAmount: 48, totalFee: 2 }]
+            : [{ serviceProvider: 'TRANSAK', destinationAmount: 48, totalFee: 2 }, { serviceProvider: 'BANXA', destinationAmount: 47, totalFee: 3 }] });
       }
       return { quote: key && !quoteExpired ? cache.get(key) : null, loading: false, error: quoteExpired ? 'quoteExpired' : '',
         invalidate() { cache.clear(); quoteExpired = false; }, retry() { calls.retries++; quoteExpired = false; }, expire() { cache.clear(); quoteExpired = true; dirty = true; } };
@@ -58,7 +71,7 @@ function fixture(t, config = {}) {
     '@/components/wallet/ProductionCountrySelect': { default: 'country-selector-fixture' },
     '@/components/wallet/WalletUsdcBalance': { default: 'wallet-usdc-balance-fixture' },
     '@/lib/wallet-production-funding-client.mjs': { readProductionDiscovery: async country => config.discovery ? config.discovery(country) : discoveryValue(country),
-      readProductionOptions: async (_country, currency) => config.options ? config.options(_country, currency) : ({ routes: ['TRANSAK', 'BANXA'].map(serviceProvider => ({ serviceProvider, paymentMethods: [
+      readProductionOptions: async (country, currency) => config.options ? config.options(country, currency) : country === 'MX' ? mexicoCatalog(currency) : ({ routes: ['TRANSAK', 'BANXA'].map(serviceProvider => ({ serviceProvider, paymentMethods: [
         { method: 'CREDIT_DEBIT_CARD', currencyCode: currency, minimumAmount: currency === 'USD' ? 20 : 931, maximumAmount: currency === 'USD' ? 50000 : 500000 },
         { method: currency === 'COP' ? 'PSE' : 'SPEI', currencyCode: currency, minimumAmount: currency === 'COP' ? 42300 : 200, maximumAmount: 500000 }] })) }),
       createProductionFunding: async (...args) => { calls.session.push(args); return waiting.promise; }, readProductionHistory: async () => { calls.history++; return { records: history }; }, readProductionStatus: async () => assert.fail('no callback or user status request') },
@@ -81,7 +94,7 @@ function fixture(t, config = {}) {
 }
 
 test('form retains country, currency, method and amount order and shows every verified fiat from discovery', async t => {
-  const h = fixture(t); await h.flush(); await h.change('production-country', 'MX');
+  const h = fixture(t); await h.flush(); await h.change('production-country', genericCountry);
   const inputs = all(h.tree).filter(node => node?.props?.id?.startsWith('production-') && ['input', 'select', 'country-selector-fixture'].includes(node.type));
   assert.deepEqual(inputs.map(node => node.props.id), ['production-country', 'production-currency', 'production-method', 'production-amount']);
   assert.deepEqual(all(field(h.tree, 'production-currency')).filter(node => node?.type === 'option').map(node => node.props.value), ['', 'MXN', 'USD', 'COP', 'EUR', 'GBP']);
@@ -103,24 +116,27 @@ test('all USDC balances use the verified wallet and disappear when its binding i
 
 test('Mexico EUR shows USDC on Arbitrum and does not open a checkout reporting the same token on Polygon', async t => {
   const config = {
-    options: async (country, currency) => country === 'MX' && currency === 'EUR' ? {
-      destinationCurrencyCode: 'USDC_ARBITRUM',
-      routes: [{ serviceProvider: 'ALCHEMYPAY', paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', currencyCode: 'EUR', minimumAmount: 100, maximumAmount: 5000 }] }]
-    } : { routes: [] },
-    quotes: () => [{ serviceProvider: 'ALCHEMYPAY', destinationAmount: 110, totalFee: 3 }],
+    options: async (_country, currency) => currency === 'EUR' ? mexicoCatalog(currency) : { routes: [] },
     history: [{ checkoutReference: '11111111-1111-4111-8111-111111111111', serviceProvider: 'ALCHEMYPAY', requestedAmount: 100,
       sourceCurrencyCode: 'EUR', status: 'session_created', destination: { address, asset: 'USDC', network: 'arbitrum', chainId: 42161 },
       confirmation: { state: 'unconfirmed', source: 'none', testMode: false } }],
   };
   const h = fixture(t, config);
-  await h.flush(); await h.change('production-country', 'MX'); await h.change('production-currency', 'EUR');
-  assert.equal(field(h.tree, 'production-method').props.value, translateMessage('es', 'onramp.cardPayment'));
-  assert.equal(field(h.tree, 'production-method').props.readOnly, true);
+  await h.flush(); await h.change('production-country', 'MX');
+  assert.equal(field(h.tree, 'production-mexico-EUR').props.checked, false);
+  assert.equal(field(h.tree, 'production-mexico-MXN'), undefined);
+  assert.equal(field(h.tree, 'production-currency'), undefined);
+  assert.equal(field(h.tree, 'production-method'), undefined);
+  await h.change('production-mexico-EUR', 'EUR');
+  assert.equal(field(h.tree, 'production-mexico-EUR').props.checked, true);
+  assert.equal(h.calls.quoteInputs.at(-1).input.paymentMethodType, 'CREDIT_DEBIT_CARD');
   assert.ok(all(all(h.tree).find(node => node?.type === 'li')).includes('USDC · Arbitrum'));
   assert.equal(field(h.tree, 'production-amount').props.value, '100');
   assert.equal(h.calls.quoteInputs.at(-1).destinationCurrencyCode, 'USDC_ARBITRUM');
   assert.ok(all(h.tree).includes('Importe a pagar 100 EUR'));
   assert.ok(all(h.tree).includes('Arbitrum'));
+  assert.ok(!all(h.tree).some(node => node?.props?.name === 'production-provider'));
+  assert.equal(submit(h.tree).props.children.at(-1), 'Continuar con Alchemy Pay');
   assert.equal(submit(h.tree).props.disabled, false);
   form(h.tree).props.onSubmit({ preventDefault() {} });
   assert.equal(h.calls.session.length, 1);
@@ -132,6 +148,88 @@ test('Mexico EUR shows USDC on Arbitrum and does not open a checkout reporting t
   await h.flush();
   assert.equal(h.calls.popups[0].closed, true);
   assert.deepEqual(h.calls.opened, []);
+});
+
+test('Mexico method switching resets the fiat amount, rejects a stale submit and aborts a preparing checkout', async t => {
+  const catalogCalls = [];
+  const h = fixture(t, { options: async (country, currency) => { catalogCalls.push([country, currency]); return mexicoCatalog(currency); } });
+  await h.flush(); await h.change('production-country', 'MX');
+  assert.deepEqual(catalogCalls, [['MX', 'EUR'], ['MX', 'MXN']]);
+  assert.equal(field(h.tree, 'production-mexico-EUR').props.checked, false);
+  assert.equal(field(h.tree, 'production-mexico-MXN').props.checked, false);
+  assert.ok(all(h.tree).includes('Paga en euros (EUR) con Alchemy Pay'));
+  assert.ok(all(h.tree).includes('Paga en pesos mexicanos (MXN) con Onramp Money'));
+  assert.equal(submit(h.tree), undefined);
+  await h.change('production-mexico-EUR', 'EUR');
+  await h.change('production-amount', '125');
+  const previousSubmit = form(h.tree).props.onSubmit;
+  await h.change('production-mexico-MXN', 'MXN');
+  assert.equal(field(h.tree, 'production-amount').props.value, '200');
+  assert.equal(field(h.tree, 'production-mexico-MXN').props.checked, true);
+  await h.change('production-amount', '300');
+  await h.change('production-mexico-MXN', 'MXN');
+  assert.equal(field(h.tree, 'production-amount').props.value, '300');
+  assert.deepEqual(catalogCalls, [['MX', 'EUR'], ['MX', 'MXN']]);
+  previousSubmit({ preventDefault() {} });
+  assert.equal(h.calls.session.length, 0);
+  assert.equal(h.calls.popups.length, 0);
+  const queuedCardChange = field(h.tree, 'production-mexico-EUR').props.onChange;
+  form(h.tree).props.onSubmit({ preventDefault() {} });
+  await h.flush();
+  assert.equal(field(h.tree, 'production-mexico-EUR').props.disabled, true);
+  assert.equal(h.calls.session.length, 1);
+  const [checkout, wallet, { signal }] = h.calls.session[0];
+  assert.deepEqual({ ...checkout, requestId: undefined }, { country: 'MX', sourceCurrencyCode: 'MXN', amount: 300,
+    paymentMethodType: 'SPEI', serviceProvider: 'ONRAMPMONEY', requestId: undefined });
+  assert.equal(wallet, address);
+  queuedCardChange();
+  await h.flush();
+  assert.equal(field(h.tree, 'production-amount').props.value, '100');
+  assert.equal(signal.aborted, true);
+  assert.equal(h.calls.popups[0].closed, true);
+  h.waiting.resolve({ checkoutUrl: 'https://meldcrypto.com/?token=synthetic_opaque', destination: { ...polygonDestination, asset: 'USDC' } });
+  await h.flush();
+  assert.deepEqual(h.calls.opened, []);
+  assert.equal(h.calls.session.length, 1);
+});
+
+test('Mexico retains a verified route when the other method fails and recovers it on explicit retry', async t => {
+  let bankUnavailable = true;
+  const h = fixture(t, { options: async (_country, currency) => {
+    if (currency === 'MXN' && bankUnavailable) throw Error('unavailable');
+    return mexicoCatalog(currency);
+  } });
+  await h.flush(); await h.change('production-country', 'MX');
+  assert.equal(field(h.tree, 'production-mexico-MXN'), undefined);
+  assert.ok(all(h.tree).includes(translateMessage('es', 'walletProduction.mexicoAvailability')));
+  await h.change('production-mexico-EUR', 'EUR');
+  await h.change('production-amount', '125');
+  assert.equal(submit(h.tree).props.disabled, false);
+  bankUnavailable = false;
+  retryButton(h.tree).props.onClick(); await h.flush();
+  assert.equal(field(h.tree, 'production-mexico-EUR').props.checked, true);
+  assert.equal(field(h.tree, 'production-mexico-MXN').props.checked, false);
+  assert.equal(field(h.tree, 'production-amount').props.value, '125');
+  assert.equal(retryButton(h.tree), undefined);
+  assert.equal(h.calls.session.length, 0);
+});
+
+test('Mexico offers no checkout when discovered currencies lack either matching provider rail', async t => {
+  const h = fixture(t, { options: async (_country, currency) => {
+    const options = mexicoCatalog(currency);
+    if (currency === 'EUR') return { ...options, destinationCurrencyCode: 'USDC_POLYGON' };
+    const [route] = options.routes;
+    return { ...options, routes: [{ ...route, paymentMethods: [{ ...route.paymentMethods[0], method: 'CREDIT_DEBIT_CARD' }] }] };
+  } });
+  await h.flush(); await h.change('production-country', 'MX');
+  assert.equal(field(h.tree, 'production-mexico-EUR'), undefined);
+  assert.equal(field(h.tree, 'production-mexico-MXN'), undefined);
+  assert.equal(field(h.tree, 'production-amount'), undefined);
+  assert.equal(submit(h.tree), undefined);
+  assert.equal(retryButton(h.tree), undefined);
+  assert.ok(all(h.tree).includes(translateMessage('es', 'walletProduction.mexicoNoMethod')));
+  assert.ok(h.calls.quoteInputs.every(call => !call.valid));
+  assert.equal(h.calls.session.length, 0);
 });
 
 test('RampNow US card offers three USDC networks, defaults to Polygon and uses the selected network to open checkout', async t => {
@@ -223,14 +321,19 @@ for (const [paymentMethod, label, network, destination] of [
 test('new fiat initializes its own provider minimum and never carries USD 50 into MXN or COP', async t => {
   const h = fixture(t); await h.flush(); await h.change('production-country', 'US'); await h.change('production-method', 'CREDIT_DEBIT_CARD');
   assert.equal(field(h.tree, 'production-amount').props.value, '50'); assert.equal(field(h.tree, 'production-amount').props.min, 50); assert.equal(field(h.tree, 'production-amount').props.max, 25000);
-  await h.change('production-country', 'MX'); assert.equal(field(h.tree, 'production-amount').props.value, ''); await h.change('production-method', 'SPEI');
-  assert.equal(field(h.tree, 'production-amount').props.value, '200'); assert.equal(h.calls.quoteInputs.at(-1).input.sourceCurrencyCode, 'MXN');
+  await h.change('production-country', 'MX'); assert.equal(field(h.tree, 'production-amount'), undefined);
+  await h.change('production-mexico-MXN', 'MXN');
+  assert.equal(field(h.tree, 'production-amount').props.value, '200');
+  assert.equal(h.calls.quoteInputs.at(-1).input.sourceCurrencyCode, 'MXN');
+  assert.equal(h.calls.quoteInputs.at(-1).input.paymentMethodType, 'SPEI');
+  assert.equal(h.calls.quoteInputs.at(-1).destinationCurrencyCode, 'USDC_POLYGON');
+  assert.equal(submit(h.tree).props.children.at(-1), 'Continuar con Onramp Money');
   await h.change('production-country', 'CO'); await h.change('production-method', 'PSE'); assert.equal(field(h.tree, 'production-amount').props.value, '42300');
   await h.change('production-currency', 'USD'); assert.equal(field(h.tree, 'production-amount').props.value, ''); assert.equal(field(h.tree, 'production-method').props.value, '');
 });
 
 test('changing methods preserves a typed amount, explains an invalid range and offers its real minimum without a quote', async t => {
-  const h = fixture(t); await h.flush(); await h.change('production-country', 'MX'); await h.change('production-method', 'SPEI'); await h.change('production-amount', '250');
+  const h = fixture(t); await h.flush(); await h.change('production-country', genericCountry); await h.change('production-method', 'SPEI'); await h.change('production-amount', '250');
   await h.change('production-method', 'CREDIT_DEBIT_CARD'); assert.equal(field(h.tree, 'production-amount').props.value, '250');
   assert.equal(field(h.tree, 'production-amount').props['aria-invalid'], true); assert.equal(h.calls.quoteInputs.at(-1).valid, false);
   const minimum = all(h.tree).find(node => node?.type === 'button' && String(node.props.children).includes('Usar mínimo:'));
@@ -287,7 +390,7 @@ test('an authoritative removed country clears its complete selection and aborts 
   await h.change('production-country', 'US'); await h.change('production-method', 'CREDIT_DEBIT_CARD');
   all(h.tree).find(node => node?.props?.name === 'production-provider').props.onChange(); await h.flush();
   form(h.tree).props.onSubmit({ preventDefault() {} }); assert.equal(h.calls.session.length, 1);
-  config.discovery = async country => country ? discoveryValue(country) : { countries: [{ code: 'MX', name: 'Mexico' }] };
+  config.discovery = async country => country ? discoveryValue(country) : { countries: [{ code: genericCountry, name: 'Canada' }] };
   retry(); await h.flush();
   for (const id of ['production-country', 'production-currency', 'production-method', 'production-amount']) assert.equal(field(h.tree, id).props.value, '');
   assert.equal(h.calls.session[0][2].signal.aborted, true); assert.equal(h.calls.popups[0].closed, true);
@@ -300,26 +403,26 @@ test('a late country catalog cannot reset a newer residence and fiat selection',
   await h.flush(); const retry = retryButton(h.tree).props.onClick; config.discovery = null; retry(); await h.flush();
   await h.change('production-country', 'US');
   const old = deferred(); config.discovery = country => country ? discoveryValue(country) : old.promise;
-  retry(); await h.flush(); await h.change('production-country', 'MX');
+  retry(); await h.flush(); await h.change('production-country', genericCountry);
   old.resolve({ countries: [{ code: 'US', name: 'United States' }] }); await h.flush();
-  assert.equal(field(h.tree, 'production-country').props.value, 'MX'); assert.equal(field(h.tree, 'production-currency').props.value, 'MXN');
+  assert.equal(field(h.tree, 'production-country').props.value, genericCountry); assert.equal(field(h.tree, 'production-currency').props.value, 'MXN');
   assert.equal(h.calls.session.length, 0); assert.equal(h.calls.popups.length, 0);
 });
 
 test('currency refresh retains an explicit valid choice and clears a withdrawn choice without selecting its replacement', async t => {
   const config = { discovery: async country => { if (country) throw Error('fiat unavailable'); return discoveryValue(country); } }, h = fixture(t, config);
-  await h.flush(); await h.change('production-country', 'MX'); const retry = retryButton(h.tree).props.onClick;
+  await h.flush(); await h.change('production-country', genericCountry); const retry = retryButton(h.tree).props.onClick;
   config.discovery = null; retry(); await h.flush(); await h.change('production-currency', 'USD'); await h.change('production-method', 'CREDIT_DEBIT_CARD');
   retry(); await h.flush(); assert.equal(field(h.tree, 'production-currency').props.value, 'USD');
   config.discovery = async country => country ? { country, currencies: [{ code: 'MXN', name: 'Mexican Peso', decimalPlaces: 2 }], defaultCurrencyCode: 'MXN' } : discoveryValue(country);
-  retry(); await h.flush(); assert.equal(field(h.tree, 'production-country').props.value, 'MX');
+  retry(); await h.flush(); assert.equal(field(h.tree, 'production-country').props.value, genericCountry);
   for (const id of ['production-currency', 'production-method', 'production-amount']) assert.equal(field(h.tree, id).props.value, '');
   assert.equal(submit(h.tree).props.disabled, true); assert.equal(h.calls.session.length, 0);
 });
 
 test('a fresh cached quote cannot display or submit a provider withdrawn from the current exact method routes', async t => {
   const config = { options: async () => { throw Error('method catalog unavailable'); } }, h = fixture(t, config);
-  await h.flush(); await h.change('production-country', 'MX'); const retry = retryButton(h.tree).props.onClick;
+  await h.flush(); await h.change('production-country', genericCountry); const retry = retryButton(h.tree).props.onClick;
   config.options = null; retry(); await h.flush(); await h.change('production-method', 'SPEI'); await h.change('production-amount', '250');
   all(h.tree).find(node => node?.props?.name === 'production-provider' && node.props.value === 'TRANSAK').props.onChange(); await h.flush();
   const oldSubmit = form(h.tree).props.onSubmit;
@@ -338,19 +441,19 @@ test('a rejected old country catalog cannot paint an error or clear the new resi
   await h.flush(); const retry = retryButton(h.tree).props.onClick; config.discovery = null; retry(); await h.flush();
   const old = deferred(), methods = deferred();
   config.discovery = country => country ? discoveryValue(country) : old.promise; config.options = () => methods.promise;
-  retry(); await h.flush(); await h.change('production-country', 'MX');
+  retry(); await h.flush(); await h.change('production-country', genericCountry);
   const placeholder = () => all(field(h.tree, 'production-method')).find(node => node?.type === 'option' && node.props.value === '').props.children;
   assert.equal(placeholder(), translateMessage('es', 'walletProduction.loading'));
   old.reject(Error('retired metadata failed')); await h.flush();
   assert.equal(placeholder(), translateMessage('es', 'walletProduction.loading'));
   assert.equal(all(h.tree).some(node => node?.props?.role === 'alert'), false);
-  assert.equal(field(h.tree, 'production-country').props.value, 'MX'); assert.equal(h.calls.session.length, 0);
+  assert.equal(field(h.tree, 'production-country').props.value, genericCountry); assert.equal(h.calls.session.length, 0);
   methods.resolve({ routes: [] }); await h.flush(); assert.equal(submit(h.tree).props.disabled, true);
 });
 
 test('a rejected stale currency refresh cannot paint an error or clear the newly chosen fiat method loader', async t => {
   const config = { discovery: async country => { if (country) throw Error('fiat unavailable'); return discoveryValue(country); } }, h = fixture(t, config);
-  await h.flush(); await h.change('production-country', 'MX'); const retry = retryButton(h.tree).props.onClick;
+  await h.flush(); await h.change('production-country', genericCountry); const retry = retryButton(h.tree).props.onClick;
   config.discovery = null; retry(); await h.flush();
   const old = deferred(), methods = deferred(); config.discovery = country => country ? old.promise : discoveryValue(country);
   retry(); await h.flush(); config.options = () => methods.promise; await h.change('production-currency', 'USD');
@@ -368,7 +471,7 @@ test('a sole real fiat, valid method and quoted provider remove redundant choice
     options: async () => ({ routes: [{ serviceProvider: 'ONRAMPMONEY', paymentMethods: [{ method: 'SPEI', currencyCode: 'MXN', minimumAmount: 200, maximumAmount: 500000 }] }] }),
     quotes: () => [{ serviceProvider: 'ONRAMPMONEY', destinationAmount: 10.18, totalFee: 2 }] };
   const h = fixture(t, config); await h.flush(); assert.equal(field(h.tree, 'production-country').props.value, '');
-  await h.change('production-country', 'MX');
+  await h.change('production-country', genericCountry);
   const fiatField = field(h.tree, 'production-currency');
   assert.equal(fiatField.type, 'output');
   assert.deepEqual(all(fiatField).filter(node => typeof node === 'string'), ['MXN', ' · ', 'Mexican Peso']);
@@ -384,7 +487,7 @@ test('a sole real fiat, valid method and quoted provider remove redundant choice
 
 test('changing method never silently substitutes the previously selected provider even when the next quote has only one provider', async t => {
   const config = { quotes: input => [{ serviceProvider: input.paymentMethodType === 'SPEI' ? 'TRANSAK' : 'BANXA', destinationAmount: 48, totalFee: 2 }] };
-  const h = fixture(t, config); await h.flush(); await h.change('production-country', 'MX'); await h.change('production-method', 'SPEI');
+  const h = fixture(t, config); await h.flush(); await h.change('production-country', genericCountry); await h.change('production-method', 'SPEI');
   assert.equal(all(h.tree).find(node => node?.props?.name === 'production-provider').props.checked, true);
   await h.change('production-amount', '1000'); await h.change('production-method', 'CREDIT_DEBIT_CARD');
   const replacement = all(h.tree).find(node => node?.props?.name === 'production-provider');
@@ -395,7 +498,7 @@ test('changing method never silently substitutes the previously selected provide
 
 test('a withdrawn selected method requires an explicit replacement rather than automatically choosing the sole remaining method', async t => {
   const config = { options: async () => { throw Error('initial method read failed'); }, quotes: () => [{ serviceProvider: 'TRANSAK', destinationAmount: 48, totalFee: 2 }] };
-  const h = fixture(t, config); await h.flush(); await h.change('production-country', 'MX'); const retry = retryButton(h.tree).props.onClick;
+  const h = fixture(t, config); await h.flush(); await h.change('production-country', genericCountry); const retry = retryButton(h.tree).props.onClick;
   config.options = async () => ({ routes: [{ serviceProvider: 'TRANSAK', paymentMethods: [{ method: 'SPEI', currencyCode: 'MXN', minimumAmount: 200, maximumAmount: 500000 }] }] });
   retry(); await h.flush(); assert.equal(field(h.tree, 'production-method').props.value, 'SPEI');
   config.options = async () => ({ routes: [{ serviceProvider: 'TRANSAK', paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', currencyCode: 'MXN', minimumAmount: 931, maximumAmount: 500000 }] }] });
@@ -404,9 +507,9 @@ test('a withdrawn selected method requires an explicit replacement rather than a
 });
 
 test('reselecting the current residence preserves the chosen method, typed amount and valid quote', async t => {
-  const h = fixture(t); await h.flush(); await h.change('production-country', 'MX'); await h.change('production-method', 'SPEI'); await h.change('production-amount', '2000');
+  const h = fixture(t); await h.flush(); await h.change('production-country', genericCountry); await h.change('production-method', 'SPEI'); await h.change('production-amount', '2000');
   all(h.tree).find(node => node?.props?.name === 'production-provider').props.onChange(); await h.flush();
-  assert.equal(submit(h.tree).props.disabled, false); await h.change('production-country', 'MX');
+  assert.equal(submit(h.tree).props.disabled, false); await h.change('production-country', genericCountry);
   assert.equal(field(h.tree, 'production-currency').props.value, 'MXN'); assert.equal(field(h.tree, 'production-method').props.value, 'SPEI');
   assert.equal(field(h.tree, 'production-amount').props.value, '2000'); assert.equal(submit(h.tree).props.disabled, false);
   assert.equal(h.calls.session.length, 0); assert.equal(h.calls.popups.length, 0);
