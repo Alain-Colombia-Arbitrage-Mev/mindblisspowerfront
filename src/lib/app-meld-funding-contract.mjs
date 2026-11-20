@@ -23,8 +23,7 @@ export function appMeldFundingAsset(country, fiat, provider = '', method = '') {
         (!provider || row.serviceProvider === provider) && (!method || row.paymentMethodType === method));
     return row?.destinationCurrencyCode ?? 'USDT_POLYGON';
   }
-  return (rows.find(row => row.serviceProvider !== 'RAMPNOW') ?? rows.find(row => row.destinationCurrencyCode === 'USDC_POLYGON')
-    ?? rows[0])?.destinationCurrencyCode ?? 'USDT_POLYGON';
+  return rows[0]?.destinationCurrencyCode ?? 'USDT_POLYGON';
 }
 
 export function appMeldRouteSupported(country, fiat, method, provider, asset = '') {
@@ -115,8 +114,11 @@ export function appMeldFundingOptions(value) {
       if (!plain(item) || item.currencyCode !== fiat || routeMethods.has(item.method)
         || !boundedLimit(item.minimumAmount) || !boundedLimit(item.maximumAmount) || item.maximumAmount < item.minimumAmount) return null;
       const row = appMeldRail(country, fiat, item.method, route.serviceProvider, target.destinationCurrencyCode);
-      if (!row) return null;
+      const retired = legacyRampNowRoute(country, fiat, item.method, route.serviceProvider, target.destinationCurrencyCode);
+      if (!row && !retired) return null;
       routeMethods.add(item.method); methods.add(item.method);
+      // Validate the old route shape during rollout without offering the retired checkout.
+      if (!row) continue;
       const [floor, ceiling] = appMeldRailBounds(row), scale = 10 ** row.minorUnits;
       const minimumAmount = Math.max(floor, Math.ceil(item.minimumAmount * scale - 0.00001) / scale);
       const maximumAmount = Math.min(ceiling, Math.floor(item.maximumAmount * scale + 0.00001) / scale);
@@ -132,7 +134,14 @@ export function appMeldFundingOptions(value) {
     paymentMethods: [...new Set(routes.flatMap(route => route.paymentMethods.map(item => item.method)))], routes };
 }
 
+function legacyRampNowRoute(country, fiat, method, provider, asset) {
+  return country === 'US' && fiat === 'USD' && provider === 'RAMPNOW'
+    && ['CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY', 'ACH', 'LOCAL_BANK_TRANSFER'].includes(method)
+    && ['USDC_POLYGON', 'USDC_ARBITRUM', 'USDC'].includes(asset);
+}
+
 function legacyRoute(country, fiat, method, provider, asset) {
+  if (legacyRampNowRoute(country, fiat, method, provider, asset)) return true;
   if (country === 'MX' && asset === 'USDT_POLYGON') return (['USD', 'MXN'].includes(fiat) && provider === 'MERCURYO' && method === 'CREDIT_DEBIT_CARD')
     || (fiat === 'MXN' && provider === 'ONRAMPMONEY' && method === 'SPEI');
   return false;

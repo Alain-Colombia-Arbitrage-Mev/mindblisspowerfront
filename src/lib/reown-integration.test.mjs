@@ -370,17 +370,17 @@ test('personal dollar continuation opens the authenticated MELD URL without addi
   assert.deepEqual(events, ['intent', 'open']);
 });
 
-test('RampNow USD card checkout uses USDC on Polygon and the same verified address', async () => {
+test('Mercuryo US dollar card checkout uses USDC on Polygon and the same verified address', async () => {
   const runtime = fundingRuntime({
     createPersonalFundingIntent: async body => {
       assert.equal(body.country, 'US');
       assert.equal(body.walletAddress, runtime.address);
-      assert.equal(body.serviceProvider, 'RAMPNOW');
+      assert.equal(body.serviceProvider, 'MERCURYO');
       assert.equal(body.destinationCurrencyCode, 'USDC_POLYGON');
       return fundingSession(body);
     },
   });
-  const input = { ...runtime.input, country: 'US', serviceProvider: 'RAMPNOW', destinationCurrencyCode: 'USDC_POLYGON' };
+  const input = { ...runtime.input, country: 'US', serviceProvider: 'MERCURYO', destinationCurrencyCode: 'USDC_POLYGON' };
   const result = await runtime.scope.startOnramp(input);
   assert.equal(result.asset, 'USDC');
   assert.equal(result.minimumUsd, 50);

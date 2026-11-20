@@ -58,7 +58,7 @@ export function selectedMethodLimits(routes, method, amount, sourceCurrencyCode 
 }
 
 // ISO currencies are choices to consult, not a claim that a provider supports a route.
-const PROVIDER_NAMES = { MERCURYO: "Mercuryo", ONRAMPMONEY: "Onramp Money", RAMPNOW: "RampNow", ALCHEMYPAY: "Alchemy Pay", BANXA: "Banxa", ONMETA: "Onmeta" };
+const PROVIDER_NAMES = { MERCURYO: "Mercuryo", ONRAMPMONEY: "Onramp Money", ALCHEMYPAY: "Alchemy Pay", BANXA: "Banxa", ONMETA: "Onmeta" };
 const PERSONAL_COUNTRIES = APP_MELD_COUNTRIES.map(code => [code]);
 export function fundingCurrencyChoices(country) {
   const currencies = appMeldCurrencyChoices(country);

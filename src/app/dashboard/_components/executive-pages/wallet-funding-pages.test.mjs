@@ -73,7 +73,7 @@ const meldOptions = (country, sourceCurrencyCode, routes) => ({
 });
 const mexicoOptions = (country, sourceCurrencyCode) => meldOptions(country, sourceCurrencyCode, sourceCurrencyCode === 'MXN'
   ? [meldRoute('ONRAMPMONEY', 'MXN', ['SPEI'], 200, 500000)]
-  : [meldRoute('MERCURYO', 'USD', ['CREDIT_DEBIT_CARD'], 50, 16821.71)]);
+  : [meldRoute('MERCURYO', 'USD', ['CREDIT_DEBIT_CARD'], 50, 1000)]);
 
 test('Colombia offers COP bank methods through Onramp Money after explicit residence selection', async t => {
   const calls = [], submitted = [];
@@ -548,7 +548,7 @@ test('only explicit personal field edits notify the page, never country detectio
   let selectionChanges = 0, sessions = 0;
   const harness = formHarness('PersonalFundingForm', {
     readPersonalFundingOptions: async (country, { sourceCurrencyCode }) => meldOptions(country, sourceCurrencyCode, country === 'US'
-      ? [meldRoute('RAMPNOW', 'USD', ['CREDIT_DEBIT_CARD', 'LOCAL_BANK_TRANSFER'], 50, 1000)]
+      ? [meldRoute('MERCURYO', 'USD', ['CREDIT_DEBIT_CARD'], 50, 1000), meldRoute('ONRAMPMONEY', 'USD', ['LOCAL_BANK_TRANSFER'], 50, 25000)]
       : [meldRoute('ONRAMPMONEY', 'COP', ['PSE', 'LOCAL_BANK_TRANSFER'], 42300, 59900000)]),
     readAdministrativeSandboxOptions() { assert.fail('administrative discovery called'); },
   });
@@ -648,7 +648,7 @@ test('future confirmed visual fixtures distinguish received USDT from requested 
 
 test('the personal form reviews its immutable trusted destination immediately before the CTA and blocks a missing address', async t => {
   const harness = formHarness('PersonalFundingForm', { readPersonalFundingOptions: async country => meldOptions(country, 'USD',
-    [meldRoute('RAMPNOW', 'USD', ['CREDIT_DEBIT_CARD'], 50, 1000)]) });
+    [meldRoute('MERCURYO', 'USD', ['CREDIT_DEBIT_CARD'], 50, 1000)]) });
   t.after(() => harness.unmount());
   selectFundingCountry(harness, {}, 'US'); await flush(); harness.render(); let tree = harness.render();
   const fields = React.Children.toArray(tree.props.children.props.children);
@@ -725,14 +725,15 @@ test('a history status action selects the exact request for a read without chang
   assert.doesNotMatch(renderToStaticMarkup(tree), /Recarga confirmada/);
 });
 
-test('personal funding exposes RampNow card and bank methods and honors an explicit Onramp Money choice', async t => {
+test('personal funding offers Mercuryo cards and mobile wallets alongside independent Onramp Money bank methods', async t => {
   if (typeof navigator === 'undefined') { Object.defineProperty(globalThis, 'navigator', { value: { language: 'es-CO', languages: ['es-CO'] }, configurable: true }); t.after(() => { delete globalThis.navigator; }); }
   const blocked = ['NETELLER', 'PAYSAFECARD', 'PAYSAFE_CARD', 'SKRILL', 'SKIRLL', 'ASTROPAY', 'VENMO', 'PAYPAL'];
   const allowed = { CO: ['PSE', 'LOCAL_BANK_TRANSFER'],
     US: ['CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY', 'ACH', 'LOCAL_BANK_TRANSFER'] };
   const submitted = [];
   const harness = formHarness('PersonalFundingForm', { readPersonalFundingOptions: async (country, { sourceCurrencyCode }) => meldOptions(country, sourceCurrencyCode, country === 'US'
-    ? [meldRoute('RAMPNOW', 'USD', [...allowed.US, ...blocked], 50, 1000), meldRoute('ONRAMPMONEY', 'USD', ['ACH', 'LOCAL_BANK_TRANSFER'], 50, 1000)]
+    ? [meldRoute('MERCURYO', 'USD', [...allowed.US.slice(0, 3), ...blocked], 50, 1000),
+      meldRoute('ONRAMPMONEY', 'USD', ['ACH', 'LOCAL_BANK_TRANSFER'], 50, 25000)]
     : [meldRoute('ONRAMPMONEY', 'COP', [...allowed.CO, ...blocked], 42300, 59900000)]),
     readAdministrativeSandboxOptions() { assert.fail('production methods cannot use sandbox'); },
   });
@@ -770,10 +771,8 @@ test('personal funding exposes RampNow card and bank methods and honors an expli
   }
   radios.find(node => node.props.value === 'ACH').props.onChange();
   tree = harness.render(props);
-  const provider = find(tree, node => node?.type === 'select' && node.props.id === 'funding-test-provider');
-  assert.deepEqual(React.Children.toArray(provider.props.children).map(option => option.props.value), ['RAMPNOW', 'ONRAMPMONEY']);
-  provider.props.onChange({ target: { value: 'ONRAMPMONEY' } });
-  tree = harness.render(props);
+  assert.equal(find(tree, node => node?.type === 'select' && node.props.id === 'funding-test-provider'), undefined);
+  assert.equal(find(tree, 'FundingMethodField').props.limits.maximumUsd, 25000);
   tree.props.onSubmit({ preventDefault() {} }); await flush();
   assert.equal(submitted[0].paymentMethodType, 'ACH');
   assert.equal(submitted[0].serviceProvider, 'ONRAMPMONEY');
@@ -784,14 +783,16 @@ test('personal funding exposes RampNow card and bank methods and honors an expli
   tree.props.onSubmit({ preventDefault() {} }); await flush();
   assert.equal(submitted.length, 2);
   assert.equal(submitted[1].paymentMethodType, 'CREDIT_DEBIT_CARD');
+  assert.equal(submitted[1].serviceProvider, 'MERCURYO');
+  assert.equal(submitted[1].destinationCurrencyCode, 'USDC_POLYGON');
 });
 
 test('US card network changes keep the linked destination and apply the exact selected route limits', async t => {
   const submitted = [];
   const harness = formHarness('PersonalFundingForm', { readPersonalFundingOptions: async (country, { sourceCurrencyCode }) => meldOptions(country, sourceCurrencyCode, [
-    meldRoute('RAMPNOW', 'USD', ['CREDIT_DEBIT_CARD'], 50, 10000, 'USDC_POLYGON'),
-    meldRoute('RAMPNOW', 'USD', ['CREDIT_DEBIT_CARD'], 50, 10000, 'USDC_ARBITRUM'),
-    meldRoute('RAMPNOW', 'USD', ['CREDIT_DEBIT_CARD'], 50, 8000, 'USDC'),
+    meldRoute('MERCURYO', 'USD', ['CREDIT_DEBIT_CARD'], 50, 16000, 'USDC_POLYGON'),
+    meldRoute('MERCURYO', 'USD', ['CREDIT_DEBIT_CARD'], 50, 16000, 'USDC_ARBITRUM'),
+    meldRoute('MERCURYO', 'USD', ['CREDIT_DEBIT_CARD'], 50, 16000, 'USDC'),
     meldRoute('ONRAMPMONEY', 'USD', ['ACH'], 50, 25000, 'USDC_POLYGON'),
   ]) });
   t.after(() => harness.unmount());
@@ -805,11 +806,11 @@ test('US card network changes keep the linked destination and apply the exact se
   networkField().props.onChange({ target: { value: 'USDC' } }); harness.render(props); tree = harness.render(props);
   assert.equal(find(tree, 'FundingDestination').props.network, 'Ethereum');
   assert.equal(find(tree, 'FundingDestination').props.address, `0x${'1'.repeat(40)}`);
-  assert.equal(find(tree, 'FundingMethodField').props.limits.maximumUsd, 8000);
+  assert.equal(find(tree, 'FundingMethodField').props.limits.maximumUsd, 16000);
   tree.props.onSubmit({ preventDefault() {} }); await flush();
   assert.equal(submitted[0].destinationCurrencyCode, 'USDC');
-  assert.equal(submitted[0].serviceProvider, 'RAMPNOW');
-  find(tree, 'FundingAmountField').props.onChange('8000.01'); harness.render(props); tree = harness.render(props);
+  assert.equal(submitted[0].serviceProvider, 'MERCURYO');
+  find(tree, 'FundingAmountField').props.onChange('16000.01'); harness.render(props); tree = harness.render(props);
   assert.equal(find(tree, 'FundingSubmit').props.disabled, true);
   tree.props.onSubmit({ preventDefault() {} }); await flush();
   assert.equal(submitted.length, 1);
@@ -1200,9 +1201,9 @@ test('the public form starts at USD100, accepts USD50 and retains higher provide
   const submitted = [];
   let finish;
   const harness = formHarness('PersonalFundingForm', { readPersonalFundingOptions: async country => meldOptions(country, 'USD', [
-    { serviceProvider: 'RAMPNOW', paymentMethods: [
-      { method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount: 7.81, maximumAmount: 10000 },
-      { method: 'APPLE_PAY', currencyCode: 'USD', minimumAmount: 128.04, maximumAmount: 10000 },
+    { serviceProvider: 'MERCURYO', paymentMethods: [
+      { method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount: 50, maximumAmount: 1000 },
+      { method: 'APPLE_PAY', currencyCode: 'USD', minimumAmount: 128.04, maximumAmount: 1000 },
     ] },
   ]) });
   t.after(() => harness.unmount());
@@ -1218,7 +1219,7 @@ test('the public form starts at USD100, accepts USD50 and retains higher provide
   }
   find(tree, 'FundingAmountField').props.onChange('50'); harness.render(props); tree = harness.render(props);
   assert.deepEqual(find(tree, 'FundingMethodField').props.methods, ['CREDIT_DEBIT_CARD']);
-  assert.deepEqual(find(tree, 'FundingMethodField').props.limits, { minimumUsd: 50, maximumUsd: 10000 });
+  assert.deepEqual(find(tree, 'FundingMethodField').props.limits, { minimumUsd: 50, maximumUsd: 1000 });
   assert.equal(find(tree, 'FundingSubmit').props.disabled, false);
   tree.props.onSubmit({ preventDefault() {} }); tree.props.onSubmit({ preventDefault() {} }); await flush();
   assert.equal(submitted.length, 1);
