@@ -257,7 +257,7 @@ test('personal provider throttling passes through the BFF once and the discovery
       assert.equal(JSON.stringify(await response.clone().json()).includes('private-'), false);
       return response;
     };
-    await assert.rejects(readPersonalFundingOptions('US'), { message: 'wallet_funding_rate_limited', status: 429 });
+    await assert.rejects(readPersonalFundingOptions('MX'), { message: 'wallet_funding_rate_limited', status: 429 });
     assert.equal(browserReads, 1); assert.equal(privateReads, 1);
   } finally { globalThis.fetch = original; }
 });

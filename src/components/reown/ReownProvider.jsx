@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createAppKit, useAppKit, useAppKitAccount, useAppKitProvider, useAppKitState, useAppKitTheme, useAppKitNetwork, useDisconnect } from "@reown/appkit/react";
 import { EthersAdapter } from "@reown/appkit-adapter-ethers";
 import { SolanaAdapter } from "@reown/appkit-adapter-solana/react";
-import { ChainController, ConnectionController, ConnectorController, ConnectorControllerUtil, OptionsController } from "@reown/appkit-controllers";
+import { BlockchainApiController, ChainController, ConnectionController, ConnectorController, ConnectorControllerUtil, OptionsController } from "@reown/appkit-controllers";
 import { ConstantsUtil as ReownConstantsUtil } from "@reown/appkit-common";
 import { mainnet, polygon, solana } from "@reown/appkit/networks";
 import { BrowserProvider, getAddress } from "ethers";
@@ -14,6 +14,7 @@ import { createPersonalFundingIntent, fundingRequestId } from "@/lib/wallet-fund
 import { readWalletBinding, requestWalletLink, walletBindingFailure } from "@/lib/wallet-binding.mjs";
 import { personalFundingFailure } from "@/lib/personal-funding-errors.mjs";
 import { personalWalletMetadata } from "@/lib/personal-portal-origin.mjs";
+import { prepareReownUsCheckout } from "@/lib/reown-production-onramp.mjs";
 import { createReownFundingOperation, verifyReownWalletOwnership } from "@/lib/reown-funding-operation.mjs";
 import { createReownWalletConnectionRequest, createReownWalletSwitchRequest, reownWalletConnectionState, reownWalletIdentityMismatch, reownWalletNeedsAccountSelection } from "@/lib/reown-wallet-connection.mjs";
 import { personalWalletBalanceSessionKey } from "@/lib/personal-wallet-balance-store.mjs";
@@ -94,7 +95,7 @@ if (configured && walletMetadata) {
       send: false,
       receive: false,
       history: false,
-      // Funding starts in Mindbliss's country/method-validated, recorded flow.
+      // Country-specific funding starts from Mindbliss's form.
       onramp: false,
     },
     themeMode: initialWalletTheme,
@@ -602,8 +603,50 @@ function ConfiguredReownProvider({ children }) {
 
   const openOnramp = useCallback(() => runOnramp(), [runOnramp]);
 
+  const startReownUsCheckout = useCallback((expectedAddress) => {
+    const assertCurrent = () => {
+      if (!ownerKey || latestOwner.current !== ownerKey || !mounted.current || logoutStarted.current) {
+        throw new DOMException("Aborted", "AbortError");
+      }
+      if (!sameAddress(walletSnapshot.current.boundAddress, boundAddress)) throw new Error("wallet_address_mismatch");
+    };
+    if (onrampOperation.current?.active) return onrampFlow.current || Promise.resolve({ pending: true });
+    if (!boundAddress) return Promise.reject(new Error("wallet_funding_wallet_not_linked"));
+    assertCurrent();
+    if (expectedAddress && !sameAddress(expectedAddress, boundAddress)) {
+      setOnrampState({ status: "error", error: "mismatch" });
+      return Promise.reject(new Error("wallet_address_mismatch"));
+    }
+
+    const scope = beginOnrampOperation();
+    setOnrampState({ status: "opening", error: "" });
+    const operation = prepareReownUsCheckout(scope, { linkedAddress: boundAddress, assertCurrent,
+      readBinding: readWalletBinding, mintCheckout: input => BlockchainApiController.getOnrampWidgetUrl(input),
+    }).then(checkoutUrl => scope.run(() => {
+      assertCurrent();
+      window.location.assign(checkoutUrl);
+      setOnrampState({ status: "open", error: "" });
+      return { opened: true, provider: "reown" };
+    })).catch(error => {
+      if (onrampOperation.current === scope && mounted.current && latestOwner.current === ownerKey) {
+        setOnrampState({ status: "error", error: personalFundingFailure(error) });
+      }
+      throw error;
+    }).finally(() => {
+      if (onrampFlow.current === operation) onrampFlow.current = null;
+      if (onrampOperation.current === scope) {
+        scope.finish(); onrampOperation.current = null;
+      }
+    });
+    onrampFlow.current = operation;
+    return operation;
+  }, [beginOnrampOperation, boundAddress, ownerKey]);
+
   const startOnramp = useCallback(async (selection = {}) => {
     if (!mounted.current || logoutStarted.current) throw new DOMException('Aborted', 'AbortError');
+    if ((selection.countryCode ?? selection.country) === "US" && (!selection.country || selection.country === "US")) {
+      return startReownUsCheckout(selection.walletAddress);
+    }
     try {
       appMeldFundingSelection(selection);
     } catch (error) {
@@ -644,7 +687,7 @@ function ConfiguredReownProvider({ children }) {
       }
       throw error;
     }
-  }, [account.isConnected, beginOnrampOperation, boundAddress, currentAddress, openConnect, runOnramp, walletProvider]);
+  }, [account.isConnected, beginOnrampOperation, boundAddress, currentAddress, openConnect, runOnramp, startReownUsCheckout, walletProvider]);
 
   const reconnectWallet = useCallback(async () => {
     if (!mounted.current || logoutStarted.current) throw new DOMException('Aborted', 'AbortError');

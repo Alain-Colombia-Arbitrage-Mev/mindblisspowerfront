@@ -82,6 +82,7 @@ export async function handleWalletFunding(request, action, {
     const appInputError = kind === 'personal' && appMeldFundingInputError(body);
     if (appInputError) return reply({ error: appInputError }, 400);
     if (kind === 'personal') {
+      if (body.country === 'US') return reply({ error: 'wallet_funding_method_unavailable' }, 400);
       const destination = appMeldDestinationFor(body.destinationCurrencyCode ?? appMeldFundingAsset(body.country, body.sourceCurrencyCode ?? 'USD', body.serviceProvider, body.paymentMethodType));
       if (request.headers.get('x-mindbliss-wallet-network') !== destination.network) return reply({ error: 'wallet_funding_network_changed' }, 409);
     }
@@ -93,6 +94,8 @@ export async function handleWalletFunding(request, action, {
     const headers = { cookie, ...(body ? { 'content-type': 'application/json', origin: request.headers.get('origin') || '' } : {}) };
     if (action === 'personal-options' || action === 'personal-status' || (action === 'history' && kind === 'personal')) {
       if (new URL(request.url).origin !== env.AUTH_PUBLIC_ORIGIN) return reply({ error: 'invalid_origin' }, 403);
+      // New U.S. purchases use Reown's hosted checkout.
+      if (action === 'personal-options' && optionsContext?.country === 'US') return reply({ error: 'wallet_funding_method_unavailable' }, 400);
       headers.origin = env.AUTH_PUBLIC_ORIGIN;
       headers['x-mindbliss-funding-provider'] = 'meld';
     }

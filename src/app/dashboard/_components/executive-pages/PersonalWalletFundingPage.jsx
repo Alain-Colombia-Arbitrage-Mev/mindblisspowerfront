@@ -40,6 +40,8 @@ export function PersonalWalletFunding() {
   if (epoch.current.owner !== owner) epoch.current = { owner, generation: epoch.current.generation + 1 };
   const generation = epoch.current.generation;
   const mounted = useRef(false), action = useRef(null);
+  const cancelOnUnmount = useRef(reown.cancelOnramp);
+  cancelOnUnmount.current = reown.cancelOnramp;
   const [actionError, setActionError] = useState("");
   const [actionDiagnostic, setActionDiagnostic] = useState("");
   const [actionBusy, setActionBusy] = useState(false);
@@ -66,7 +68,11 @@ export function PersonalWalletFunding() {
   const live = () => mounted.current && Boolean(owner) && epoch.current.generation === generation;
   useEffect(() => {
     mounted.current = true;
-    return () => { mounted.current = false; action.current = null; };
+    return () => {
+      mounted.current = false;
+      if (action.current?.kind === "checkout") cancelOnUnmount.current?.();
+      action.current = null;
+    };
   }, []);
   useEffect(() => {
     action.current = null; setActionBusy(false); setCheckoutBusy(false); setWalletRecovery({ phase: "", address: "" });

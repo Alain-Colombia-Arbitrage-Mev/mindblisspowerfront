@@ -32,6 +32,10 @@
 .formPanel :global(.mb-onramp-country-picker) { margin-bottom: 18px; }
 .formFields { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "country" "currency" "amount" "method"; gap: 20px; }
 .formFields.implicitCurrency { grid-template-areas: "country" "amount" "method"; }
+.formFields.reownFields { grid-template-columns: minmax(0, 1fr); grid-template-areas: "country" "checkout"; }
+.reownCheckout { grid-area: checkout; padding: 14px 16px; border: 1px solid var(--vp-border); border-radius: 12px; background: var(--vp-field); }
+.reownCheckout h3 { margin: 0; color: var(--vp-text); font-size: 14px; font-weight: 700; }
+.reownCheckout p { margin: 5px 0 0; color: var(--vp-muted); font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
 .formFields .countryField, .formFields .currencyField, .formFields .amountField { min-width: 0; margin: 0; }
 .countryField { grid-area: country; align-content: start; }
 .countryHeading { display: flex; align-items: center; gap: 4px; min-width: 0; }

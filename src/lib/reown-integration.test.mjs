@@ -6,6 +6,7 @@ import ts from 'typescript';
 import { APP_MELD_MINIMUM_USD, appMeldFundingSelection } from './app-meld-funding-contract.mjs';
 import { personalFundingFailure } from './personal-funding-errors.mjs';
 import { createReownFundingOperation, verifyReownWalletOwnership } from './reown-funding-operation.mjs';
+import { prepareReownUsCheckout } from './reown-production-onramp.mjs';
 import { personalWalletMetadata } from './personal-portal-origin.mjs';
 
 const read = relative => readFileSync(new URL(relative, import.meta.url), "utf8");
@@ -70,12 +71,76 @@ function fundingRuntime(overrides = {}) {
     Event: class { constructor(type) { this.type = type; } },
     ...overrides,
   };
-  for (const name of ['beginOnrampOperation', 'cancelOnramp', 'openConnect', 'linkWallet', 'runOnramp', 'startOnramp']) {
+  for (const name of ['beginOnrampOperation', 'cancelOnramp', 'openConnect', 'linkWallet', 'runOnramp', 'startReownUsCheckout', 'startOnramp']) {
     scope[name] = onrampCallback(name, scope);
   }
   return { scope, events, states, bindings, address, requestId,
     input: { requestId, country: 'MX', sourceCurrencyCode: 'USD', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD', serviceProvider: 'MERCURYO' } };
 }
+
+function usFundingRuntime() {
+  const runtime = fundingRuntime({ prepareReownUsCheckout });
+  const { scope, events, address } = runtime;
+  scope.latestOwner = { current: scope.ownerKey };
+  scope.walletSnapshot.current.boundAddress = address;
+  scope.readWalletBinding = async ({ signal }) => {
+    assert.equal(signal.aborted, false);
+    events.push('read binding');
+    return { linked: true, address };
+  };
+  scope.BlockchainApiController = { async getOnrampWidgetUrl(input) {
+    assert.deepEqual({ ...input }, { destinationCurrencyCode: 'USDC_POLYGON', walletAddress: address });
+    events.push('request Reown checkout');
+    return 'https://meldcrypto.com/?wt=synthetic';
+  } };
+  scope.createPersonalFundingIntent = () => assert.fail('US checkout called direct MELD');
+  scope.open = () => assert.fail('US checkout tried to authenticate the wallet again');
+  scope.window.location.assign = url => events.push(url);
+  return runtime;
+}
+
+test('US opens Reown with the canonical linked address and produces no direct funding record', async () => {
+  const { scope, address, events, states } = usFundingRuntime();
+  const result = await scope.startOnramp({ countryCode: 'US', walletAddress: address });
+  assert.deepEqual({ ...result }, { opened: true, provider: 'reown' });
+  assert.deepEqual(events, ['read binding', 'request Reown checkout', 'https://meldcrypto.com/?wt=synthetic']);
+  assert.equal(states.at(-1).status, 'open');
+});
+
+test('US checkout rejects caller overrides, changed bindings, and unexpected checkout links', async () => {
+  const runtime = usFundingRuntime();
+  const otherAddress = `0x${'2'.repeat(40)}`;
+  const { scope, events } = runtime;
+  const input = { countryCode: 'US', walletAddress: runtime.address };
+  await assert.rejects(scope.startOnramp({ ...input, walletAddress: otherAddress }), { message: 'wallet_address_mismatch' });
+  assert.deepEqual(events, []);
+  const readBinding = scope.readWalletBinding;
+  scope.readWalletBinding = async () => ({ linked: true, address: otherAddress });
+  await assert.rejects(scope.startOnramp(input), { message: 'wallet_address_mismatch' });
+  assert.deepEqual(events, []);
+  scope.readWalletBinding = readBinding;
+  for (const url of ['https://example.test/?wt=synthetic', 'https://meldcrypto.com/?wt=synthetic&wt=other',
+    'https://meldcrypto.com/?token=legacy', 'http://meldcrypto.com/?wt=synthetic']) {
+    scope.BlockchainApiController.getOnrampWidgetUrl = async () => url;
+    await assert.rejects(scope.startOnramp(input), { message: 'reown_provider_invalid' });
+  }
+  assert.ok(events.every(event => event === 'read binding'));
+});
+
+test('a US checkout minted after cancellation or an owner change cannot redirect', async () => {
+  for (const change of ['cancel', 'owner']) {
+    const { scope, events } = usFundingRuntime();
+    const response = deferred(), requested = deferred();
+    scope.BlockchainApiController.getOnrampWidgetUrl = () => { requested.resolve(); return response.promise; };
+    const opening = scope.startOnramp({ countryCode: 'US' });
+    await requested.promise;
+    if (change === 'cancel') scope.cancelOnramp();
+    else scope.latestOwner.current = 'another-owner';
+    response.resolve('https://meldcrypto.com/?wt=synthetic');
+    await assert.rejects(opening, { name: 'AbortError' });
+    assert.deepEqual(events, ['read binding']);
+  }
+});
 
 test('manual cancellation releases a hung SDK connect and its late result cannot begin funding', async () => {
   const rpc = deferred(), started = deferred();
@@ -300,11 +365,11 @@ test('personal start and continuation reject ineligible country, method and curr
   const selections = [
     { input: { country: 'MX', sourceCurrencyCode: 'MXN', amount: 1000, paymentMethodType: 'LOCAL_BANK_TRANSFER' }, code: 'wallet_funding_method_unavailable', category: 'method' },
     { input: { country: 'MX', sourceCurrencyCode: 'COP', amount: 200000, paymentMethodType: 'SPEI' }, code: 'invalid_request', category: 'provider' },
-    { input: { country: 'US', sourceCurrencyCode: 'USD', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD', destinationCurrencyCode: 'USDT_POLYGON' }, code: 'wallet_funding_method_unavailable', category: 'method' },
-    { input: { country: 'US', sourceCurrencyCode: 'USD', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD', serviceProvider: 'ONRAMPMONEY' }, code: 'wallet_funding_method_unavailable', category: 'method' },
+    { input: { country: 'MX', sourceCurrencyCode: 'USD', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD', destinationCurrencyCode: 'USDT_POLYGON' }, code: 'wallet_funding_method_unavailable', category: 'method' },
+    { input: { country: 'MX', sourceCurrencyCode: 'USD', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD', serviceProvider: 'ONRAMPMONEY' }, code: 'wallet_funding_method_unavailable', category: 'method' },
     { input: { country: 'CA', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' }, code: 'wallet_funding_invalid_country', category: 'method' },
     ...['NETELLER', 'PAYSAFECARD', 'PAYSAFE_CARD', 'SKRILL', 'SKIRLL', 'ASTROPAY'].map(paymentMethodType => ({
-      input: { country: 'US', amount: 100, paymentMethodType }, code: 'wallet_funding_method_unavailable', category: 'method' })),
+      input: { country: 'MX', amount: 100, paymentMethodType }, code: 'wallet_funding_method_unavailable', category: 'method' })),
     { input: { amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' }, code: 'wallet_funding_invalid_country', category: 'method' },
     { input: { countryCode: '', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' }, code: 'wallet_funding_invalid_country', category: 'method' },
     { input: { country: '', countryCode: '', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' }, code: 'wallet_funding_invalid_country', category: 'method' },
@@ -370,17 +435,17 @@ test('personal dollar continuation opens the authenticated MELD URL without addi
   assert.deepEqual(events, ['intent', 'open']);
 });
 
-test('Mercuryo US dollar card checkout uses USDC on Polygon and the same verified address', async () => {
+test('Mercuryo Mexico dollar card checkout uses USDC on Polygon and the same verified address', async () => {
   const runtime = fundingRuntime({
     createPersonalFundingIntent: async body => {
-      assert.equal(body.country, 'US');
+      assert.equal(body.country, 'MX');
       assert.equal(body.walletAddress, runtime.address);
       assert.equal(body.serviceProvider, 'MERCURYO');
       assert.equal(body.destinationCurrencyCode, 'USDC_POLYGON');
       return fundingSession(body);
     },
   });
-  const input = { ...runtime.input, country: 'US', serviceProvider: 'MERCURYO', destinationCurrencyCode: 'USDC_POLYGON' };
+  const input = { ...runtime.input, serviceProvider: 'MERCURYO', destinationCurrencyCode: 'USDC_POLYGON' };
   const result = await runtime.scope.startOnramp(input);
   assert.equal(result.asset, 'USDC');
   assert.equal(result.minimumUsd, 50);

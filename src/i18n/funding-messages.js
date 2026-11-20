@@ -1,5 +1,9 @@
 export const fundingMessages = {
   es: { funding: {
+    reownUsCheckoutTitle: "Recargar con Reown",
+    reownUsCheckoutDescription: "Elige Estados Unidos, el monto en USD y tu método de pago. Para pagar con Stripe, búscalo en «See more quotes» si está disponible. Confirma que recibes USDC en Polygon antes de pagar. Consulta el estado y el recibo en Reown.",
+    reownUsCheckoutAction: "Continuar a Reown",
+    reownUsDestinationReview: "Comprueba que el checkout muestre esta dirección antes de pagar.",
     chooseWallet: "Elegir otra billetera",
     activateWallet: "Activar mi billetera",
     activatingWallet: "Activando tu billetera…",
@@ -105,6 +109,10 @@ export const fundingMessages = {
     sandboxUnavailable: "No pudimos abrir una sesión de prueba para este país, monto y proveedor. Prueba otra combinación.",
   } },
   en: { funding: {
+    reownUsCheckoutTitle: "Add funds with Reown",
+    reownUsCheckoutDescription: "Choose United States, the USD amount, and your payment method. To pay with Stripe, look for it in “See more quotes” when available. Confirm you are receiving USDC on Polygon before paying. Check your purchase status and receipt in Reown.",
+    reownUsCheckoutAction: "Continue to Reown",
+    reownUsDestinationReview: "Check that the checkout shows this wallet address before paying.",
     chooseWallet: "Choose another wallet",
     activateWallet: "Activate my wallet",
     activatingWallet: "Activating your wallet…",
@@ -210,6 +218,10 @@ export const fundingMessages = {
     sandboxUnavailable: "We could not open a test session for this country, amount and provider. Try another combination.",
   } },
   ar: { funding: {
+    reownUsCheckoutTitle: "إضافة رصيد عبر Reown",
+    reownUsCheckoutDescription: "اختر الولايات المتحدة والمبلغ بالدولار الأمريكي وطريقة الدفع. للدفع عبر Stripe، ابحث عنه في «See more quotes» إذا كان متاحًا. تأكد من استلام USDC على شبكة Polygon قبل الدفع. تابع حالة الشراء والإيصال في Reown.",
+    reownUsCheckoutAction: "متابعة إلى Reown",
+    reownUsDestinationReview: "تأكد من ظهور عنوان المحفظة هذا في صفحة الدفع قبل الدفع.",
     chooseWallet: "اختيار محفظة أخرى",
     activateWallet: "تفعيل محفظتي",
     activatingWallet: "جارٍ تفعيل محفظتك…",
@@ -315,6 +327,10 @@ export const fundingMessages = {
     sandboxUnavailable: "تعذر فتح جلسة اختبار لهذا البلد والمبلغ والمزوّد. جرّب مجموعة أخرى.",
   } },
   zh: { funding: {
+    reownUsCheckoutTitle: "通过 Reown 充值",
+    reownUsCheckoutDescription: "选择美国、美元金额和付款方式。如需使用 Stripe 付款，请在「See more quotes」中查看是否可用。付款前请确认通过 Polygon 网络接收 USDC。在 Reown 中查看购买状态和收据。",
+    reownUsCheckoutAction: "前往 Reown",
+    reownUsDestinationReview: "付款前，请确认结账页面显示的是此钱包地址。",
     chooseWallet: "选择其他钱包",
     activateWallet: "启用我的钱包",
     activatingWallet: "正在启用钱包…",

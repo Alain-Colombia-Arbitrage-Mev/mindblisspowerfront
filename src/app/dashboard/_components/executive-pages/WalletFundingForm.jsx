@@ -82,6 +82,7 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
   const localCurrencies = useRef({});
   const defaultAmountPending = useRef(false);
   const methodContext = useRef("");
+  const usesReown = countryCode === "US";
   const current = options.country === countryCode && (options.sourceCurrencyCode || "USD") === sourceCurrencyCode;
   const methods = current && options.status === "ready" ? eligiblePaymentMethods(options.routes, Number(amount), sourceCurrencyCode, countryCode) : [];
   const methodsKey = methods.join(",");
@@ -109,7 +110,7 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
     }).filter(other => Number.isFinite(other.minimum) && Number(amount) < other.minimum) : [];
   const showCurrency = Boolean(countryCode && (sourceCurrencyCode !== "USD" || fundingCurrencyChoices(countryCode).length > 1));
   const parsedAmount = Number(amount);
-  const valid = Boolean(provider && destination && /^0x[0-9a-f]{40}$/i.test(destinationAddress));
+  const valid = Boolean((usesReown || (provider && destination)) && /^0x[0-9a-f]{40}$/i.test(destinationAddress));
 
   function changeSelection(update, value) {
     update(value);
@@ -120,7 +121,7 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
     const context = `${countryCode}:${sourceCurrencyCode}`;
     if (methodContext.current !== context) { setMethod(""); setProviderChoice(""); setDestinationChoice(""); }
     methodContext.current = context;
-    if (!countryCode) { setOptions(EMPTY_OPTIONS); return undefined; }
+    if (!countryCode || usesReown) { setOptions(EMPTY_OPTIONS); return undefined; }
     const controller = new AbortController();
     setOptions({ ...EMPTY_OPTIONS, status: "loading", country: countryCode, sourceCurrencyCode });
     readPersonalFundingOptions(countryCode, { signal: controller.signal, sourceCurrencyCode }).then(data => {
@@ -134,7 +135,7 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
       }
     }).catch(() => { if (!controller.signal.aborted) setOptions({ ...EMPTY_OPTIONS, status: "error", country: countryCode, sourceCurrencyCode }); });
     return () => controller.abort();
-  }, [countryCode, sourceCurrencyCode, revision]);
+  }, [countryCode, sourceCurrencyCode, revision, usesReown]);
 
   useEffect(() => {
     const eligible = methodsKey.split(",");
@@ -147,14 +148,16 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
     event.preventDefault();
     if (disabled || busy || submitting.current || !valid) return;
     submitting.current = true;
-    try { await onContinue({ requestId: fundingRequestId(), amount: parsedAmount, countryCode, sourceCurrencyCode,
-      paymentMethodType: method, serviceProvider: provider.serviceProvider, destinationCurrencyCode: destinationCode }); }
-    finally { submitting.current = false; }
+    try {
+      if (usesReown) await onContinue({ countryCode });
+      else await onContinue({ requestId: fundingRequestId(), amount: parsedAmount, countryCode, sourceCurrencyCode,
+        paymentMethodType: method, serviceProvider: provider.serviceProvider, destinationCurrencyCode: destinationCode });
+    } finally { submitting.current = false; }
   }
 
   return <form className="mb-onramp-simple" onSubmit={event => void submit(event).catch(() => {})} aria-label={t("walletPage.personalWalletLabel")}>
     <div className="mb-onramp-simple-main">
-      <div className={`${styles.formFields}${!showCurrency ? ` ${styles.implicitCurrency}` : ""}`}>
+      <div className={`${styles.formFields}${usesReown ? ` ${styles.reownFields}` : !showCurrency ? ` ${styles.implicitCurrency}` : ""}`}>
         <FundingCountryField id={id} value={countryCode} countries={PERSONAL_COUNTRIES} label={t("funding.residenceCountryLabel")} onChange={value => {
           const currency = localCurrencies.current[value] || appMeldDefaultCurrency(value);
           changeSelection(setCountryCode, value);
@@ -162,45 +165,52 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
           if (value !== countryCode) setAmount(defaultAmount(value, currency));
           setSourceCurrencyCode(currency);
         }} busy={busy} />
-        {showCurrency ? <FundingCurrencyField id={id} country={countryCode} value={sourceCurrencyCode} onChange={value => {
-          if (!fundingCurrencyChoices(countryCode).includes(value)) return;
-          localCurrencies.current[countryCode] = value;
-          defaultAmountPending.current = true;
-          changeSelection(setSourceCurrencyCode, value);
-          setAmount(defaultAmount(countryCode, value));
-        }} busy={busy} /> : null}
-        <FundingAmountField id={id} amount={amount} sourceCurrencyCode={sourceCurrencyCode} minimumAmount={routeMinimum} maximumAmount={selectedLimits?.maximumAmount ?? selectedLimits?.maximumUsd} countryCode={countryCode}
-          onChange={value => { defaultAmountPending.current = false; changeSelection(setAmount, value); }} busy={busy} />
-        <FundingMethodField id={id} value={methods.includes(method) ? method : ""} methods={methods} status={current ? options.status : "loading"}
-          selectionUnavailable={selectionUnavailable}
-          countrySelected={Boolean(countryCode)} sourceCurrencyCode={sourceCurrencyCode} minimumUsd={routeMinimum}
-          amountValid={appMeldSourceAmount(parsedAmount, sourceCurrencyCode, countryCode)}
-          onUseMinimum={routeMinimum !== null && Number(amount) < routeMinimum ? () => changeSelection(setAmount, routeMinimum.toFixed(minorUnits)) : undefined}
-          limits={selectedLimits} onChange={value => { setProviderChoice(""); setDestinationChoice(""); changeSelection(setMethod, value); }}
-          onRetry={() => setRevision(value => value + 1)} busy={busy}>
-          {otherMethods.length ? <div className="flex flex-wrap gap-2">
-            {otherMethods.map(other => <button className="executive-button" type="button" disabled={busy} key={other.method} onClick={() => {
-              defaultAmountPending.current = false; setProviderChoice(""); setDestinationChoice(""); setMethod(other.method);
-              changeSelection(setAmount, other.minimum.toFixed(minorUnits));
-            }}>{t("funding.methodAtMinimum", { method: paymentMethodLabel(other.method, t), amount: localeAmount(other.minimum) })}</button>)}
-          </div> : null}
-          {networkChoices.length > 1 ? <label className={`mb-onramp-country-picker ${styles.currencyField}`} htmlFor={`${id}-network`}><span>{t("funding.depositNetwork")}</span>
-            <select id={`${id}-network`} value={destinationCode} disabled={busy} onChange={event => {
-              setProviderChoice(""); changeSelection(setDestinationChoice, event.target.value);
-            }}>{networkChoices.map(code => <option key={code} value={code}>{appMeldDestinationFor(code)?.name}</option>)}</select></label> : null}
-          {matchingRoutes.length > 1 ? <label className={`mb-onramp-country-picker ${styles.currencyField}`} htmlFor={`${id}-provider`}><span>{t("funding.providerLabel")}</span>
-            <select id={`${id}-provider`} value={providerChoice || provider?.serviceProvider || ""} onChange={event => changeSelection(setProviderChoice, event.target.value)} disabled={busy}>
-              {!providerChoice && !provider ? <option value="" disabled>{t("funding.providerLabel")}</option> : null}
-              {matchingRoutes.map(route => <option key={route.serviceProvider} value={route.serviceProvider}>{PROVIDER_NAMES[route.serviceProvider]}</option>)}
-            </select></label> : provider ? <small>{t("funding.providerLabel")} · {PROVIDER_NAMES[provider.serviceProvider]}</small> : null}
-        </FundingMethodField>
+        {usesReown ? <section className={styles.reownCheckout} aria-labelledby={`${id}-reown-checkout`}>
+          <h3 id={`${id}-reown-checkout`}>{t("funding.reownUsCheckoutTitle")}</h3>
+          <p>{t("funding.reownUsCheckoutDescription")}</p>
+        </section> : <>
+          {showCurrency ? <FundingCurrencyField id={id} country={countryCode} value={sourceCurrencyCode} onChange={value => {
+            if (!fundingCurrencyChoices(countryCode).includes(value)) return;
+            localCurrencies.current[countryCode] = value;
+            defaultAmountPending.current = true;
+            changeSelection(setSourceCurrencyCode, value);
+            setAmount(defaultAmount(countryCode, value));
+          }} busy={busy} /> : null}
+          <FundingAmountField id={id} amount={amount} sourceCurrencyCode={sourceCurrencyCode} minimumAmount={routeMinimum} maximumAmount={selectedLimits?.maximumAmount ?? selectedLimits?.maximumUsd} countryCode={countryCode}
+            onChange={value => { defaultAmountPending.current = false; changeSelection(setAmount, value); }} busy={busy} />
+          <FundingMethodField id={id} value={methods.includes(method) ? method : ""} methods={methods} status={current ? options.status : "loading"}
+            selectionUnavailable={selectionUnavailable}
+            countrySelected={Boolean(countryCode)} sourceCurrencyCode={sourceCurrencyCode} minimumUsd={routeMinimum}
+            amountValid={appMeldSourceAmount(parsedAmount, sourceCurrencyCode, countryCode)}
+            onUseMinimum={routeMinimum !== null && Number(amount) < routeMinimum ? () => changeSelection(setAmount, routeMinimum.toFixed(minorUnits)) : undefined}
+            limits={selectedLimits} onChange={value => { setProviderChoice(""); setDestinationChoice(""); changeSelection(setMethod, value); }}
+            onRetry={() => setRevision(value => value + 1)} busy={busy}>
+            {otherMethods.length ? <div className="flex flex-wrap gap-2">
+              {otherMethods.map(other => <button className="executive-button" type="button" disabled={busy} key={other.method} onClick={() => {
+                defaultAmountPending.current = false; setProviderChoice(""); setDestinationChoice(""); setMethod(other.method);
+                changeSelection(setAmount, other.minimum.toFixed(minorUnits));
+              }}>{t("funding.methodAtMinimum", { method: paymentMethodLabel(other.method, t), amount: localeAmount(other.minimum) })}</button>)}
+            </div> : null}
+            {networkChoices.length > 1 ? <label className={`mb-onramp-country-picker ${styles.currencyField}`} htmlFor={`${id}-network`}><span>{t("funding.depositNetwork")}</span>
+              <select id={`${id}-network`} value={destinationCode} disabled={busy} onChange={event => {
+                setProviderChoice(""); changeSelection(setDestinationChoice, event.target.value);
+              }}>{networkChoices.map(code => <option key={code} value={code}>{appMeldDestinationFor(code)?.name}</option>)}</select></label> : null}
+            {matchingRoutes.length > 1 ? <label className={`mb-onramp-country-picker ${styles.currencyField}`} htmlFor={`${id}-provider`}><span>{t("funding.providerLabel")}</span>
+              <select id={`${id}-provider`} value={providerChoice || provider?.serviceProvider || ""} onChange={event => changeSelection(setProviderChoice, event.target.value)} disabled={busy}>
+                {!providerChoice && !provider ? <option value="" disabled>{t("funding.providerLabel")}</option> : null}
+                {matchingRoutes.map(route => <option key={route.serviceProvider} value={route.serviceProvider}>{PROVIDER_NAMES[route.serviceProvider]}</option>)}
+              </select></label> : provider ? <small>{t("funding.providerLabel")} · {PROVIDER_NAMES[provider.serviceProvider]}</small> : null}
+          </FundingMethodField>
+        </>}
       </div>
-      <FundingDestination address={destinationAddress} asset={countryCode ? destination?.asset : undefined}
-        network={destination?.name || "Polygon"} editableByProvider={provider?.serviceProvider === "MERCURYO"} />
+      <FundingDestination address={destinationAddress} asset={countryCode && !usesReown ? destination?.asset : undefined}
+        network={usesReown ? "" : destination?.name || "Polygon"} editableByProvider={provider?.serviceProvider === "MERCURYO"}
+        reviewMessage={usesReown ? "funding.reownUsDestinationReview" : undefined} />
       <div className={styles.fundingActions}>
-        {walletAction || <FundingSubmit disabled={disabled || !valid} busy={busy} />}
+        {walletAction || <FundingSubmit disabled={disabled || !valid} busy={busy}
+          label={usesReown ? "funding.reownUsCheckoutAction" : undefined} />}
         {!disabled && destinationAddress ? <AppWalletDepositQr key={destinationAddress} address={destinationAddress}
-          preferredDestinationCode={countryCode && method && destinationCode ? destinationCode : "USDC_POLYGON"} disabled={busy} /> : null}
+          preferredDestinationCode={!usesReown && current && method && destinationCode ? destinationCode : "USDC_POLYGON"} disabled={busy} /> : null}
       </div>
     </div>
   </form>;
@@ -310,21 +320,21 @@ function FundingMethodField({ id, value, methods, status, countrySelected, sourc
   </fieldset>;
 }
 
-function FundingSubmit({ disabled, busy }) {
+function FundingSubmit({ disabled, busy, label = "walletPage.addFundsAction" }) {
   const { t } = useI18n();
   return <button className="executive-button primary mb-onramp-primary" type="submit" disabled={disabled || busy}>
-    {busy ? <Loader2 className="animate-spin" size={17} aria-hidden="true" /> : <ShieldCheck size={17} aria-hidden="true" />}{t(busy ? "funding.preparingTopUp" : "walletPage.addFundsAction")}
+    {busy ? <Loader2 className="animate-spin" size={17} aria-hidden="true" /> : <ShieldCheck size={17} aria-hidden="true" />}{t(busy ? "funding.preparingTopUp" : label)}
   </button>;
 }
 
-export function FundingDestination({ address, asset, network = "Polygon", editableByProvider = false }) {
-  const { t, locale } = useI18n();
+export function FundingDestination({ address, asset, network = "Polygon", editableByProvider = false, reviewMessage = "" }) {
+  const { t } = useI18n();
   const id = useId();
-  return <div className={styles.destinationReview}><label htmlFor={`${id}-destination`}>{t("funding.reviewDestination")}<small>{asset ? `${asset} · ${network}` : network}</small></label>
+  return <div className={styles.destinationReview}><label htmlFor={`${id}-destination`}>{t("funding.reviewDestination")}{network ? <small>{asset ? `${asset} · ${network}` : network}</small> : null}</label>
     <input id={`${id}-destination`} type="text" readOnly value={address} dir="ltr" title={address || undefined}
       aria-describedby={`${id}-destination-help`} placeholder={t("funding.destinationReviewEmpty")} />
-    <small id={`${id}-destination-help`} className={address && !editableByProvider ? "sr-only" : undefined}>
-      {t(!address ? "funding.destinationReviewEmpty" : editableByProvider ? "funding.destinationReviewEditable" : "funding.destinationReviewCopy")}
+    <small id={`${id}-destination-help`} className={address && !editableByProvider && !reviewMessage ? "sr-only" : undefined}>
+      {t(!address ? "funding.destinationReviewEmpty" : reviewMessage || (editableByProvider ? "funding.destinationReviewEditable" : "funding.destinationReviewCopy"))}
     </small>
   </div>;
 }

@@ -123,18 +123,17 @@ test('MXN931/SPEI and administrative USD50 to25000 keep their own currency and b
   assert.equal(sandbox.routes[0].paymentMethods[0].maximumAmount, 25000);
 });
 
-test('the private BFF blocks old-range new writes before transport and accepts U.S. bank funding at its exact USD boundaries', async () => {
+test('the private BFF blocks old-range new writes before transport and accepts Mexico card funding at its exact USD boundaries', async () => {
   let calls = 0;
-  const bankRoute = { country: 'US', serviceProvider: 'ONRAMPMONEY', paymentMethodType: 'ACH' };
   const send = amount => handleWalletFunding(new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/wallet-funding/personal/intent`, {
     method: 'POST', headers: { cookie: 'better-auth.session_token=synthetic', origin: env.AUTH_PUBLIC_ORIGIN,
       'x-mindbliss-wallet-network': 'polygon', 'x-mindbliss-funding-provider': 'meld', 'cf-connecting-ip': '198.51.100.5',
-      'sec-fetch-site': 'same-origin', 'content-type': 'application/json' }, body: JSON.stringify(input(amount, bankRoute)),
+      'sec-fetch-site': 'same-origin', 'content-type': 'application/json' }, body: JSON.stringify(mexCard(amount)),
   }), 'personal', { env, serviceRequest: async (_url, init) => { calls++; const amount = JSON.parse(init.body).amount;
-    assert.ok(amount >= 50 && amount <= 25000); return { ok: true, data: meldSession(amount, bankRoute) }; } });
-  for (const amount of [20, 49.99, 25000.01]) assert.equal((await send(amount)).status, 400);
+    assert.ok(amount >= 50 && amount <= 16821.71); return { ok: true, data: meldSession(amount) }; } });
+  for (const amount of [20, 49.99, 16821.72]) assert.equal((await send(amount)).status, 400);
   assert.equal(calls, 0);
-  for (const amount of [50, 25000]) assert.equal((await send(amount)).status, 200);
+  for (const amount of [50, 16821.71]) assert.equal((await send(amount)).status, 200);
   assert.equal(calls, 2);
 });
 

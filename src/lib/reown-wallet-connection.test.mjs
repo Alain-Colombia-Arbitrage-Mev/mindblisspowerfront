@@ -234,6 +234,7 @@ function providerHarness(t, { bound = false, reset = async () => {}, proof = fal
       }, walletBindingFailure: error => error.message },
     '@/lib/personal-funding-errors.mjs': { personalFundingFailure: error => error.message },
     '@/lib/personal-portal-origin.mjs': { personalWalletMetadata: () => ({ url: 'https://app.mindblisspower.com' }) },
+    '@/lib/reown-production-onramp.mjs': { prepareReownUsCheckout() { assert.fail('No Reown checkout in connection tests'); } },
     '@/lib/reown-funding-operation.mjs': { createReownFundingOperation, verifyReownWalletOwnership },
     '@/lib/reown-wallet-connection.mjs': { createReownWalletConnectionRequest, createReownWalletSwitchRequest, reownWalletConnectionState: state, reownWalletIdentityMismatch: identityMismatch, reownWalletNeedsAccountSelection: needsSelection },
     '@/lib/personal-wallet-balance-store.mjs': { personalWalletBalanceSessionKey },

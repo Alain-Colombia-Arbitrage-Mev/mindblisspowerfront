@@ -69,7 +69,7 @@ test('historical PayPal uses Topper US/USD with contextual acknowledgements and 
   for (const patch of [{ country: 'CO' }, { country: 'MX' }, { destination: { ...destination, network: 'ethereum', chainId: 1 } }]) assert.equal(fundingStatus({ ...status, ...patch }, 'personal'), null);
 });
 
-test('US USD uses Mercuryo for card and mobile wallets across three networks and Onramp Money for bank payments on Polygon', async t => {
+test('legacy US MELD fixtures still parse and the BFF rejects every new US discovery or intent before private transport', async t => {
   const mercuryo = ['CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY'];
   const onrampMoney = ['ACH', 'LOCAL_BANK_TRANSFER'];
   const targets = [
@@ -101,24 +101,24 @@ test('US USD uses Mercuryo for card and mobile wallets across three networks and
     return Response.json(session(browserBody));
   });
   assert.deepEqual(await readPersonalFundingOptions('US'), options);
-  const catalogResponse = await handleWalletFunding(new Request(
-    env.AUTH_PUBLIC_ORIGIN + '/api/member/wallet-funding/personal/options?country=US&sourceCurrencyCode=USD',
-    { headers: { cookie: 'better-auth.session_token=synthetic', 'x-mindbliss-funding-provider': 'meld' } }), 'personal-options',
-  { env, serviceRequest: async () => ({ ok: true, data: staleOptions }) });
-  assert.equal(catalogResponse.status, 200);
-  assert.deepEqual(await catalogResponse.json(), options);
+  const serviceRequest = () => assert.fail('New US funding must use Reown');
+  const unavailable = { error: 'wallet_funding_method_unavailable' };
+  for (const query of ['country=US', 'country=US&sourceCurrencyCode=USD']) {
+    const get = new Request(env.AUTH_PUBLIC_ORIGIN + '/api/member/wallet-funding/personal/options?' + query,
+      { headers: { cookie: 'better-auth.session_token=synthetic', 'x-mindbliss-funding-provider': 'meld' } });
+    const response = await handleWalletFunding(get, 'personal-options', { env, serviceRequest });
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), unavailable);
+  }
   for (const route of options.routes) for (const { method: paymentMethodType, maximumAmount } of route.paymentMethods) {
     const body = { ...input('US', 'USD', paymentMethodType), serviceProvider: route.serviceProvider, destinationCurrencyCode: route.destinationCurrencyCode };
     const result = await createPersonalFundingIntent(body);
     assert.equal(result.serviceProvider, body.serviceProvider);
     assert.deepEqual(result.destination, { address, asset: 'USDC', network: route.network, chainId: route.chainId });
     assert.deepEqual(browserBody, body);
-    const response = await handleWalletFunding(post(body, route.network), 'personal', { env, serviceRequest: async (_url, init) => {
-      assert.deepEqual(JSON.parse(init.body), body);
-      return { ok: true, data: session(body) };
-    } });
-    assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), result);
+    const response = await handleWalletFunding(post(body, route.network), 'personal', { env, serviceRequest });
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), unavailable);
     const atMaximum = { ...body, amount: maximumAmount };
     assert.equal((await createPersonalFundingIntent(atMaximum)).requestedAmount, maximumAmount);
     const overMaximum = { ...body, amount: Number((maximumAmount + 0.01).toFixed(2)) };
@@ -157,14 +157,32 @@ test('browser and BFF block US methods or destinations missing from the producti
   }
 });
 
-test('prior RampNow transactions remain readable on their stored USDC network but cannot create a new checkout', () => {
+test('prior US MELD transactions remain readable from the authenticated BFF on their stored USDC network', async () => {
   for (const [code, network, chainId] of [['USDC_POLYGON', 'polygon', 137], ['USDC_ARBITRUM', 'arbitrum', 42161], ['USDC', 'ethereum', 1]]) {
     const body = input('US', 'USD', 'CREDIT_DEBIT_CARD');
     const historical = { ...ack(body, []), provider: 'meld', country: 'US', serviceProvider: 'RAMPNOW',
       destination: { address, asset: 'USDC', network, chainId }, destinationCurrencyCode: code, status: 'session_created' };
     const status = { ...historical, requestStatus: 'session_created', confirmation: { state: 'unconfirmed', source: 'none', testMode: false } };
+    const statusRequest = new Request(env.AUTH_PUBLIC_ORIGIN + '/api/member/wallet-funding/personal/status?checkoutReference=' + requestId,
+      { headers: { cookie: 'better-auth.session_token=synthetic' } });
+    const statusResponse = await handleWalletFunding(statusRequest, 'personal-status', { env, serviceRequest: async (url, init) => {
+      assert.equal(url, 'https://auth.core.internal/api/member/wallet-funding/personal/status?checkoutReference=' + requestId);
+      assert.equal(init.headers.cookie, 'better-auth.session_token=synthetic');
+      return { ok: true, data: status };
+    } });
+    assert.equal(statusResponse.status, 200);
+    assert.deepEqual(await statusResponse.json(), appPersonalFundingStatus(status));
     assert.deepEqual(appPersonalFundingStatus(status).destination, historical.destination);
     const history = { walletKind: 'personal', environment: 'production', settlement: 'unconfirmed', records: [historical] };
+    const historyRequest = new Request(env.AUTH_PUBLIC_ORIGIN + '/api/member/wallet-funding/history?walletKind=personal',
+      { headers: { cookie: 'better-auth.session_token=synthetic' } });
+    const historyResponse = await handleWalletFunding(historyRequest, 'history', { env, serviceRequest: async (url, init) => {
+      assert.equal(url, 'https://auth.core.internal/api/member/wallet-funding/history?walletKind=personal');
+      assert.equal(init.headers.cookie, 'better-auth.session_token=synthetic');
+      return { ok: true, data: history };
+    } });
+    assert.equal(historyResponse.status, 200);
+    assert.deepEqual(await historyResponse.json(), appPersonalFundingHistory(history));
     assert.equal(appPersonalFundingHistory(history).records[0].serviceProvider, 'RAMPNOW');
     assert.deepEqual(appPersonalFundingHistory(history).records[0].destination, historical.destination);
     for (const invalid of [{ country: 'MX' }, { destination: { ...historical.destination, asset: 'USDT' } }]) {

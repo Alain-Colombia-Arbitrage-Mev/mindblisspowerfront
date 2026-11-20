@@ -1,6 +1,35 @@
 import { FUNDING_UUID, personalFundingProviders, validFundingSourceAmount, fundingCurrencyCode, fundingSourceSupported, personalFundingCountry, personalFundingMethod } from './wallet-funding-contract.mjs';
 import { PERSONAL_WALLET_MELD_ASSET } from './personal-wallet.mjs';
 
+const hostedCheckoutAddress = /^0x(?!0{40}$)[0-9a-f]{40}$/i;
+
+/** Reown's opaque widget session is independent of the legacy public-key flow. */
+export async function prepareReownUsCheckout(operation, { linkedAddress, assertCurrent, readBinding, mintCheckout }) {
+  if (!hostedCheckoutAddress.test(linkedAddress || '')) throw new Error('wallet_funding_wallet_not_linked');
+  const binding = await operation.wait(() => {
+    assertCurrent();
+    return readBinding({ signal: operation.signal });
+  });
+  if (binding?.linked !== true) throw new Error('wallet_funding_wallet_not_linked');
+  if (!hostedCheckoutAddress.test(binding.address || '') || binding.address.toLowerCase() !== linkedAddress.toLowerCase()) {
+    throw new Error('wallet_address_mismatch');
+  }
+  const checkout = await operation.wait(() => {
+    assertCurrent();
+    return mintCheckout({ destinationCurrencyCode: 'USDC_POLYGON', walletAddress: binding.address });
+  });
+  assertCurrent();
+  if (typeof checkout !== 'string' || checkout.length > 8192 || /[\s\\\u0000-\u001f\u007f]/.test(checkout)) {
+    throw new Error('reown_provider_invalid');
+  }
+  const url = new URL(checkout);
+  if (url.origin !== 'https://meldcrypto.com' || url.pathname !== '/' || url.username || url.password || url.hash
+    || url.searchParams.size !== 1 || !/^[A-Za-z0-9_.~+/-]{1,7800}={0,2}$/.test(url.searchParams.get('wt') || '')) {
+    throw new Error('reown_provider_invalid');
+  }
+  return url.href;
+}
+
 /** Validate before linking, selecting a provider or creating a personal intent. */
 export function reownFundingCurrency(sourceCurrencyCode = 'USD', context = {}) {
   if (!fundingCurrencyCode(sourceCurrencyCode)) throw new Error('invalid_request');
