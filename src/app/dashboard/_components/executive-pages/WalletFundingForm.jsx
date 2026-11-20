@@ -71,7 +71,7 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
   const [revision, setRevision] = useState(0);
   const [sourceCurrencyCode, setSourceCurrencyCode] = useState("USD");
   const submitting = useRef(false);
-  const localCurrencies = useRef({ MX: "USD", CO: "COP" });
+  const localCurrencies = useRef({ ...LOCAL_CURRENCIES });
   const copDefaultPending = useRef(false);
   const methodContext = useRef("");
   const current = options.country === countryCode && (options.sourceCurrencyCode || "USD") === sourceCurrencyCode;
