@@ -1,4 +1,4 @@
-import { walletProductionAsset, walletProductionInput, walletProductionSubject } from './wallet-production-funding-contract.mjs';
+import { walletProductionAsset, walletProductionExplicitDestinationAllowed, walletProductionInput, walletProductionSubject } from './wallet-production-funding-contract.mjs';
 import { sandboxWalletAddress } from './sandbox-wallet-contract.mjs';
 
 export const PRODUCTION_QUOTE_DEBOUNCE_MS = 500;
@@ -42,15 +42,26 @@ export function mexicoFundingOption(options, decimalPlaces) {
   const routes = [{ ...route, paymentMethods: route.paymentMethods.filter(item => item.method === choice.method && item.currencyCode === choice.currency) }];
   return productionFundingLimits(routes, choice.currency, choice.method, decimalPlaces) ? { ...choice, routes } : null;
 }
-export function productionFundingDestinationChoices(routes, currency, method) {
-  return routes.find(route => route.serviceProvider === 'RAMPNOW')?.paymentMethods
-    .find(item => item.currencyCode === currency && item.method === method)?.destinationCurrencyCodes ?? [];
+export function productionFundingDestinationChoices(routes, country, currency, method, defaultDestination) {
+  const rampNowChoices = routes.find(route => route.serviceProvider === 'RAMPNOW')?.paymentMethods
+    .find(item => item.currencyCode === currency && item.method === method)?.destinationCurrencyCodes;
+  if (!rampNowChoices?.length) return [];
+  const selection = { country, sourceCurrencyCode: currency, paymentMethodType: method, destinationCurrencyCode: defaultDestination };
+  const isDefaultAvailable = productionFundingRoutesForDestination(routes, selection).length > 0;
+  return isDefaultAvailable ? [...new Set([defaultDestination, ...rampNowChoices])] : rampNowChoices;
+}
+export function productionFundingRoutesForDestination(routes, input) {
+  const { country, sourceCurrencyCode, paymentMethodType, destinationCurrencyCode } = input;
+  const available = Array.isArray(routes) ? routes : [];
+  if (!destinationCurrencyCode) return available;
+  return available.filter(({ serviceProvider, paymentMethods }) =>
+    walletProductionExplicitDestinationAllowed(country, sourceCurrencyCode, paymentMethodType, destinationCurrencyCode, serviceProvider)
+    && paymentMethods.some(item => item.currencyCode === sourceCurrencyCode && item.method === paymentMethodType
+      && (serviceProvider !== 'RAMPNOW' || item.destinationCurrencyCodes?.includes(destinationCurrencyCode))));
 }
 export function productionFundingProviderSupported(routes, serviceProvider, input, decimalPlaces = 2) {
   if (!input || !walletProductionInput(input)) return false;
-  return (Array.isArray(routes) ? routes : []).some(route => route.serviceProvider === serviceProvider
-    && (!input.destinationCurrencyCode || (serviceProvider === 'RAMPNOW'
-      && productionFundingDestinationChoices([route], input.sourceCurrencyCode, input.paymentMethodType).includes(input.destinationCurrencyCode)))
+  return productionFundingRoutesForDestination(routes, input).some(route => route.serviceProvider === serviceProvider
     && productionFundingValue(String(input.amount), productionFundingLimits([route], input.sourceCurrencyCode, input.paymentMethodType, decimalPlaces), decimalPlaces) !== null);
 }
 export function productionFundingSelectionKey(ownerSubject, address, input, destinationCurrencyCode = 'USDT_POLYGON') {

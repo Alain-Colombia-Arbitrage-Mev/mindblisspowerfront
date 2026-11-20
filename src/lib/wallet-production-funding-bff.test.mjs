@@ -265,12 +265,12 @@ test('the actual production route passes the Cloudflare guard and maps its publi
   assert.equal(denied.status, 404); assert.equal(calls, 2);
 });
 
-test('RampNow US USD catalog, quote and session for cards and mobile wallets preserve a bounded destination code through the signed native request', async () => {
+test('RampNow US USD catalog, quote and session preserve the payment method and USDC network through the signed native request', async () => {
   const networks = ['USDC_POLYGON', 'USDC_ARBITRUM', 'USDC'];
   const expected = { address, asset: 'USDC', network: 'polygon', chainId: 137 };
   const actual = { address, asset: 'USDC', network: 'ethereum', chainId: 1 };
   const existingMethod = options.routes[0].paymentMethods[0];
-  const allowedMethods = ['CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY'];
+  const allowedMethods = ['CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY', 'ACH', 'LOCAL_BANK_TRANSFER'];
   const paymentMethods = allowedMethods.map(method => ({ ...existingMethod, method, destinationCurrencyCodes: networks }));
   const catalog = { ...options, destinationCurrencyCode: 'USDC_POLYGON', routes: [{ serviceProvider: 'RAMPNOW', paymentMethods }] };
   const routePath = 'options?country=US&sourceCurrencyCode=USD';
@@ -296,7 +296,7 @@ test('RampNow US USD catalog, quote and session for cards and mobile wallets pre
     }
   }
   const never = async () => assert.fail('Invalid route reached the native service');
-  for (const [action, body] of [['quote', { ...selection, country: 'MX' }], ['quote', { ...selection, paymentMethodType: 'ACH' }],
+  for (const [action, body] of [['quote', { ...selection, country: 'MX' }], ['quote', { ...selection, paymentMethodType: 'CASH_APP' }],
     ['session', { ...checkout, serviceProvider: 'BANXA' }], ['session', { ...checkout, destinationCurrencyCode: 'USDC_ETHEREUM' }],
     ['session', { ...checkout, address }], ['session', { ...checkout, paymentMethodType: 'PAYPAL' }],
     ['quote', { ...selection, sourceCurrencyCode: 'EUR', paymentMethodType: 'APPLE_PAY' }],

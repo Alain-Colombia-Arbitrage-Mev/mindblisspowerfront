@@ -10,7 +10,7 @@ import { readProductionDiscovery, readProductionOptions, createProductionFunding
 import useProductionFundingQuote from '@/components/wallet/useProductionFundingQuote';
 import ProductionCountrySelect from '@/components/wallet/ProductionCountrySelect';
 import WalletUsdcBalance from '@/components/wallet/WalletUsdcBalance';
-import { MEXICO_BANK_FUNDING, mexicoFundingOption, productionFundingCurrencies, productionFundingDestinationChoices, productionFundingLimits, productionFundingValue, productionFundingProviderSupported, PRODUCTION_QUOTE_TTL_MS } from '@/lib/production-funding-selection.mjs';
+import { MEXICO_BANK_FUNDING, mexicoFundingOption, productionFundingCurrencies, productionFundingDestinationChoices, productionFundingLimits, productionFundingRoutesForDestination, productionFundingValue, productionFundingProviderSupported, PRODUCTION_QUOTE_TTL_MS } from '@/lib/production-funding-selection.mjs';
 import { walletProductionAsset, walletProductionDestinationCode, walletProductionFailureLog } from '@/lib/wallet-production-funding-contract.mjs';
 import { readSandboxWalletFundingHistory } from '@/lib/sandbox-wallet-client.mjs';
 import { FUNDING_UUID } from '@/lib/wallet-funding-contract.mjs';
@@ -49,9 +49,9 @@ export function ProductionWalletView({ ownerSubject }) {
   const isMexico = country === 'MX';
   const mexicoChoice = isMexico ? mexicoOption : null;
   const routes = isMexico ? mexicoChoice?.routes ?? [] : catalogRoutes;
-  const destinationChoices = productionFundingDestinationChoices(routes, currency, method);
+  const destinationChoices = productionFundingDestinationChoices(routes, country, currency, method, catalogDestinationCode);
   const fundingDestinationCode = isMexico ? mexicoChoice?.destinationCurrencyCode ?? ''
-    : destinationChoices.includes(preferredDestinationCode) ? preferredDestinationCode : catalogDestinationCode;
+    : destinationChoices.includes(preferredDestinationCode) ? preferredDestinationCode : destinationChoices[0] ?? catalogDestinationCode;
   const fundingAsset = walletProductionAsset(fundingDestinationCode);
   const explicitDestinationCode = destinationChoices.includes(fundingDestinationCode) ? fundingDestinationCode : '';
   const [revision, setRevision] = useState(0), [countryRevision, setCountryRevision] = useState(0), [history, setHistory] = useState([]), [selected, setSelected] = useState(null);
@@ -146,7 +146,8 @@ export function ProductionWalletView({ ownerSubject }) {
   const number = value => new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(value);
   const decimals = currencies.find(item => item.code === currency)?.decimalPlaces ?? 2;
   const methods = availableMethods(routes, currency, decimals);
-  const amountRoutes = explicitDestinationCode ? routes.filter(route => route.serviceProvider === 'RAMPNOW') : routes;
+  const amountRoutes = productionFundingRoutesForDestination(routes, { country, sourceCurrencyCode: currency,
+    paymentMethodType: method, destinationCurrencyCode: explicitDestinationCode });
   const limits = productionFundingLimits(amountRoutes, currency, method, decimals), minimum = limits?.minimum, maximum = limits?.maximum;
   const eligible = productionFundingValue(amount, limits, decimals) !== null;
   useEffect(() => {

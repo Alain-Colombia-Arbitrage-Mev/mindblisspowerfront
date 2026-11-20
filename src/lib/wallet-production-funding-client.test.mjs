@@ -301,7 +301,7 @@ test('RampNow preserves the quoted chain and accepts only a settled native USDC 
   assert.deepEqual(walletProductionStatus(settled).destination, expected);
   assert.deepEqual(walletProductionStatus({ ...settled, confirmedDestination: expected }).confirmedDestination, expected);
   assert.deepEqual(walletProductionHistory({ ...history, records: [settled] }).records[0].confirmedDestination, actual);
-  for (const change of [{ serviceProvider: 'ONRAMPMONEY' }, { requestedAmount: 0 }, { country: 'MX' }, { paymentMethodType: 'ACH' },
+  for (const change of [{ serviceProvider: 'ONRAMPMONEY' }, { requestedAmount: 0 }, { country: 'MX' }, { paymentMethodType: 'CASH_APP' },
     { confirmedDestination: undefined }, { confirmedDestination: null },
     { confirmation: { state: 'pending', source: 'meld_production_api', testMode: false } },
     { confirmedDestination: { ...actual, address: otherAddress } }, { confirmedDestination: { ...actual, asset: 'USDT' } },
@@ -309,5 +309,28 @@ test('RampNow preserves the quoted chain and accepts only a settled native USDC 
     const invalid = { ...settled, ...change };
     assert.equal(walletProductionStatus(invalid), null);
     assert.equal(walletProductionHistory({ ...history, records: [invalid] }), null);
+  }
+});
+
+test('a US bank quote can offer both providers on Polygon while the checkout preserves destination and method', () => {
+  const polygon = { ...destination, asset: 'USDC' };
+  const ethereum = { ...polygon, network: 'ethereum', chainId: 1 };
+  for (const paymentMethodType of ['ACH', 'LOCAL_BANK_TRANSFER']) {
+    const selection = { ...input, paymentMethodType, destinationCurrencyCode: 'USDC_POLYGON' };
+    const order = { ...sessionInput, ...selection };
+    assert.deepEqual(walletProductionInput(order, true), order);
+    const { destinationCurrencyCode: _explicit, ...legacyOrder } = order;
+    assert.deepEqual(walletProductionInput(legacyOrder, true), legacyOrder);
+    for (const patch of [{ destinationCurrencyCode: 'USDC' }, { paymentMethodType: 'CREDIT_DEBIT_CARD' }, { country: 'MX' }]) {
+      assert.equal(walletProductionInput({ ...order, ...patch }, true), null);
+    }
+    const bankPrice = { ...quote, destination: polygon, paymentMethodType, quotes: ['RAMPNOW', 'ONRAMPMONEY'].map(serviceProvider =>
+      ({ ...quoteItem, serviceProvider, destinationCurrencyCode: 'USDC_POLYGON' })) };
+    assert.deepEqual(walletProductionQuote(bankPrice, selection, address), bankPrice);
+    const ethereumPrice = { ...bankPrice, destination: ethereum, quotes: bankPrice.quotes.map(item => ({ ...item, destinationCurrencyCode: 'USDC' })) };
+    assert.equal(walletProductionQuote(ethereumPrice, { ...selection, destinationCurrencyCode: 'USDC' }, address), null);
+    const session = { ...ack, paymentMethodType, destination: polygon, destinationCurrencyCode: 'USDC_POLYGON' };
+    assert.deepEqual(walletProductionAcknowledgement(session, order), session);
+    assert.equal(walletProductionAcknowledgement({ ...session, destination: ethereum, destinationCurrencyCode: 'USDC' }, order), null);
   }
 });

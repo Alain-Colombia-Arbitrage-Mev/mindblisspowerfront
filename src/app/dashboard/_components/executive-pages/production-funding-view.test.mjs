@@ -295,6 +295,44 @@ for (const [paymentMethod, label, network, destination] of [
   });
 }
 
+for (const paymentMethod of ['ACH', 'LOCAL_BANK_TRANSFER']) {
+  test('US ' + paymentMethod + ' keeps Onramp Money on Polygon and offers RampNow on other verified networks', async t => {
+    const networks = ['USDC_POLYGON', 'USDC_ARBITRUM', 'USDC'];
+    const bankMethod = { method: paymentMethod, currencyCode: 'USD', minimumAmount: 50, maximumAmount: 10000 };
+    const h = fixture(t, {
+      options: async () => ({ destinationCurrencyCode: 'USDC_POLYGON', routes: [
+        { serviceProvider: 'ONRAMPMONEY', paymentMethods: [{ ...bankMethod, maximumAmount: 25000 }] },
+        { serviceProvider: 'RAMPNOW', paymentMethods: [{ ...bankMethod, destinationCurrencyCodes: networks }] },
+      ] }),
+      quotes: ({ destinationCurrencyCode }) => [
+        { serviceProvider: 'RAMPNOW', destinationAmount: 47, totalFee: 3 },
+        ...(destinationCurrencyCode === 'USDC_POLYGON' ? [{ serviceProvider: 'ONRAMPMONEY', destinationAmount: 45, totalFee: 5 }] : []),
+      ],
+    });
+    const providers = () => all(h.tree).filter(node => node?.props?.name === 'production-provider');
+    await h.flush(); await h.change('production-country', 'US');
+    assert.equal(field(h.tree, 'production-network').props.value, 'USDC_POLYGON');
+    assert.deepEqual(providers().map(node => node.props.value), ['RAMPNOW', 'ONRAMPMONEY']);
+    assert.equal(field(h.tree, 'production-amount').props.max, 25000);
+    providers()[1].props.onChange(); await h.flush();
+    await h.change('production-network', 'USDC');
+    assert.deepEqual(providers().map(node => node.props.value), ['RAMPNOW']);
+    assert.equal(field(h.tree, 'production-amount').props.max, 10000);
+    assert.equal(submit(h.tree).props.disabled, true);
+    await h.change('production-network', 'USDC_POLYGON');
+    providers()[1].props.onChange(); await h.flush();
+    form(h.tree).props.onSubmit({ preventDefault() {} });
+    const [sessionInput, expectedAddress] = h.calls.session[0];
+    assert.equal(expectedAddress, address);
+    assert.equal(sessionInput.serviceProvider, 'ONRAMPMONEY');
+    assert.equal(sessionInput.paymentMethodType, paymentMethod);
+    assert.equal(sessionInput.destinationCurrencyCode, 'USDC_POLYGON');
+    h.waiting.resolve({ checkoutUrl: 'https://meldcrypto.com/?token=synthetic_opaque', destination: { ...polygonDestination, asset: 'USDC' } });
+    await h.flush();
+    assert.deepEqual(h.calls.opened, ['https://meldcrypto.com/?token=synthetic_opaque']);
+  });
+}
+
 test('new fiat initializes its own provider minimum and never carries USD 50 into MXN or COP', async t => {
   const h = fixture(t); await h.flush(); await h.change('production-country', 'US'); await h.change('production-method', 'CREDIT_DEBIT_CARD');
   assert.equal(field(h.tree, 'production-amount').props.value, '50'); assert.equal(field(h.tree, 'production-amount').props.min, 50); assert.equal(field(h.tree, 'production-amount').props.max, 25000);
