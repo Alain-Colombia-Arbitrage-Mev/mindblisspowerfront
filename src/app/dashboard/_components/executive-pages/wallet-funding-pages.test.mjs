@@ -770,9 +770,11 @@ test('choosing the United States opens only the Reown flow and preserves direct 
   assert.equal(find(tree, 'FundingSubmit').props.label, 'funding.reownUsCheckoutAction');
   const steps = find(tree, node => node?.type === 'ol');
   assert.equal(find(tree, 'FundingSubmit').props.describedBy, steps.props.id);
-  assert.deepEqual(findAll(steps, node => node.type === 'li').map(node => node.props.children), [
-    'funding.reownUsCheckoutCountry', 'funding.reownUsCheckoutAmount', 'funding.reownUsCheckoutStripe',
-  ]);
+  const instructions = findAll(steps, node => node.type === 'li').map(node => node.props.children);
+  assert.equal(instructions.length, 3);
+  assert.match(instructions[0], /Quotes Currently Unavailable.*United States/);
+  assert.match(instructions[1], /50 o 100 USD.*USDC en Polygon/);
+  assert.match(instructions[2], /Stripe.*See more quotes/);
   assert.equal(find(tree, 'FundingSubmit').props.disabled, false);
   await tree.props.onSubmit({ preventDefault() {} });
   assert.deepEqual(submitted, [{ countryCode: 'US' }]);
