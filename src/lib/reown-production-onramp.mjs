@@ -1,10 +1,12 @@
 import { FUNDING_UUID, personalFundingProviders, validFundingSourceAmount, fundingCurrencyCode, fundingSourceSupported, personalFundingCountry, personalFundingMethod } from './wallet-funding-contract.mjs';
+import { browserRequestDeadline } from './browser-request-deadline.mjs';
 import { PERSONAL_WALLET_MELD_ASSET } from './personal-wallet.mjs';
 
 const hostedCheckoutAddress = /^0x(?!0{40}$)[0-9a-f]{40}$/i;
 
 /** Reown's opaque widget session is independent of the legacy public-key flow. */
-export async function prepareReownUsCheckout(operation, { linkedAddress, assertCurrent, readBinding, mintCheckout }) {
+export async function prepareReownUsCheckout(operation, { linkedAddress, assertCurrent, readBinding, projectId, fetchImpl = fetch }) {
+  if (!/^[0-9a-f]{32}$/i.test(projectId || '')) throw new Error('reown_unavailable');
   if (!hostedCheckoutAddress.test(linkedAddress || '')) throw new Error('wallet_funding_wallet_not_linked');
   const binding = await operation.wait(() => {
     assertCurrent();
@@ -14,9 +16,36 @@ export async function prepareReownUsCheckout(operation, { linkedAddress, assertC
   if (!hostedCheckoutAddress.test(binding.address || '') || binding.address.toLowerCase() !== linkedAddress.toLowerCase()) {
     throw new Error('wallet_address_mismatch');
   }
-  const checkout = await operation.wait(() => {
+  const checkout = await operation.wait(async () => {
     assertCurrent();
-    return mintCheckout({ destinationCurrencyCode: 'USDC_POLYGON', walletAddress: binding.address });
+    const endpoint = new URL('https://rpc.walletconnect.org/v1/onramp/widget-url');
+    endpoint.searchParams.set('projectId', projectId);
+    endpoint.searchParams.set('new_meld_api', 'true');
+    const deadline = browserRequestDeadline(operation.signal, 15_000);
+    try {
+      // Use AppKit's checkout mint. Its helper omits the selected market,
+      // which leaves the hosted widget to infer country and currency.
+      const response = await fetchImpl(endpoint, {
+        method: 'POST',
+        credentials: 'omit',
+        redirect: 'error',
+        cache: 'no-store',
+        signal: deadline.signal,
+        body: JSON.stringify({
+          projectId,
+          externalCustomerId: projectId,
+          walletAddress: binding.address,
+          destinationCurrencyCode: 'USDC_POLYGON',
+          countryCode: 'US',
+          sourceCurrencyCode: 'USD',
+          paymentMethodType: 'CREDIT_DEBIT_CARD',
+        }),
+      });
+      if (!response.ok) throw new Error('reown_provider_unavailable');
+      const result = await response.json();
+      if (deadline.signal.aborted) throw deadline.signal.reason ?? new DOMException('Aborted', 'AbortError');
+      return result?.url;
+    } finally { deadline.dispose(); }
   });
   assertCurrent();
   if (typeof checkout !== 'string' || checkout.length > 8192 || /[\s\\\u0000-\u001f\u007f]/.test(checkout)) {

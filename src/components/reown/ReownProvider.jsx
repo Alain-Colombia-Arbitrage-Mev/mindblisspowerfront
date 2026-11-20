@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createAppKit, useAppKit, useAppKitAccount, useAppKitProvider, useAppKitState, useAppKitTheme, useAppKitNetwork, useDisconnect } from "@reown/appkit/react";
 import { EthersAdapter } from "@reown/appkit-adapter-ethers";
 import { SolanaAdapter } from "@reown/appkit-adapter-solana/react";
-import { BlockchainApiController, ChainController, ConnectionController, ConnectorController, ConnectorControllerUtil, OptionsController } from "@reown/appkit-controllers";
+import { ChainController, ConnectionController, ConnectorController, ConnectorControllerUtil, OptionsController } from "@reown/appkit-controllers";
 import { ConstantsUtil as ReownConstantsUtil } from "@reown/appkit-common";
 import { mainnet, polygon, solana } from "@reown/appkit/networks";
 import { BrowserProvider, getAddress } from "ethers";
@@ -621,7 +621,7 @@ function ConfiguredReownProvider({ children }) {
     const scope = beginOnrampOperation();
     setOnrampState({ status: "opening", error: "" });
     const operation = prepareReownUsCheckout(scope, { linkedAddress: boundAddress, assertCurrent,
-      readBinding: readWalletBinding, mintCheckout: input => BlockchainApiController.getOnrampWidgetUrl(input),
+      readBinding: readWalletBinding, projectId,
     }).then(checkoutUrl => scope.run(() => {
       assertCurrent();
       window.location.assign(checkoutUrl);

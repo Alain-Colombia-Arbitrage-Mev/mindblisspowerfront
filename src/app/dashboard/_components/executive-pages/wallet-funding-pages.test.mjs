@@ -768,6 +768,11 @@ test('choosing the United States opens only the Reown flow and preserves direct 
   assert.equal(find(tree, 'FundingAmountField'), undefined);
   assert.equal(find(tree, 'FundingMethodField'), undefined);
   assert.equal(find(tree, 'FundingSubmit').props.label, 'funding.reownUsCheckoutAction');
+  const steps = find(tree, node => node?.type === 'ol');
+  assert.equal(find(tree, 'FundingSubmit').props.describedBy, steps.props.id);
+  assert.deepEqual(findAll(steps, node => node.type === 'li').map(node => node.props.children), [
+    'funding.reownUsCheckoutCountry', 'funding.reownUsCheckoutAmount', 'funding.reownUsCheckoutStripe',
+  ]);
   assert.equal(find(tree, 'FundingSubmit').props.disabled, false);
   await tree.props.onSubmit({ preventDefault() {} });
   assert.deepEqual(submitted, [{ countryCode: 'US' }]);
@@ -777,6 +782,7 @@ test('choosing the United States opens only the Reown flow and preserves direct 
   assert.deepEqual(calls, [['CO', 'COP']]);
   assert.deepEqual(findAll(field.type(field.props), node => node?.type === 'input' && node.props.type === 'radio').map(node => node.props.value), ['PSE', 'LOCAL_BANK_TRANSFER']);
   assert.equal(find(tree, 'FundingSubmit').props.label, undefined);
+  assert.equal(find(tree, 'FundingSubmit').props.describedBy, undefined);
 
   tree = selectFundingCountry(harness, props, 'US');
   assert.equal(find(tree, 'FundingMethodField'), undefined);

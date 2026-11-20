@@ -167,7 +167,11 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
         }} busy={busy} />
         {usesReown ? <section className={styles.reownCheckout} aria-labelledby={`${id}-reown-checkout`}>
           <h3 id={`${id}-reown-checkout`}>{t("funding.reownUsCheckoutTitle")}</h3>
-          <p>{t("funding.reownUsCheckoutDescription")}</p>
+          <ol id={`${id}-reown-steps`}>
+            <li>{t("funding.reownUsCheckoutCountry")}</li>
+            <li>{t("funding.reownUsCheckoutAmount")}</li>
+            <li>{t("funding.reownUsCheckoutStripe")}</li>
+          </ol>
         </section> : <>
           {showCurrency ? <FundingCurrencyField id={id} country={countryCode} value={sourceCurrencyCode} onChange={value => {
             if (!fundingCurrencyChoices(countryCode).includes(value)) return;
@@ -208,7 +212,8 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
         reviewMessage={usesReown ? "funding.reownUsDestinationReview" : undefined} />
       <div className={styles.fundingActions}>
         {walletAction || <FundingSubmit disabled={disabled || !valid} busy={busy}
-          label={usesReown ? "funding.reownUsCheckoutAction" : undefined} />}
+          label={usesReown ? "funding.reownUsCheckoutAction" : undefined}
+          describedBy={usesReown ? `${id}-reown-steps` : undefined} />}
         {!disabled && destinationAddress ? <AppWalletDepositQr key={destinationAddress} address={destinationAddress}
           preferredDestinationCode={!usesReown && current && method && destinationCode ? destinationCode : "USDC_POLYGON"} disabled={busy} /> : null}
       </div>
@@ -320,9 +325,9 @@ function FundingMethodField({ id, value, methods, status, countrySelected, sourc
   </fieldset>;
 }
 
-function FundingSubmit({ disabled, busy, label = "walletPage.addFundsAction" }) {
+function FundingSubmit({ disabled, busy, label = "walletPage.addFundsAction", describedBy = undefined }) {
   const { t } = useI18n();
-  return <button className="executive-button primary mb-onramp-primary" type="submit" disabled={disabled || busy}>
+  return <button className="executive-button primary mb-onramp-primary" type="submit" disabled={disabled || busy} aria-describedby={describedBy}>
     {busy ? <Loader2 className="animate-spin" size={17} aria-hidden="true" /> : <ShieldCheck size={17} aria-hidden="true" />}{t(busy ? "funding.preparingTopUp" : label)}
   </button>;
 }

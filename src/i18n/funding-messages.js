@@ -1,7 +1,9 @@
 export const fundingMessages = {
   es: { funding: {
     reownUsCheckoutTitle: "Recargar con Reown",
-    reownUsCheckoutDescription: "Elige Estados Unidos, el monto en USD y tu método de pago. Para pagar con Stripe, búscalo en «See more quotes» si está disponible. Confirma que recibes USDC en Polygon antes de pagar. Consulta el estado y el recibo en Reown.",
+    reownUsCheckoutCountry: "Si ves «Quotes Currently Unavailable» o una moneda distinta de USD, cierra el aviso y elige «United States» en el selector de país.",
+    reownUsCheckoutAmount: "Con tarjeta, prueba 50 o 100 USD y confirma que recibes USDC en Polygon.",
+    reownUsCheckoutStripe: "Elige Stripe en «See more quotes» cuando esté disponible. El recibo queda en Reown.",
     reownUsCheckoutAction: "Continuar a Reown",
     reownUsDestinationReview: "Comprueba que el checkout muestre esta dirección antes de pagar.",
     chooseWallet: "Elegir otra billetera",
@@ -110,7 +112,9 @@ export const fundingMessages = {
   } },
   en: { funding: {
     reownUsCheckoutTitle: "Add funds with Reown",
-    reownUsCheckoutDescription: "Choose United States, the USD amount, and your payment method. To pay with Stripe, look for it in “See more quotes” when available. Confirm you are receiving USDC on Polygon before paying. Check your purchase status and receipt in Reown.",
+    reownUsCheckoutCountry: "If you see “Quotes Currently Unavailable” or a currency other than USD, close the notice and choose “United States” in the country selector.",
+    reownUsCheckoutAmount: "Try 50 or 100 USD by card and confirm you are receiving USDC on Polygon.",
+    reownUsCheckoutStripe: "Choose Stripe under “See more quotes” when available. Find your receipt in Reown.",
     reownUsCheckoutAction: "Continue to Reown",
     reownUsDestinationReview: "Check that the checkout shows this wallet address before paying.",
     chooseWallet: "Choose another wallet",
@@ -219,7 +223,9 @@ export const fundingMessages = {
   } },
   ar: { funding: {
     reownUsCheckoutTitle: "إضافة رصيد عبر Reown",
-    reownUsCheckoutDescription: "اختر الولايات المتحدة والمبلغ بالدولار الأمريكي وطريقة الدفع. للدفع عبر Stripe، ابحث عنه في «See more quotes» إذا كان متاحًا. تأكد من استلام USDC على شبكة Polygon قبل الدفع. تابع حالة الشراء والإيصال في Reown.",
+    reownUsCheckoutCountry: "إذا ظهرت رسالة «Quotes Currently Unavailable» أو عملة غير USD، فأغلق التنبيه واختر «United States» من قائمة البلدان.",
+    reownUsCheckoutAmount: "جرّب دفع 50 أو 100 دولار أمريكي بالبطاقة وتأكد من استلام USDC على شبكة Polygon.",
+    reownUsCheckoutStripe: "اختر Stripe من «See more quotes» إذا كان متاحًا. يمكنك العثور على الإيصال في Reown.",
     reownUsCheckoutAction: "متابعة إلى Reown",
     reownUsDestinationReview: "تأكد من ظهور عنوان المحفظة هذا في صفحة الدفع قبل الدفع.",
     chooseWallet: "اختيار محفظة أخرى",
@@ -328,7 +334,9 @@ export const fundingMessages = {
   } },
   zh: { funding: {
     reownUsCheckoutTitle: "通过 Reown 充值",
-    reownUsCheckoutDescription: "选择美国、美元金额和付款方式。如需使用 Stripe 付款，请在「See more quotes」中查看是否可用。付款前请确认通过 Polygon 网络接收 USDC。在 Reown 中查看购买状态和收据。",
+    reownUsCheckoutCountry: "如果出现「Quotes Currently Unavailable」或显示其他币种，请关闭提示并在国家选择器中选择「United States」。",
+    reownUsCheckoutAmount: "可尝试使用银行卡支付 50 或 100 美元，并确认通过 Polygon 网络接收 USDC。",
+    reownUsCheckoutStripe: "如有 Stripe 报价，请在「See more quotes」中选择。收据可在 Reown 中查看。",
     reownUsCheckoutAction: "前往 Reown",
     reownUsDestinationReview: "付款前，请确认结账页面显示的是此钱包地址。",
     chooseWallet: "选择其他钱包",

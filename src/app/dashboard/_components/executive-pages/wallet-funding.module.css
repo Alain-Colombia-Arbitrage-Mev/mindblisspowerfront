@@ -35,7 +35,8 @@
 .formFields.reownFields { grid-template-columns: minmax(0, 1fr); grid-template-areas: "country" "checkout"; }
 .reownCheckout { grid-area: checkout; padding: 14px 16px; border: 1px solid var(--vp-border); border-radius: 12px; background: var(--vp-field); }
 .reownCheckout h3 { margin: 0; color: var(--vp-text); font-size: 14px; font-weight: 700; }
-.reownCheckout p { margin: 5px 0 0; color: var(--vp-muted); font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.reownCheckout ol { margin: 6px 0 0; padding-inline-start: 20px; list-style: decimal; color: var(--vp-muted); font-size: 13px; line-height: 1.5; }
+.reownCheckout li + li { margin-block-start: 4px; }
 .formFields .countryField, .formFields .currencyField, .formFields .amountField { min-width: 0; margin: 0; }
 .countryField { grid-area: country; align-content: start; }
 .countryHeading { display: flex; align-items: center; gap: 4px; min-width: 0; }

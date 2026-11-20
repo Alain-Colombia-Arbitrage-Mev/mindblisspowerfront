@@ -79,8 +79,9 @@ function fundingRuntime(overrides = {}) {
 }
 
 function usFundingRuntime() {
-  const runtime = fundingRuntime({ prepareReownUsCheckout });
+  const runtime = fundingRuntime();
   const { scope, events, address } = runtime;
+  scope.prepareReownUsCheckout = (operation, options) => prepareReownUsCheckout(operation, { ...options, fetchImpl: scope.mintRequest });
   scope.latestOwner = { current: scope.ownerKey };
   scope.walletSnapshot.current.boundAddress = address;
   scope.readWalletBinding = async ({ signal }) => {
@@ -88,23 +89,44 @@ function usFundingRuntime() {
     events.push('read binding');
     return { linked: true, address };
   };
-  scope.BlockchainApiController = { async getOnrampWidgetUrl(input) {
-    assert.deepEqual({ ...input }, { destinationCurrencyCode: 'USDC_POLYGON', walletAddress: address });
+  scope.mintRequest = async (url, options) => {
+    assert.equal(url.origin, 'https://rpc.walletconnect.org');
+    assert.equal(url.pathname, '/v1/onramp/widget-url');
+    assert.deepEqual(Object.fromEntries(url.searchParams), { projectId: scope.projectId, new_meld_api: 'true' });
+    assert.equal(options.method, 'POST');
+    assert.equal(options.credentials, 'omit');
+    assert.equal(options.redirect, 'error');
+    assert.deepEqual(JSON.parse(options.body), {
+      projectId: scope.projectId, externalCustomerId: scope.projectId, walletAddress: address, destinationCurrencyCode: 'USDC_POLYGON',
+      countryCode: 'US', sourceCurrencyCode: 'USD', paymentMethodType: 'CREDIT_DEBIT_CARD',
+    });
     events.push('request Reown checkout');
-    return 'https://meldcrypto.com/?wt=synthetic';
-  } };
+    return Response.json({ url: 'https://meldcrypto.com/?wt=synthetic' });
+  };
   scope.createPersonalFundingIntent = () => assert.fail('US checkout called direct MELD');
   scope.open = () => assert.fail('US checkout tried to authenticate the wallet again');
   scope.window.location.assign = url => events.push(url);
   return runtime;
 }
 
-test('US opens Reown with the canonical linked address and produces no direct funding record', async () => {
+test('US opens Reown with the canonical linked address and the US card market', async () => {
   const { scope, address, events, states } = usFundingRuntime();
   const result = await scope.startOnramp({ countryCode: 'US', walletAddress: address });
   assert.deepEqual({ ...result }, { opened: true, provider: 'reown' });
   assert.deepEqual(events, ['read binding', 'request Reown checkout', 'https://meldcrypto.com/?wt=synthetic']);
   assert.equal(states.at(-1).status, 'open');
+});
+
+test('unavailable Reown mint leaves US checkout retryable without redirecting or changing markets', async () => {
+  const { scope, events, states } = usFundingRuntime();
+  scope.mintRequest = async () => {
+    events.push('failed Reown request');
+    return new Response(null, { status: 503 });
+  };
+  await assert.rejects(scope.startOnramp({ countryCode: 'US' }), { message: 'reown_provider_unavailable' });
+  assert.deepEqual(events, ['read binding', 'failed Reown request']);
+  assert.equal(states.at(-1).error, 'provider');
+  assert.equal(scope.onrampOperation.current, null);
 });
 
 test('US checkout rejects caller overrides, changed bindings, and unexpected checkout links', async () => {
@@ -121,7 +143,7 @@ test('US checkout rejects caller overrides, changed bindings, and unexpected che
   scope.readWalletBinding = readBinding;
   for (const url of ['https://example.test/?wt=synthetic', 'https://meldcrypto.com/?wt=synthetic&wt=other',
     'https://meldcrypto.com/?token=legacy', 'http://meldcrypto.com/?wt=synthetic']) {
-    scope.BlockchainApiController.getOnrampWidgetUrl = async () => url;
+    scope.mintRequest = async () => Response.json({ url });
     await assert.rejects(scope.startOnramp(input), { message: 'reown_provider_invalid' });
   }
   assert.ok(events.every(event => event === 'read binding'));
@@ -131,12 +153,12 @@ test('a US checkout minted after cancellation or an owner change cannot redirect
   for (const change of ['cancel', 'owner']) {
     const { scope, events } = usFundingRuntime();
     const response = deferred(), requested = deferred();
-    scope.BlockchainApiController.getOnrampWidgetUrl = () => { requested.resolve(); return response.promise; };
+    scope.mintRequest = () => { requested.resolve(); return response.promise; };
     const opening = scope.startOnramp({ countryCode: 'US' });
     await requested.promise;
     if (change === 'cancel') scope.cancelOnramp();
     else scope.latestOwner.current = 'another-owner';
-    response.resolve('https://meldcrypto.com/?wt=synthetic');
+    response.resolve(Response.json({ url: 'https://meldcrypto.com/?wt=synthetic' }));
     await assert.rejects(opening, { name: 'AbortError' });
     assert.deepEqual(events, ['read binding']);
   }
