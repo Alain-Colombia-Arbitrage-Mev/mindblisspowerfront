@@ -8,7 +8,7 @@ const method = (currencyCode, minimumAmount, maximumAmount, id = 'CREDIT_DEBIT_C
   ({ method: id, currencyCode, minimumAmount, maximumAmount });
 const routes = (...paymentMethods) => [{ serviceProvider: 'TRANSAK', paymentMethods }];
 const owner = 'synthetic-wallet-owner', address = `0x${'aBcDeF12'.repeat(5)}`;
-const input = { country: 'US', sourceCurrencyCode: 'USD', amount: 50, paymentMethodType: 'CREDIT_DEBIT_CARD' };
+const input = { country: 'US', sourceCurrencyCode: 'USD', amount: 50, paymentMethodType: 'ACH' };
 
 test('a local default does not hide a second verified bank currency', () => {
   const currencies = [fiat('EUR'), fiat('SEK'), fiat('EUR')];
@@ -88,25 +88,25 @@ test('amount precision rounds route bounds inwards and cannot grant a third deci
 });
 
 test('quote identity binds the native owner, canonical address and exact financial selection while equivalent decimal formatting shares a key', () => {
-  const key = productionFundingSelectionKey(owner, address, input);
+  const key = productionFundingSelectionKey(owner, address, input, 'USDC_POLYGON');
   assert.ok(key);
-  assert.deepEqual(JSON.parse(key), [owner, address.toLowerCase(), 'US', 'USD', 'CREDIT_DEBIT_CARD', 50, 'USDT_POLYGON']);
+  assert.deepEqual(JSON.parse(key), [owner, address.toLowerCase(), 'US', 'USD', 'ACH', 50, 'USDC_POLYGON']);
   const samePurchase = { ...input, country: 'MX', sourceCurrencyCode: 'EUR' };
   const polygonKey = productionFundingSelectionKey(owner, address, samePurchase, 'USDC_POLYGON');
   const arbitrumKey = productionFundingSelectionKey(owner, address, samePurchase, 'USDC_ARBITRUM');
   assert.notEqual(polygonKey, arbitrumKey);
   assert.equal(JSON.parse(polygonKey).at(-1), 'USDC_POLYGON');
   assert.equal(JSON.parse(arbitrumKey).at(-1), 'USDC_ARBITRUM');
-  const ethereum = { ...input, destinationCurrencyCode: 'USDC' };
+  const ethereum = { ...input, paymentMethodType: 'CREDIT_DEBIT_CARD', destinationCurrencyCode: 'USDC' };
   assert.equal(JSON.parse(productionFundingSelectionKey(owner, address, ethereum, 'USDC')).at(-1), 'USDC');
   assert.equal(productionFundingSelectionKey(owner, address, ethereum, 'USDC_POLYGON'), '');
   assert.equal(productionFundingSelectionKey(owner, address, input, 'USDC_ETHEREUM'), '');
-  assert.equal(productionFundingSelectionKey(owner, address.toLowerCase(), { ...input, amount: Number('50.00') }), key);
+  assert.equal(productionFundingSelectionKey(owner, address.toLowerCase(), { ...input, amount: Number('50.00') }, 'USDC_POLYGON'), key);
   for (const [subject, wallet, patch] of [
     ['different-owner', address, {}], [owner, `0x${'2'.repeat(40)}`, {}],
     [owner, address, { country: 'MX' }], [owner, address, { sourceCurrencyCode: 'MXN' }],
     [owner, address, { paymentMethodType: 'APPLE_PAY' }], [owner, address, { amount: 100 }],
-  ]) assert.notEqual(productionFundingSelectionKey(subject, wallet, { ...input, ...patch }), key);
+  ]) assert.notEqual(productionFundingSelectionKey(subject, wallet, { ...input, ...patch }, 'USDC_POLYGON'), key);
 });
 
 test('invalid owner, address and injected input cannot create a usable quote identity', () => {

@@ -312,21 +312,26 @@ export function ProductionWalletView({ ownerSubject }) {
             : <select id="production-currency" value={currency} disabled={Boolean(busy) || !currencies.length || Boolean(loading)} required onChange={event => changeCurrency(event.target.value)}><option value="">{tr('selectCurrency')}</option>{currencies.map(item => <option key={item.code} value={item.code}>{item.code} · {item.name}</option>)}</select>}</div>
           <div className={local.field}><label htmlFor="production-method">{tr('method')}</label>{methods.length === 1 && method === methods[0]
             ? <input id="production-method" value={names[method] ? t(names[method]) : methodName(method)} readOnly className={local.fixedValue} />
-            : <select id="production-method" value={method} disabled={Boolean(busy) || Boolean(loading) || !methods.length} required onChange={event => { methodChosen.current = true; reset(); setMethod(event.target.value); setPreferredDestinationCode(''); }}><option value="">{tr(loading === 'methods' ? 'loading' : 'selectMethod')}</option>{methods.map(item => <option key={item} value={item}>{names[item] ? t(names[item]) : methodName(item)}</option>)}</select>}</div></>}
+            : <select id="production-method" value={method} disabled={Boolean(busy) || Boolean(loading) || !methods.length} required onChange={event => {
+              methodChosen.current = true;
+              if (country === 'US' && currency === 'USD') { providerChosen.current = false; setSelectedProvider(''); }
+              reset(); setMethod(event.target.value); setPreferredDestinationCode('');
+            }}><option value="">{tr(loading === 'methods' ? 'loading' : 'selectMethod')}</option>{methods.map(item => <option key={item} value={item}>{names[item] ? t(names[item]) : methodName(item)}</option>)}</select>}</div></>}
           {destinationChoices.length > 1 ? <div className={local.field}><label htmlFor="production-network">{tr('receiveNetwork')}</label>
             <select id="production-network" value={fundingDestinationCode} disabled={Boolean(busy) || Boolean(loading)} aria-describedby="production-network-hint" onChange={event => {
               const code = event.target.value;
               if (code === live.current.fundingDestinationCode || !destinationChoices.includes(code)) return;
+              if (country === 'US' && currency === 'USD') { providerChosen.current = false; setSelectedProvider(''); }
               reset(); setPreferredDestinationCode(code);
             }}>
               {destinationChoices.map(code => <option key={code} value={code}>{walletProductionAsset(code).networkName}</option>)}
-            </select><span id="production-network-hint" className={styles.hint}>{tr('rampNowNetworkHint')}</span></div> : null}
+            </select><span id="production-network-hint" className={styles.hint}>{tr('fundingNetworkHint')}</span></div> : null}
           {!isMexico || mexicoChoice ? <div className={local.field}><label htmlFor="production-amount">{tr('amount')} {currency ? `(${currency})` : ''}</label><input id="production-amount" type="number" inputMode={decimals ? 'decimal' : 'numeric'} min={minimum} max={maximum} step={decimals ? '0.01' : '1'} value={amount} disabled={Boolean(busy) || !method || !limits} required placeholder={currency ? tr('amountPlaceholder', { currency }) : ''}
             aria-describedby="production-amount-hint" aria-invalid={Boolean(amountMode === 'manual' && amount && !eligible)} onChange={event => { const next = event.target.value; if (!next || Number(next) !== Number(amount)) reset(); setAmount(next); setAmountMode('manual'); }} />
             <span id="production-amount-hint" className={styles.hint}>{limits ? tr('limits', { min: number(minimum), max: number(maximum), currency }) : tr('chooseMethod')}</span>
             {limits && amountMode === 'manual' && amount && !eligible ? <><span className={local.fieldError} role="alert">{tr('invalidAmount', { min: number(minimum), max: number(maximum), currency })}</span><button className={local.minimum} type="button" onClick={() => { reset(); setAmount(String(minimum)); setAmountMode('manual'); }}>{tr('useMinimum', { amount: number(minimum), currency })}</button></> : null}</div> : null}
         </div>
-        {explicitDestinationCode && destinationChoices.length === 1 ? <p className={styles.hint}>{tr('rampNowNetworkHint')}</p> : null}
+        {explicitDestinationCode && destinationChoices.length === 1 ? <p className={styles.hint}>{tr('fundingNetworkHint')}</p> : null}
         {country && currency && !loading && !methods.length ? <p role="status" className={styles.hint}>{tr('noRoute')}</p> : null}
         {quoteState.loading ? <p role="status" className={local.quoteLoading}><Loader2 size={17} className="animate-spin" aria-hidden="true" />{tr('quoteLoading')}</p> : null}
         {isMexico && checkoutQuote ? <div className={local.paymentSummary} aria-live="polite">
@@ -338,7 +343,7 @@ export function ProductionWalletView({ ownerSubject }) {
           <input type="radio" name="production-provider" value={item.serviceProvider} checked={selectedProvider === item.serviceProvider} disabled={Boolean(busy)} aria-label={tr('quoteSelection', { provider: providerName(item.serviceProvider) })} onChange={() => { if (mounted.current && live.current.quote === quote && live.current.binding.canReceive()) { providerChosen.current = true; setSelectedProvider(item.serviceProvider); } }} />
           <strong>{providerName(item.serviceProvider)}</strong><span>{tr('receive')}</span><bdi className={local.received}>{number(item.destinationAmount)} {quote.destination.asset}</bdi><span>{explicitDestinationCode ? tr('quotedNetwork', { network: fundingAsset.networkName }) : fundingAsset.networkName}</span><span>{tr('fees', { amount: number(item.totalFee), currency: quote.sourceCurrencyCode })}</span></label>)}</div>
           {!providerAvailable ? <p className={styles.hint}>{tr('chooseProvider')}</p> : null}</fieldset> : null}
-        {checkoutQuote?.serviceProvider === 'MERCURYO' ? <p className={styles.hint}>{tr('mercuryoCardInstructions')}</p> : null}
+        {checkoutQuote?.serviceProvider === 'MERCURYO' ? <p className={styles.hint}>{tr('mercuryoCardInstructions', { network: fundingAsset.networkName })}</p> : null}
         {!isMexico || mexicoChoice ? <button type="submit" className={`executive-button primary ${local.fund}`} disabled={!eligible || !ready || (!providerAvailable && !canRequestQuote) || quoteState.loading || Boolean(loading) || Boolean(busy)}>
           {busy && busy !== 'status' ? <Loader2 size={18} className="animate-spin" aria-hidden="true" /> : null}
           {busy && busy !== 'status' ? tr('opening') : isMexico && providerAvailable ? tr('continue', { provider: providerName(checkoutProvider) }) : tr('addFunds')}

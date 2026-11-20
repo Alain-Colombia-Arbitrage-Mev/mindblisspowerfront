@@ -10,17 +10,17 @@ const ownerSubject = 'synthetic-wallet-owner';
 const address = `0x${'1'.repeat(40)}`, otherAddress = `0x${'2'.repeat(40)}`;
 const reference = '11111111-1111-4111-8111-111111111111';
 const otherReference = '22222222-2222-4222-8222-222222222222';
-const input = { country: 'US', sourceCurrencyCode: 'USD', amount: 50, paymentMethodType: 'CREDIT_DEBIT_CARD' };
+const input = { country: 'US', sourceCurrencyCode: 'USD', amount: 50, paymentMethodType: 'ACH' };
 const sessionInput = { ...input, requestId: reference, serviceProvider: 'ONRAMPMONEY' };
-const destination = { address, asset: 'USDT', network: 'polygon', chainId: 137 };
+const destination = { address, asset: 'USDC', network: 'polygon', chainId: 137 };
 const quoteItem = { serviceProvider: 'ONRAMPMONEY', sourceAmount: 50, destinationAmount: 47.25, totalFee: 2.5,
-  networkFee: 0.25, sourceCurrencyCode: 'USD', destinationCurrencyCode: 'USDT_POLYGON', rampScore: 90 };
+  networkFee: 0.25, sourceCurrencyCode: 'USD', destinationCurrencyCode: 'USDC_POLYGON', rampScore: 90 };
 const quote = { walletKind: 'personal', environment: 'production', country: 'US', sourceCurrencyCode: 'USD',
-  requestedAmount: 50, paymentMethodType: 'CREDIT_DEBIT_CARD', destination, quotes: [quoteItem] };
+  requestedAmount: 50, paymentMethodType: 'ACH', destination, quotes: [quoteItem] };
 const checkoutUrl = 'https://meldcrypto.com/?token=synthetic_opaque';
 const ack = { checkoutReference: reference, walletKind: 'personal', environment: 'production', provider: 'meld',
   serviceProvider: 'ONRAMPMONEY', country: 'US', sourceCurrencyCode: 'USD', requestedAmount: 50,
-  paymentMethodType: 'CREDIT_DEBIT_CARD', destinationCurrencyCode: 'USDT_POLYGON', destination,
+  paymentMethodType: 'ACH', destinationCurrencyCode: 'USDC_POLYGON', destination,
   status: 'session_created', checkoutUrl, createdAt: '2026-11-19T12:00:00.000Z' };
 const discovery = { countries: [{ code: 'US', name: 'United States' }, { code: 'MX', name: 'Mexico' }, { code: 'CO', name: 'Colombia' }] };
 const mexico = { country: 'MX', currencies: [{ code: 'MXN', name: 'Mexican Peso', decimalPlaces: 2 },
@@ -133,7 +133,7 @@ test('options reject malformed route members and sandbox or foreign-currency res
   }
 });
 
-test('a production quote is an estimate pinned to the requested amount, source and linked USDT Polygon destination', async t => {
+test('a production quote is an estimate pinned to the requested amount, source and linked USDC Polygon destination', async t => {
   const calls = [];
   t.mock.method(globalThis, 'fetch', async (path, init) => { calls.push({ path, init }); return Response.json(quote); });
   assert.deepEqual(await quoteProductionFunding(input, address, context), quote);
@@ -145,7 +145,7 @@ test('a production quote is an estimate pinned to the requested amount, source a
   assert.equal(walletProductionQuote(quote, input, otherAddress), null);
   for (const patch of [{ walletKind: 'administrative' }, { environment: 'sandbox' }, { country: 'MX' },
     { sourceCurrencyCode: 'MXN' }, { requestedAmount: 100 }, { paymentMethodType: 'APPLE_PAY' },
-    { destination: { ...destination, address: otherAddress } }, { destination: { ...destination, asset: 'USDC' } },
+    { destination: { ...destination, address: otherAddress } }, { destination: { ...destination, asset: 'USDT' } },
     { destination: { ...destination, network: 'ethereum', chainId: 1 } }, { quotes: [] }, { quotes: [null] }]) {
     assert.equal(walletProductionQuote({ ...quote, ...patch }, input, address), null);
   }
@@ -277,22 +277,42 @@ test('Mexico EUR card accepts only Alchemy Pay with the exact Arbitrum USDC dest
   assert.equal(walletProductionAcknowledgement({ ...session, checkoutUrl: 'https://ramp.alchemypay.org/?token=synthetic' }, request), null);
 });
 
-test('RampNow preserves the quoted chain and accepts only a settled native USDC change to the same wallet', () => {
+test('Mercuryo US card and mobile wallets require a declared USDC network and correlate quote and checkout', () => {
   const networks = [
     ['USDC_POLYGON', { address, asset: 'USDC', network: 'polygon', chainId: 137 }],
     ['USDC_ARBITRUM', { address, asset: 'USDC', network: 'arbitrum', chainId: 42161 }],
     ['USDC', { address, asset: 'USDC', network: 'ethereum', chainId: 1 }],
   ];
-  const priced = { ...quote, destination: networks[0][1], quotes: [{ ...quoteItem, serviceProvider: 'RAMPNOW', destinationCurrencyCode: 'USDC_POLYGON' }] };
-  for (const [destinationCurrencyCode, requestedDestination] of networks) {
-    const selection = { ...sessionInput, destinationCurrencyCode, serviceProvider: 'RAMPNOW' };
-    const price = { ...priced, destination: requestedDestination, quotes: [{ ...priced.quotes[0], destinationCurrencyCode }] };
-    const session = { ...ack, destinationCurrencyCode, destination: requestedDestination, serviceProvider: 'RAMPNOW' };
-    assert.deepEqual(walletProductionQuote(price, selection, address).destination, requestedDestination);
-    assert.deepEqual(walletProductionAcknowledgement(session, selection).destination, requestedDestination);
-    assert.equal(walletProductionQuote(price, { ...selection, destinationCurrencyCode: 'USDT_POLYGON' }, address), null);
-    assert.equal(walletProductionAcknowledgement(session, { ...selection, destinationCurrencyCode: 'USDT_POLYGON' }), null);
+  for (const paymentMethodType of ['CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY']) {
+    for (const [destinationCurrencyCode, requestedDestination] of networks) {
+      const selection = { ...input, paymentMethodType, destinationCurrencyCode };
+      const order = { ...sessionInput, ...selection, serviceProvider: 'MERCURYO' };
+      const price = { ...quote, paymentMethodType, destination: requestedDestination,
+        quotes: [{ ...quoteItem, serviceProvider: 'MERCURYO', destinationCurrencyCode, networkFee: null }] };
+      const session = { ...ack, paymentMethodType, destinationCurrencyCode, destination: requestedDestination, serviceProvider: 'MERCURYO' };
+      assert.deepEqual(walletProductionInput(selection), selection);
+      assert.deepEqual(walletProductionInput(order, true), order);
+      assert.deepEqual(walletProductionQuote(price, selection, address).destination, requestedDestination);
+      assert.deepEqual(walletProductionAcknowledgement(session, order).destination, requestedDestination);
+      assert.equal(walletProductionQuote(price, { ...selection, destinationCurrencyCode: 'USDT_POLYGON' }, address), null);
+      assert.equal(walletProductionQuote(price, selection, otherAddress), null);
+      assert.equal(walletProductionAcknowledgement(session, { ...order, destinationCurrencyCode: 'USDT_POLYGON' }), null);
+      const { destinationCurrencyCode: _explicit, ...incomplete } = order;
+      assert.equal(walletProductionInput(incomplete, true), null);
+      assert.equal(walletProductionInput({ ...order, serviceProvider: 'RAMPNOW' }, true), null);
+      assert.equal(walletProductionInput({ ...order, paymentMethodType: 'ACH' }, true), null);
+      assert.equal(walletProductionQuote({ ...price, quotes: [{ ...price.quotes[0], serviceProvider: 'RAMPNOW' }] }, selection, address), null);
+      assert.equal(walletProductionAcknowledgement({ ...session, serviceProvider: 'RAMPNOW' }, undefined), null);
+    }
   }
+});
+
+test('historical RampNow status and history accept only settled native USDC changes to the original wallet', () => {
+  const networks = [
+    ['USDC_POLYGON', { address, asset: 'USDC', network: 'polygon', chainId: 137 }],
+    ['USDC_ARBITRUM', { address, asset: 'USDC', network: 'arbitrum', chainId: 42161 }],
+    ['USDC', { address, asset: 'USDC', network: 'ethereum', chainId: 1 }],
+  ];
   const [expected, , actual] = networks.map(([, destination]) => destination);
   const confirmation = { state: 'confirmed', source: 'meld_production_api', testMode: false, receivedAmount: '44.123456',
     providerStatus: 'SETTLED', confirmedAt: ack.createdAt, transactionId: 'synthetic-transfer' };
@@ -312,20 +332,20 @@ test('RampNow preserves the quoted chain and accepts only a settled native USDC 
   }
 });
 
-test('a US bank quote can offer both providers on Polygon while the checkout preserves destination and method', () => {
+test('US bank quotes use only Onramp Money on Polygon and preserve the payment method', () => {
   const polygon = { ...destination, asset: 'USDC' };
   const ethereum = { ...polygon, network: 'ethereum', chainId: 1 };
   for (const paymentMethodType of ['ACH', 'LOCAL_BANK_TRANSFER']) {
-    const selection = { ...input, paymentMethodType, destinationCurrencyCode: 'USDC_POLYGON' };
+    const selection = { ...input, paymentMethodType };
     const order = { ...sessionInput, ...selection };
     assert.deepEqual(walletProductionInput(order, true), order);
-    const { destinationCurrencyCode: _explicit, ...legacyOrder } = order;
-    assert.deepEqual(walletProductionInput(legacyOrder, true), legacyOrder);
-    for (const patch of [{ destinationCurrencyCode: 'USDC' }, { paymentMethodType: 'CREDIT_DEBIT_CARD' }, { country: 'MX' }]) {
+    const explicitPolygonOrder = { ...order, destinationCurrencyCode: 'USDC_POLYGON' };
+    assert.deepEqual(walletProductionInput(explicitPolygonOrder, true), explicitPolygonOrder);
+    for (const patch of [{ destinationCurrencyCode: 'USDC' }, { paymentMethodType: 'CREDIT_DEBIT_CARD' }, { paymentMethodType: 'CREDIT_DEBIT_CARD', destinationCurrencyCode: 'USDC_POLYGON' },
+      { country: 'MX', destinationCurrencyCode: 'USDC_POLYGON' }, { serviceProvider: 'RAMPNOW' }, { serviceProvider: 'MERCURYO' }]) {
       assert.equal(walletProductionInput({ ...order, ...patch }, true), null);
     }
-    const bankPrice = { ...quote, destination: polygon, paymentMethodType, quotes: ['RAMPNOW', 'ONRAMPMONEY'].map(serviceProvider =>
-      ({ ...quoteItem, serviceProvider, destinationCurrencyCode: 'USDC_POLYGON' })) };
+    const bankPrice = { ...quote, destination: polygon, paymentMethodType, quotes: [{ ...quoteItem, serviceProvider: 'ONRAMPMONEY', destinationCurrencyCode: 'USDC_POLYGON' }] };
     assert.deepEqual(walletProductionQuote(bankPrice, selection, address), bankPrice);
     const ethereumPrice = { ...bankPrice, destination: ethereum, quotes: bankPrice.quotes.map(item => ({ ...item, destinationCurrencyCode: 'USDC' })) };
     assert.equal(walletProductionQuote(ethereumPrice, { ...selection, destinationCurrencyCode: 'USDC' }, address), null);

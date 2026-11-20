@@ -50,12 +50,12 @@ export function mexicoFundingMethod(routes, selected = '') {
   return methods.length === 1 ? methods[0] : '';
 }
 export function productionFundingDestinationChoices(routes, country, currency, method, defaultDestination) {
-  const rampNowChoices = routes.find(route => route.serviceProvider === 'RAMPNOW')?.paymentMethods
-    .find(item => item.currencyCode === currency && item.method === method)?.destinationCurrencyCodes;
-  if (!rampNowChoices?.length) return [];
+  const choices = routes.flatMap(route => route.paymentMethods.filter(item => item.currencyCode === currency && item.method === method)
+    .flatMap(item => item.destinationCurrencyCodes || []));
+  if (!choices.length) return [];
   const selection = { country, sourceCurrencyCode: currency, paymentMethodType: method, destinationCurrencyCode: defaultDestination };
   const isDefaultAvailable = productionFundingRoutesForDestination(routes, selection).length > 0;
-  return isDefaultAvailable ? [...new Set([defaultDestination, ...rampNowChoices])] : rampNowChoices;
+  return [...new Set(isDefaultAvailable ? [defaultDestination, ...choices] : choices)];
 }
 export function productionFundingRoutesForDestination(routes, input) {
   const { country, sourceCurrencyCode, paymentMethodType, destinationCurrencyCode } = input;
@@ -64,7 +64,7 @@ export function productionFundingRoutesForDestination(routes, input) {
   return available.filter(({ serviceProvider, paymentMethods }) =>
     walletProductionExplicitDestinationAllowed(country, sourceCurrencyCode, paymentMethodType, destinationCurrencyCode, serviceProvider)
     && paymentMethods.some(item => item.currencyCode === sourceCurrencyCode && item.method === paymentMethodType
-      && (serviceProvider !== 'RAMPNOW' || item.destinationCurrencyCodes?.includes(destinationCurrencyCode))));
+      && (!item.destinationCurrencyCodes || item.destinationCurrencyCodes.includes(destinationCurrencyCode))));
 }
 export function productionFundingProviderSupported(routes, serviceProvider, input, decimalPlaces = 2) {
   if (!input || !walletProductionInput(input)) return false;

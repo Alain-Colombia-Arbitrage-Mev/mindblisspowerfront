@@ -12,18 +12,18 @@ import { cloudflarePortalGuard } from './cloudflare-portal-guard.mjs';
 const owner = 'synthetic-production-owner', reference = '11111111-1111-4111-8111-111111111111', otherReference = '22222222-2222-4222-8222-222222222222';
 const address = `0x${'1'.repeat(40)}`, cookie = 'better-auth.session_token=synthetic';
 const env = { AUTH_PUBLIC_ORIGIN: origin, AUTH_PROVIDER: 'better-auth', AUTH_BFF_SHARED_SECRET: 's'.repeat(48), NODE_ENV: 'production' };
-const destination = { address, asset: 'USDT', network: 'polygon', chainId: 137 };
+const destination = { address, asset: 'USDC', network: 'polygon', chainId: 137 };
 const capability = { flow: 'wallet_funding', configured: true, environment: 'production', asset: 'USDT', network: 'polygon', chainId: 137, canBroadcast: false };
-const input = { country: 'US', sourceCurrencyCode: 'USD', amount: 50, paymentMethodType: 'CREDIT_DEBIT_CARD' };
+const input = { country: 'US', sourceCurrencyCode: 'USD', amount: 50, paymentMethodType: 'ACH' };
 const sessionInput = { ...input, requestId: reference, serviceProvider: 'ONRAMPMONEY' };
 const countries = { countries: [{ code: 'US', name: 'United States' }, { code: 'MX', name: 'Mexico' }] };
 const discovery = { country: 'US', currencies: [{ code: 'USD', name: 'US Dollar', decimalPlaces: 2 }], defaultCurrencyCode: 'USD' };
-const options = { environment: 'production', country: 'US', sourceCurrencyCode: 'USD',
-  routes: [{ serviceProvider: 'ONRAMPMONEY', paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount: 20, maximumAmount: 25000 }] }] };
-const quote = { walletKind: 'personal', environment: 'production', country: 'US', sourceCurrencyCode: 'USD', requestedAmount: 50, paymentMethodType: 'CREDIT_DEBIT_CARD', destination,
-  quotes: [{ serviceProvider: 'ONRAMPMONEY', sourceAmount: 50, destinationAmount: 46.5, totalFee: 3, networkFee: 0.5, sourceCurrencyCode: 'USD', destinationCurrencyCode: 'USDT_POLYGON' }] };
-const snapshot = { checkoutReference: reference, provider: 'meld', serviceProvider: 'ONRAMPMONEY', country: 'US', requestedAmount: 50, sourceCurrencyCode: 'USD', paymentMethodType: 'CREDIT_DEBIT_CARD', destination };
-const ack = { ...snapshot, walletKind: 'personal', environment: 'production', status: 'session_created', destinationCurrencyCode: 'USDT_POLYGON',
+const options = { environment: 'production', country: 'US', sourceCurrencyCode: 'USD', destinationCurrencyCode: 'USDC_POLYGON',
+  routes: [{ serviceProvider: 'ONRAMPMONEY', paymentMethods: [{ method: 'ACH', currencyCode: 'USD', minimumAmount: 20, maximumAmount: 25000 }] }] };
+const quote = { walletKind: 'personal', environment: 'production', country: 'US', sourceCurrencyCode: 'USD', requestedAmount: 50, paymentMethodType: 'ACH', destination,
+  quotes: [{ serviceProvider: 'ONRAMPMONEY', sourceAmount: 50, destinationAmount: 46.5, totalFee: 3, networkFee: 0.5, sourceCurrencyCode: 'USD', destinationCurrencyCode: 'USDC_POLYGON' }] };
+const snapshot = { checkoutReference: reference, provider: 'meld', serviceProvider: 'ONRAMPMONEY', country: 'US', requestedAmount: 50, sourceCurrencyCode: 'USD', paymentMethodType: 'ACH', destination };
+const ack = { ...snapshot, walletKind: 'personal', environment: 'production', status: 'session_created', destinationCurrencyCode: 'USDC_POLYGON',
   checkoutUrl: 'https://meldcrypto.com/?token=synthetic_opaque', createdAt: '2026-11-19T12:00:00.000Z' };
 const status = { ...snapshot, walletKind: 'personal', environment: 'production', requestStatus: 'session_created', confirmation: { state: 'unconfirmed', source: 'none', testMode: false } };
 const history = { walletKind: 'personal', environment: 'production', settlement: 'unconfirmed', records: [{ ...snapshot, status: 'session_created', createdAt: ack.createdAt }] };
@@ -62,12 +62,12 @@ test('seven production actions pin the Wallet private service, native cookies, c
 
 test('Mercuryo MX cards stay on USDC Polygon and retain an unknown network fee across the private service', async () => {
   for (const [sourceCurrencyCode, amount] of [['MXN', 1000], ['USD', 100]]) {
-    const selection = { ...input, country: 'MX', sourceCurrencyCode, amount };
+    const selection = { ...input, country: 'MX', sourceCurrencyCode, amount, paymentMethodType: 'CREDIT_DEBIT_CARD' };
     const session = { ...selection, requestId: reference, serviceProvider: 'MERCURYO' };
     const receiving = { ...destination, asset: 'USDC' };
-    const scopedQuote = { ...quote, country: 'MX', sourceCurrencyCode, requestedAmount: amount, destination: receiving,
+    const scopedQuote = { ...quote, country: 'MX', sourceCurrencyCode, requestedAmount: amount, paymentMethodType: selection.paymentMethodType, destination: receiving,
       quotes: [{ ...quote.quotes[0], serviceProvider: 'MERCURYO', sourceCurrencyCode, sourceAmount: amount, destinationCurrencyCode: 'USDC_POLYGON', networkFee: null }] };
-    const scopedAck = { ...ack, country: 'MX', sourceCurrencyCode, requestedAmount: amount, serviceProvider: 'MERCURYO',
+    const scopedAck = { ...ack, country: 'MX', sourceCurrencyCode, requestedAmount: amount, paymentMethodType: selection.paymentMethodType, serviceProvider: 'MERCURYO',
       destinationCurrencyCode: 'USDC_POLYGON', destination: receiving };
     const responses = [
       ['quote', selection, scopedQuote, 200],
@@ -171,12 +171,12 @@ test('discovery and options correlate actual country and fiat without fabricatin
   }
 });
 
-test('quote and session responses cannot cross source context, request reference, provider or USDT Polygon destination', async () => {
+test('quote and session responses cannot cross source context, request reference, provider or USDC Polygon destination', async () => {
   const cases = [['quote', input, { ...quote, country: 'MX' }], ['quote', input, { ...quote, requestedAmount: 100 }], ['quote', input, { ...quote, paymentMethodType: 'APPLE_PAY' }],
     ['session', sessionInput, { ...ack, checkoutReference: otherReference }], ['session', sessionInput, { ...ack, sourceCurrencyCode: 'MXN' }],
     ['session', sessionInput, { ...ack, serviceProvider: 'TOPPER' }], ['session', sessionInput, { ...ack, paymentMethodType: 'GOOGLE_PAY' }]];
   for (const [action, body, value] of cases) assert.equal((await handleWalletProductionFunding(request(action, body), action, { env, serviceRequest: success(value) })).status, 502);
-  for (const change of [{ asset: 'USDC' }, { network: 'ethereum', chainId: 1 }, { address: '0xinvalid' }, { chainId: 10 }]) {
+  for (const change of [{ asset: 'USDT' }, { network: 'ethereum', chainId: 1 }, { address: '0xinvalid' }, { chainId: 10 }]) {
     for (const [action, body, value] of [['quote', input, quote], ['session', sessionInput, ack]]) {
       const result = await handleWalletProductionFunding(request(action, body), action, { env, serviceRequest: success({ ...value, destination: { ...destination, ...change } }) });
       assert.equal(result.status, 502);
@@ -243,7 +243,9 @@ test('the observed Banxa production transit URL is bound to its provider and rej
     ['TRANSAK', 'https://meldcrypto.com/?token=synthetic_opaque', 400],
     ['BANXA', banxaUrl + '&walletAddress=foreign', 502], ['BANXA', banxaUrl + '&initId=second', 502],
     ['BANXA', 'https://meldshared.banxa.com/papi/transit?initId=synthetic_opaque', 502], ['BANXA', 'https://checkout.banxa-sandbox.com/?initId=synthetic_opaque', 502]]) {
-    const body = { ...sessionInput, serviceProvider: provider }, value = { ...ack, serviceProvider: provider, checkoutUrl };
+    const body = { ...sessionInput, country: 'CA', paymentMethodType: 'CREDIT_DEBIT_CARD', serviceProvider: provider };
+    const value = { ...ack, country: 'CA', paymentMethodType: body.paymentMethodType, serviceProvider: provider, checkoutUrl,
+      destination: { ...destination, asset: 'USDT' }, destinationCurrencyCode: 'USDT_POLYGON' };
     const result = await handleWalletProductionFunding(request('session', body), 'session', { env, serviceRequest: success(value) });
     assert.equal(result.status, expected, `${provider}:${checkoutUrl}`);
   }
@@ -252,7 +254,9 @@ test('the observed Banxa production transit URL is bound to its provider and rej
 test('an actual production SETTLED proof retains exact USDT string and required evidence through Native, BFF and browser parsing', async t => {
   const confirmation = { state: 'confirmed', source: 'meld_production_api', testMode: false, providerStatus: 'SETTLED',
     receivedAmount: '46.123456', transactionId: 'synthetic-production-transaction', confirmedAt: ack.createdAt };
-  const values = { status: { ...status, confirmation }, history: { ...history, records: [{ ...history.records[0], confirmation }] } };
+  const legacyDestination = { ...destination, asset: 'USDT' };
+  const values = { status: { ...status, destination: legacyDestination, confirmation },
+    history: { ...history, records: [{ ...history.records[0], destination: legacyDestination, confirmation }] } };
   const responses = new Map();
   for (const action of ['status', 'history']) {
     const suffix = action === 'status' ? `${action}?checkoutReference=${reference}` : action;
@@ -322,23 +326,28 @@ test('the actual production route passes the Cloudflare guard and maps its publi
   assert.equal(denied.status, 404); assert.equal(calls, 2);
 });
 
-test('RampNow US USD catalog, quote and session preserve the payment method and USDC network through the signed native request', async () => {
+test('Mercuryo US USD catalog, quote and session preserve the payment method and USDC network through the signed native request', async () => {
   const networks = ['USDC_POLYGON', 'USDC_ARBITRUM', 'USDC'];
   const expected = { address, asset: 'USDC', network: 'polygon', chainId: 137 };
   const actual = { address, asset: 'USDC', network: 'ethereum', chainId: 1 };
   const existingMethod = options.routes[0].paymentMethods[0];
-  const allowedMethods = ['CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY', 'ACH', 'LOCAL_BANK_TRANSFER'];
+  const allowedMethods = ['CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY'];
   const paymentMethods = allowedMethods.map(method => ({ ...existingMethod, method, destinationCurrencyCodes: networks }));
-  const catalog = { ...options, destinationCurrencyCode: 'USDC_POLYGON', routes: [{ serviceProvider: 'RAMPNOW', paymentMethods }] };
+  const bankMethods = ['ACH', 'LOCAL_BANK_TRANSFER'].map(method => ({ ...existingMethod, method }));
+  const activeRoutes = [{ serviceProvider: 'MERCURYO', paymentMethods }, { serviceProvider: 'ONRAMPMONEY', paymentMethods: bankMethods }];
+  const staleRoute = { serviceProvider: 'RAMPNOW', paymentMethods: [...paymentMethods, { ...bankMethods[0], destinationCurrencyCodes: networks }] };
+  const catalog = { ...options, destinationCurrencyCode: 'USDC_POLYGON', routes: [staleRoute, ...activeRoutes] };
   const routePath = 'options?country=US&sourceCurrencyCode=USD';
   const catalogResponse = await handleWalletProductionFunding(request(routePath), 'options', { env, serviceRequest: success(catalog) });
   assert.equal(catalogResponse.status, 200);
-  assert.deepEqual((await catalogResponse.json()).routes[0].paymentMethods, paymentMethods);
-  const selection = { ...input, destinationCurrencyCode: 'USDC' };
-  const checkout = { ...sessionInput, ...selection, serviceProvider: 'RAMPNOW' };
+  const currentCatalog = await catalogResponse.json();
+  assert.deepEqual(currentCatalog.routes, activeRoutes);
+  assert.deepEqual(currentCatalog.paymentMethods, [...allowedMethods, 'ACH', 'LOCAL_BANK_TRANSFER']);
+  const selection = { ...input, paymentMethodType: 'CREDIT_DEBIT_CARD', destinationCurrencyCode: 'USDC' };
+  const checkout = { ...sessionInput, ...selection, serviceProvider: 'MERCURYO' };
   for (const paymentMethodType of allowedMethods) {
-    const price = { ...quote, paymentMethodType, destination: actual, quotes: [{ ...quote.quotes[0], serviceProvider: 'RAMPNOW', destinationCurrencyCode: 'USDC' }] };
-    const session = { ...ack, paymentMethodType, destination: actual, destinationCurrencyCode: 'USDC', serviceProvider: 'RAMPNOW' };
+    const price = { ...quote, paymentMethodType, destination: actual, quotes: [{ ...quote.quotes[0], serviceProvider: 'MERCURYO', destinationCurrencyCode: 'USDC', networkFee: null }] };
+    const session = { ...ack, paymentMethodType, destination: actual, destinationCurrencyCode: 'USDC', serviceProvider: 'MERCURYO' };
     for (const [action, body, data] of [['quote', { ...selection, paymentMethodType }, price], ['session', { ...checkout, paymentMethodType }, session]]) {
       const response = await handleWalletProductionFunding(request(action, body), action, { env, serviceRequest: async (_url, init) => {
         assert.deepEqual(JSON.parse(init.body), body);
@@ -354,13 +363,14 @@ test('RampNow US USD catalog, quote and session preserve the payment method and 
   }
   const never = async () => assert.fail('Invalid route reached the native service');
   for (const [action, body] of [['quote', { ...selection, country: 'MX' }], ['quote', { ...selection, paymentMethodType: 'CASH_APP' }],
-    ['session', { ...checkout, serviceProvider: 'BANXA' }], ['session', { ...checkout, destinationCurrencyCode: 'USDC_ETHEREUM' }],
+    ['session', { ...checkout, serviceProvider: 'BANXA' }], ['session', { ...checkout, serviceProvider: 'RAMPNOW' }],
+    ['session', { ...checkout, paymentMethodType: 'ACH' }], ['session', { ...checkout, destinationCurrencyCode: 'USDC_ETHEREUM' }],
     ['session', { ...checkout, address }], ['session', { ...checkout, paymentMethodType: 'PAYPAL' }],
     ['quote', { ...selection, sourceCurrencyCode: 'EUR', paymentMethodType: 'APPLE_PAY' }],
     ['session', { ...checkout, country: 'MX', paymentMethodType: 'GOOGLE_PAY' }]]) {
     assert.equal((await handleWalletProductionFunding(request(action, body), action, { env, serviceRequest: never })).status, 400);
   }
-  for (const paymentMethodType of allowedMethods) {
+  for (const paymentMethodType of [...allowedMethods, 'ACH', 'LOCAL_BANK_TRANSFER']) {
     const settled = { ...status, paymentMethodType, serviceProvider: 'RAMPNOW', destination: expected, confirmedDestination: actual,
       confirmation: { state: 'confirmed', source: 'meld_production_api', testMode: false, receivedAmount: '46.500000',
         confirmedAt: ack.createdAt, transactionId: 'settled-synthetic', providerStatus: 'SETTLED' } };

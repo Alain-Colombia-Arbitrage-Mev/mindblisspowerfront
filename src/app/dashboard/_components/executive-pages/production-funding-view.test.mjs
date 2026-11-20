@@ -270,13 +270,13 @@ for (const fiat of ['MXN', 'USD']) {
     assert.equal(methodField.props.value, 'SPEI');
     assert.deepEqual(all(methodField).filter(node => node?.type === 'option').map(node => node.props.value), ['', 'SPEI', 'CREDIT_DEBIT_CARD']);
     assert.equal(submit(h.tree).props.children.at(-1), 'Continuar con Onramp Money');
-    assert.ok(!all(h.tree).includes(translateMessage('es', 'walletProduction.mercuryoCardInstructions')));
+    assert.ok(!all(h.tree).includes(translateMessage('es', 'walletProduction.mercuryoCardInstructions', { network: 'Polygon' })));
     if (fiat === 'USD') await h.change('production-currency', 'USD');
     else await h.change('production-method', 'CREDIT_DEBIT_CARD');
     const amount = Number(field(h.tree, 'production-amount').props.value);
     assert.equal(amount, fiat === 'USD' ? 50 : 800);
     assert.equal(submit(h.tree).props.children.at(-1), 'Continuar con Mercuryo');
-    assert.ok(all(h.tree).includes(translateMessage('es', 'walletProduction.mercuryoCardInstructions')));
+    assert.ok(all(h.tree).includes(translateMessage('es', 'walletProduction.mercuryoCardInstructions', { network: 'Polygon' })));
     assert.equal(h.calls.session.length, 0);
     assert.equal(h.calls.popups.length, 0);
     form(h.tree).props.onSubmit({ preventDefault() {} });
@@ -336,15 +336,15 @@ for (const [name, amend] of [
   });
 }
 
-test('RampNow US card offers three USDC networks, defaults to Polygon and uses the selected network to open checkout', async t => {
+test('Mercuryo US card offers three USDC networks, defaults to Polygon and uses the selected network to open checkout', async t => {
   const networks = ['USDC_POLYGON', 'USDC_ARBITRUM', 'USDC'];
   const ethereumDestination = { address, asset: 'USDC', network: 'ethereum', chainId: 1 };
   const config = {
     options: async (country, currency) => country === 'US' && currency === 'USD' ? {
       destinationCurrencyCode: 'USDC_POLYGON',
-      routes: [{ serviceProvider: 'RAMPNOW', paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount: 50, maximumAmount: 5000, destinationCurrencyCodes: networks }] }],
+      routes: [{ serviceProvider: 'MERCURYO', paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount: 50, maximumAmount: 5000, destinationCurrencyCodes: networks }] }],
     } : { routes: [] },
-    quotes: () => [{ serviceProvider: 'RAMPNOW', destinationAmount: 47, totalFee: 3 }],
+    quotes: () => [{ serviceProvider: 'MERCURYO', destinationAmount: 47, totalFee: 3 }],
     history: [{ checkoutReference: '11111111-1111-4111-8111-111111111111', serviceProvider: 'RAMPNOW', requestedAmount: 50,
       sourceCurrencyCode: 'USD', status: 'session_created', destination: { ...polygonDestination, asset: 'USDC' }, confirmedDestination: ethereumDestination,
       confirmation: { state: 'confirmed', source: 'meld_production_api', testMode: false } }],
@@ -371,7 +371,7 @@ test('RampNow US card offers three USDC networks, defaults to Polygon and uses t
   assert.equal(h.calls.session.length, 1);
   const [request, expectedAddress] = h.calls.session[0];
   assert.equal(expectedAddress, address);
-  assert.equal(request.serviceProvider, 'RAMPNOW');
+  assert.equal(request.serviceProvider, 'MERCURYO');
   assert.equal(request.destinationCurrencyCode, 'USDC');
   assert.equal(request.amount, 70);
   assert.equal(Object.hasOwn(request, 'address'), false);
@@ -386,15 +386,15 @@ for (const [paymentMethod, label, network, destination] of [
   ['APPLE_PAY', 'Apple Pay', 'USDC_ARBITRUM', { address, asset: 'USDC', network: 'arbitrum', chainId: 42161 }],
   ['GOOGLE_PAY', 'Google Pay', 'USDC', { address, asset: 'USDC', network: 'ethereum', chainId: 1 }],
 ]) {
-  test('RampNow displays and sends ' + label + ' with the selected USDC network', async t => {
+  test('Mercuryo displays and sends ' + label + ' with the selected USDC network', async t => {
     const networks = ['USDC_POLYGON', 'USDC_ARBITRUM', 'USDC'];
     const paymentMethods = ['CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY'].map(method => ({ method, currencyCode: 'USD',
       minimumAmount: 50, maximumAmount: 5000, destinationCurrencyCodes: networks }));
     const config = {
       options: async (country, currency) => country === 'US' && currency === 'USD' ? {
-        destinationCurrencyCode: 'USDC_POLYGON', routes: [{ serviceProvider: 'RAMPNOW', paymentMethods }],
+        destinationCurrencyCode: 'USDC_POLYGON', routes: [{ serviceProvider: 'MERCURYO', paymentMethods }],
       } : { routes: [] },
-      quotes: () => [{ serviceProvider: 'RAMPNOW', destinationAmount: 47, totalFee: 3 }],
+      quotes: () => [{ serviceProvider: 'MERCURYO', destinationAmount: 47, totalFee: 3 }],
     };
     const h = fixture(t, config); await h.flush(); await h.change('production-country', 'US');
     assert.equal(field(h.tree, 'production-network'), undefined);
@@ -412,7 +412,7 @@ for (const [paymentMethod, label, network, destination] of [
     form(h.tree).props.onSubmit({ preventDefault() {} });
     const [checkout, expectedAddress] = h.calls.session[0];
     assert.equal(h.calls.session.length, 1);
-    assert.equal(checkout.serviceProvider, 'RAMPNOW');
+    assert.equal(checkout.serviceProvider, 'MERCURYO');
     assert.equal(checkout.paymentMethodType, paymentMethod);
     assert.equal(checkout.destinationCurrencyCode, network);
     assert.equal(expectedAddress, address);
@@ -423,38 +423,43 @@ for (const [paymentMethod, label, network, destination] of [
 }
 
 for (const paymentMethod of ['ACH', 'LOCAL_BANK_TRANSFER']) {
-  test('US ' + paymentMethod + ' keeps Onramp Money on Polygon and offers RampNow on other verified networks', async t => {
+  test('US ' + paymentMethod + ' stays on Polygon with Onramp Money after choosing a Mercuryo card network', async t => {
     const networks = ['USDC_POLYGON', 'USDC_ARBITRUM', 'USDC'];
-    const bankMethod = { method: paymentMethod, currencyCode: 'USD', minimumAmount: 50, maximumAmount: 10000 };
+    const polygon = { ...polygonDestination, asset: 'USDC' };
+    const bankMethod = { method: paymentMethod, currencyCode: 'USD', minimumAmount: 50, maximumAmount: 25000 };
     const h = fixture(t, {
       options: async () => ({ destinationCurrencyCode: 'USDC_POLYGON', routes: [
-        { serviceProvider: 'ONRAMPMONEY', paymentMethods: [{ ...bankMethod, maximumAmount: 25000 }] },
-        { serviceProvider: 'RAMPNOW', paymentMethods: [{ ...bankMethod, destinationCurrencyCodes: networks }] },
+        { serviceProvider: 'ONRAMPMONEY', paymentMethods: [bankMethod] },
+        { serviceProvider: 'MERCURYO', paymentMethods: [{ ...bankMethod, method: 'CREDIT_DEBIT_CARD', maximumAmount: 5000, destinationCurrencyCodes: networks }] },
       ] }),
-      quotes: ({ destinationCurrencyCode }) => [
-        { serviceProvider: 'RAMPNOW', destinationAmount: 47, totalFee: 3 },
-        ...(destinationCurrencyCode === 'USDC_POLYGON' ? [{ serviceProvider: 'ONRAMPMONEY', destinationAmount: 45, totalFee: 5 }] : []),
-      ],
+      quotes: ({ paymentMethodType }) => paymentMethodType === 'CREDIT_DEBIT_CARD'
+        ? [{ serviceProvider: 'MERCURYO', destinationAmount: 47, totalFee: 3 }]
+        : [{ serviceProvider: 'ONRAMPMONEY', destinationAmount: 45, totalFee: 5 }],
     });
-    const providers = () => all(h.tree).filter(node => node?.props?.name === 'production-provider');
+    const checkedProvider = () => all(h.tree).find(node => node?.props?.name === 'production-provider' && node.props.checked)?.props.value;
     await h.flush(); await h.change('production-country', 'US');
-    assert.equal(field(h.tree, 'production-network').props.value, 'USDC_POLYGON');
-    assert.deepEqual(providers().map(node => node.props.value), ['RAMPNOW', 'ONRAMPMONEY']);
-    assert.equal(field(h.tree, 'production-amount').props.max, 25000);
-    providers()[1].props.onChange(); await h.flush();
+    await h.change('production-method', paymentMethod);
+    assert.equal(checkedProvider(), 'ONRAMPMONEY');
+    await h.change('production-method', 'CREDIT_DEBIT_CARD');
+    assert.equal(checkedProvider(), 'MERCURYO');
+    assert.equal(submit(h.tree).props.disabled, false);
     await h.change('production-network', 'USDC');
-    assert.deepEqual(providers().map(node => node.props.value), ['RAMPNOW']);
-    assert.equal(field(h.tree, 'production-amount').props.max, 10000);
-    assert.equal(submit(h.tree).props.disabled, true);
-    await h.change('production-network', 'USDC_POLYGON');
-    providers()[1].props.onChange(); await h.flush();
+    assert.equal(h.calls.quoteInputs.at(-1).input.destinationCurrencyCode, 'USDC');
+    await h.change('production-method', paymentMethod);
+    assert.equal(field(h.tree, 'production-network'), undefined);
+    assert.equal(field(h.tree, 'production-amount').props.max, 25000);
+    assert.equal(h.calls.quoteInputs.at(-1).destinationCurrencyCode, 'USDC_POLYGON');
+    assert.equal(h.calls.quoteInputs.at(-1).input.destinationCurrencyCode, undefined);
+    assert.equal(checkedProvider(), 'ONRAMPMONEY');
+    assert.equal(submit(h.tree).props.disabled, false);
+    assert.equal(h.calls.session.length, 0);
     form(h.tree).props.onSubmit({ preventDefault() {} });
     const [sessionInput, expectedAddress] = h.calls.session[0];
     assert.equal(expectedAddress, address);
     assert.equal(sessionInput.serviceProvider, 'ONRAMPMONEY');
     assert.equal(sessionInput.paymentMethodType, paymentMethod);
-    assert.equal(sessionInput.destinationCurrencyCode, 'USDC_POLYGON');
-    h.waiting.resolve({ checkoutUrl: 'https://meldcrypto.com/?token=synthetic_opaque', destination: { ...polygonDestination, asset: 'USDC' } });
+    assert.equal(sessionInput.destinationCurrencyCode, undefined);
+    h.waiting.resolve({ checkoutUrl: 'https://meldcrypto.com/?token=synthetic_opaque', destination: polygon });
     await h.flush();
     assert.deepEqual(h.calls.opened, ['https://meldcrypto.com/?token=synthetic_opaque']);
   });

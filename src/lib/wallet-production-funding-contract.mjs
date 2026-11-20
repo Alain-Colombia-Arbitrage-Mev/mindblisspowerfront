@@ -8,8 +8,8 @@ export const walletProductionSubject = sandboxWalletSubjectHeader;
 const code = value => typeof value === 'string' && /^[A-Z]{2}$/.test(value);
 const currency = value => typeof value === 'string' && /^[A-Z]{3}$/.test(value);
 const token = value => typeof value === 'string' && /^[A-Z0-9_]{2,64}$/.test(value);
-const checkoutProviders = new Set(['ALCHEMYPAY', 'BANXA', 'MERCURYO', 'ONMETA', 'ONRAMPMONEY', 'RAMPNOW']);
-const recordedProviders = new Set([...checkoutProviders, 'BLOCKCHAINDOTCOM', 'BTCDIRECT', 'GUARDARIAN', 'KOYWE',
+const checkoutProviders = new Set(['ALCHEMYPAY', 'BANXA', 'MERCURYO', 'ONMETA', 'ONRAMPMONEY']);
+const recordedProviders = new Set([...checkoutProviders, 'RAMPNOW', 'BLOCKCHAINDOTCOM', 'BTCDIRECT', 'GUARDARIAN', 'KOYWE',
   'KRYPTONIM', 'ROBINHOOD', 'STRIPE', 'TOPPER', 'TRANSAK', 'UNLIMIT']);
 const plain = value => Boolean(value && typeof value === 'object' && !Array.isArray(value));
 const exact = (value, keys) => plain(value) && Object.keys(value).length === keys.length && Object.keys(value).every(key => keys.includes(key));
@@ -31,22 +31,27 @@ function destination(value) {
   return asset && sandboxWalletAddress(value.address)
     ? { address: value.address.toLowerCase(), asset: asset.asset, network: asset.network, chainId: asset.chainId } : null;
 }
-const rampNowAssetCodes = new Set(['USDC_POLYGON', 'USDC_ARBITRUM', 'USDC']);
+const usdcAssetCodes = new Set(['USDC_POLYGON', 'USDC_ARBITRUM', 'USDC']);
 const usBankMethods = new Set(['ACH', 'LOCAL_BANK_TRANSFER']);
-const rampNowMethods = new Set(['CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY', ...usBankMethods]);
+const usMercuryoMethods = new Set(['CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY']);
+const rampNowMethods = new Set([...usMercuryoMethods, ...usBankMethods]);
+const isMercuryoUsMethod = (country, fiat, method) => country === 'US' && fiat === 'USD' && usMercuryoMethods.has(method);
 const isRampNowMethod = (country, fiat, method) => country === 'US' && fiat === 'USD' && rampNowMethods.has(method);
 const isMercuryoMexicoCard = (country, fiat, method) => country === 'MX' && ['MXN', 'USD'].includes(fiat) && method === 'CREDIT_DEBIT_CARD';
 const isMercuryoBrazilCard = (country, fiat, method) => country === 'BR' && fiat === 'BRL' && method === 'CREDIT_DEBIT_CARD';
 const isBrazilPix = (country, fiat, method) => country === 'BR' && fiat === 'BRL' && method === 'PIX';
-export function walletProductionExplicitDestinationAllowed(country, fiat, method, code, provider = 'RAMPNOW') {
-  return isRampNowMethod(country, fiat, method) && rampNowAssetCodes.has(code)
-    && (provider === 'RAMPNOW' || (provider === 'ONRAMPMONEY' && code === 'USDC_POLYGON' && usBankMethods.has(method)));
+export function walletProductionExplicitDestinationAllowed(country, fiat, method, code, provider) {
+  if (country !== 'US' || fiat !== 'USD') return false;
+  if (usBankMethods.has(method)) return code === 'USDC_POLYGON' && (provider === undefined || provider === 'ONRAMPMONEY');
+  return usMercuryoMethods.has(method) && usdcAssetCodes.has(code) && (provider === undefined || provider === 'MERCURYO');
 }
-function assetAllowed(code, country, fiat, provider, method) {
+function assetAllowed(code, country, fiat, provider, method, historical = false) {
   if (country === 'BR') return code === 'USDC_ARBITRUM' && ((provider === 'ALCHEMYPAY' && isBrazilPix(country, fiat, method))
     || (provider === 'MERCURYO' && isMercuryoBrazilCard(country, fiat, method)));
-  if (provider === 'RAMPNOW') return walletProductionExplicitDestinationAllowed(country, fiat, method, code, provider);
-  if (provider === 'MERCURYO') return code === 'USDC_POLYGON' && isMercuryoMexicoCard(country, fiat, method);
+  if (provider === 'RAMPNOW') return historical && isRampNowMethod(country, fiat, method) && usdcAssetCodes.has(code);
+  if (country === 'US' && !historical) return walletProductionExplicitDestinationAllowed(country, fiat, method, code, provider);
+  if (provider === 'MERCURYO') return (code === 'USDC_POLYGON' && isMercuryoMexicoCard(country, fiat, method))
+    || (usdcAssetCodes.has(code) && isMercuryoUsMethod(country, fiat, method));
   if (code === 'USDT_POLYGON') return true;
   if (code === 'USDC_ARBITRUM') return country === 'MX' && fiat === 'EUR' && provider === 'ALCHEMYPAY' && method === 'CREDIT_DEBIT_CARD';
   return code === 'USDC_POLYGON' && provider === 'ONRAMPMONEY'
@@ -78,13 +83,15 @@ export function walletProductionInput(value, session = false) {
     ...(hasDestination ? ['destinationCurrencyCode'] : [])];
   if (!exact(value, keys) || !code(value.country) || !currency(value.sourceCurrencyCode) || !amount(value.amount) || !token(value.paymentMethodType)
     || (value.sourceCurrencyCode === 'USD' && (value.amount < 50 || value.amount > 25000))
+    || (value.country === 'US' && !walletProductionExplicitDestinationAllowed(value.country, value.sourceCurrencyCode,
+      value.paymentMethodType, hasDestination ? value.destinationCurrencyCode : 'USDC_POLYGON', session ? value.serviceProvider : undefined))
     || (value.country === 'BR' && !isBrazilPix(value.country, value.sourceCurrencyCode, value.paymentMethodType)
       && !isMercuryoBrazilCard(value.country, value.sourceCurrencyCode, value.paymentMethodType))
     || (session && (!FUNDING_UUID.test(value.requestId || '') || !checkoutProviders.has(value.serviceProvider)))
     || (session && value.country === 'BR' && !assetAllowed('USDC_ARBITRUM', value.country, value.sourceCurrencyCode, value.serviceProvider, value.paymentMethodType))
-    || (session && value.serviceProvider === 'RAMPNOW' && !hasDestination)
     || (session && value.serviceProvider === 'MERCURYO' && !isMercuryoMexicoCard(value.country, value.sourceCurrencyCode, value.paymentMethodType)
-      && !isMercuryoBrazilCard(value.country, value.sourceCurrencyCode, value.paymentMethodType))
+      && !isMercuryoBrazilCard(value.country, value.sourceCurrencyCode, value.paymentMethodType)
+      && !(hasDestination && isMercuryoUsMethod(value.country, value.sourceCurrencyCode, value.paymentMethodType)))
     || (hasDestination && !walletProductionExplicitDestinationAllowed(value.country, value.sourceCurrencyCode, value.paymentMethodType,
       value.destinationCurrencyCode, session ? value.serviceProvider : undefined))) return null;
   return { country: value.country, sourceCurrencyCode: value.sourceCurrencyCode, amount: value.amount, paymentMethodType: value.paymentMethodType,
@@ -109,20 +116,22 @@ export function walletProductionDiscovery(value, country = '') {
 }
 export function walletProductionOptions(value) {
   if (!plain(value) || value.environment !== 'production' || !code(value.country) || !currency(value.sourceCurrencyCode)
-    || !Array.isArray(value.routes) || value.routes.length > 32 || !value.routes.every(route => plain(route) && checkoutProviders.has(route.serviceProvider)
+    || !Array.isArray(value.routes) || value.routes.length > 32 || !value.routes.every(route => plain(route) && (checkoutProviders.has(route.serviceProvider) || route.serviceProvider === 'RAMPNOW')
       && Array.isArray(route.paymentMethods) && route.paymentMethods.length <= 128 && route.paymentMethods.every(item => plain(item) && token(item.method) && item.currencyCode === value.sourceCurrencyCode
         && finite(item.minimumAmount) && finite(item.maximumAmount) && item.maximumAmount >= item.minimumAmount))) return null;
   const destinationCode = value.destinationCurrencyCode === undefined ? 'USDT_POLYGON' : value.destinationCurrencyCode;
-  if (!walletProductionAsset(destinationCode) || !value.routes.every(route => route.paymentMethods.every(item => {
+  // A previous Wallet Core instance may still advertise RampNow during rollout.
+  const offered = value.routes.filter(route => route.serviceProvider !== 'RAMPNOW');
+  if (!walletProductionAsset(destinationCode) || !offered.every(route => route.paymentMethods.every(item => {
     if (item.destinationCurrencyCodes === undefined) return assetAllowed(destinationCode, value.country, value.sourceCurrencyCode, route.serviceProvider, item.method);
-    return route.serviceProvider === 'RAMPNOW' && rampNowAssetCodes.has(destinationCode)
+    return route.serviceProvider === 'MERCURYO' && usdcAssetCodes.has(destinationCode)
       && Array.isArray(item.destinationCurrencyCodes) && item.destinationCurrencyCodes.length > 0
       && new Set(item.destinationCurrencyCodes).size === item.destinationCurrencyCodes.length
-      && item.destinationCurrencyCodes.every(code => walletProductionExplicitDestinationAllowed(value.country, value.sourceCurrencyCode, item.method, code));
+      && item.destinationCurrencyCodes.every(code => walletProductionExplicitDestinationAllowed(value.country, value.sourceCurrencyCode, item.method, code, route.serviceProvider));
   }))) return null;
-  const routes = value.routes.map(route => ({ serviceProvider: route.serviceProvider, paymentMethods: route.paymentMethods.map(item => ({
+  const routes = offered.map(route => ({ serviceProvider: route.serviceProvider, paymentMethods: route.paymentMethods.map(item => ({
     method: item.method, currencyCode: item.currencyCode, minimumAmount: item.minimumAmount, maximumAmount: item.maximumAmount,
-    ...(route.serviceProvider === 'RAMPNOW' ? { destinationCurrencyCodes: [...(item.destinationCurrencyCodes ?? [destinationCode])] } : {}),
+    ...(item.destinationCurrencyCodes ? { destinationCurrencyCodes: [...item.destinationCurrencyCodes] } : {}),
   })) }));
   return { environment: 'production', country: value.country, sourceCurrencyCode: value.sourceCurrencyCode, routes,
     ...(value.destinationCurrencyCode ? { destinationCurrencyCode: value.destinationCurrencyCode } : {}),
@@ -167,7 +176,7 @@ function snapshot(value) {
   if (!plain(value) || !FUNDING_UUID.test(value.checkoutReference || '') || value.provider !== 'meld' || !recordedProviders.has(value.serviceProvider) || !code(value.country)
     || !currency(value.sourceCurrencyCode) || !amount(value.requestedAmount) || !token(value.paymentMethodType) || !dest
     || (value.destinationCurrencyCode !== undefined && value.destinationCurrencyCode !== destinationCode)
-    || !assetAllowed(destinationCode, value.country, value.sourceCurrencyCode, value.serviceProvider, value.paymentMethodType)) return null;
+    || !assetAllowed(destinationCode, value.country, value.sourceCurrencyCode, value.serviceProvider, value.paymentMethodType, true)) return null;
   return { checkoutReference: value.checkoutReference.toLowerCase(), provider: 'meld', serviceProvider: value.serviceProvider, country: value.country,
     sourceCurrencyCode: value.sourceCurrencyCode, requestedAmount: value.requestedAmount, paymentMethodType: value.paymentMethodType, destination: dest };
 }
@@ -194,7 +203,7 @@ function confirmation(value) {
 function confirmedRampNowDestination(value, safe, proof) {
   if (!safe || safe.serviceProvider !== 'RAMPNOW' || proof?.state !== 'confirmed') return value === undefined ? undefined : null;
   const actual = destination(value);
-  return actual?.address === safe.destination.address && rampNowAssetCodes.has(walletProductionDestinationCode(actual)) ? actual : null;
+  return actual?.address === safe.destination.address && usdcAssetCodes.has(walletProductionDestinationCode(actual)) ? actual : null;
 }
 export function walletProductionStatus(value) {
   const safe = snapshot(value), proof = confirmation(value?.confirmation);
