@@ -59,19 +59,20 @@ test('stale route metadata cannot lower 931, higher provider minima remain intac
   assert.equal(administrativeSandboxOptions(administrative).routes[0].paymentMethods[0].minimumAmount, 150);
 });
 
-test('below-floor MXN attempts are rejected before browser transport or authenticated private forwarding', async () => {
+test('App SPEI attempts below 200 MXN are rejected before browser transport or authenticated private forwarding', async () => {
   const original = globalThis.fetch;
   const env = { AUTH_PROVIDER: 'better-auth', AUTH_BFF_SHARED_SECRET: 's'.repeat(32), AUTH_PUBLIC_ORIGIN: 'https://app.example.test',
     BETTER_AUTH_BACKEND_URL: 'https://auth.core.internal', NODE_ENV: 'production' };
   try {
     globalThis.fetch = async () => assert.fail('below-floor amount reached transport');
-    await assert.rejects(createPersonalFundingIntent(input(930.99)), { message: 'invalid_request' });
+    await assert.rejects(createPersonalFundingIntent(input(199.99)), { message: 'invalid_request' });
     const request = new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/wallet-funding/personal/intent`, { method: 'POST',
       headers: { cookie: 'better-auth.session_token=synthetic', origin: env.AUTH_PUBLIC_ORIGIN, 'sec-fetch-site': 'same-origin', 'content-type': 'application/json', 'x-mindbliss-wallet-network': 'polygon', 'x-mindbliss-funding-provider': 'meld' },
-      body: JSON.stringify(input(930.99)) });
+      body: JSON.stringify(input(199.99)) });
     const response = await handleWalletFunding(request, 'personal', { env, serviceRequest: async () => assert.fail('below-floor amount reached private backend') });
     assert.equal(response.status, 400);
-    globalThis.fetch = async (_path, init) => { assert.deepEqual(JSON.parse(init.body), input(931)); return Response.json({ ...ack(931), provider: 'meld', serviceProvider: 'ONRAMPMONEY', country: 'MX', status: 'session_created', checkoutUrl: 'https://meldcrypto.com/?token=synthetic' }); };
-    assert.equal((await createPersonalFundingIntent(input(931))).sourceCurrencyCode, 'MXN');
+    globalThis.fetch = async (_path, init) => { assert.deepEqual(JSON.parse(init.body), input(200)); return Response.json({ ...ack(200), provider: 'meld', serviceProvider: 'ONRAMPMONEY', country: 'MX', status: 'session_created',
+      destinationCurrencyCode: 'USDC_POLYGON', destination: { address, asset: 'USDC', network: 'polygon', chainId: 137 }, checkoutUrl: 'https://meldcrypto.com/?token=synthetic' }); };
+    assert.equal((await createPersonalFundingIntent(input(200))).sourceCurrencyCode, 'MXN');
   } finally { globalThis.fetch = original; }
 });

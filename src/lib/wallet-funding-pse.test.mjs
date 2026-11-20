@@ -19,10 +19,9 @@ test('MELD COP discovery and checkout preserve PSE or bank, the COP amount and l
   const paymentMethods = ['PSE', 'LOCAL_BANK_TRANSFER'];
   const context = { walletKind: 'personal', environment: 'production', provider: 'meld', country: 'CO', sourceCurrencyCode: 'COP',
     destinationCurrencyCode: 'USDC_POLYGON' };
-  const options = { ...context, network: 'polygon', chainId: 137, paymentMethods, routes: [{ serviceProvider: 'ONRAMPMONEY',
-    paymentMethods: paymentMethods.map(method => ({ method, currencyCode: 'COP', minimumAmount: 42300, maximumAmount: 5000000 })) }] };
-  const expected = { ...options, routes: options.routes.map(route => ({ ...route,
-    paymentMethods: route.paymentMethods.map(method => ({ ...method, minimumAmount: 170000, maximumAmount: 4000000 })) })) };
+  const target = { destinationCurrencyCode: 'USDC_POLYGON', network: 'polygon', chainId: 137 };
+  const options = { ...context, ...target, paymentMethods, routes: [{ ...target, serviceProvider: 'ONRAMPMONEY',
+    paymentMethods: paymentMethods.map(method => ({ method, currencyCode: 'COP', minimumAmount: 42300, maximumAmount: 59900000 })) }] };
   const lookup = '/api/member/wallet-funding/personal/options?country=CO&sourceCurrencyCode=COP';
   const query = new Request(`${env.AUTH_PUBLIC_ORIGIN}${lookup}`, { headers: { cookie: 'better-auth.session_token=synthetic' } });
   const session = body => ({ ...context, checkoutReference: body.requestId, status: 'session_created', serviceProvider: body.serviceProvider,
@@ -41,9 +40,9 @@ test('MELD COP discovery and checkout preserve PSE or bank, the COP amount and l
     const body = JSON.parse(init.body); sent.push(body);
     return { ok: true, data: session(body) };
   };
-  assert.deepEqual(await readPersonalFundingOptions('CO', { sourceCurrencyCode: 'COP' }), expected);
-  assert.deepEqual(await (await handleWalletFunding(query, 'personal-options', { env, serviceRequest: transport })).json(), expected);
-  for (const paymentMethodType of paymentMethods) for (const amount of [170000, 4000000]) {
+  assert.deepEqual(await readPersonalFundingOptions('CO', { sourceCurrencyCode: 'COP' }), options);
+  assert.deepEqual(await (await handleWalletFunding(query, 'personal-options', { env, serviceRequest: transport })).json(), options);
+  for (const paymentMethodType of paymentMethods) for (const amount of [42300, 42300.5, 59900000]) {
     const body = { requestId: reference, walletAddress: address, country: 'CO', amount, sourceCurrencyCode: 'COP', paymentMethodType,
       serviceProvider: 'ONRAMPMONEY', destinationCurrencyCode: 'USDC_POLYGON' };
     assert.deepEqual(await createPersonalFundingIntent(body), session(body));
@@ -54,14 +53,14 @@ test('MELD COP discovery and checkout preserve PSE or bank, the COP amount and l
   assert.equal(appMeldFundingOptions({ ...options, routes: [{ ...options.routes[0], serviceProvider: 'BANXA' }] }), null);
 });
 
-test('COP checkout blocks out-of-range or fractional amounts and unapproved method, provider or asset before transport', async t => {
+test('COP checkout blocks out-of-range amounts and fractional centavos and unapproved method, provider or asset before transport', async t => {
   const never = () => assert.fail('Rejected COP checkout reached transport');
   t.mock.method(globalThis, 'fetch', never);
   const body = { requestId: reference, walletAddress: address, country: 'CO', amount: 170000, sourceCurrencyCode: 'COP',
     paymentMethodType: 'PSE', serviceProvider: 'ONRAMPMONEY', destinationCurrencyCode: 'USDC_POLYGON' };
   for (const [changes, error] of [
-    [{ amount: 169999 }, 'invalid_request'], [{ amount: 170000.5 }, 'invalid_request'], [{ amount: 4000001 }, 'invalid_request'],
-    [{ sourceCurrencyCode: 'USD' }, 'invalid_request'], [{ destinationCurrencyCode: 'USDT_POLYGON' }, 'invalid_request'],
+    [{ amount: 42299.99 }, 'invalid_request'], [{ amount: 42300.001 }, 'invalid_request'], [{ amount: 59900000.01 }, 'invalid_request'],
+    [{ sourceCurrencyCode: 'USD' }, 'invalid_request'], [{ destinationCurrencyCode: 'USDT_POLYGON' }, 'wallet_funding_method_unavailable'],
     [{ paymentMethodType: 'CREDIT_DEBIT_CARD' }, 'wallet_funding_method_unavailable'], [{ serviceProvider: 'BANXA' }, 'wallet_funding_method_unavailable'],
   ]) {
     const input = { ...body, ...changes };

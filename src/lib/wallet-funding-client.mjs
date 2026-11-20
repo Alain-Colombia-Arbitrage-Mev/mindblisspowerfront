@@ -10,7 +10,7 @@ export async function createPersonalFundingIntent(input, options = {}) {
   if (!body) throw new Error('invalid_request');
   const appInputError = appMeldFundingInputError(body);
   if (appInputError) throw new Error(appInputError);
-  const destination = appMeldDestinationFor(appMeldFundingAsset(body.country, body.sourceCurrencyCode ?? 'USD'));
+  const destination = appMeldDestinationFor(body.destinationCurrencyCode ?? appMeldFundingAsset(body.country, body.sourceCurrencyCode ?? 'USD', body.serviceProvider, body.paymentMethodType));
   const data = appMeldFundingSession(await request('/api/member/wallet-funding/personal/intent', {
     method: 'POST', signal: options.signal,
     headers: { 'content-type': 'application/json', 'x-mindbliss-wallet-network': destination.network, 'x-mindbliss-funding-provider': 'meld' },

@@ -10,8 +10,8 @@ const input = { requestId: '11111111-1111-4111-8111-111111111111', walletAddress
   sourceCurrencyCode: 'USD', paymentMethodType: 'CREDIT_DEBIT_CARD' };
 const ack = { walletKind: 'personal', environment: 'production', provider: 'meld', serviceProvider: 'MERCURYO', country: 'MX', status: 'session_created',
   checkoutReference: input.requestId, requestedAmount: 50, sourceCurrencyCode: 'USD', paymentMethodType: input.paymentMethodType,
-  checkoutUrl: 'https://meldcrypto.com/?token=synthetic', createdAt: '2026-11-11T12:00:00Z', destinationCurrencyCode: 'USDT_POLYGON',
-  destination: { address, asset: 'USDT', network: 'polygon', chainId: 137 } };
+  checkoutUrl: 'https://meldcrypto.com/?token=synthetic', createdAt: '2026-11-11T12:00:00Z', destinationCurrencyCode: 'USDC_POLYGON',
+  destination: { address, asset: 'USDC', network: 'polygon', chainId: 137 } };
 const env = { AUTH_PROVIDER: 'better-auth', AUTH_BFF_SHARED_SECRET: 's'.repeat(40), NODE_ENV: 'production',
   AUTH_PUBLIC_ORIGIN: 'https://app.mindblisspower.com', BETTER_AUTH_BACKEND_URL: 'https://auth.core.internal' };
 const request = () => new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/wallet-funding/personal/intent`, { method: 'POST',
@@ -30,10 +30,10 @@ test('new personal discovery must explicitly identify Polygon USDT before any pa
   }
 });
 
-test('only a Polygon acknowledgement for the submitted wallet can pass the private and browser boundaries', async () => {
+test('only a Polygon USDC acknowledgement for the submitted Mexican wallet can pass the private and browser boundaries', async () => {
   const original = globalThis.fetch;
   try {
-    for (const value of [ack, { ...ack, destination: { ...ack.destination, address: other } }, { ...ack, destinationCurrencyCode: 'USDT' },
+    for (const value of [ack, { ...ack, destination: { ...ack.destination, address: other } }, { ...ack, destinationCurrencyCode: 'USDT_POLYGON' },
       { ...ack, destination: { ...ack.destination, network: 'ethereum', chainId: 1 } }, { ...ack, destination: undefined }]) {
       const valid = value === ack;
       const response = await handleWalletFunding(request(), 'personal', { env, serviceRequest: async () => ({ ok: true, data: value }) });

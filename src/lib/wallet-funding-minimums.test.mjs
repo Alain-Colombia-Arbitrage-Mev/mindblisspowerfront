@@ -79,7 +79,8 @@ test('Swapped and Mercuryo keep independent route limits instead of sharing the 
 test('Mexico USD card accepts only its authenticated Mercuryo checkout', async t => {
   const body = { ...input('personal', 100), country: 'MX', sourceCurrencyCode: 'USD' };
   const session = { ...ack('personal', 100), country: 'MX', sourceCurrencyCode: 'USD', provider: 'meld',
-    serviceProvider: 'MERCURYO', status: 'session_created', checkoutUrl: 'https://meldcrypto.com/?token=synthetic' };
+    serviceProvider: 'MERCURYO', status: 'session_created', checkoutUrl: 'https://meldcrypto.com/?token=synthetic',
+    destinationCurrencyCode: 'USDC_POLYGON', destination: { address, asset: 'USDC', network: 'polygon', chainId: 137 } };
   let response = session;
   t.mock.method(globalThis, 'fetch', async (path, init) => {
     assert.equal(path, '/api/member/wallet-funding/personal/intent');

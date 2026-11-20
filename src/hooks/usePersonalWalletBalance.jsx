@@ -15,7 +15,7 @@ export function usePersonalWalletBalance(expectedAddress = '', network = 'ethere
   useEffect(() => {
     if (key) void store.refresh(key, Boolean(address && store.get(key).walletAddress && address !== store.get(key).walletAddress));
   }, [key, address]);
-  const supported = asset === 'USDT' ? ['ethereum', 'polygon'].includes(network) : asset === 'USDC' && ['polygon', 'arbitrum'].includes(network);
+  const supported = asset === 'USDT' ? ['ethereum', 'polygon'].includes(network) : asset === 'USDC' && ['ethereum', 'polygon', 'arbitrum'].includes(network);
   const invalid = !supported
     || (address && (!/^0x[0-9a-f]{40}$/.test(address) || (value.walletAddress && address !== value.walletAddress)));
   if (invalid) return { ...EMPTY_PERSONAL_BALANCE, error: 'personal_wallet_balance_mismatch', refresh };

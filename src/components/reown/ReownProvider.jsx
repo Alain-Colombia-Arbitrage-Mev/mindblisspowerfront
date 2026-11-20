@@ -523,7 +523,8 @@ function ConfiguredReownProvider({ children }) {
     }
     selection = Object.freeze({ ...selection });
     const { sourceCurrencyCode, countryCode, amount: requestedAmount, destinationCurrencyCode } = context;
-    const isArbitrum = destinationCurrencyCode === "USDC_ARBITRUM";
+    const target = destinationCurrencyCode === "USDC_ARBITRUM" ? { network: 'arbitrum', chainId: 42161 }
+      : destinationCurrencyCode === "USDC" ? { network: 'ethereum', chainId: 1 } : { network: 'polygon', chainId: 137 };
     if (onrampFlow.current) return onrampFlow.current;
     const scope = beginOnrampOperation();
     let phase = 'link';
@@ -566,8 +567,8 @@ function ConfiguredReownProvider({ children }) {
       if (intent.provider !== "meld" || intent.status !== "session_created" || intent.checkoutReference !== requestId || intent.requestedAmount !== requestedAmount
         || (intent.sourceCurrencyCode ?? 'USD') !== sourceCurrencyCode || intent.paymentMethodType !== selection.paymentMethodType
         || intent.destinationCurrencyCode !== destinationCurrencyCode || (selection.serviceProvider && intent.serviceProvider !== selection.serviceProvider)
-        || intent.destination?.asset !== destinationCurrencyCode.split('_')[0] || intent.destination?.network !== (isArbitrum ? 'arbitrum' : 'polygon')
-        || intent.destination?.chainId !== (isArbitrum ? 42161 : 137) || !sameAddress(intent.destination?.address, verifiedAddress)) {
+        || intent.destination?.asset !== destinationCurrencyCode.split('_')[0] || intent.destination?.network !== target.network
+        || intent.destination?.chainId !== target.chainId || !sameAddress(intent.destination?.address, verifiedAddress)) {
         throw new Error('wallet_funding_invalid_acknowledgement');
       }
       setFundingRevision(current => current + 1);

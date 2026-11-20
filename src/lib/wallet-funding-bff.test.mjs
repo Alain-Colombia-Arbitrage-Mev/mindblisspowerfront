@@ -12,8 +12,8 @@ const ack = kind => ({ checkoutReference: requestId, walletKind: kind, environme
   provider: 'meld', status: 'session_created',
   requestedAmount: 100, createdAt: '2026-11-10T15:00:00.000Z', ...(kind === 'administrative' ? { checkoutUrl: 'https://sb.meldcrypto.com/?token=synthetic' }
     : { country: 'MX', sourceCurrencyCode: 'USD', serviceProvider: 'MERCURYO', checkoutUrl: 'https://meldcrypto.com/?token=synthetic',
-      paymentMethodType: input.paymentMethodType, destinationCurrencyCode: 'USDT_POLYGON',
-      destination: { address: input.walletAddress, asset: 'USDT', network: 'polygon', chainId: 137 } }) });
+      paymentMethodType: input.paymentMethodType, destinationCurrencyCode: 'USDC_POLYGON',
+      destination: { address: input.walletAddress, asset: 'USDC', network: 'polygon', chainId: 137 } }) });
 const request = (body = input, headers = {}) => new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/wallet-funding/personal/intent`, {
   method: 'POST', headers: { cookie: 'better-auth.session_token=synthetic-session', origin: env.AUTH_PUBLIC_ORIGIN,
     'x-mindbliss-wallet-network': 'polygon', 'x-mindbliss-funding-provider': 'meld',
@@ -84,7 +84,7 @@ test('administrative funding accepts only a sandbox session and leaves its opaqu
 test('wallet and environment acknowledgements cannot cross funding histories or claim settlement', async () => {
   for (const data of [{ ...ack('personal'), environment: 'sandbox' }, { ...ack('personal'), walletKind: 'administrative' },
     { ...ack('personal'), status: 'complete' }, { ...ack('personal'), requestedAmount: 101 }, { ...ack('personal'), provider: 'reown' },
-    { ...ack('personal'), serviceProvider: 'SWAPPED' }, { ...ack('personal'), destinationCurrencyCode: 'USDC_POLYGON' },
+    { ...ack('personal'), serviceProvider: 'SWAPPED' }, { ...ack('personal'), destinationCurrencyCode: 'USDT_POLYGON' },
     { ...ack('personal'), checkoutUrl: 'https://meldcrypto.com.evil.test/?token=opaque' },
     { ...ack('personal'), checkoutUrl: 'https://meldcrypto.com/?token=opaque&token=other' },
     { ...ack('personal'), destination: { ...ack('personal').destination, address: `0x${'2'.repeat(40)}` } },
@@ -127,8 +127,8 @@ test('administrative methods use only the selected sandbox country and provider,
 
 test('personal options authenticate and reject crossed countries, sandbox methods and unknown limits', async () => {
   const options = { walletKind: 'personal', environment: 'production', provider: 'meld', country: 'MX', sourceCurrencyCode: 'USD',
-    destinationCurrencyCode: 'USDT_POLYGON', network: 'polygon', chainId: 137,
-    paymentMethods: ['CREDIT_DEBIT_CARD'], routes: [{ serviceProvider: 'MERCURYO', paymentMethods: [
+    destinationCurrencyCode: 'USDC_POLYGON', network: 'polygon', chainId: 137,
+    paymentMethods: ['CREDIT_DEBIT_CARD'], routes: [{ serviceProvider: 'MERCURYO', destinationCurrencyCode: 'USDC_POLYGON', network: 'polygon', chainId: 137, paymentMethods: [
       { method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount: 100, maximumAmount: 10000 }] }] };
   const get = new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/wallet-funding/personal/options?country=MX`,
     { headers: { cookie: 'better-auth.session_token=synthetic' } });
@@ -155,7 +155,7 @@ test('USD discovery canonicalizes the MELD path for omitted and explicit currenc
     const serviceProvider = administrative ? 'BANXA' : 'MERCURYO';
     const suffix = administrative ? `&serviceProvider=${serviceProvider}` : '';
     const payload = { walletKind: kind, environment: administrative ? 'sandbox' : 'production', provider: 'meld',
-      country, ...(administrative ? { serviceProvider } : { sourceCurrencyCode: 'USD', destinationCurrencyCode: 'USDT_POLYGON', network: 'polygon', chainId: 137 }),
+      country, ...(administrative ? { serviceProvider } : { sourceCurrencyCode: 'USD', destinationCurrencyCode: 'USDC_POLYGON', network: 'polygon', chainId: 137 }),
       paymentMethods: ['CREDIT_DEBIT_CARD'], routes: [{ serviceProvider, paymentMethods: [{ method: 'CREDIT_DEBIT_CARD',
         ...(administrative ? { minimumUsd: 10, maximumUsd: 1000 } : { currencyCode: 'USD', minimumAmount: 10, maximumAmount: 1000 }) }] }] };
     for (const currencyQuery of ['', '&sourceCurrencyCode=USD']) {

@@ -256,17 +256,17 @@ test('ownership callbacks refuse a mismatched, unselected or switching wallet be
 test('SPEI submits the actual amounts in pesos and opens the server-issued checkout URL', async () => {
   const runtime = fundingRuntime({ open: () => assert.fail('verified wallet asked to authenticate again'),
     createPersonalFundingIntent: async body => {
-      assert.equal(body.sourceCurrencyCode, 'MXN'); assert.equal(body.amount, 931); assert.equal(body.paymentMethodType, 'SPEI');
-      assert.equal(body.destinationCurrencyCode, 'USDT_POLYGON'); assert.equal(body.serviceProvider, 'ONRAMPMONEY');
+      assert.equal(body.sourceCurrencyCode, 'MXN'); assert.equal(body.amount, 200); assert.equal(body.paymentMethodType, 'SPEI');
+      assert.equal(body.destinationCurrencyCode, 'USDC_POLYGON'); assert.equal(body.serviceProvider, 'ONRAMPMONEY');
       return fundingSession(body);
     } });
-  const result = await runtime.scope.startOnramp({ ...runtime.input, sourceCurrencyCode: 'MXN', paymentMethodType: 'SPEI', amount: 931, serviceProvider: 'ONRAMPMONEY' });
+  const result = await runtime.scope.startOnramp({ ...runtime.input, sourceCurrencyCode: 'MXN', paymentMethodType: 'SPEI', amount: 200, serviceProvider: 'ONRAMPMONEY' });
   assert.equal(result.sourceCurrencyCode, 'MXN'); assert.equal(result.minimumUsd, null);
   assert.equal(runtime.events.find(value => value?.opened).opened.href, checkoutUrl);
 });
 
 test('Mercuryo USD and MXN cards hand off the linked wallet and chosen currency without extra authentication', async () => {
-  for (const choice of [{ sourceCurrencyCode: 'USD', amount: 50 }, { sourceCurrencyCode: 'MXN', amount: 931 }]) {
+  for (const choice of [{ sourceCurrencyCode: 'USD', amount: 50 }, { sourceCurrencyCode: 'MXN', amount: 520.03 }]) {
     const runtime = fundingRuntime({ open: () => assert.fail('Verified wallet asked to authenticate again'),
       createPersonalFundingIntent: async body => {
         assert.equal(body.country, 'MX');
@@ -274,7 +274,7 @@ test('Mercuryo USD and MXN cards hand off the linked wallet and chosen currency 
         assert.equal(body.paymentMethodType, 'CREDIT_DEBIT_CARD');
         assert.equal(body.amount, choice.amount);
         assert.equal(body.sourceCurrencyCode, choice.sourceCurrencyCode);
-        assert.equal(body.destinationCurrencyCode, 'USDT_POLYGON');
+        assert.equal(body.destinationCurrencyCode, 'USDC_POLYGON');
         assert.equal(body.serviceProvider, 'MERCURYO');
         return fundingSession(body);
       } });
@@ -300,7 +300,7 @@ test('personal start and continuation reject ineligible country, method and curr
   const selections = [
     { input: { country: 'MX', sourceCurrencyCode: 'MXN', amount: 1000, paymentMethodType: 'LOCAL_BANK_TRANSFER' }, code: 'wallet_funding_method_unavailable', category: 'method' },
     { input: { country: 'MX', sourceCurrencyCode: 'COP', amount: 200000, paymentMethodType: 'SPEI' }, code: 'invalid_request', category: 'provider' },
-    { input: { country: 'US', sourceCurrencyCode: 'USD', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD', destinationCurrencyCode: 'USDT_POLYGON' }, code: 'invalid_request', category: 'provider' },
+    { input: { country: 'US', sourceCurrencyCode: 'USD', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD', destinationCurrencyCode: 'USDT_POLYGON' }, code: 'wallet_funding_method_unavailable', category: 'method' },
     { input: { country: 'US', sourceCurrencyCode: 'USD', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD', serviceProvider: 'ONRAMPMONEY' }, code: 'wallet_funding_method_unavailable', category: 'method' },
     { input: { country: 'CA', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' }, code: 'wallet_funding_invalid_country', category: 'method' },
     ...['NETELLER', 'PAYSAFECARD', 'PAYSAFE_CARD', 'SKRILL', 'SKIRLL', 'ASTROPAY'].map(paymentMethodType => ({

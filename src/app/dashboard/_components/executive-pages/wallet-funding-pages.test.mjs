@@ -65,21 +65,21 @@ function formHarness(name, api, detectedCountry = 'US') {
   return { ...harness, render(props = {}) { return render({ destinationAddress: `0x${'1'.repeat(40)}`, ...props }); } };
 }
 
-const meldRoute = (serviceProvider, currencyCode, methods, minimumAmount, maximumAmount) => ({
-  serviceProvider, paymentMethods: methods.map(method => ({ method, currencyCode, minimumAmount, maximumAmount })),
+const meldRoute = (serviceProvider, currencyCode, methods, minimumAmount, maximumAmount, destinationCurrencyCode) => ({
+  serviceProvider, ...(destinationCurrencyCode ? { destinationCurrencyCode } : {}), paymentMethods: methods.map(method => ({ method, currencyCode, minimumAmount, maximumAmount })),
 });
 const meldOptions = (country, sourceCurrencyCode, routes) => ({
   country, sourceCurrencyCode, destinationCurrencyCode: appMeldFunding.appMeldFundingAsset(country, sourceCurrencyCode), routes,
 });
 const mexicoOptions = (country, sourceCurrencyCode) => meldOptions(country, sourceCurrencyCode, sourceCurrencyCode === 'MXN'
-  ? [meldRoute('ONRAMPMONEY', 'MXN', ['SPEI'], 931, 50000)]
-  : [meldRoute('MERCURYO', 'USD', ['CREDIT_DEBIT_CARD'], 50, 15000)]);
+  ? [meldRoute('ONRAMPMONEY', 'MXN', ['SPEI'], 200, 500000)]
+  : [meldRoute('MERCURYO', 'USD', ['CREDIT_DEBIT_CARD'], 50, 16821.71)]);
 
 test('Colombia offers COP bank methods through Onramp Money after explicit residence selection', async t => {
   const calls = [], submitted = [];
   const harness = formHarness('PersonalFundingForm', { readPersonalFundingOptions: async (country, { sourceCurrencyCode }) => {
     calls.push({ country, sourceCurrencyCode });
-    return meldOptions(country, sourceCurrencyCode, [meldRoute('ONRAMPMONEY', 'COP', ['PSE', 'LOCAL_BANK_TRANSFER', 'CREDIT_DEBIT_CARD'], 170000, 4000000)]);
+    return meldOptions(country, sourceCurrencyCode, [meldRoute('ONRAMPMONEY', 'COP', ['PSE', 'LOCAL_BANK_TRANSFER', 'CREDIT_DEBIT_CARD'], 42300, 59900000)]);
   } });
   t.after(() => harness.unmount());
   const props = { onContinue: value => submitted.push(value) };
@@ -89,7 +89,11 @@ test('Colombia offers COP bank methods through Onramp Money after explicit resid
   const currencyField = find(tree, 'FundingCurrencyField');
   assert.equal(currencyField.props.value, 'COP');
   assert.deepEqual(findAll(currencyField.type(currencyField.props), node => node?.type === 'option').map(option => option.props.value), ['COP']);
-  assert.equal(find(tree, 'FundingAmountField').props.sourceCurrencyCode, 'COP');
+  const amountField = find(tree, 'FundingAmountField');
+  assert.equal(amountField.props.sourceCurrencyCode, 'COP');
+  assert.equal(amountField.props.amount, '42300');
+  const moneyInput = findAll(amountField.type(amountField.props), node => node?.type === 'input' && node.props.type === 'number')[0];
+  assert.equal(moneyInput.props.min, '42300'); assert.equal(moneyInput.props.max, '59900000'); assert.equal(moneyInput.props.step, '0.01');
   assert.deepEqual(find(tree, 'FundingMethodField').props.methods, ['PSE', 'LOCAL_BANK_TRANSFER']);
   assert.equal(find(tree, 'FundingSubmit').props.disabled, false);
   tree.props.onSubmit({ preventDefault() {} }); await flush();
@@ -104,8 +108,8 @@ test('Mexico defaults to MXN and SPEI while an explicit card choice retains its 
   const harness = formHarness('PersonalFundingForm', { readPersonalFundingOptions: async (country, { sourceCurrencyCode }) => {
     calls.push({ country, sourceCurrencyCode });
     return sourceCurrencyCode === 'MXN' ? meldOptions(country, sourceCurrencyCode, [
-      meldRoute('ONRAMPMONEY', 'MXN', ['SPEI'], 931, 2000),
-      meldRoute('MERCURYO', 'MXN', ['CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY'], 1500, 100000),
+      meldRoute('ONRAMPMONEY', 'MXN', ['SPEI'], 200, 500000),
+      meldRoute('MERCURYO', 'MXN', ['CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY'], 520.03, 312013.7),
     ]) : mexicoOptions(country, sourceCurrencyCode);
   } });
   t.after(() => harness.unmount());
@@ -113,22 +117,32 @@ test('Mexico defaults to MXN and SPEI while an explicit card choice retains its 
   selectFundingCountry(harness, props, 'MX'); await flush(); harness.render(props); let tree = harness.render(props);
   assert.deepEqual(calls, [{ country: 'MX', sourceCurrencyCode: 'MXN' }]);
   assert.equal(find(tree, 'FundingCurrencyField').props.value, 'MXN');
-  assert.equal(find(tree, 'FundingAmountField').props.amount, '931');
-  assert.equal(find(tree, 'FundingMethodField').props.value, 'SPEI');
+  assert.equal(find(tree, 'FundingAmountField').props.amount, '200');
+  const defaultMethod = find(tree, 'FundingMethodField');
+  assert.equal(defaultMethod.props.value, 'SPEI');
+  assert.deepEqual(defaultMethod.props.methods, ['SPEI']);
+  const minimumLabel = new Intl.NumberFormat('es', { style: 'currency', currency: 'MXN' }).format(520.03);
+  const cardShortcut = find(defaultMethod.type(defaultMethod.props), node => node?.type === 'button'
+    && typeof node.props.children === 'string' && node.props.children.includes(minimumLabel));
+  assert.ok(cardShortcut);
+  cardShortcut.props.onClick(); harness.render(props); tree = harness.render(props);
+  assert.equal(find(tree, 'FundingAmountField').props.amount, '520.03');
+  assert.equal(find(tree, 'FundingMethodField').props.value, 'CREDIT_DEBIT_CARD');
+  assert.equal(submitted.length, 0, 'selecting the provider minimum only edits the form');
   find(tree, 'FundingAmountField').props.onChange('2000'); tree = harness.render(props); tree = harness.render(props);
   assert.deepEqual(find(tree, 'FundingMethodField').props.methods, ['SPEI', 'CREDIT_DEBIT_CARD']);
   find(tree, 'FundingMethodField').props.onChange('CREDIT_DEBIT_CARD'); tree = harness.render(props); tree = harness.render(props);
-  find(tree, 'FundingAmountField').props.onChange('1200'); tree = harness.render(props); tree = harness.render(props);
+  find(tree, 'FundingAmountField').props.onChange('500'); tree = harness.render(props); tree = harness.render(props);
   assert.equal(find(tree, 'FundingMethodField').props.selectionUnavailable, true);
-  assert.equal(find(tree, 'FundingMethodField').props.minimumUsd, 1500);
+  assert.equal(find(tree, 'FundingMethodField').props.minimumUsd, 520.03);
   assert.equal(find(tree, 'FundingSubmit').props.disabled, true);
   find(tree, 'FundingMethodField').props.onUseMinimum(); tree = harness.render(props); tree = harness.render(props);
   assert.equal(find(tree, 'FundingMethodField').props.value, 'CREDIT_DEBIT_CARD');
-  assert.equal(find(tree, 'FundingAmountField').props.amount, '1500.00');
+  assert.equal(find(tree, 'FundingAmountField').props.amount, '520.03');
   tree.props.onSubmit({ preventDefault() {} }); await flush();
   assert.equal(submitted.length, 1); assert.equal(submitted[0].sourceCurrencyCode, 'MXN');
-  assert.equal(submitted[0].paymentMethodType, 'CREDIT_DEBIT_CARD'); assert.equal(submitted[0].amount, 1500);
-  assert.equal(submitted[0].serviceProvider, 'MERCURYO'); assert.equal(submitted[0].destinationCurrencyCode, 'USDT_POLYGON');
+  assert.equal(submitted[0].paymentMethodType, 'CREDIT_DEBIT_CARD'); assert.equal(submitted[0].amount, 520.03);
+  assert.equal(submitted[0].serviceProvider, 'MERCURYO'); assert.equal(submitted[0].destinationCurrencyCode, 'USDC_POLYGON');
   find(tree, 'FundingMethodField').props.onRetry(); harness.render(props); await flush(); tree = harness.render(props); tree = harness.render(props);
   assert.equal(find(tree, 'FundingMethodField').props.value, 'CREDIT_DEBIT_CARD');
   assert.equal(submitted.length, 1); assert.equal(calls.filter(call => call.sourceCurrencyCode === 'MXN').length, 2);
@@ -321,7 +335,7 @@ test('inline and sidebar activation coalesce and preserve Mexico, pesos, amount 
   assert.equal(calls.length, 2); assert.equal(calls[1][0], 'checkout');
   assert.equal(calls[1][1].walletAddress, reown.linkedAddress); assert.equal(calls[1][1].amount, 1234.56);
   assert.equal(calls[1][1].countryCode, 'MX'); assert.equal(calls[1][1].sourceCurrencyCode, 'MXN'); assert.equal(calls[1][1].paymentMethodType, 'SPEI');
-  assert.equal(calls[1][1].serviceProvider, 'ONRAMPMONEY'); assert.equal(calls[1][1].destinationCurrencyCode, 'USDT_POLYGON');
+  assert.equal(calls[1][1].serviceProvider, 'ONRAMPMONEY'); assert.equal(calls[1][1].destinationCurrencyCode, 'USDC_POLYGON');
 });
 
 test('cancelled inline activation keeps the form available for retry without a purchase', async t => {
@@ -460,6 +474,8 @@ test('personal countries discard canceled responses, respect route limits and su
   harness.render(props);
   assert.equal(calls[1].signal.aborted, true);
   assert.equal(calls[2].sourceCurrencyCode, 'USD');
+  tree = harness.render(props);
+  find(tree, 'FundingAmountField').props.onChange('100'); harness.render(props);
   calls[2].resolve(meldOptions('MX', 'USD', [meldRoute('MERCURYO', 'USD', ['CREDIT_DEBIT_CARD'], 175, 1000)]));
   await flush(); tree = harness.render(props);
   assert.deepEqual(find(tree, 'FundingMethodField').props.methods, [], '100 USD cannot use a 175 USD route');
@@ -473,7 +489,7 @@ test('personal countries discard canceled responses, respect route limits and su
   assert.equal(submitted[0].paymentMethodType, 'CREDIT_DEBIT_CARD');
   assert.equal(submitted[0].amount, 200);
   assert.equal(submitted[0].serviceProvider, 'MERCURYO');
-  assert.equal(submitted[0].destinationCurrencyCode, 'USDT_POLYGON');
+  assert.equal(submitted[0].destinationCurrencyCode, 'USDC_POLYGON');
   assert.equal(administrativeCalls, 0);
 });
 
@@ -533,7 +549,7 @@ test('only explicit personal field edits notify the page, never country detectio
   const harness = formHarness('PersonalFundingForm', {
     readPersonalFundingOptions: async (country, { sourceCurrencyCode }) => meldOptions(country, sourceCurrencyCode, country === 'US'
       ? [meldRoute('RAMPNOW', 'USD', ['CREDIT_DEBIT_CARD', 'LOCAL_BANK_TRANSFER'], 50, 1000)]
-      : [meldRoute('ONRAMPMONEY', 'COP', ['PSE', 'LOCAL_BANK_TRANSFER'], 170000, 4000000)]),
+      : [meldRoute('ONRAMPMONEY', 'COP', ['PSE', 'LOCAL_BANK_TRANSFER'], 42300, 59900000)]),
     readAdministrativeSandboxOptions() { assert.fail('administrative discovery called'); },
   });
   t.after(() => harness.unmount());
@@ -717,7 +733,7 @@ test('personal funding exposes RampNow card and bank methods and honors an expli
   const submitted = [];
   const harness = formHarness('PersonalFundingForm', { readPersonalFundingOptions: async (country, { sourceCurrencyCode }) => meldOptions(country, sourceCurrencyCode, country === 'US'
     ? [meldRoute('RAMPNOW', 'USD', [...allowed.US, ...blocked], 50, 1000), meldRoute('ONRAMPMONEY', 'USD', ['ACH', 'LOCAL_BANK_TRANSFER'], 50, 1000)]
-    : [meldRoute('ONRAMPMONEY', 'COP', [...allowed.CO, ...blocked], 170000, 4000000)]),
+    : [meldRoute('ONRAMPMONEY', 'COP', [...allowed.CO, ...blocked], 42300, 59900000)]),
     readAdministrativeSandboxOptions() { assert.fail('production methods cannot use sandbox'); },
   });
   t.after(() => harness.unmount());
@@ -755,7 +771,7 @@ test('personal funding exposes RampNow card and bank methods and honors an expli
   radios.find(node => node.props.value === 'ACH').props.onChange();
   tree = harness.render(props);
   const provider = find(tree, node => node?.type === 'select' && node.props.id === 'funding-test-provider');
-  assert.deepEqual(provider.props.children.map(option => option.props.value), ['RAMPNOW', 'ONRAMPMONEY']);
+  assert.deepEqual(React.Children.toArray(provider.props.children).map(option => option.props.value), ['RAMPNOW', 'ONRAMPMONEY']);
   provider.props.onChange({ target: { value: 'ONRAMPMONEY' } });
   tree = harness.render(props);
   tree.props.onSubmit({ preventDefault() {} }); await flush();
@@ -770,6 +786,71 @@ test('personal funding exposes RampNow card and bank methods and honors an expli
   assert.equal(submitted[1].paymentMethodType, 'CREDIT_DEBIT_CARD');
 });
 
+test('US card network changes keep the linked destination and apply the exact selected route limits', async t => {
+  const submitted = [];
+  const harness = formHarness('PersonalFundingForm', { readPersonalFundingOptions: async (country, { sourceCurrencyCode }) => meldOptions(country, sourceCurrencyCode, [
+    meldRoute('RAMPNOW', 'USD', ['CREDIT_DEBIT_CARD'], 50, 10000, 'USDC_POLYGON'),
+    meldRoute('RAMPNOW', 'USD', ['CREDIT_DEBIT_CARD'], 50, 10000, 'USDC_ARBITRUM'),
+    meldRoute('RAMPNOW', 'USD', ['CREDIT_DEBIT_CARD'], 50, 8000, 'USDC'),
+    meldRoute('ONRAMPMONEY', 'USD', ['ACH'], 50, 25000, 'USDC_POLYGON'),
+  ]) });
+  t.after(() => harness.unmount());
+  const props = { onContinue: async value => submitted.push(value) };
+  selectFundingCountry(harness, props, 'US'); await flush(); harness.render(props); let tree = harness.render(props);
+  const networkField = () => find(tree, node => node?.type === 'select' && node.props.id === 'funding-test-network');
+  assert.deepEqual(React.Children.toArray(networkField().props.children).map(node => [node.props.value, node.props.children]), [
+    ['USDC_POLYGON', 'Polygon'], ['USDC_ARBITRUM', 'Arbitrum'], ['USDC', 'Ethereum'],
+  ]);
+  assert.equal(networkField().props.value, 'USDC_POLYGON');
+  networkField().props.onChange({ target: { value: 'USDC' } }); harness.render(props); tree = harness.render(props);
+  assert.equal(find(tree, 'FundingDestination').props.network, 'Ethereum');
+  assert.equal(find(tree, 'FundingDestination').props.address, `0x${'1'.repeat(40)}`);
+  assert.equal(find(tree, 'FundingMethodField').props.limits.maximumUsd, 8000);
+  tree.props.onSubmit({ preventDefault() {} }); await flush();
+  assert.equal(submitted[0].destinationCurrencyCode, 'USDC');
+  assert.equal(submitted[0].serviceProvider, 'RAMPNOW');
+  find(tree, 'FundingAmountField').props.onChange('8000.01'); harness.render(props); tree = harness.render(props);
+  assert.equal(find(tree, 'FundingSubmit').props.disabled, true);
+  tree.props.onSubmit({ preventDefault() {} }); await flush();
+  assert.equal(submitted.length, 1);
+  find(tree, 'FundingMethodField').props.onChange('ACH'); harness.render(props); tree = harness.render(props);
+  assert.equal(networkField(), undefined);
+  assert.equal(find(tree, 'FundingDestination').props.network, 'Polygon');
+  assert.equal(find(tree, 'FundingMethodField').props.limits.maximumUsd, 25000);
+  tree.props.onSubmit({ preventDefault() {} }); await flush();
+  assert.equal(submitted[1].destinationCurrencyCode, 'USDC_POLYGON');
+  assert.equal(submitted[1].serviceProvider, 'ONRAMPMONEY');
+});
+
+test('Vietnam uses whole VND at the live VietQR minimum and clears VND methods before changing country', async t => {
+  const calls = [], submitted = [];
+  const harness = formHarness('PersonalFundingForm', { readPersonalFundingOptions(country, { sourceCurrencyCode, signal }) {
+    return new Promise(resolve => calls.push({ country, sourceCurrencyCode, signal, resolve }));
+  } });
+  t.after(() => harness.unmount());
+  const props = { onContinue: async value => submitted.push(value) };
+  selectFundingCountry(harness, props, 'VN');
+  calls[0].resolve(meldOptions('VN', 'VND', [meldRoute('ONRAMPMONEY', 'VND', ['VIETQR'], 55000, 9999999)]));
+  await flush(); harness.render(props); let tree = harness.render(props);
+  assert.deepEqual([calls[0].country, calls[0].sourceCurrencyCode], ['VN', 'VND']);
+  const amountField = find(tree, 'FundingAmountField');
+  const number = find(amountField.type(amountField.props), node => node?.type === 'input' && node.props.type === 'number');
+  assert.equal(number.props.min, '55000');
+  assert.equal(number.props.step, '1');
+  assert.equal(number.props.inputMode, 'numeric');
+  assert.equal(find(tree, 'FundingMethodField').props.value, 'VIETQR');
+  amountField.props.onChange('55000.50'); harness.render(props); tree = harness.render(props);
+  assert.equal(find(tree, 'FundingSubmit').props.disabled, true);
+  find(tree, 'FundingAmountField').props.onChange('55000'); harness.render(props); tree = harness.render(props);
+  tree.props.onSubmit({ preventDefault() {} }); await flush();
+  assert.deepEqual(submitted.map(({ countryCode, sourceCurrencyCode, amount, paymentMethodType, destinationCurrencyCode }) =>
+    [countryCode, sourceCurrencyCode, amount, paymentMethodType, destinationCurrencyCode]), [['VN', 'VND', 55000, 'VIETQR', 'USDT_POLYGON']]);
+  find(tree, 'FundingCountryField').props.onChange('IN'); harness.render(props); tree = harness.render(props);
+  assert.deepEqual([calls[1].country, calls[1].sourceCurrencyCode], ['IN', 'INR']);
+  assert.deepEqual(find(tree, 'FundingMethodField').props.methods, []);
+  assert.equal(find(tree, 'FundingSubmit').props.disabled, true);
+});
+
 test('selected method limits reflect overlapping real routes and never invent a minimum for an unavailable amount', () => {
   const { selectedMethodLimits } = formHarness('PersonalFundingForm', {}).exports;
   const routes = [{ paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', minimumUsd: 10, maximumUsd: 1000 }] },
@@ -782,7 +863,7 @@ test('selected method limits reflect overlapping real routes and never invent a 
 test('USD amount controls expose exact accessible limits, quick presets and a slider without overwriting manual cents', async t => {
   const submitted = [], selections = [];
   const harness = formHarness('PersonalFundingForm', { readPersonalFundingOptions: async country => meldOptions(country, 'USD',
-    [meldRoute('RAMPNOW', 'USD', ['CREDIT_DEBIT_CARD'], 1, 25000)]) });
+    [meldRoute('ONRAMPMONEY', 'USD', ['ACH'], 50, 25000)]) });
   t.after(() => harness.unmount());
   const props = { onContinue: input => submitted.push(input), onSelectionChange: () => selections.push('changed') };
   selectFundingCountry(harness, props, 'US'); await flush(); harness.render(props); let tree = harness.render(props);
@@ -790,15 +871,15 @@ test('USD amount controls expose exact accessible limits, quick presets and a sl
   const range = () => findAll(amountField(), node => node?.type === 'input' && node.props.type === 'range')[0];
   const number = () => findAll(amountField(), node => node?.type === 'input' && node.props.type === 'number')[0];
   const presets = findAll(amountField(), node => node?.type === 'button');
-  assert.deepEqual(presets.map(button => button.props.children.props.children), [50, 100, 500, 1000, 2000, 5000, 10000, 15000]
+  assert.deepEqual(presets.map(button => button.props.children.props.children), [50, 100, 500, 1000, 2000, 5000, 10000, 25000]
     .map(value => new Intl.NumberFormat('es', { maximumFractionDigits: 0 }).format(value)));
-  assert.deepEqual(presets.map(button => button.props['aria-label']), [50, 100, 500, 1000, 2000, 5000, 10000, 15000]
+  assert.deepEqual(presets.map(button => button.props['aria-label']), [50, 100, 500, 1000, 2000, 5000, 10000, 25000]
     .map(value => new Intl.NumberFormat('es', { style: 'currency', currency: 'USD' }).format(value)));
   assert.ok(presets.every(button => button.props.type === 'button'));
   assert.deepEqual(presets.filter(button => button.props['aria-pressed']).map(button => button.props.children.props.children), ['100']);
   assert.equal(number().props.value, '100');
-  assert.equal(range().props.min, 50); assert.equal(range().props.max, 15000); assert.equal(range().props.step, 'any');
-  assert.equal(number().props.min, '50'); assert.equal(number().props.max, '15000'); assert.equal(number().props.step, '0.01');
+  assert.equal(range().props.min, 50); assert.equal(range().props.max, 25000); assert.equal(range().props.step, 'any');
+  assert.equal(number().props.min, '50'); assert.equal(number().props.max, '25000'); assert.equal(number().props.step, '0.01');
   assert.doesNotMatch(renderToStaticMarkup(amountField()), /\b30(?:[.,]00)?\s*(?:USD|US\$)|(?:\$|US\$)\s*30\b/);
   assert.ok(findAll(amountField(), node => node?.type === 'label').some(label => label.props.htmlFor === range().props.id));
   number().props.onChange({ target: { value: '1234.56' } }); harness.render(props); tree = harness.render(props);
@@ -815,9 +896,9 @@ test('USD amount controls expose exact accessible limits, quick presets and a sl
   presets[0].props.onClick(); harness.render(props); tree = harness.render(props);
   assert.equal(number().props.value, '50'); assert.equal(range().props.value, 50);
   presets.at(-1).props.onClick(); harness.render(props); tree = harness.render(props);
-  assert.equal(number().props.value, '15000'); assert.equal(find(tree, 'FundingSubmit').props.disabled, false);
+  assert.equal(number().props.value, '25000'); assert.equal(find(tree, 'FundingSubmit').props.disabled, false);
   assert.equal(submitted.length, 0, 'amount controls initiated a checkout');
-  for (const invalid of ['20', '29.99', '30', '49.99', '15000.01']) {
+  for (const invalid of ['20', '29.99', '30', '49.99', '25000.01']) {
     number().props.onChange({ target: { value: invalid } }); harness.render(props); tree = harness.render(props);
     assert.equal(number().props.value, invalid, 'the slider silently clamped the manual field');
     assert.equal(number().props['aria-invalid'], true); assert.equal(find(tree, 'FundingSubmit').props.disabled, true);
@@ -836,7 +917,7 @@ test('USD slider keyboard actions move useful increments and clamp boundaries wi
       assert.equal(prevented, true, key); assert.equal(find(tree, 'FundingAmountField').props.amount, String(expected), key);
     }
     key('ArrowRight', 200); key('ArrowUp', 300); key('PageUp', 1300); key('PageDown', 300); key('ArrowLeft', 200); key('ArrowDown', 100);
-    key('ArrowLeft', 50); key('End', 15000); key('ArrowUp', 15000); key('Home', 50);
+    key('ArrowLeft', 50); key('End', 25000); key('ArrowUp', 25000); key('Home', 50);
     range().props.onKeyDown({ key: 'Tab', preventDefault() { assert.fail('the slider trapped keyboard navigation'); } });
     assert.equal(range().props.dir, 'ltr', 'numeric slider direction must match its ArrowRight increment in every locale');
   } finally { harness.unmount(); }
@@ -848,10 +929,10 @@ test('SPEI amounts retain fixed pesos and have neither USD presets nor a USD sli
     let tree = harness.render(props); find(tree, 'FundingCountryField').props.onChange('MX'); tree = harness.render(props);
     find(tree, 'FundingCurrencyField').props.onChange('MXN'); tree = harness.render(props);
     const field = find(tree, 'FundingAmountField'), view = field.type(field.props);
-    assert.equal(field.props.amount, '931');
+    assert.equal(field.props.amount, '200');
     assert.equal(findAll(view, node => node?.type === 'input' && node.props.type === 'range').length, 0);
     assert.equal(findAll(view, node => node?.type === 'button').length, 0);
-    assert.equal(findAll(view, node => node?.type === 'input' && node.props.type === 'number')[0].props.min, '931');
+    assert.equal(findAll(view, node => node?.type === 'input' && node.props.type === 'number')[0].props.min, '200');
   } finally { harness.unmount(); }
 });
 
@@ -877,7 +958,7 @@ test('history-driven status focus uses native focus and scrolling, respects redu
   assert.equal(reads[0].signal.aborted, true);
 });
 
-test('personal MXN discovery cancels USD responses and enforces the fixed 931 floor above older provider limits', async t => {
+test('personal MXN discovery cancels USD responses and enforces the 200 peso floor above older provider limits', async t => {
   const calls = [], submitted = [];
   const harness = formHarness('PersonalFundingForm', {
     readPersonalFundingOptions(country, { signal, sourceCurrencyCode }) { return new Promise(resolve => calls.push({ country, signal, sourceCurrencyCode, resolve })); },
@@ -895,7 +976,7 @@ test('personal MXN discovery cancels USD responses and enforces the fixed 931 fl
   harness.render(props); tree = harness.render(props);
   const latest = calls.at(-1);
   assert.equal(latest.sourceCurrencyCode, 'MXN');
-  assert.equal(find(tree, 'FundingAmountField').props.amount, '931', 'changing currency selects its fixed minimum rather than relabelling USD 100');
+  assert.equal(find(tree, 'FundingAmountField').props.amount, '200', 'changing currency selects its fixed minimum rather than relabelling USD 100');
   for (const old of calls.slice(0, -1)) {
     assert.equal(old.signal.aborted, true);
     old.resolve({ country: old.country, sourceCurrencyCode: old.sourceCurrencyCode, routes: [{ paymentMethods: [{ method: 'PAYPAL', minimumUsd: 50, maximumUsd: 5000 }] }] });
@@ -903,14 +984,14 @@ test('personal MXN discovery cancels USD responses and enforces the fixed 931 fl
   latest.resolve(meldOptions('MX', 'MXN', [
     meldRoute('ONRAMPMONEY', 'MXN', ['SPEI', 'ASTROPAY'], 150, 100000),
     { serviceProvider: 'MERCURYO', paymentMethods: [
-      { method: 'CREDIT_DEBIT_CARD', currencyCode: 'MXN', minimumAmount: 100, maximumAmount: 100000 },
+      { method: 'CREDIT_DEBIT_CARD', currencyCode: 'MXN', minimumAmount: 520.03, maximumAmount: 100000 },
       { method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount: 50, maximumAmount: 5000 },
     ] },
   ]));
   await flush(); harness.render(props); harness.render(props); tree = harness.render(props);
   const method = find(tree, 'FundingMethodField');
-  assert.deepEqual(method.props.methods, ['SPEI', 'CREDIT_DEBIT_CARD']);
-  assert.deepEqual(method.props.limits, { minimumAmount: 931, maximumAmount: 100000 });
+  assert.deepEqual(method.props.methods, ['SPEI']);
+  assert.deepEqual(method.props.limits, { minimumAmount: 200, maximumAmount: 100000 });
   assert.match(renderToStaticMarkup(method.type(method.props)), /SPEI.*transferencia bancaria/);
   assert.doesNotMatch(renderToStaticMarkup(method.type(method.props)), /AstroPay/i);
   method.props.onChange('ASTROPAY'); harness.render(props); tree = harness.render(props);
@@ -918,9 +999,9 @@ test('personal MXN discovery cancels USD responses and enforces the fixed 931 fl
   tree.props.onSubmit({ preventDefault() {} }); await flush();
   assert.equal(submitted.length, 0, 'an unavailable rail cannot replace the valid SPEI selection');
   find(tree, 'FundingMethodField').props.onChange('SPEI'); harness.render(props); tree = harness.render(props);
-  assert.equal(find(tree, 'FundingAmountField').props.amount, '931', 'the fixed MXN minimum does not depend on a currency conversion');
+  assert.equal(find(tree, 'FundingAmountField').props.amount, '200', 'the fixed MXN minimum does not depend on a currency conversion');
   assert.equal(find(tree, 'FundingSubmit').props.disabled, false);
-  find(tree, 'FundingAmountField').props.onChange('930.99');
+  find(tree, 'FundingAmountField').props.onChange('199.99');
   harness.render(props); tree = harness.render(props);
   assert.equal(find(tree, 'FundingSubmit').props.disabled, true);
   tree.props.onSubmit({ preventDefault() {} }); await flush();
@@ -931,7 +1012,7 @@ test('personal MXN discovery cancels USD responses and enforces the fixed 931 fl
   assert.match(feedback, /Usar/);
   const lookups = calls.length;
   belowMinimum.props.onUseMinimum(); harness.render(props); tree = harness.render(props);
-  assert.equal(find(tree, 'FundingAmountField').props.amount, '931.00');
+  assert.equal(find(tree, 'FundingAmountField').props.amount, '200.00');
   assert.equal(calls.length, lookups, 'using the provider minimum edits the amount without replaying discovery');
   find(tree, 'FundingAmountField').props.onChange('1200');
   harness.render(props); tree = harness.render(props);
@@ -958,9 +1039,15 @@ test('residence is initially unselected despite browser region or remount and ca
     t.after(() => personal.unmount());
     personal.render(props); await flush(); let tree = personal.render(props);
     const field = find(tree, 'FundingCountryField');
-    assert.equal(field.props.value, '', detectedCountry); assert.deepEqual(field.props.countries.map(([code]) => code), ['US', 'MX', 'CO', 'BR', 'PE', 'AR', 'DE', 'KE', 'VN']);
+    assert.equal(field.props.value, '', detectedCountry);
+    const countries = field.props.countries.map(([code]) => code);
+    assert.equal(countries.length, 72);
+    assert.equal(new Set(countries).size, 72);
+    for (const country of ['US', 'MX', 'CO', 'BR', 'PE', 'AR', 'DE', 'KE', 'VN', 'IN', 'ES', 'ZA']) assert.ok(countries.includes(country), country);
     const html = renderToStaticMarkup(field.type(field.props));
-    assert.match(html, /value=""/); assert.match(html, /value="CO">Colombia</); assert.doesNotMatch(html, /value="(?:PA|ES|GB|CR|DO|GT|UY)"/);
+    assert.match(html, /value=""/); assert.match(html, /value="CO">Colombia</);
+    assert.match(html, /value="DE">Alemania</); assert.match(html, /value="US">Estados Unidos</);
+    assert.doesNotMatch(html, /value="(?:PA|CA|CR|DO|GB|GT|UY)"/);
     assert.equal(find(tree, 'FundingCurrencyField'), undefined); assert.equal(find(tree, 'FundingAmountField').props.sourceCurrencyCode, 'USD');
     assert.equal(find(tree, 'FundingMethodField').props.countrySelected, false);
     assert.deepEqual(find(tree, 'FundingMethodField').props.methods, []); assert.equal(find(tree, 'FundingSubmit').props.disabled, true);
@@ -1056,7 +1143,7 @@ test('manual country changes cancel prior methods and remember the Mexican curre
   assert.deepEqual(harness.exports.fundingCurrencyChoices('MX'), ['USD', 'MXN']);
   find(tree, 'FundingCurrencyField').props.onChange('MXN');
   harness.render(props); tree = harness.render(props);
-  assert.equal(find(tree, 'FundingAmountField').props.amount, '931');
+  assert.equal(find(tree, 'FundingAmountField').props.amount, '200');
   calls.at(-1).resolve(meldOptions('MX', 'MXN', [meldRoute('ONRAMPMONEY', 'MXN', ['SPEI'], 148.66, 100000)]));
   await flush(); harness.render(props); tree = harness.render(props);
   find(tree, 'FundingAmountField').props.onChange('1000');
@@ -1074,7 +1161,7 @@ test('manual country changes cancel prior methods and remember the Mexican curre
   find(tree, 'FundingCountryField').props.onChange('MX');
   harness.render(props); tree = harness.render(props);
   assert.equal(find(tree, 'FundingCurrencyField').props.value, 'MXN');
-  assert.equal(find(tree, 'FundingAmountField').props.amount, '931');
+  assert.equal(find(tree, 'FundingAmountField').props.amount, '200');
   assert.deepEqual([calls.at(-1).country, calls.at(-1).sourceCurrencyCode], ['MX', 'MXN']);
   assert.equal(calls.slice(0, -1).every(call => call.signal.aborted), true);
   assert.equal(edits.length, 6, 'only explicit country, currency and amount changes notify the page');
@@ -1085,14 +1172,15 @@ test('MXN amount validation and higher provider floors remain explicit even when
   t.after(() => harness.unmount());
   const tree = harness.render();
   const amount = find(tree, 'FundingAmountField');
-  const html = renderToStaticMarkup(amount.type({ ...amount.props, amount: '930.99', sourceCurrencyCode: 'MXN' }));
-  assert.match(html, /min="931"/);
-  assert.match(html, /931 MXN/);
+  const html = renderToStaticMarkup(amount.type({ ...amount.props, amount: '199.99', sourceCurrencyCode: 'MXN', countryCode: 'MX' }));
+  assert.match(html, /min="200"/);
+  assert.match(html, /max="500000"/);
+  assert.match(html, /id="funding-test-amount-hint"/);
   assert.match(html, /aria-invalid="true"/);
   const route = (minimumAmount, maximumAmount) => [meldRoute('ONRAMPMONEY', 'MXN', ['SPEI'], minimumAmount, maximumAmount)];
-  assert.deepEqual(harness.exports.eligiblePaymentMethods(route(148.66, 100000), 930.99, 'MXN', 'MX'), []);
-  assert.deepEqual(harness.exports.eligiblePaymentMethods(route(148.66, 100000), 931, 'MXN', 'MX'), ['SPEI']);
-  assert.deepEqual(harness.exports.eligiblePaymentMethods(route(148.66, 930), 931, 'MXN', 'MX'), []);
+  assert.deepEqual(harness.exports.eligiblePaymentMethods(route(148.66, 100000), 199.99, 'MXN', 'MX'), []);
+  assert.deepEqual(harness.exports.eligiblePaymentMethods(route(148.66, 100000), 200, 'MXN', 'MX'), ['SPEI']);
+  assert.deepEqual(harness.exports.eligiblePaymentMethods(route(148.66, 199.99), 200, 'MXN', 'MX'), []);
   assert.deepEqual(harness.exports.selectedMethodLimits(route(1200, 100000), 'SPEI', 1200, 'MXN'), { minimumAmount: 1200, maximumAmount: 100000 });
 });
 
@@ -1113,8 +1201,8 @@ test('the public form starts at USD100, accepts USD50 and retains higher provide
   let finish;
   const harness = formHarness('PersonalFundingForm', { readPersonalFundingOptions: async country => meldOptions(country, 'USD', [
     { serviceProvider: 'RAMPNOW', paymentMethods: [
-      { method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount: 7.81, maximumAmount: 111530 },
-      { method: 'APPLE_PAY', currencyCode: 'USD', minimumAmount: 128.04, maximumAmount: 16821.71 },
+      { method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount: 7.81, maximumAmount: 10000 },
+      { method: 'APPLE_PAY', currencyCode: 'USD', minimumAmount: 128.04, maximumAmount: 10000 },
     ] },
   ]) });
   t.after(() => harness.unmount());
@@ -1130,7 +1218,7 @@ test('the public form starts at USD100, accepts USD50 and retains higher provide
   }
   find(tree, 'FundingAmountField').props.onChange('50'); harness.render(props); tree = harness.render(props);
   assert.deepEqual(find(tree, 'FundingMethodField').props.methods, ['CREDIT_DEBIT_CARD']);
-  assert.deepEqual(find(tree, 'FundingMethodField').props.limits, { minimumUsd: 50, maximumUsd: 15000 });
+  assert.deepEqual(find(tree, 'FundingMethodField').props.limits, { minimumUsd: 50, maximumUsd: 10000 });
   assert.equal(find(tree, 'FundingSubmit').props.disabled, false);
   tree.props.onSubmit({ preventDefault() {} }); tree.props.onSubmit({ preventDefault() {} }); await flush();
   assert.equal(submitted.length, 1);

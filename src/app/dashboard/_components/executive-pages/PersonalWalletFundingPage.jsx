@@ -170,7 +170,7 @@ export function PersonalWalletFunding() {
       </section>
       <aside className={styles.details} aria-label={t("funding.destinationDetails")}>
         <ResidenceImportantCard />
-        {!setupRequired ? <PersonalWalletBalances expectedAddress={address} showArbitrum /> : null}
+        {!setupRequired ? <PersonalWalletBalances expectedAddress={address} showFundingNetworks /> : null}
         <section className={styles.detailCard}>
           <div className={styles.stateHeading}>{!setupRequired ? <CheckCircle2 size={19} aria-hidden="true" /> : <ShieldCheck size={19} aria-hidden="true" />}
             <h2>{t(setupRequired && actionBusy ? "funding.activatingWallet" : statusLabel)}</h2></div>

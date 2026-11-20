@@ -25,13 +25,13 @@ test('administrative methods never borrow personal provider options or invent an
 test('personal country methods reject sandbox payloads and do not fall back to administrative discovery', async () => {
   const original = globalThis.fetch;
   const personal = { walletKind: 'personal', environment: 'production', provider: 'meld', country: 'MX', sourceCurrencyCode: 'USD',
-    destinationCurrencyCode: 'USDT_POLYGON', network: 'polygon', chainId: 137,
-    paymentMethods: ['CREDIT_DEBIT_CARD'], routes: [{ serviceProvider: 'MERCURYO',
+    destinationCurrencyCode: 'USDC_POLYGON', network: 'polygon', chainId: 137,
+    paymentMethods: ['CREDIT_DEBIT_CARD'], routes: [{ serviceProvider: 'MERCURYO', destinationCurrencyCode: 'USDC_POLYGON', network: 'polygon', chainId: 137,
       paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount: 10, maximumAmount: 25000 }] }] };
   const paths = [];
   try {
     globalThis.fetch = async path => { paths.push(path); return Response.json(personal); };
-    assert.deepEqual(await readPersonalFundingOptions('MX'), { ...personal, routes: [{ ...personal.routes[0], paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount: 50, maximumAmount: 15000 }] }] });
+    assert.deepEqual(await readPersonalFundingOptions('MX'), { ...personal, routes: [{ ...personal.routes[0], paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount: 50, maximumAmount: 16821.71 }] }] });
     assert.deepEqual(paths, ['/api/member/wallet-funding/personal/options?country=MX&sourceCurrencyCode=USD']);
     globalThis.fetch = async () => Response.json(options);
     await assert.rejects(readPersonalFundingOptions('MX'), { message: 'funding_unavailable' });
@@ -47,7 +47,7 @@ test('a personal intent cannot silently change the requested payment method', as
   try {
     globalThis.fetch = async () => Response.json({ checkoutReference: input.requestId, walletKind: 'personal',
       environment: 'production', provider: 'meld', serviceProvider: 'ONRAMPMONEY', country: 'MX', sourceCurrencyCode: 'MXN', status: 'session_created', requestedAmount: 1000,
-      destinationCurrencyCode: 'USDT_POLYGON', destination: { address: input.walletAddress, asset: 'USDT', network: 'polygon', chainId: 137 },
+      destinationCurrencyCode: 'USDC_POLYGON', destination: { address: input.walletAddress, asset: 'USDC', network: 'polygon', chainId: 137 },
       createdAt: '2026-11-10T15:00:00Z', paymentMethodType: 'SPEI', checkoutUrl: 'https://meldcrypto.com/?token=synthetic' });
     await assert.rejects(createPersonalFundingIntent(input), { message: 'funding_unavailable' });
   } finally { globalThis.fetch = original; }
@@ -72,13 +72,13 @@ test('a canceled old country/provider request cannot publish late methods into t
 test('personal discovery retries one transient GET with the exact country and currency, never a payment write', async () => {
   const original = globalThis.fetch;
   const personal = { walletKind: 'personal', environment: 'production', provider: 'meld', country: 'MX', sourceCurrencyCode: 'MXN',
-    destinationCurrencyCode: 'USDT_POLYGON', network: 'polygon', chainId: 137,
-    paymentMethods: ['SPEI'], routes: [{ serviceProvider: 'ONRAMPMONEY', paymentMethods: [{ method: 'SPEI', currencyCode: 'MXN', minimumAmount: 148.66, maximumAmount: 212370.61 }] }] };
+    destinationCurrencyCode: 'USDC_POLYGON', network: 'polygon', chainId: 137,
+    paymentMethods: ['SPEI'], routes: [{ serviceProvider: 'ONRAMPMONEY', destinationCurrencyCode: 'USDC_POLYGON', network: 'polygon', chainId: 137, paymentMethods: [{ method: 'SPEI', currencyCode: 'MXN', minimumAmount: 148.66, maximumAmount: 212370.61 }] }] };
   const calls = [];
   try {
     globalThis.fetch = async (path, init) => { calls.push({ path, init }); return calls.length === 1 ? Response.json({ error: 'wallet_funding_provider_unavailable' }, { status: 503 }) : Response.json(personal); };
     assert.deepEqual(await readPersonalFundingOptions('MX', { sourceCurrencyCode: 'MXN' }), { ...personal,
-      routes: [{ ...personal.routes[0], paymentMethods: [{ ...personal.routes[0].paymentMethods[0], minimumAmount: 931 }] }] });
+      routes: [{ ...personal.routes[0], paymentMethods: [{ ...personal.routes[0].paymentMethods[0], minimumAmount: 200 }] }] });
     assert.equal(calls.length, 2);
     assert.ok(calls.every(call => call.path.endsWith('country=MX&sourceCurrencyCode=MXN') && call.init.method === 'GET' && call.init.cache === 'no-store'));
     calls.length = 0;

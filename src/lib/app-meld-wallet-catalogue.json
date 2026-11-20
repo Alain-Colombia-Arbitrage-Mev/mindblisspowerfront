@@ -1,0 +1,1495 @@
+{
+  "walletBackendRevision": "c4a29a978e0e0d30d965b38d731695edb0baf685",
+  "rows": [
+    {
+      "country": "AD",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 30000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "AE",
+      "sourceCurrencyCode": "AED",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "LOCAL_BANK_TRANSFER",
+      "minorUnits": 2,
+      "minimumAmount": 50,
+      "maximumAmount": 371000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "AR",
+      "sourceCurrencyCode": "ARS",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "LOCAL_BANK_TRANSFER",
+      "minorUnits": 2,
+      "minimumAmount": 25000,
+      "maximumAmount": 6600000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "AT",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 30000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "AT",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "OPEN_BANKING",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "AT",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "AU",
+      "sourceCurrencyCode": "AUD",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "LOCAL_BANK_TRANSFER",
+      "minorUnits": 2,
+      "minimumAmount": 20,
+      "maximumAmount": 5000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "AU",
+      "sourceCurrencyCode": "AUD",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "PAYID",
+      "minorUnits": 2,
+      "minimumAmount": 20,
+      "maximumAmount": 1500,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "AX",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 30000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "BE",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 30000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "BE",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "OPEN_BANKING",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "BE",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "BG",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "OPEN_BANKING",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "BG",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "BJ",
+      "sourceCurrencyCode": "XOF",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "MOBILE_MONEY",
+      "minorUnits": 0,
+      "minimumAmount": 10000,
+      "maximumAmount": 1500000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "BL",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 30000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "BR",
+      "sourceCurrencyCode": "BRL",
+      "serviceProvider": "ALCHEMYPAY",
+      "paymentMethodType": "PIX",
+      "minorUnits": 2,
+      "minimumAmount": 50,
+      "maximumAmount": 20000,
+      "destinationCurrencyCode": "USDC_ARBITRUM"
+    },
+    {
+      "country": "BR",
+      "sourceCurrencyCode": "BRL",
+      "serviceProvider": "MERCURYO",
+      "paymentMethodType": "CREDIT_DEBIT_CARD",
+      "minorUnits": 2,
+      "minimumAmount": 155.65,
+      "maximumAmount": 93387.41,
+      "destinationCurrencyCode": "USDC_ARBITRUM"
+    },
+    {
+      "country": "BW",
+      "sourceCurrencyCode": "BWP",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "MOBILE_MONEY",
+      "minorUnits": 2,
+      "minimumAmount": 150,
+      "maximumAmount": 1000000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "CC",
+      "sourceCurrencyCode": "AUD",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "LOCAL_BANK_TRANSFER",
+      "minorUnits": 2,
+      "minimumAmount": 20,
+      "maximumAmount": 5000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "CC",
+      "sourceCurrencyCode": "AUD",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "PAYID",
+      "minorUnits": 2,
+      "minimumAmount": 20,
+      "maximumAmount": 1500,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "CG",
+      "sourceCurrencyCode": "XAF",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "LOCAL_BANK_TRANSFER",
+      "minorUnits": 0,
+      "minimumAmount": 7400,
+      "maximumAmount": 1000000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "CL",
+      "sourceCurrencyCode": "CLP",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "KHIPU",
+      "minorUnits": 0,
+      "minimumAmount": 30000,
+      "maximumAmount": 6000000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "CM",
+      "sourceCurrencyCode": "XAF",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "MOBILE_MONEY",
+      "minorUnits": 0,
+      "minimumAmount": 7400,
+      "maximumAmount": 1000000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "CO",
+      "sourceCurrencyCode": "COP",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "LOCAL_BANK_TRANSFER",
+      "minorUnits": 2,
+      "minimumAmount": 42300,
+      "maximumAmount": 59900000,
+      "destinationCurrencyCode": "USDC_POLYGON"
+    },
+    {
+      "country": "CO",
+      "sourceCurrencyCode": "COP",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "PSE",
+      "minorUnits": 2,
+      "minimumAmount": 42300,
+      "maximumAmount": 59900000,
+      "destinationCurrencyCode": "USDC_POLYGON"
+    },
+    {
+      "country": "CX",
+      "sourceCurrencyCode": "AUD",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "LOCAL_BANK_TRANSFER",
+      "minorUnits": 2,
+      "minimumAmount": 20,
+      "maximumAmount": 5000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "CX",
+      "sourceCurrencyCode": "AUD",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "PAYID",
+      "minorUnits": 2,
+      "minimumAmount": 20,
+      "maximumAmount": 1500,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "CY",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 30000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "CY",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "OPEN_BANKING",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "CY",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "CZ",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "OPEN_BANKING",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "CZ",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "DE",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 30000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "DE",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "OPEN_BANKING",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "DE",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "EE",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 30000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "EE",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "OPEN_BANKING",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "EE",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "ES",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 30000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "ES",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "OPEN_BANKING",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "ES",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "FI",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 30000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "FI",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "OPEN_BANKING",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "FI",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "FR",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 30000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "FR",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "OPEN_BANKING",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "FR",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "GA",
+      "sourceCurrencyCode": "XAF",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "LOCAL_BANK_TRANSFER",
+      "minorUnits": 0,
+      "minimumAmount": 7400,
+      "maximumAmount": 1000000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "GF",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 30000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "GP",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 30000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "GR",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 30000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "GR",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "OPEN_BANKING",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "GR",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "HM",
+      "sourceCurrencyCode": "AUD",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "LOCAL_BANK_TRANSFER",
+      "minorUnits": 2,
+      "minimumAmount": 20,
+      "maximumAmount": 5000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "HM",
+      "sourceCurrencyCode": "AUD",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "PAYID",
+      "minorUnits": 2,
+      "minimumAmount": 20,
+      "maximumAmount": 1500,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "HR",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 30000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "HR",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "OPEN_BANKING",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "HR",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "HU",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "OPEN_BANKING",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "HU",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "ID",
+      "sourceCurrencyCode": "IDR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "LOCAL_BANK_TRANSFER",
+      "minorUnits": 2,
+      "minimumAmount": 120000,
+      "maximumAmount": 99000000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "IE",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "OPEN_BANKING",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "IE",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "IN",
+      "sourceCurrencyCode": "INR",
+      "serviceProvider": "ONMETA",
+      "paymentMethodType": "IMPS",
+      "minorUnits": 2,
+      "minimumAmount": 50,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "IN",
+      "sourceCurrencyCode": "INR",
+      "serviceProvider": "ONMETA",
+      "paymentMethodType": "UPI",
+      "minorUnits": 2,
+      "minimumAmount": 50,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "IN",
+      "sourceCurrencyCode": "INR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "IMPS",
+      "minorUnits": 2,
+      "minimumAmount": 100,
+      "maximumAmount": 500000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "IN",
+      "sourceCurrencyCode": "INR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "UPI",
+      "minorUnits": 2,
+      "minimumAmount": 100,
+      "maximumAmount": 500000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "IS",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "OPEN_BANKING",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "IS",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "IT",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 30000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "IT",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "OPEN_BANKING",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "IT",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "KE",
+      "sourceCurrencyCode": "KES",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "MPESA",
+      "minorUnits": 2,
+      "minimumAmount": 1850,
+      "maximumAmount": 700000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "KI",
+      "sourceCurrencyCode": "AUD",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "LOCAL_BANK_TRANSFER",
+      "minorUnits": 2,
+      "minimumAmount": 20,
+      "maximumAmount": 5000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "KI",
+      "sourceCurrencyCode": "AUD",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "PAYID",
+      "minorUnits": 2,
+      "minimumAmount": 20,
+      "maximumAmount": 1500,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "LI",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "OPEN_BANKING",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "LI",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "LT",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "OPEN_BANKING",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "LT",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "LU",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 30000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "LU",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "OPEN_BANKING",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "LU",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "LV",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 30000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "LV",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "OPEN_BANKING",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "LV",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "MC",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 30000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "ME",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 30000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "MF",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 30000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "MQ",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 30000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "MT",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 30000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "MT",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "OPEN_BANKING",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "MT",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "MW",
+      "sourceCurrencyCode": "MWK",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "MOBILE_MONEY",
+      "minorUnits": 2,
+      "minimumAmount": 2000,
+      "maximumAmount": 40000000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "MX",
+      "sourceCurrencyCode": "MXN",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "SPEI",
+      "minorUnits": 2,
+      "minimumAmount": 200,
+      "maximumAmount": 500000,
+      "destinationCurrencyCode": "USDC_POLYGON"
+    },
+    {
+      "country": "MY",
+      "sourceCurrencyCode": "MYR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "LOCAL_BANK_TRANSFER",
+      "minorUnits": 2,
+      "minimumAmount": 75,
+      "maximumAmount": 6000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "NL",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 30000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "NL",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "OPEN_BANKING",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "NL",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "NR",
+      "sourceCurrencyCode": "AUD",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "LOCAL_BANK_TRANSFER",
+      "minorUnits": 2,
+      "minimumAmount": 20,
+      "maximumAmount": 5000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "NR",
+      "sourceCurrencyCode": "AUD",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "PAYID",
+      "minorUnits": 2,
+      "minimumAmount": 20,
+      "maximumAmount": 1500,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "PE",
+      "sourceCurrencyCode": "PEN",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "LOCAL_BANK_TRANSFER",
+      "minorUnits": 2,
+      "minimumAmount": 19,
+      "maximumAmount": 4500000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "PM",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 30000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "PT",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 30000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "PT",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "OPEN_BANKING",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "PT",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "RE",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 30000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "RO",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "OPEN_BANKING",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "RO",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "SE",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "OPEN_BANKING",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "SE",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "SE",
+      "sourceCurrencyCode": "SEK",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "KLARNA",
+      "minorUnits": 2,
+      "minimumAmount": 125,
+      "maximumAmount": 50000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "SI",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 30000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "SI",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "OPEN_BANKING",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "SI",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "SK",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 30000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "SK",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "OPEN_BANKING",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "SK",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "SM",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 30000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "TF",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 30000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "TV",
+      "sourceCurrencyCode": "AUD",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "LOCAL_BANK_TRANSFER",
+      "minorUnits": 2,
+      "minimumAmount": 20,
+      "maximumAmount": 5000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "TV",
+      "sourceCurrencyCode": "AUD",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "PAYID",
+      "minorUnits": 2,
+      "minimumAmount": 20,
+      "maximumAmount": 1500,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "TZ",
+      "sourceCurrencyCode": "TZS",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "MOBILE_MONEY",
+      "minorUnits": 2,
+      "minimumAmount": 2500,
+      "maximumAmount": 10000000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "UG",
+      "sourceCurrencyCode": "UGX",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "MOBILE_MONEY",
+      "minorUnits": 0,
+      "minimumAmount": 15000,
+      "maximumAmount": 250000000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "VA",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 30000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "VN",
+      "sourceCurrencyCode": "VND",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "VIETQR",
+      "minorUnits": 0,
+      "minimumAmount": 200000,
+      "maximumAmount": 25000000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "VN",
+      "sourceCurrencyCode": "VND",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "VIETQR",
+      "minorUnits": 0,
+      "minimumAmount": 55000,
+      "maximumAmount": 450000000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "XK",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 30000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "YT",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 30000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "ZA",
+      "sourceCurrencyCode": "ZAR",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "LOCAL_BANK_TRANSFER",
+      "minorUnits": 2,
+      "minimumAmount": 200,
+      "maximumAmount": 79000,
+      "destinationCurrencyCode": "USDT_POLYGON"
+    },
+    {
+      "country": "US",
+      "sourceCurrencyCode": "USD",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "ACH",
+      "minorUnits": 2,
+      "minimumAmount": 50,
+      "maximumAmount": 25000,
+      "destinationCurrencyCode": "USDC_POLYGON"
+    },
+    {
+      "country": "US",
+      "sourceCurrencyCode": "USD",
+      "serviceProvider": "ONRAMPMONEY",
+      "paymentMethodType": "LOCAL_BANK_TRANSFER",
+      "minorUnits": 2,
+      "minimumAmount": 50,
+      "maximumAmount": 25000,
+      "destinationCurrencyCode": "USDC_POLYGON"
+    },
+    {
+      "country": "US",
+      "sourceCurrencyCode": "USD",
+      "serviceProvider": "RAMPNOW",
+      "paymentMethodType": "CREDIT_DEBIT_CARD",
+      "minorUnits": 2,
+      "minimumAmount": 50,
+      "maximumAmount": 10000,
+      "destinationCurrencyCode": "USDC_POLYGON"
+    },
+    {
+      "country": "US",
+      "sourceCurrencyCode": "USD",
+      "serviceProvider": "RAMPNOW",
+      "paymentMethodType": "CREDIT_DEBIT_CARD",
+      "minorUnits": 2,
+      "minimumAmount": 50,
+      "maximumAmount": 10000,
+      "destinationCurrencyCode": "USDC_ARBITRUM"
+    },
+    {
+      "country": "US",
+      "sourceCurrencyCode": "USD",
+      "serviceProvider": "RAMPNOW",
+      "paymentMethodType": "CREDIT_DEBIT_CARD",
+      "minorUnits": 2,
+      "minimumAmount": 50,
+      "maximumAmount": 10000,
+      "destinationCurrencyCode": "USDC"
+    },
+    {
+      "country": "US",
+      "sourceCurrencyCode": "USD",
+      "serviceProvider": "RAMPNOW",
+      "paymentMethodType": "APPLE_PAY",
+      "minorUnits": 2,
+      "minimumAmount": 50,
+      "maximumAmount": 10000,
+      "destinationCurrencyCode": "USDC_POLYGON"
+    },
+    {
+      "country": "US",
+      "sourceCurrencyCode": "USD",
+      "serviceProvider": "RAMPNOW",
+      "paymentMethodType": "APPLE_PAY",
+      "minorUnits": 2,
+      "minimumAmount": 50,
+      "maximumAmount": 10000,
+      "destinationCurrencyCode": "USDC_ARBITRUM"
+    },
+    {
+      "country": "US",
+      "sourceCurrencyCode": "USD",
+      "serviceProvider": "RAMPNOW",
+      "paymentMethodType": "APPLE_PAY",
+      "minorUnits": 2,
+      "minimumAmount": 50,
+      "maximumAmount": 10000,
+      "destinationCurrencyCode": "USDC"
+    },
+    {
+      "country": "US",
+      "sourceCurrencyCode": "USD",
+      "serviceProvider": "RAMPNOW",
+      "paymentMethodType": "GOOGLE_PAY",
+      "minorUnits": 2,
+      "minimumAmount": 50,
+      "maximumAmount": 10000,
+      "destinationCurrencyCode": "USDC_POLYGON"
+    },
+    {
+      "country": "US",
+      "sourceCurrencyCode": "USD",
+      "serviceProvider": "RAMPNOW",
+      "paymentMethodType": "GOOGLE_PAY",
+      "minorUnits": 2,
+      "minimumAmount": 50,
+      "maximumAmount": 10000,
+      "destinationCurrencyCode": "USDC_ARBITRUM"
+    },
+    {
+      "country": "US",
+      "sourceCurrencyCode": "USD",
+      "serviceProvider": "RAMPNOW",
+      "paymentMethodType": "GOOGLE_PAY",
+      "minorUnits": 2,
+      "minimumAmount": 50,
+      "maximumAmount": 10000,
+      "destinationCurrencyCode": "USDC"
+    },
+    {
+      "country": "US",
+      "sourceCurrencyCode": "USD",
+      "serviceProvider": "RAMPNOW",
+      "paymentMethodType": "ACH",
+      "minorUnits": 2,
+      "minimumAmount": 50,
+      "maximumAmount": 10000,
+      "destinationCurrencyCode": "USDC_POLYGON"
+    },
+    {
+      "country": "US",
+      "sourceCurrencyCode": "USD",
+      "serviceProvider": "RAMPNOW",
+      "paymentMethodType": "ACH",
+      "minorUnits": 2,
+      "minimumAmount": 50,
+      "maximumAmount": 10000,
+      "destinationCurrencyCode": "USDC_ARBITRUM"
+    },
+    {
+      "country": "US",
+      "sourceCurrencyCode": "USD",
+      "serviceProvider": "RAMPNOW",
+      "paymentMethodType": "ACH",
+      "minorUnits": 2,
+      "minimumAmount": 50,
+      "maximumAmount": 10000,
+      "destinationCurrencyCode": "USDC"
+    },
+    {
+      "country": "US",
+      "sourceCurrencyCode": "USD",
+      "serviceProvider": "RAMPNOW",
+      "paymentMethodType": "LOCAL_BANK_TRANSFER",
+      "minorUnits": 2,
+      "minimumAmount": 50,
+      "maximumAmount": 10000,
+      "destinationCurrencyCode": "USDC_POLYGON"
+    },
+    {
+      "country": "US",
+      "sourceCurrencyCode": "USD",
+      "serviceProvider": "RAMPNOW",
+      "paymentMethodType": "LOCAL_BANK_TRANSFER",
+      "minorUnits": 2,
+      "minimumAmount": 50,
+      "maximumAmount": 10000,
+      "destinationCurrencyCode": "USDC_ARBITRUM"
+    },
+    {
+      "country": "US",
+      "sourceCurrencyCode": "USD",
+      "serviceProvider": "RAMPNOW",
+      "paymentMethodType": "LOCAL_BANK_TRANSFER",
+      "minorUnits": 2,
+      "minimumAmount": 50,
+      "maximumAmount": 10000,
+      "destinationCurrencyCode": "USDC"
+    },
+    {
+      "country": "MX",
+      "sourceCurrencyCode": "MXN",
+      "serviceProvider": "MERCURYO",
+      "paymentMethodType": "CREDIT_DEBIT_CARD",
+      "minorUnits": 2,
+      "minimumAmount": 520.03,
+      "maximumAmount": 312013.7,
+      "destinationCurrencyCode": "USDC_POLYGON"
+    },
+    {
+      "country": "MX",
+      "sourceCurrencyCode": "USD",
+      "serviceProvider": "MERCURYO",
+      "paymentMethodType": "CREDIT_DEBIT_CARD",
+      "minorUnits": 2,
+      "minimumAmount": 50,
+      "maximumAmount": 16821.71,
+      "destinationCurrencyCode": "USDC_POLYGON"
+    }
+  ]
+}

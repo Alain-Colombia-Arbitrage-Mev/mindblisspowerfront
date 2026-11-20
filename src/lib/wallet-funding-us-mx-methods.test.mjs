@@ -22,9 +22,9 @@ const usOptions = { walletKind: 'personal', environment: 'production', provider:
     paymentMethods: ['CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY', ...(serviceProvider === 'TOPPER' ? ['VENMO', 'PAYPAL'] : [])].map(name => method(name)) })) };
 const env = { AUTH_PROVIDER: 'better-auth', AUTH_BFF_SHARED_SECRET: 's'.repeat(32),
   AUTH_PUBLIC_ORIGIN: 'https://app.example.test', BETTER_AUTH_BACKEND_URL: 'https://auth.core.internal', NODE_ENV: 'production' };
-const post = body => new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/wallet-funding/personal/intent`, {
+const post = (body, network = 'polygon') => new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/wallet-funding/personal/intent`, {
   method: 'POST', headers: { cookie: 'better-auth.session_token=synthetic', origin: env.AUTH_PUBLIC_ORIGIN,
-    'x-mindbliss-wallet-network': 'polygon', 'x-mindbliss-funding-provider': 'meld', 'cf-connecting-ip': '198.51.100.5', 'content-type': 'application/json', 'sec-fetch-site': 'same-origin' }, body: JSON.stringify(body),
+    'x-mindbliss-wallet-network': network, 'x-mindbliss-funding-provider': 'meld', 'cf-connecting-ip': '198.51.100.5', 'content-type': 'application/json', 'sec-fetch-site': 'same-origin' }, body: JSON.stringify(body),
 });
 
 test('US dollar options admit three real providers while Topper and Venmo stay scoped to US/USD and both wallet methods remain scoped', () => {
@@ -69,15 +69,25 @@ test('historical PayPal uses Topper US/USD with contextual acknowledgements and 
   for (const patch of [{ country: 'CO' }, { country: 'MX' }, { destination: { ...destination, network: 'ethereum', chainId: 1 } }]) assert.equal(fundingStatus({ ...status, ...patch }, 'personal'), null);
 });
 
-test('US USD keeps RampNow card, mobile and bank options with Onramp Money bank support and USDC on Polygon', async t => {
+test('US USD sends RampNow card, mobile and bank routes on three networks with distinct Onramp Money limits', async t => {
   const rampNow = ['CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY', 'ACH', 'LOCAL_BANK_TRANSFER'];
   const onrampMoney = ['ACH', 'LOCAL_BANK_TRANSFER'];
-  const options = { ...usOptions, provider: 'meld', destinationCurrencyCode: 'USDC_POLYGON', paymentMethods: rampNow,
-    routes: [['RAMPNOW', rampNow], ['ONRAMPMONEY', onrampMoney]].map(([serviceProvider, names]) => ({
-      serviceProvider, paymentMethods: names.map(name => ({ method: name, currencyCode: 'USD', minimumAmount: 50, maximumAmount: 15000 })),
-    })) };
-  const session = body => ({ ...ack(body, []), provider: 'meld', status: 'session_created', country: 'US', serviceProvider: body.serviceProvider,
-    destinationCurrencyCode: 'USDC_POLYGON', destination: { ...destination, asset: 'USDC' }, checkoutUrl: 'https://meldcrypto.com/?token=synthetic' });
+  const targets = [
+    { destinationCurrencyCode: 'USDC_POLYGON', network: 'polygon', chainId: 137 },
+    { destinationCurrencyCode: 'USDC_ARBITRUM', network: 'arbitrum', chainId: 42161 },
+    { destinationCurrencyCode: 'USDC', network: 'ethereum', chainId: 1 },
+  ];
+  const route = (serviceProvider, names, target, maximumAmount) => ({
+    serviceProvider, ...target, paymentMethods: names.map(name => ({ method: name, currencyCode: 'USD', minimumAmount: 50, maximumAmount })),
+  });
+  const options = { ...usOptions, ...targets[0], provider: 'meld', paymentMethods: rampNow,
+    routes: [...targets.map(target => route('RAMPNOW', rampNow, target, 10000)), route('ONRAMPMONEY', onrampMoney, targets[0], 25000)] };
+  const session = body => {
+    const target = targets.find(target => target.destinationCurrencyCode === body.destinationCurrencyCode);
+    return { ...ack(body, []), provider: 'meld', status: 'session_created', country: 'US', serviceProvider: body.serviceProvider,
+      destinationCurrencyCode: target.destinationCurrencyCode, destination: { address, asset: 'USDC', network: target.network, chainId: target.chainId },
+      checkoutUrl: 'https://meldcrypto.com/?token=synthetic' };
+  };
   let browserBody;
   t.mock.method(globalThis, 'fetch', (url, init) => {
     if (init.method === 'GET') {
@@ -85,16 +95,17 @@ test('US USD keeps RampNow card, mobile and bank options with Onramp Money bank 
       return Response.json(options);
     }
     browserBody = JSON.parse(init.body);
+    assert.equal(init.headers['x-mindbliss-wallet-network'], session(browserBody).destination.network);
     return Response.json(session(browserBody));
   });
   assert.deepEqual(await readPersonalFundingOptions('US'), options);
   for (const route of options.routes) for (const { method: paymentMethodType } of route.paymentMethods) {
-    const body = { ...input('US', 'USD', paymentMethodType), serviceProvider: route.serviceProvider, destinationCurrencyCode: 'USDC_POLYGON' };
+    const body = { ...input('US', 'USD', paymentMethodType), serviceProvider: route.serviceProvider, destinationCurrencyCode: route.destinationCurrencyCode };
     const result = await createPersonalFundingIntent(body);
     assert.equal(result.serviceProvider, body.serviceProvider);
-    assert.deepEqual(result.destination, { ...destination, asset: 'USDC' });
+    assert.deepEqual(result.destination, { address, asset: 'USDC', network: route.network, chainId: route.chainId });
     assert.deepEqual(browserBody, body);
-    const response = await handleWalletFunding(post(body), 'personal', { env, serviceRequest: async (_url, init) => {
+    const response = await handleWalletFunding(post(body, route.network), 'personal', { env, serviceRequest: async (_url, init) => {
       assert.deepEqual(JSON.parse(init.body), body);
       return { ok: true, data: session(body) };
     } });
@@ -103,6 +114,8 @@ test('US USD keeps RampNow card, mobile and bank options with Onramp Money bank 
   }
   assert.equal(appMeldFundingOptions({ ...options, routes: [...options.routes, { serviceProvider: 'BANXA', paymentMethods: [method('CREDIT_DEBIT_CARD')] }] }), null);
   assert.equal(appMeldFundingOptions({ ...options, paymentMethods: [...rampNow, 'PAYPAL'] }), null);
+  const malformedRoute = { ...options.routes[1], chainId: 137 };
+  assert.equal(appMeldFundingOptions({ ...options, routes: [options.routes[0], malformedRoute, ...options.routes.slice(2)] }), null);
 });
 
 test('browser and BFF block US methods or destinations missing from the production MELD route contract', async t => {
@@ -114,7 +127,8 @@ test('browser and BFF block US methods or destinations missing from the producti
     [{ paymentMethodType: 'CASH_APP' }, 'wallet_funding_method_unavailable'],
     [{ serviceProvider: 'BANXA' }, 'wallet_funding_method_unavailable'],
     [{ serviceProvider: 'ONRAMPMONEY' }, 'wallet_funding_method_unavailable'],
-    [{ destinationCurrencyCode: 'USDT_POLYGON' }, 'invalid_request'],
+    [{ destinationCurrencyCode: 'USDT_POLYGON' }, 'wallet_funding_method_unavailable'],
+    [{ destinationCurrencyCode: 'UNKNOWN' }, 'invalid_request'],
   ]) {
     const body = { ...input('US', 'USD', 'CREDIT_DEBIT_CARD'), ...patch };
     await assert.rejects(createPersonalFundingIntent(body), { message: error });
@@ -124,27 +138,39 @@ test('browser and BFF block US methods or destinations missing from the producti
   }
 });
 
-test('MXN discovery and writes keep confirmed MELD methods and the 931 MXN business floor', async t => {
-  const methods = ['SPEI', 'CREDIT_DEBIT_CARD'];
+test('MXN discovery uses its exact Polygon USDC provider bounds for SPEI and card', async t => {
+  const specifications = [
+    ['SPEI', 'ONRAMPMONEY', 200, 500000, 'invalid_request'],
+    ['CREDIT_DEBIT_CARD', 'MERCURYO', 520.03, 312013.7, 'wallet_funding_amount_out_of_range'],
+  ];
   const checkoutUrl = 'https://meldcrypto.com/?token=synthetic';
-  const provider = name => name === 'SPEI' ? 'ONRAMPMONEY' : 'MERCURYO';
-  const options = { ...usOptions, provider: 'meld', country: 'MX', sourceCurrencyCode: 'MXN', paymentMethods: methods,
-    routes: methods.map(name => ({ serviceProvider: provider(name), paymentMethods: [method(name, 'MXN', 931)] })) };
+  const target = { destinationCurrencyCode: 'USDC_POLYGON', network: 'polygon', chainId: 137 };
+  const options = { ...usOptions, ...target, provider: 'meld', country: 'MX', sourceCurrencyCode: 'MXN',
+    paymentMethods: specifications.map(([name]) => name),
+    routes: specifications.map(([method, serviceProvider, minimumAmount, maximumAmount]) => ({ ...target, serviceProvider,
+      paymentMethods: [{ method, currencyCode: 'MXN', minimumAmount, maximumAmount }] })) };
   const sent = [];
   t.mock.method(globalThis, 'fetch', async (_url, init) => {
     if (init.method === 'GET') return Response.json(options);
     const body = JSON.parse(init.body); sent.push(body);
-    return Response.json({ ...ack(body, []), provider: 'meld', country: 'MX', serviceProvider: provider(body.paymentMethodType),
-      status: 'session_created', checkoutUrl });
+    const [, serviceProvider] = specifications.find(([name]) => name === body.paymentMethodType);
+    return Response.json({ ...ack(body, []), provider: 'meld', country: 'MX', serviceProvider,
+      destinationCurrencyCode: target.destinationCurrencyCode, destination: { ...destination, asset: 'USDC' }, status: 'session_created', checkoutUrl });
   });
   assert.deepEqual(await readPersonalFundingOptions('MX', { sourceCurrencyCode: 'MXN' }), options);
-  for (const paymentMethodType of methods) {
-    const body = input('MX', 'MXN', paymentMethodType, 931);
-    assert.equal((await createPersonalFundingIntent(body)).sourceCurrencyCode, 'MXN');
-    await assert.rejects(createPersonalFundingIntent({ ...body, amount: 930.99 }), { message: 'invalid_request' });
+  for (const [paymentMethodType, serviceProvider, minimumAmount, maximumAmount, belowMinimumError] of specifications) {
+    const body = { ...input('MX', 'MXN', paymentMethodType, minimumAmount), serviceProvider, destinationCurrencyCode: target.destinationCurrencyCode };
+    const result = await createPersonalFundingIntent(body);
+    assert.equal(result.sourceCurrencyCode, 'MXN'); assert.equal(result.destinationCurrencyCode, 'USDC_POLYGON');
+    await assert.rejects(createPersonalFundingIntent({ ...body, amount: Number((minimumAmount - 0.01).toFixed(2)) }), { message: belowMinimumError });
+    await createPersonalFundingIntent({ ...body, amount: maximumAmount });
+    await assert.rejects(createPersonalFundingIntent({ ...body, amount: Number((maximumAmount + 0.01).toFixed(2)) }),
+      { message: paymentMethodType === 'SPEI' ? 'invalid_request' : 'wallet_funding_amount_out_of_range' });
   }
-  assert.equal(sent.length, 2);
-  assert.ok(sent.every(body => body.amount === 931 && body.sourceCurrencyCode === 'MXN' && body.country === 'MX'));
+  assert.deepEqual(sent.map(body => [body.paymentMethodType, body.amount]), [
+    ['SPEI', 200], ['SPEI', 500000], ['CREDIT_DEBIT_CARD', 520.03], ['CREDIT_DEBIT_CARD', 312013.7],
+  ]);
+  assert.ok(sent.every(body => body.sourceCurrencyCode === 'MXN' && body.country === 'MX'));
 });
 
 test('new MXN card and mobile-wallet history stays on Polygon while legacy SPEI history remains readable', () => {
