@@ -63,7 +63,9 @@ function validFiatAmount(value) {
 /** New SPEI requests use the fixed MXN floor plus provider limits, never a USD valuation. */
 export function validFundingSourceAmount(value, kind = 'personal', sourceCurrencyCode = 'USD') {
   if (sourceCurrencyCode === 'USD') return validFundingAmount(value, kind);
-  return kind === 'personal' && validFiatAmount(value) && sourceCurrencyCode === 'MXN' && value >= PERSONAL_FUNDING_MINIMUM_MXN;
+  return kind === 'personal' && validFiatAmount(value) && (sourceCurrencyCode === 'MXN'
+    ? value >= PERSONAL_FUNDING_MINIMUM_MXN
+    : sourceCurrencyCode === 'COP' && Number.isInteger(value) && value >= PERSONAL_FUNDING_MINIMUM_COP && value <= PERSONAL_FUNDING_MAXIMUM_COP);
 }
 
 export function fundingSourceSupported(value, kind) {

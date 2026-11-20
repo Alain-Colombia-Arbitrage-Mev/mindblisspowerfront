@@ -4,6 +4,7 @@ import { personalProductionOptions, fundingAcknowledgement, fundingHistory, fund
 import { readPersonalFundingOptions, createPersonalFundingIntent } from './wallet-funding-client.mjs';
 import { buildReownProductionOnrampUrl } from './reown-production-onramp.mjs';
 import { handleWalletFunding } from './wallet-funding-bff.mjs';
+import { appMeldFundingOptions } from './app-meld-funding-contract.mjs';
 
 const requestId = 'd8a4c010-cc33-44da-a297-8b3c6440f491';
 const address = `0x${'1'.repeat(40)}`;
@@ -68,13 +69,58 @@ test('historical PayPal uses Topper US/USD with contextual acknowledgements and 
   for (const patch of [{ country: 'CO' }, { country: 'MX' }, { destination: { ...destination, network: 'ethereum', chainId: 1 } }]) assert.equal(fundingStatus({ ...status, ...patch }, 'personal'), null);
 });
 
-test('browser and BFF block currently unavailable US card and wallet writes before transport', async t => {
-  t.mock.method(globalThis, 'fetch', async () => assert.fail('Unsupported route reached transport'));
-  for (const paymentMethodType of ['CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY', 'VENMO', 'PAYPAL']) {
-    const body = input('US', 'USD', paymentMethodType);
-    await assert.rejects(createPersonalFundingIntent(body), { message: 'wallet_funding_method_unavailable' });
-    assert.equal((await handleWalletFunding(post(body), 'personal', { env,
-      serviceRequest: async () => assert.fail('Unsupported route reached MELD') })).status, 400);
+test('US USD keeps RampNow card, mobile and bank options with Onramp Money bank support and USDC on Polygon', async t => {
+  const rampNow = ['CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY', 'ACH', 'LOCAL_BANK_TRANSFER'];
+  const onrampMoney = ['ACH', 'LOCAL_BANK_TRANSFER'];
+  const options = { ...usOptions, provider: 'meld', destinationCurrencyCode: 'USDC_POLYGON', paymentMethods: rampNow,
+    routes: [['RAMPNOW', rampNow], ['ONRAMPMONEY', onrampMoney]].map(([serviceProvider, names]) => ({
+      serviceProvider, paymentMethods: names.map(name => ({ method: name, currencyCode: 'USD', minimumAmount: 50, maximumAmount: 15000 })),
+    })) };
+  const session = body => ({ ...ack(body, []), provider: 'meld', status: 'session_created', country: 'US', serviceProvider: body.serviceProvider,
+    destinationCurrencyCode: 'USDC_POLYGON', destination: { ...destination, asset: 'USDC' }, checkoutUrl: 'https://meldcrypto.com/?token=synthetic' });
+  let browserBody;
+  t.mock.method(globalThis, 'fetch', (url, init) => {
+    if (init.method === 'GET') {
+      assert.equal(url, '/api/member/wallet-funding/personal/options?country=US&sourceCurrencyCode=USD');
+      return Response.json(options);
+    }
+    browserBody = JSON.parse(init.body);
+    return Response.json(session(browserBody));
+  });
+  assert.deepEqual(await readPersonalFundingOptions('US'), options);
+  for (const route of options.routes) for (const { method: paymentMethodType } of route.paymentMethods) {
+    const body = { ...input('US', 'USD', paymentMethodType), serviceProvider: route.serviceProvider, destinationCurrencyCode: 'USDC_POLYGON' };
+    const result = await createPersonalFundingIntent(body);
+    assert.equal(result.serviceProvider, body.serviceProvider);
+    assert.deepEqual(result.destination, { ...destination, asset: 'USDC' });
+    assert.deepEqual(browserBody, body);
+    const response = await handleWalletFunding(post(body), 'personal', { env, serviceRequest: async (_url, init) => {
+      assert.deepEqual(JSON.parse(init.body), body);
+      return { ok: true, data: session(body) };
+    } });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), result);
+  }
+  assert.equal(appMeldFundingOptions({ ...options, routes: [...options.routes, { serviceProvider: 'BANXA', paymentMethods: [method('CREDIT_DEBIT_CARD')] }] }), null);
+  assert.equal(appMeldFundingOptions({ ...options, paymentMethods: [...rampNow, 'PAYPAL'] }), null);
+});
+
+test('browser and BFF block US methods or destinations missing from the production MELD route contract', async t => {
+  const never = () => assert.fail('Unsupported route reached transport');
+  t.mock.method(globalThis, 'fetch', never);
+  for (const [patch, error] of [
+    [{ paymentMethodType: 'VENMO' }, 'wallet_funding_method_unavailable'],
+    [{ paymentMethodType: 'PAYPAL' }, 'wallet_funding_method_unavailable'],
+    [{ paymentMethodType: 'CASH_APP' }, 'wallet_funding_method_unavailable'],
+    [{ serviceProvider: 'BANXA' }, 'wallet_funding_method_unavailable'],
+    [{ serviceProvider: 'ONRAMPMONEY' }, 'wallet_funding_method_unavailable'],
+    [{ destinationCurrencyCode: 'USDT_POLYGON' }, 'invalid_request'],
+  ]) {
+    const body = { ...input('US', 'USD', 'CREDIT_DEBIT_CARD'), ...patch };
+    await assert.rejects(createPersonalFundingIntent(body), { message: error });
+    const response = await handleWalletFunding(post(body), 'personal', { env, serviceRequest: never });
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), { error });
   }
 });
 

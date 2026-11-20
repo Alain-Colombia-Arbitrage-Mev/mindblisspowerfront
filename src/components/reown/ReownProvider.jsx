@@ -9,9 +9,8 @@ import { ConstantsUtil as ReownConstantsUtil } from "@reown/appkit-common";
 import { mainnet, polygon, solana } from "@reown/appkit/networks";
 import { BrowserProvider, getAddress } from "ethers";
 import { useMemberSession } from "@/lib/member-session-context";
-import { reownFundingSelection } from "@/lib/reown-production-onramp.mjs";
+import { APP_MELD_MINIMUM_USD, appMeldFundingSelection } from "@/lib/app-meld-funding-contract.mjs";
 import { createPersonalFundingIntent, fundingRequestId } from "@/lib/wallet-funding-client.mjs";
-import { PERSONAL_WALLET_ASSET, PERSONAL_WALLET_MINIMUM_USD } from "@/lib/personal-wallet.mjs";
 import { readWalletBinding, requestWalletLink, walletBindingFailure } from "@/lib/wallet-binding.mjs";
 import { personalFundingFailure } from "@/lib/personal-funding-errors.mjs";
 import { personalWalletMetadata } from "@/lib/personal-portal-origin.mjs";
@@ -174,7 +173,7 @@ function ConfiguredReownProvider({ children }) {
   const preparationSnapshot = useRef(null);
   const preparationListeners = useRef(new Set());
   const [selectionRevision, setSelectionRevision] = useState(0);
-  const connectionSnapshot = useRef({ status: "restoring", modalOpen: false, disconnected: false, address: "" });
+  const connectionSnapshot = useRef({ status: "restoring", modalOpen: false, disconnected: false, address: "", sdkRestoring: true });
   const [connectionBusy, setConnectionBusy] = useState(false);
   const [walletSwitching, setWalletSwitching] = useState(false);
   const [restorationTimedOut, setRestorationTimedOut] = useState(false);
@@ -363,7 +362,7 @@ function ConfiguredReownProvider({ children }) {
   const restoredStatus = sdkConnectionStatus === "restoring" && restorationTimedOut ? "disconnected" : sdkConnectionStatus;
   const connectionStatus = walletSwitching ? "restoring" : restoredStatus;
   connectionSnapshot.current = { status: restoredStatus, modalOpen: appKitState.open === true,
-    disconnected: restoredStatus === "disconnected", address: currentAddress };
+    disconnected: restoredStatus === "disconnected", address: currentAddress, sdkRestoring: sdkConnectionStatus === "restoring" };
   // Captured callbacks must not regain authority after SDK account A → B → A,
   // a different owner, or a fresh candidate selection. This is an observation
   // generation only; canonical backend binding still proves ownership.
@@ -444,7 +443,7 @@ function ConfiguredReownProvider({ children }) {
   useEffect(() => {
     connectionRequest.current?.update(connectionSnapshot.current);
     switchRequest.current?.update(connectionSnapshot.current);
-  }, [restoredStatus, appKitState.open, account.isConnected, account.status]);
+  }, [restoredStatus, sdkConnectionStatus, appKitState.open, account.isConnected, account.status, currentAddress]);
 
   const linkWallet = useCallback((parentOperation) => {
     if (!mounted.current || logoutStarted.current || walletSnapshot.current.owner !== ownerKey) return Promise.reject(new DOMException('Aborted', 'AbortError'));
@@ -517,13 +516,13 @@ function ConfiguredReownProvider({ children }) {
     if (!mounted.current || logoutStarted.current) return Promise.reject(new DOMException('Aborted', 'AbortError'));
     let context;
     try {
-      context = reownFundingSelection(selection);
+      context = appMeldFundingSelection(selection);
     } catch (error) {
       setOnrampState({ status: "error", error: personalFundingFailure(error) });
       return Promise.reject(error);
     }
     selection = Object.freeze({ ...selection });
-    const { sourceCurrencyCode, countryCode } = context;
+    const { sourceCurrencyCode, countryCode, amount: requestedAmount, destinationCurrencyCode } = context;
     if (onrampFlow.current) return onrampFlow.current;
     const scope = beginOnrampOperation();
     let phase = 'link';
@@ -553,18 +552,20 @@ function ConfiguredReownProvider({ children }) {
       setOnrampState({ status: "opening", error: "" });
       phase = 'intent';
       const requestId = selection.requestId || fundingRequestId();
-      const requestedAmount = selection.amount ?? PERSONAL_WALLET_MINIMUM_USD;
       const intent = await scope.wait(() => createPersonalFundingIntent({
         requestId, walletAddress: verifiedAddress, country: countryCode,
         sourceCurrencyCode,
         amount: requestedAmount,
         paymentMethodType: selection.paymentMethodType,
+        serviceProvider: selection.serviceProvider,
+        destinationCurrencyCode,
       }, { signal: scope.signal }));
       scope.assertActive();
       if (!mounted.current) throw new DOMException("Aborted", "AbortError");
       if (intent.provider !== "meld" || intent.status !== "session_created" || intent.checkoutReference !== requestId || intent.requestedAmount !== requestedAmount
         || (intent.sourceCurrencyCode ?? 'USD') !== sourceCurrencyCode || intent.paymentMethodType !== selection.paymentMethodType
-        || intent.destinationCurrencyCode !== 'USDT_POLYGON' || intent.destination?.asset !== 'USDT' || intent.destination?.network !== 'polygon'
+        || intent.destinationCurrencyCode !== destinationCurrencyCode || (selection.serviceProvider && intent.serviceProvider !== selection.serviceProvider)
+        || intent.destination?.asset !== destinationCurrencyCode.split('_')[0] || intent.destination?.network !== 'polygon'
         || intent.destination?.chainId !== 137 || !sameAddress(intent.destination?.address, verifiedAddress)) {
         throw new Error('wallet_funding_invalid_acknowledgement');
       }
@@ -578,8 +579,8 @@ function ConfiguredReownProvider({ children }) {
       onrampIntent.current = false;
       onrampSelection.current = null;
       setOnrampState({ status: "open", error: "" });
-      return { opened: true, provider: "meld", checkoutReference: intent.checkoutReference, asset: PERSONAL_WALLET_ASSET,
-        sourceCurrencyCode, minimumUsd: sourceCurrencyCode === 'USD' ? PERSONAL_WALLET_MINIMUM_USD : null };
+      return { opened: true, provider: "meld", checkoutReference: intent.checkoutReference, asset: intent.destination.asset,
+        sourceCurrencyCode, minimumUsd: sourceCurrencyCode === 'USD' ? APP_MELD_MINIMUM_USD : null };
     })().catch(error => {
       if (onrampOperation.current === scope) {
         onrampIntent.current = false;
@@ -602,7 +603,7 @@ function ConfiguredReownProvider({ children }) {
   const startOnramp = useCallback(async (selection = {}) => {
     if (!mounted.current || logoutStarted.current) throw new DOMException('Aborted', 'AbortError');
     try {
-      reownFundingSelection(selection);
+      appMeldFundingSelection(selection);
     } catch (error) {
       setOnrampState({ status: "error", error: personalFundingFailure(error) });
       throw error;
@@ -646,7 +647,7 @@ function ConfiguredReownProvider({ children }) {
   const reconnectWallet = useCallback(async () => {
     if (!mounted.current || logoutStarted.current) throw new DOMException('Aborted', 'AbortError');
     try {
-      reownFundingSelection(onrampSelection.current || {});
+      appMeldFundingSelection(onrampSelection.current || {});
     } catch (error) {
       setOnrampState({ status: "error", error: personalFundingFailure(error) });
       throw error;
@@ -868,7 +869,7 @@ function ConfiguredReownProvider({ children }) {
     cancelOnramp, clearOnrampError, getCompanyPaymentProvider, switchCompanyPaymentNetwork, openAccount, openConnect, openOnramp, reconnectWallet, refreshLink, startOnramp, paymentConnection, headless.connect, headless.prepare]);
 
   preparationSnapshot.current = { owner: ownerKey, linkStatus: binding.status, linkedAddress: binding.address,
-    address: value.address, isConnected: value.isConnected,
+    address: value.address, isConnected: value.isConnected && sdkConnectionStatus === "connected",
     isCandidate: !walletNeedsAccountSelection && !walletIdentityMismatch && !walletSwitching,
     connectWallet, linkWallet,
     cancelConnection(promise) {

@@ -3,7 +3,7 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import vm from 'node:vm';
 import ts from 'typescript';
-import { reownFundingSelection } from './reown-production-onramp.mjs';
+import { APP_MELD_MINIMUM_USD, appMeldFundingSelection } from './app-meld-funding-contract.mjs';
 import { personalFundingFailure } from './personal-funding-errors.mjs';
 import { createReownFundingOperation, verifyReownWalletOwnership } from './reown-funding-operation.mjs';
 import { personalWalletMetadata } from './personal-portal-origin.mjs';
@@ -38,7 +38,8 @@ const checkoutUrl = 'https://meldcrypto.com/?token=synthetic';
 const fundingSession = body => ({
   provider: 'meld', status: 'session_created', checkoutReference: body.requestId,
   requestedAmount: body.amount, sourceCurrencyCode: body.sourceCurrencyCode, paymentMethodType: body.paymentMethodType,
-  destinationCurrencyCode: 'USDT_POLYGON', destination: { address: body.walletAddress, asset: 'USDT', network: 'polygon', chainId: 137 },
+  serviceProvider: body.serviceProvider, destinationCurrencyCode: body.destinationCurrencyCode,
+  destination: { address: body.walletAddress, asset: body.destinationCurrencyCode.split('_')[0], network: 'polygon', chainId: 137 },
   checkoutUrl,
 });
 function fundingRuntime(overrides = {}) {
@@ -48,7 +49,7 @@ function fundingRuntime(overrides = {}) {
   const events = [], states = [], bindings = [];
   const ref = () => ({ current: null });
   const scope = {
-    reownFundingSelection, personalFundingFailure,
+    appMeldFundingSelection, personalFundingFailure,
     createReownFundingOperation, verifyReownWalletOwnership, projectId,
     onrampErrorCode: personalFundingFailure, isAddress: value => /^0x[0-9a-f]{40}$/i.test(value || ''),
     sameAddress: (a, b) => typeof a === 'string' && typeof b === 'string' && a.toLowerCase() === b.toLowerCase(),
@@ -57,7 +58,7 @@ function fundingRuntime(overrides = {}) {
     onrampOperation: ref(), linkingOperation: ref(), onrampFlow: ref(), onrampSelection: ref(), onrampIntent: ref(),
     switchRequest: ref(), walletIdentityMismatch: false, walletNeedsAccountSelection: false,
     linking: ref(), connectModalSeen: ref(), appKitState: { open: false },
-    PERSONAL_WALLET_MINIMUM_USD: 30, PERSONAL_WALLET_ASSET: 'USDT', DOMException,
+    APP_MELD_MINIMUM_USD, DOMException,
     setBinding: value => bindings.push(value), setOnrampState: value => states.push(value),
     setVerificationError() {}, setIsLinking() {}, setFundingRevision: () => events.push('revision'),
     fundingRequestId: () => requestId,
@@ -73,7 +74,7 @@ function fundingRuntime(overrides = {}) {
     scope[name] = onrampCallback(name, scope);
   }
   return { scope, events, states, bindings, address, requestId,
-    input: { requestId, country: 'MX', sourceCurrencyCode: 'USD', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' } };
+    input: { requestId, country: 'MX', sourceCurrencyCode: 'USD', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD', serviceProvider: 'MERCURYO' } };
 }
 
 test('manual cancellation releases a hung SDK connect and its late result cannot begin funding', async () => {
@@ -256,9 +257,10 @@ test('SPEI submits the actual amounts in pesos and opens the server-issued check
   const runtime = fundingRuntime({ open: () => assert.fail('verified wallet asked to authenticate again'),
     createPersonalFundingIntent: async body => {
       assert.equal(body.sourceCurrencyCode, 'MXN'); assert.equal(body.amount, 931); assert.equal(body.paymentMethodType, 'SPEI');
+      assert.equal(body.destinationCurrencyCode, 'USDT_POLYGON'); assert.equal(body.serviceProvider, 'ONRAMPMONEY');
       return fundingSession(body);
     } });
-  const result = await runtime.scope.startOnramp({ ...runtime.input, sourceCurrencyCode: 'MXN', paymentMethodType: 'SPEI', amount: 931 });
+  const result = await runtime.scope.startOnramp({ ...runtime.input, sourceCurrencyCode: 'MXN', paymentMethodType: 'SPEI', amount: 931, serviceProvider: 'ONRAMPMONEY' });
   assert.equal(result.sourceCurrencyCode, 'MXN'); assert.equal(result.minimumUsd, null);
   assert.equal(runtime.events.find(value => value?.opened).opened.href, checkoutUrl);
 });
@@ -272,6 +274,8 @@ test('Mercuryo USD and MXN cards hand off the linked wallet and chosen currency 
         assert.equal(body.paymentMethodType, 'CREDIT_DEBIT_CARD');
         assert.equal(body.amount, choice.amount);
         assert.equal(body.sourceCurrencyCode, choice.sourceCurrencyCode);
+        assert.equal(body.destinationCurrencyCode, 'USDT_POLYGON');
+        assert.equal(body.serviceProvider, 'MERCURYO');
         return fundingSession(body);
       } });
     const result = await runtime.scope.startOnramp({ ...runtime.input, ...choice });
@@ -280,9 +284,10 @@ test('Mercuryo USD and MXN cards hand off the linked wallet and chosen currency 
   }
 });
 
-test('a changed checkout reference, amount, currency or method cannot open a provider', async () => {
+test('a changed checkout reference, amount, currency, method, provider or destination cannot open checkout', async () => {
   for (const change of [{ checkoutReference: '11111111-1111-4111-8111-111111111111' }, { requestedAmount: 101 },
     { sourceCurrencyCode: 'MXN' }, { paymentMethodType: 'APPLE_PAY' }, { destinationCurrencyCode: 'USDT' },
+    { serviceProvider: 'RAMPNOW' },
     { destination: { address: `0x${'2'.repeat(40)}`, asset: 'USDT', network: 'polygon', chainId: 137 } },
     { destination: { address: `0x${'1'.repeat(40)}`, asset: 'USDT', network: 'ethereum', chainId: 1 } }]) {
     const runtime = fundingRuntime({ createPersonalFundingIntent: async body => ({ ...fundingSession(body), ...change }) });
@@ -293,8 +298,10 @@ test('a changed checkout reference, amount, currency or method cannot open a pro
 
 test('personal start and continuation reject ineligible country, method and currency before wallet effects', async () => {
   const selections = [
-    { input: { country: 'MX', sourceCurrencyCode: 'MXN', amount: 1000, paymentMethodType: 'LOCAL_BANK_TRANSFER' }, code: 'wallet_funding_valuation_unavailable', category: 'valuation' },
-    { input: { country: 'MX', sourceCurrencyCode: 'COP', amount: 1000, paymentMethodType: 'SPEI' }, code: 'wallet_funding_valuation_unavailable', category: 'valuation' },
+    { input: { country: 'MX', sourceCurrencyCode: 'MXN', amount: 1000, paymentMethodType: 'LOCAL_BANK_TRANSFER' }, code: 'wallet_funding_method_unavailable', category: 'method' },
+    { input: { country: 'MX', sourceCurrencyCode: 'COP', amount: 200000, paymentMethodType: 'SPEI' }, code: 'invalid_request', category: 'provider' },
+    { input: { country: 'US', sourceCurrencyCode: 'USD', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD', destinationCurrencyCode: 'USDT_POLYGON' }, code: 'invalid_request', category: 'provider' },
+    { input: { country: 'US', sourceCurrencyCode: 'USD', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD', serviceProvider: 'ONRAMPMONEY' }, code: 'wallet_funding_method_unavailable', category: 'method' },
     { input: { country: 'CA', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' }, code: 'wallet_funding_invalid_country', category: 'method' },
     ...['NETELLER', 'PAYSAFECARD', 'PAYSAFE_CARD', 'SKRILL', 'SKIRLL', 'ASTROPAY'].map(paymentMethodType => ({
       input: { country: 'US', amount: 100, paymentMethodType }, code: 'wallet_funding_method_unavailable', category: 'method' })),
@@ -309,7 +316,7 @@ test('personal start and continuation reject ineligible country, method and curr
       const onrampSelection = ref();
       const never = () => assert.fail('unvalued local fiat caused a wallet or checkout side effect');
       const scope = {
-        reownFundingSelection, personalFundingFailure, setOnrampState: state => states.push(state),
+        appMeldFundingSelection, personalFundingFailure, setOnrampState: state => states.push(state),
         navigator: { language: 'en-US', languages: ['en-US'] },
         onrampSelection, onrampFlow: ref(), onrampAbort: ref(), onrampIntent: ref(),
         boundAddress: `0x${'1'.repeat(40)}`, currentAddress: `0x${'1'.repeat(40)}`, walletProvider: {}, account: { isConnected: true },
@@ -361,6 +368,23 @@ test('personal dollar continuation opens the authenticated MELD URL without addi
   });
   assert.equal((await runtime.scope.startOnramp(runtime.input)).opened, true);
   assert.deepEqual(events, ['intent', 'open']);
+});
+
+test('RampNow USD card checkout uses USDC on Polygon and the same verified address', async () => {
+  const runtime = fundingRuntime({
+    createPersonalFundingIntent: async body => {
+      assert.equal(body.country, 'US');
+      assert.equal(body.walletAddress, runtime.address);
+      assert.equal(body.serviceProvider, 'RAMPNOW');
+      assert.equal(body.destinationCurrencyCode, 'USDC_POLYGON');
+      return fundingSession(body);
+    },
+  });
+  const input = { ...runtime.input, country: 'US', serviceProvider: 'RAMPNOW', destinationCurrencyCode: 'USDC_POLYGON' };
+  const result = await runtime.scope.startOnramp(input);
+  assert.equal(result.asset, 'USDC');
+  assert.equal(result.minimumUsd, 50);
+  assert.equal(runtime.events.find(value => value?.opened).opened.href, checkoutUrl);
 });
 
 test("Reown creates separate EVM and Solana wallets while retaining native member authorization", () => {

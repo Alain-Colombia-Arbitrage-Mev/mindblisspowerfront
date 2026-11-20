@@ -29,9 +29,9 @@ export function reownWalletConnectionState({ initialized = true, status, loading
   const current = address(currentAddress), bound = address(boundAddress);
   if (isConnected && identityMismatch) return 'mismatch';
   if (isConnected && current && bound && current !== bound) return 'mismatch';
-  if (isConnected && current && typeof walletProvider?.request === 'function') return 'connected';
   if (!initialized || loading || ['connecting', 'reconnecting'].includes(status)
     || (isConnected && current && typeof walletProvider?.request !== 'function')) return 'restoring';
+  if (isConnected && current && typeof walletProvider?.request === 'function') return 'connected';
   return 'disconnected';
 }
 
@@ -87,7 +87,7 @@ export function createReownWalletConnectionRequest({ open, timeoutMs = 90_000, r
   initialState = { status: 'disconnected', modalOpen: false }, onSettled = (_error) => {} }) {
   if (typeof open !== 'function' || !Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > 300_000
     || !Number.isFinite(restoreTimeoutMs) || restoreTimeoutMs < 0 || restoreTimeoutMs > 30_000) throw new TypeError('invalid_wallet_connection_request');
-  let resolve, reject, settled = false, seenModal = false, closeTimer, restoreTimer, requestedModal = false;
+  let resolve, reject, settled = false, seenModal = false, closeTimer, closingStatus, restoreTimer, requestedModal = false;
   const promise = new Promise((done, fail) => { resolve = done; reject = fail; });
   const finish = (error = null) => {
     if (settled) return;
@@ -108,14 +108,20 @@ export function createReownWalletConnectionRequest({ open, timeoutMs = 90_000, r
   else if (initialState.status === 'restoring') restoreTimer = setTimeout(requestModal, restoreTimeoutMs);
   else requestModal();
   return { promise, cancel: abort,
-    update({ status, modalOpen }) {
+    update({ status, modalOpen, sdkRestoring = status === 'restoring' }) {
       if (settled) return;
       if (status === 'connected') { finish(); return; }
       if (!requestedModal && status !== 'restoring') requestModal();
+      const modalCloseStatus = sdkRestoring && status !== 'mismatch' ? 'restoring' : status;
       if (modalOpen) { seenModal = true; clearTimeout(closeTimer); closeTimer = undefined; }
-      // Closing the modal can precede the final account event. Give that event
-      // one short grace period, then release the button without starting a payment.
-      else if (seenModal && !closeTimer) closeTimer = setTimeout(() => status === 'mismatch' ? finish(new Error('wallet_address_mismatch')) : abort(), 500);
+      else if (seenModal && (!closeTimer || modalCloseStatus !== closingStatus)) {
+        // AppKit can close Connect before publishing the account and provider.
+        // Keep waiting while synchronization is reported and release dismissed flows promptly.
+        clearTimeout(closeTimer);
+        closingStatus = modalCloseStatus;
+        const delay = modalCloseStatus === 'restoring' ? restoreTimeoutMs : 500;
+        closeTimer = setTimeout(() => modalCloseStatus === 'mismatch' ? finish(new Error('wallet_address_mismatch')) : abort(), delay);
+      }
     },
   };
 }

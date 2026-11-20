@@ -4,7 +4,7 @@ import { coreFetch, runtimeEnvironment } from './cloudflare-runtime.mjs';
 import { memberMutationError } from './member-mutation-policy.mjs';
 import { boundedServiceRequest } from './private-service-request.mjs';
 import { administrativeSandboxOptions, fundingAcknowledgement, fundingHistory, fundingInput, fundingStatus, fundingCurrencyCode, fundingSourceSupported, FUNDING_UUID } from './wallet-funding-contract.mjs';
-import { appMeldFundingContext, appMeldFundingInputError, appMeldFundingOptions, appMeldFundingSession, appPersonalFundingHistory, appPersonalFundingStatus } from './app-meld-funding-contract.mjs';
+import { appMeldFundingContext, appMeldFundingInputError, appMeldFundingOptions, appMeldFundingRequest, appMeldFundingSession, appPersonalFundingHistory, appPersonalFundingStatus } from './app-meld-funding-contract.mjs';
 import { readBoundedRequestJson } from './bounded-request-json.mjs';
 
 const reply = (body, status = 200) => Response.json(body, { status, headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' } });
@@ -71,13 +71,14 @@ export async function handleWalletFunding(request, action, {
     const length = request.headers.get('content-length');
     if (length !== null && (!/^\d+$/.test(length) || Number(length) > 2048)) return reply({ error: 'request_too_large' }, 413);
     try {
-      body = fundingInput(await readBoundedRequestJson(request, { maxBytes: 2048 }), kind);
+      const raw = await readBoundedRequestJson(request, { maxBytes: 2048 });
+      body = kind === 'personal' ? appMeldFundingRequest(raw) : fundingInput(raw, kind);
     } catch (error) {
       if (error?.message === 'request_body_unavailable') return reply({ error: 'wallet_funding_provider_unavailable' }, 503);
       return reply({ error: error?.message === 'request_too_large' ? 'request_too_large' : 'invalid_request' }, error?.message === 'request_too_large' ? 413 : 400);
     }
     if (!body) return reply({ error: 'invalid_request' }, 400);
-    if (!fundingSourceSupported(body, kind)) return reply({ error: 'wallet_funding_valuation_unavailable' }, 503);
+    if (kind === 'administrative' && !fundingSourceSupported(body, kind)) return reply({ error: 'wallet_funding_valuation_unavailable' }, 503);
     const appInputError = kind === 'personal' && appMeldFundingInputError(body);
     if (appInputError) return reply({ error: appInputError }, 400);
     path = kind === 'personal' ? '/api/member/wallet-funding/personal/intent' : '/api/member/wallet-funding/administrative/session';

@@ -1,14 +1,13 @@
 import { administrativeSandboxOptions, fundingAcknowledgement, fundingHistory, fundingInput, fundingStatus, fundingCurrencyCode, fundingSourceSupported, FUNDING_UUID } from './wallet-funding-contract.mjs';
-import { appMeldFundingContext, appMeldFundingInputError, appMeldFundingOptions, appMeldFundingSession, appPersonalFundingHistory, appPersonalFundingStatus } from './app-meld-funding-contract.mjs';
+import { appMeldFundingContext, appMeldFundingInputError, appMeldFundingOptions, appMeldFundingRequest, appMeldFundingSession, appPersonalFundingHistory, appPersonalFundingStatus } from './app-meld-funding-contract.mjs';
 import { browserRequestDeadline } from './browser-request-deadline.mjs';
 
 export function fundingRequestId() { return crypto.randomUUID(); }
 
 /** @param {Record<string, unknown>} input @param {{signal?: AbortSignal}} [options] */
 export async function createPersonalFundingIntent(input, options = {}) {
-  const body = fundingInput(input, 'personal');
+  const body = appMeldFundingRequest(input);
   if (!body) throw new Error('invalid_request');
-  if (!fundingSourceSupported(body, 'personal')) throw new Error('wallet_funding_valuation_unavailable');
   const appInputError = appMeldFundingInputError(body);
   if (appInputError) throw new Error(appInputError);
   const data = appMeldFundingSession(await request('/api/member/wallet-funding/personal/intent', {

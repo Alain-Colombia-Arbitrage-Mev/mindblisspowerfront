@@ -19,6 +19,8 @@ test('backend linkage does not impersonate an active wallet session and SDK rest
   assert.equal(state(linked), 'connected');
   assert.equal(state({ boundAddress: address }), 'disconnected');
   assert.equal(state({ ...linked, walletProvider: undefined }), 'restoring');
+  assert.equal(state({ ...linked, status: 'connecting' }), 'restoring');
+  assert.equal(state({ ...linked, loading: true }), 'restoring');
   assert.equal(state({ ...linked, isConnected: false, status: 'reconnecting' }), 'restoring');
   assert.equal(state({ initialized: false, boundAddress: address }), 'restoring');
   assert.equal(state({ ...linked, currentAddress: other }), 'mismatch');
@@ -86,6 +88,21 @@ test('a closed modal releases the reconnect state without claiming authenticatio
   await Promise.resolve(); request.update({ status: 'disconnected', modalOpen: true });
   request.update({ status: 'disconnected', modalOpen: false });
   t.mock.timers.tick(500); await rejected; t.mock.timers.reset();
+});
+
+test('a modal that closes during SDK restoration waits for the signer after the short close window', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let opened = 0;
+  const request = createReownWalletConnectionRequest({ open: () => { opened++; } });
+  await tick();
+  request.update({ status: 'disconnected', modalOpen: true });
+  request.update({ status: 'disconnected', modalOpen: false });
+  t.mock.timers.tick(400);
+  request.update({ status: 'restoring', modalOpen: false });
+  t.mock.timers.tick(1500);
+  request.update({ status: 'connected', modalOpen: false });
+  assert.deepEqual(await request.promise, { connected: true });
+  assert.equal(opened, 1);
 });
 
 test('the connection deadline recovers a stalled third-party wallet login without creating a funding or payment operation', async () => {
@@ -206,7 +223,7 @@ function providerHarness(t, { bound = false, reset = async () => {}, proof = fal
       }; }
     } },
     '@/lib/member-session-context': { useMemberSession: () => member }, '@/lib/browser-onramp-region.mjs': { browserOnrampRegion() { assert.fail('No funding region lookup'); } },
-    '@/lib/reown-production-onramp.mjs': { buildReownProductionOnrampUrl() { assert.fail('No funding URL'); }, reownFundingSelection() { assert.fail('No funding selection'); } },
+    '@/lib/app-meld-funding-contract.mjs': { appMeldFundingSelection() { assert.fail('No funding selection'); } },
     '@/lib/wallet-funding-client.mjs': { createPersonalFundingIntent() { assert.fail('No funding intent'); }, fundingRequestId() { assert.fail('No funding intent'); } },
     '@/lib/personal-wallet.mjs': { PERSONAL_WALLET_ASSET: 'USDT', PERSONAL_WALLET_MINIMUM_USD: 30 },
     '@/lib/wallet-binding.mjs': { readWalletBinding: async options => readBinding ? readBinding(options) : bound ? { linked: true, address } : { linked: false },
@@ -255,6 +272,7 @@ function providerHarness(t, { bound = false, reset = async () => {}, proof = fal
       assert.fail('Synthetic provider failed to settle');
     },
     async account(next) { Object.assign(account, next); dirty = true; return view.flush(); },
+    async modal(next) { Object.assign(sdk, next); dirty = true; return view.flush(); },
     async member(next) { member = next; dirty = true; return view.flush(); },
     unmount() { for (const cell of slots) cell?.cleanup?.(); unmounted = true; },
   };
@@ -393,6 +411,29 @@ test('one explicit activation coalesces fresh connection and ownership proof wit
   await h.flush();
   assert.equal(h.value.isLinked, true); assert.deepEqual(h.calls, ['disconnect', 'open', 'challenge', 'sign', 'confirm']);
   assert.deepEqual(await h.value.prepareWallet(), { linked: true, address: other });
+  assert.deepEqual(h.calls, ['disconnect', 'open', 'challenge', 'sign', 'confirm']);
+});
+
+test('one activation survives a closing Reown modal while the SDK is still making the new signer available', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const h = providerHarness(t, { proof: true, accountState: { isConnected: false, status: 'disconnected', address: undefined, embeddedWalletInfo: undefined } });
+  await h.flush();
+  const activation = h.value.prepareWallet();
+  const result = activation.catch(error => error);
+  await h.flush();
+  await h.modal({ open: true, loading: true });
+  t.mock.timers.tick(16_000);
+  await h.flush();
+  await h.account({ isConnected: true, status: 'connecting', address: other });
+  await h.modal({ open: false, loading: true });
+  t.mock.timers.tick(1500);
+  await h.flush();
+  assert.deepEqual(h.calls, ['disconnect', 'open']);
+  await h.account({ status: 'connected' });
+  assert.deepEqual(h.calls, ['disconnect', 'open']);
+  await h.modal({ loading: false });
+  assert.deepEqual(await result, { linked: true, address: other });
+  assert.equal(h.value.isLinked, true);
   assert.deepEqual(h.calls, ['disconnect', 'open', 'challenge', 'sign', 'confirm']);
 });
 

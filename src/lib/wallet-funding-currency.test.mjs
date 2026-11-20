@@ -4,6 +4,7 @@ import { personalProductionOptions, administrativeSandboxOptions, fundingAcknowl
   PERSONAL_FUNDING_COUNTRIES, PERSONAL_FUNDING_BLOCKED_METHODS, PERSONAL_FUNDING_UNAVAILABLE_METHODS } from './wallet-funding-contract.mjs';
 import { readAdministrativeSandboxOptions, readPersonalFundingOptions, createPersonalFundingIntent, createAdministrativeSandboxSession } from './wallet-funding-client.mjs';
 import { handleWalletFunding } from './wallet-funding-bff.mjs';
+import { appMeldFundingOptions } from './app-meld-funding-contract.mjs';
 
 const env = { AUTH_PROVIDER: 'better-auth', AUTH_BFF_SHARED_SECRET: 's'.repeat(32),
   AUTH_PUBLIC_ORIGIN: 'https://app.example.test', BETTER_AUTH_BACKEND_URL: 'https://auth.core.internal', NODE_ENV: 'production' };
@@ -71,9 +72,9 @@ test('personal discovery rejects unsupported country and currency pairs before e
   const original = globalThis.fetch;
   try {
     globalThis.fetch = async () => assert.fail('Unsupported country/currency reached browser transport');
-    for (const [country, sourceCurrencyCode] of [['US', 'MXN'], ['CO', 'MXN'], ['US', 'COP'], ['MX', 'COP'], ['CO', 'COP'], ['US', 'EUR']]) {
-      const candidate = { ...options('personal'), country, sourceCurrencyCode, paymentMethods: [], routes: [] };
-      assert.equal(personalProductionOptions(candidate), null);
+    for (const [country, sourceCurrencyCode] of [['US', 'MXN'], ['CO', 'MXN'], ['US', 'COP'], ['MX', 'COP'], ['CO', 'USD'], ['US', 'EUR']]) {
+      const candidate = { ...productionOptions(), country, sourceCurrencyCode, paymentMethods: [], routes: [] };
+      assert.equal(appMeldFundingOptions(candidate), null);
       await assert.rejects(readPersonalFundingOptions(country, { sourceCurrencyCode }), { message: 'invalid_request' });
       const response = await handleWalletFunding(get(`personal/options?country=${country}&sourceCurrencyCode=${sourceCurrencyCode}`), 'personal-options', {
         env, serviceRequest: async () => assert.fail('Unsupported country/currency reached private transport'),
@@ -81,9 +82,11 @@ test('personal discovery rejects unsupported country and currency pairs before e
       assert.equal(response.status, 400);
       assert.deepEqual(await response.json(), { error: 'invalid_request' });
     }
-    for (const [country, sourceCurrencyCode] of [['US', 'USD'], ['MX', 'USD'], ['CO', 'USD'], ['MX', 'MXN']]) {
-      const candidate = { ...options('personal'), country, sourceCurrencyCode, paymentMethods: [], routes: [] };
-      assert.deepEqual(personalProductionOptions(candidate), candidate);
+    for (const [country, sourceCurrencyCode, destinationCurrencyCode] of [
+      ['US', 'USD', 'USDC_POLYGON'], ['MX', 'USD', 'USDT_POLYGON'], ['CO', 'COP', 'USDC_POLYGON'], ['MX', 'MXN', 'USDT_POLYGON'],
+    ]) {
+      const candidate = { ...productionOptions(), country, sourceCurrencyCode, destinationCurrencyCode, paymentMethods: [], routes: [] };
+      assert.deepEqual(appMeldFundingOptions(candidate), candidate);
     }
   } finally { globalThis.fetch = original; }
 });
@@ -139,15 +142,15 @@ test('SPEI records its actual MXN amount while other local mutations remain unav
     assert.deepEqual(await response.json(), acknowledgement);
     globalThis.fetch = async () => assert.fail('unvalued local amount reached transport');
     await assert.rejects(createAdministrativeSandboxSession({ ...input, serviceProvider: 'TRANSAK' }), { message: 'wallet_funding_valuation_unavailable' });
-    for (const [kind, body] of [
-      ['personal', { ...input, country: 'US' }],
-      ['personal', { ...input, paymentMethodType: 'LOCAL_BANK_TRANSFER' }],
-      ['administrative', { ...input, serviceProvider: 'TRANSAK' }],
+    for (const [kind, body, status, error] of [
+      ['personal', { ...input, country: 'US' }, 400, 'invalid_request'],
+      ['personal', { ...input, paymentMethodType: 'LOCAL_BANK_TRANSFER' }, 400, 'wallet_funding_method_unavailable'],
+      ['administrative', { ...input, serviceProvider: 'TRANSAK' }, 503, 'wallet_funding_valuation_unavailable'],
     ]) {
-      if (kind === 'personal') await assert.rejects(createPersonalFundingIntent(body), { message: 'wallet_funding_valuation_unavailable' });
+      if (kind === 'personal') await assert.rejects(createPersonalFundingIntent(body), { message: error });
       const response = await handleWalletFunding(post(body), kind, { env, serviceRequest: async () => assert.fail('unsupported local mutation forwarded') });
-      assert.equal(response.status, 503);
-      assert.deepEqual(await response.json(), { error: 'wallet_funding_valuation_unavailable' });
+      assert.equal(response.status, status);
+      assert.deepEqual(await response.json(), { error });
     }
     for (const amount of [19.99, 0, '20', 20.001, 25000.01]) {
       await assert.rejects(createPersonalFundingIntent({ ...input, sourceCurrencyCode: 'USD', amount }), { message: 'invalid_request' });
@@ -286,10 +289,8 @@ test('new personal funding excludes prohibited and temporarily unavailable metho
         destination: { address: input.walletAddress, asset: 'USDT', network: 'polygon', chainId: 137 } }, 'personal'), null);
     }
     await assert.rejects(readPersonalFundingOptions('CA'), { message: 'invalid_request' });
-    for (const sourceCurrencyCode of ['MXN']) {
-      await assert.rejects(createPersonalFundingIntent({ ...valid, country: 'CO', amount: sourceCurrencyCode === 'COP' ? 200000 : 1000, sourceCurrencyCode,
-        paymentMethodType: 'SPEI' }), { message: 'wallet_funding_valuation_unavailable' });
-    }
+    await assert.rejects(createPersonalFundingIntent({ ...valid, country: 'CO', amount: 1000, sourceCurrencyCode: 'MXN',
+      paymentMethodType: 'SPEI' }), { message: 'invalid_request' });
   } finally { globalThis.fetch = original; }
   for (const country of ['CA', 'PA']) {
     const response = await handleWalletFunding(get(`personal/options?country=${country}`), 'personal-options', {
