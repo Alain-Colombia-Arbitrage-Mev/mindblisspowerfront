@@ -393,7 +393,7 @@ function ConfiguredReownProvider({ children }) {
       if (!mounted.current || latestOwner.current !== ownerKey || logoutStarted.current) throw new DOMException("Aborted", "AbortError");
     };
     setWalletSwitching(true); setConnectionBusy(true); setVerificationError("");
-    const request = createReownWalletSwitchRequest({ initialState: connectionSnapshot.current,
+    const request = createReownWalletSwitchRequest({ initialState: connectionSnapshot.current, waitForModalClose: true,
       disconnect: async () => {
         valid();
         // Email/social share one AUTH session across adapters. A dormant
@@ -430,10 +430,10 @@ function ConfiguredReownProvider({ children }) {
     if (switchRequest.current) return switchRequest.current.promise;
     if (walletIdentityMismatch || walletNeedsAccountSelection
       || (connectionSnapshot.current.disconnected && (boundAddress || ConnectionController.hasAnyConnection(ReownConstantsUtil.CONNECTOR_ID.AUTH)))) return chooseWallet();
-    if (connectionSnapshot.current.status === "connected") return Promise.resolve({ connected: true });
+    if (connectionSnapshot.current.status === "connected" && !connectionSnapshot.current.modalOpen) return Promise.resolve({ connected: true });
     if (connectionRequest.current) return connectionRequest.current.promise;
     setConnectionBusy(true);
-    const request = createReownWalletConnectionRequest({ initialState: connectionSnapshot.current,
+    const request = createReownWalletConnectionRequest({ initialState: connectionSnapshot.current, waitForModalClose: true,
       open: () => open({ view: "Connect", namespace: "eip155" }),
       onSettled() { if (connectionRequest.current === request) connectionRequest.current = null; if (mounted.current) setConnectionBusy(false); } });
     connectionRequest.current = request;
@@ -869,7 +869,7 @@ function ConfiguredReownProvider({ children }) {
     cancelOnramp, clearOnrampError, getCompanyPaymentProvider, switchCompanyPaymentNetwork, openAccount, openConnect, openOnramp, reconnectWallet, refreshLink, startOnramp, paymentConnection, headless.connect, headless.prepare]);
 
   preparationSnapshot.current = { owner: ownerKey, linkStatus: binding.status, linkedAddress: binding.address,
-    address: value.address, isConnected: value.isConnected && sdkConnectionStatus === "connected",
+    address: value.address, isConnected: value.isConnected && sdkConnectionStatus === "connected" && appKitState.open !== true,
     isCandidate: !walletNeedsAccountSelection && !walletIdentityMismatch && !walletSwitching,
     connectWallet, linkWallet,
     cancelConnection(promise) {

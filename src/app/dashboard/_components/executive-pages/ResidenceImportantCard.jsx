@@ -20,7 +20,7 @@ export default function ResidenceImportantCard() {
         <p className={styles.copy}>{t("funding.residenceSidebarCopy")}</p>
       </div>
       <div className={styles.requirement}>
-        <ContactRound aria-hidden="true" /><p>{t("funding.residenceCountrySsn")}</p>
+        <ContactRound aria-hidden="true" /><p>{t("funding.residenceUsDocuments")}</p>
       </div>
     </div>
   </section>;

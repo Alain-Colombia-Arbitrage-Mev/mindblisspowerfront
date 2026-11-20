@@ -28,7 +28,7 @@ function card(locale) {
 const all = (node, predicate) => [...(predicate(node) ? [node] : []), ...React.Children.toArray(node?.props?.children).flatMap(child => all(child, predicate))];
 const text = node => typeof node === 'string' ? node : React.Children.toArray(node?.props?.children).map(text).join('');
 
-test('the tSzaZ residence card renders its exact guidance, live heading and SSN requirement in every locale without payment controls', t => {
+test('the tSzaZ residence card renders its exact guidance, live heading and document guidance in every locale without payment controls', t => {
   t.mock.method(globalThis, 'fetch', () => assert.fail('Rendering residence guidance cannot contact a backend'));
   for (const locale of ['es', 'en', 'ar', 'zh']) {
     const tree = card(locale), html = renderToStaticMarkup(tree);
@@ -37,10 +37,10 @@ test('the tSzaZ residence card renders its exact guidance, live heading and SSN 
     assert.equal(tree.props['aria-label'], translateMessage(locale, 'funding.residenceImportantTitle'));
     assert.deepEqual(all(tree, node => node?.type === 'h2').map(text), [translateMessage(locale, 'funding.residenceImportantTitle')]);
     assert.deepEqual(all(tree, node => node?.type === 'p').map(text), [
-      translateMessage(locale, 'funding.residenceSidebarCopy'), translateMessage(locale, 'funding.residenceCountrySsn'),
+      translateMessage(locale, 'funding.residenceSidebarCopy'), translateMessage(locale, 'funding.residenceUsDocuments'),
     ]);
     assert.ok(html.includes(translateMessage(locale, 'funding.residenceCountryLabel')));
-    assert.match(html, /SSN/);
+    assert.match(html, /SSN/); assert.match(html, /ITIN/);
     assert.equal(all(tree, node => node?.type === ContactRound && node.props['aria-hidden'] === 'true').length, 1);
     assert.equal(all(tree, node => node?.type === Info && node.props['aria-hidden'] === 'true').length, 1);
     assert.equal(all(tree, node => ['form', 'input', 'select', 'button', 'a'].includes(node?.type)).length, 0);

@@ -226,7 +226,7 @@ function FundingCountryField({ id, value, onChange, busy, label = "", countries 
         <PopoverContent className={styles.residencyPopover} align="start" sideOffset={8} collisionPadding={16}
           aria-label={t("funding.residenceCountryInfo")} aria-describedby={`${id}-residency-popup-copy`} onOpenAutoFocus={event => event.preventDefault()}>
           <div id={`${id}-residency-popup-copy`}>
-            <p>{t("funding.residenceCountryHelp")}</p><p><strong>{t("funding.residenceCountrySsn")}</strong></p>
+            <p>{t("funding.residenceCountryHelp")}</p><p><strong>{t("funding.residenceUsDocuments")}</strong></p>
           </div>
         </PopoverContent>
       </Popover>

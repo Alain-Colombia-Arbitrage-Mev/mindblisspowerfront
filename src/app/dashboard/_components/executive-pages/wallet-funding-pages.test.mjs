@@ -1011,7 +1011,7 @@ test('residence help appears only in the accessible info popover without inline 
     assert.doesNotMatch(html, /role="dialog"/);
     const closedForm = renderToStaticMarkup(tree);
     assert.ok(!closedForm.includes(translateMessage(locale, 'funding.residenceCountryHelp')));
-    assert.ok(!closedForm.includes(translateMessage(locale, 'funding.residenceCountrySsn')));
+    assert.ok(!closedForm.includes(translateMessage(locale, 'funding.residenceUsDocuments')));
     assert.doesNotMatch(closedForm, /funding-test-residency-help/);
     assert.equal(field.props.describedBy, undefined);
     assert.equal(find(view, node => node?.type === 'select').props['aria-describedby'], undefined);
@@ -1020,7 +1020,7 @@ test('residence help appears only in the accessible info popover without inline 
     const copy = renderToStaticMarkup(content.props.children);
     assert.equal(content.props.children.props.id, content.props['aria-describedby']);
     assert.ok(copy.includes(translateMessage(locale, 'funding.residenceCountryHelp')));
-    assert.ok(copy.includes(translateMessage(locale, 'funding.residenceCountrySsn')));
+    assert.ok(copy.includes(translateMessage(locale, 'funding.residenceUsDocuments')));
     assert.equal(field.props.value, '', 'Reading help cannot choose a country of residence');
     assert.equal(find(tree, 'FundingSubmit').props.disabled, true);
   }

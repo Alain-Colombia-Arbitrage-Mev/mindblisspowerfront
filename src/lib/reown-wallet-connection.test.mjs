@@ -83,7 +83,7 @@ test('restoration failure opens the explicit connection flow once, while its dea
 
 test('a closed modal releases the reconnect state without claiming authentication or changing the bound account', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
-  const request = createReownWalletConnectionRequest({ open: async () => {} });
+  const request = createReownWalletConnectionRequest({ open: async () => {}, waitForModalClose: true });
   const rejected = assert.rejects(request.promise, { name: 'AbortError' });
   await Promise.resolve(); request.update({ status: 'disconnected', modalOpen: true });
   request.update({ status: 'disconnected', modalOpen: false });
@@ -434,6 +434,38 @@ test('one activation survives a closing Reown modal while the SDK is still makin
   await h.modal({ loading: false });
   assert.deepEqual(await result, { linked: true, address: other });
   assert.equal(h.value.isLinked, true);
+  assert.deepEqual(h.calls, ['disconnect', 'open', 'challenge', 'sign', 'confirm']);
+});
+
+test('activation waits for the Connect or SIWX modal to close before requesting ownership', async t => {
+  const h = providerHarness(t, { proof: true, accountState: { isConnected: false, status: 'disconnected', address: undefined, embeddedWalletInfo: undefined } });
+  await h.flush();
+  const activation = h.value.prepareWallet();
+  const result = activation.catch(error => error);
+  await h.flush();
+  await h.modal({ open: true });
+  await h.account({ isConnected: true, status: 'connected', address: other });
+  assert.deepEqual(h.calls, ['disconnect', 'open'], 'The SDK can expose a live signer before closing its auth modal');
+  assert.equal(h.value.isLinked, false);
+  await h.modal({ open: false });
+  assert.deepEqual(await result, { linked: true, address: other });
+  assert.deepEqual(h.calls, ['disconnect', 'open', 'challenge', 'sign', 'confirm']);
+});
+
+test('activation of a selected wallet waits through an already open Reown modal without resetting or reopening it', async t => {
+  const h = providerHarness(t, { proof: true, accountState: { isConnected: false, status: 'disconnected', address: undefined, embeddedWalletInfo: undefined } });
+  await h.flush();
+  const choice = h.value.chooseWallet();
+  await h.flush();
+  await h.account({ isConnected: true, status: 'connected', address: other });
+  await choice;
+  await h.modal({ open: true });
+  const activation = h.value.prepareWallet();
+  const result = activation.catch(error => error);
+  await h.flush();
+  assert.deepEqual(h.calls, ['disconnect', 'open']);
+  await h.modal({ open: false });
+  assert.deepEqual(await result, { linked: true, address: other });
   assert.deepEqual(h.calls, ['disconnect', 'open', 'challenge', 'sign', 'confirm']);
 });
 

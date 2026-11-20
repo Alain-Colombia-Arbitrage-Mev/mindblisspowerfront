@@ -38,7 +38,7 @@ export function reownWalletConnectionState({ initialized = true, status, loading
 /** Explicit wallet selection is separate from funding. A resolved SDK
  * disconnect alone is insufficient: observe its disconnected account before
  * opening Connect, and ignore every old connected snapshot until then. */
-export function createReownWalletSwitchRequest({ disconnect, open, timeoutMs = 90_000,
+export function createReownWalletSwitchRequest({ disconnect, open, timeoutMs = 90_000, waitForModalClose = false,
   initialState = { status: 'connected', modalOpen: false, disconnected: false }, onSettled = (_error) => {} }) {
   if (typeof disconnect !== 'function' || typeof open !== 'function' || !Number.isFinite(timeoutMs)
     || timeoutMs <= 0 || timeoutMs > 300_000) throw new TypeError('invalid_wallet_switch_request');
@@ -55,7 +55,7 @@ export function createReownWalletSwitchRequest({ disconnect, open, timeoutMs = 9
   const timer = setTimeout(() => finish(Object.assign(new Error('wallet_connection_timeout'), { name: 'TimeoutError' })), timeoutMs);
   const continueAfterReset = () => {
     if (settled || !reset || state.disconnected !== true || connection) return;
-    connection = createReownWalletConnectionRequest({ timeoutMs, initialState: { status: 'disconnected', modalOpen: false },
+    connection = createReownWalletConnectionRequest({ timeoutMs, waitForModalClose, initialState: { status: 'disconnected', modalOpen: false },
       open: () => { if (settled) return; opened = true; return open(); } });
     connection.promise.then(() => finish(), finish);
   };
@@ -80,14 +80,18 @@ export function createReownWalletSwitchRequest({ disconnect, open, timeoutMs = 9
 }
 
 /** Wait for connection state, rather than treating an opened modal as a connected wallet.
- * @param {{open: () => unknown, timeoutMs?: number, restoreTimeoutMs?: number,
+ * @param {{open: () => unknown, timeoutMs?: number, restoreTimeoutMs?: number, waitForModalClose?: boolean,
  * initialState?: {status?: string, modalOpen?: boolean}, onSettled?: (error: unknown) => void}} options
  */
-export function createReownWalletConnectionRequest({ open, timeoutMs = 90_000, restoreTimeoutMs = 15_000,
+export function createReownWalletConnectionRequest({ open, timeoutMs = 90_000, restoreTimeoutMs = 15_000, waitForModalClose = false,
   initialState = { status: 'disconnected', modalOpen: false }, onSettled = (_error) => {} }) {
   if (typeof open !== 'function' || !Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > 300_000
     || !Number.isFinite(restoreTimeoutMs) || restoreTimeoutMs < 0 || restoreTimeoutMs > 30_000) throw new TypeError('invalid_wallet_connection_request');
-  let resolve, reject, settled = false, seenModal = false, closeTimer, closingStatus, restoreTimer, requestedModal = false;
+  let resolve, reject, settled = false, closeTimer, closingStatus, restoreTimer;
+  let observed = initialState;
+  let seenModal = waitForModalClose && initialState.modalOpen === true;
+  let requestedModal = seenModal;
+  const ready = ({ status, modalOpen }) => status === 'connected' && (!waitForModalClose || !modalOpen);
   const promise = new Promise((done, fail) => { resolve = done; reject = fail; });
   const finish = (error = null) => {
     if (settled) return;
@@ -104,13 +108,22 @@ export function createReownWalletConnectionRequest({ open, timeoutMs = 90_000, r
   };
   // A page may ask to connect while the SDK is restoring a live session. Give
   // that read-only restoration a bounded chance before presenting another login.
-  if (initialState.status === 'connected') Promise.resolve().then(() => finish());
-  else if (initialState.status === 'restoring') restoreTimer = setTimeout(requestModal, restoreTimeoutMs);
-  else requestModal();
+  if (ready(initialState)) Promise.resolve().then(() => { if (ready(observed)) finish(); });
+  else if (!seenModal) {
+    if (initialState.status === 'restoring') restoreTimer = setTimeout(requestModal, restoreTimeoutMs);
+    else requestModal();
+  }
   return { promise, cancel: abort,
-    update({ status, modalOpen, sdkRestoring = status === 'restoring' }) {
+    update(next) {
       if (settled) return;
-      if (status === 'connected') { finish(); return; }
+      observed = next;
+      const { status, modalOpen, sdkRestoring = status === 'restoring' } = next;
+      if (ready(next)) { finish(); return; }
+      if (waitForModalClose && modalOpen) {
+        // Authentication can already be open while AppKit publishes its signer.
+        // Hand it control until it closes so it cannot dismiss the ownership prompt.
+        requestedModal = true; clearTimeout(restoreTimer);
+      }
       if (!requestedModal && status !== 'restoring') requestModal();
       const modalCloseStatus = sdkRestoring && status !== 'mismatch' ? 'restoring' : status;
       if (modalOpen) { seenModal = true; clearTimeout(closeTimer); closeTimer = undefined; }
