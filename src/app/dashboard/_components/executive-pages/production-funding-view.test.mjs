@@ -21,7 +21,7 @@ const submit = tree => all(tree).find(node => node?.type === 'button' && node.pr
 const form = tree => all(tree).find(node => node?.type === 'form');
 const deferred = () => { let resolve, reject; return { promise: new Promise((done, fail) => { resolve = done; reject = fail; }), resolve, reject }; };
 const discoveryValue = country => country ? { country, defaultCurrencyCode: { US: 'USD', MX: 'MXN', CO: 'COP', [genericCountry]: 'MXN' }[country],
-  currencies: ['USD', 'MXN', 'COP', 'EUR', 'GBP'].map(code => ({ code, name: code, decimalPlaces: 2 })) }
+  currencies: (country === 'MX' ? ['MXN', 'EUR'] : ['USD', 'MXN', 'COP', 'EUR', 'GBP']).map(code => ({ code, name: code, decimalPlaces: 2 })) }
   : { countries: [{ code: 'US', name: 'United States' }, { code: 'MX', name: 'Mexico' }, { code: 'CO', name: 'Colombia' }, { code: genericCountry, name: 'Canada' }] };
 const retryButton = tree => all(tree).find(node => node?.type === 'button' && node.props.children === translateMessage('es', 'walletProduction.retry'));
 function fixture(t, config = {}) {
@@ -164,6 +164,50 @@ test('Mexico SPEI refuses a checkout that returns USDC on Arbitrum', async t => 
   assert.equal(h.calls.popups[0].closed, true);
   assert.deepEqual(h.calls.opened, []);
 });
+
+for (const fiat of ['MXN', 'USD']) {
+  test(`Mexico offers Mercuryo card in ${fiat} alongside SPEI in MXN without starting checkout automatically`, async t => {
+    const h = fixture(t, {
+      discovery: async country => country === 'MX' ? { ...discoveryValue(country), currencies: ['MXN', 'USD', 'EUR'].map(code => ({ code, name: code, decimalPlaces: 2 })) } : discoveryValue(country),
+      options: async (_country, currency) => ({ destinationCurrencyCode: 'USDC_POLYGON', routes: [
+        ...(currency === 'MXN' ? mexicoCatalog().routes : []),
+        { serviceProvider: 'MERCURYO', paymentMethods: [
+          { method: 'CREDIT_DEBIT_CARD', currencyCode: currency, minimumAmount: currency === 'USD' ? 50 : 800, maximumAmount: currency === 'USD' ? 1000 : 20000 },
+          { method: 'APPLE_PAY', currencyCode: currency, minimumAmount: 1, maximumAmount: 20000 },
+        ] },
+      ] }),
+      quotes: input => [{ serviceProvider: input.paymentMethodType === 'SPEI' ? 'ONRAMPMONEY' : 'MERCURYO', destinationAmount: 48, totalFee: 2, networkFee: null }],
+    });
+    await h.flush();
+    await h.change('production-country', 'MX');
+    const currencyField = field(h.tree, 'production-currency');
+    assert.equal(currencyField.props.value, 'MXN');
+    assert.deepEqual(all(currencyField).filter(node => node?.type === 'option').map(node => node.props.value), ['', 'MXN', 'USD']);
+    const methodField = field(h.tree, 'production-method');
+    assert.equal(methodField.props.value, 'SPEI');
+    assert.deepEqual(all(methodField).filter(node => node?.type === 'option').map(node => node.props.value), ['', 'SPEI', 'CREDIT_DEBIT_CARD']);
+    assert.equal(submit(h.tree).props.children.at(-1), 'Continuar con Onramp Money');
+    assert.ok(!all(h.tree).includes(translateMessage('es', 'walletProduction.mercuryoCardInstructions')));
+    if (fiat === 'USD') await h.change('production-currency', 'USD');
+    else await h.change('production-method', 'CREDIT_DEBIT_CARD');
+    const amount = Number(field(h.tree, 'production-amount').props.value);
+    assert.equal(amount, fiat === 'USD' ? 50 : 800);
+    assert.equal(submit(h.tree).props.children.at(-1), 'Continuar con Mercuryo');
+    assert.ok(all(h.tree).includes(translateMessage('es', 'walletProduction.mercuryoCardInstructions')));
+    assert.equal(h.calls.session.length, 0);
+    assert.equal(h.calls.popups.length, 0);
+    form(h.tree).props.onSubmit({ preventDefault() {} });
+    assert.equal(h.calls.session.length, 1);
+    const [{ requestId, ...request }, wallet] = h.calls.session[0];
+    assert.match(requestId, FUNDING_UUID);
+    assert.deepEqual(request, { country: 'MX', sourceCurrencyCode: fiat, amount,
+      paymentMethodType: 'CREDIT_DEBIT_CARD', serviceProvider: 'MERCURYO' });
+    assert.equal(wallet, address);
+    h.waiting.resolve({ checkoutUrl: 'https://meldcrypto.com/?token=synthetic_opaque', destination: { ...polygonDestination, asset: 'USDC' } });
+    await h.flush();
+    assert.deepEqual(h.calls.opened, ['https://meldcrypto.com/?token=synthetic_opaque']);
+  });
+}
 
 test('Mexico retries a failed SPEI options request and only then offers checkout', async t => {
   const catalogCalls = [];

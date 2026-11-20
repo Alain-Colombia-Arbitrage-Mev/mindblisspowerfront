@@ -8,7 +8,7 @@ export const walletProductionSubject = sandboxWalletSubjectHeader;
 const code = value => typeof value === 'string' && /^[A-Z]{2}$/.test(value);
 const currency = value => typeof value === 'string' && /^[A-Z]{3}$/.test(value);
 const token = value => typeof value === 'string' && /^[A-Z0-9_]{2,64}$/.test(value);
-const checkoutProviders = new Set(['ALCHEMYPAY', 'BANXA', 'ONMETA', 'ONRAMPMONEY', 'RAMPNOW']);
+const checkoutProviders = new Set(['ALCHEMYPAY', 'BANXA', 'MERCURYO', 'ONMETA', 'ONRAMPMONEY', 'RAMPNOW']);
 const recordedProviders = new Set([...checkoutProviders, 'BLOCKCHAINDOTCOM', 'BTCDIRECT', 'GUARDARIAN', 'KOYWE',
   'KRYPTONIM', 'ROBINHOOD', 'STRIPE', 'TOPPER', 'TRANSAK', 'UNLIMIT']);
 const plain = value => Boolean(value && typeof value === 'object' && !Array.isArray(value));
@@ -35,12 +35,14 @@ const rampNowAssetCodes = new Set(['USDC_POLYGON', 'USDC_ARBITRUM', 'USDC']);
 const usBankMethods = new Set(['ACH', 'LOCAL_BANK_TRANSFER']);
 const rampNowMethods = new Set(['CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY', ...usBankMethods]);
 const isRampNowMethod = (country, fiat, method) => country === 'US' && fiat === 'USD' && rampNowMethods.has(method);
+const isMercuryoMexicoCard = (country, fiat, method) => country === 'MX' && ['MXN', 'USD'].includes(fiat) && method === 'CREDIT_DEBIT_CARD';
 export function walletProductionExplicitDestinationAllowed(country, fiat, method, code, provider = 'RAMPNOW') {
   return isRampNowMethod(country, fiat, method) && rampNowAssetCodes.has(code)
     && (provider === 'RAMPNOW' || (provider === 'ONRAMPMONEY' && code === 'USDC_POLYGON' && usBankMethods.has(method)));
 }
 function assetAllowed(code, country, fiat, provider, method) {
   if (provider === 'RAMPNOW') return walletProductionExplicitDestinationAllowed(country, fiat, method, code, provider);
+  if (provider === 'MERCURYO') return code === 'USDC_POLYGON' && isMercuryoMexicoCard(country, fiat, method);
   if (code === 'USDT_POLYGON') return true;
   if (code === 'USDC_ARBITRUM') return country === 'MX' && fiat === 'EUR' && provider === 'ALCHEMYPAY' && method === 'CREDIT_DEBIT_CARD';
   return code === 'USDC_POLYGON' && provider === 'ONRAMPMONEY'
@@ -74,6 +76,7 @@ export function walletProductionInput(value, session = false) {
     || (value.sourceCurrencyCode === 'USD' && (value.amount < 50 || value.amount > 25000))
     || (session && (!FUNDING_UUID.test(value.requestId || '') || !checkoutProviders.has(value.serviceProvider)))
     || (session && value.serviceProvider === 'RAMPNOW' && !hasDestination)
+    || (session && value.serviceProvider === 'MERCURYO' && !isMercuryoMexicoCard(value.country, value.sourceCurrencyCode, value.paymentMethodType))
     || (hasDestination && !walletProductionExplicitDestinationAllowed(value.country, value.sourceCurrencyCode, value.paymentMethodType,
       value.destinationCurrencyCode, session ? value.serviceProvider : undefined))) return null;
   return { country: value.country, sourceCurrencyCode: value.sourceCurrencyCode, amount: value.amount, paymentMethodType: value.paymentMethodType,
@@ -127,7 +130,8 @@ export function walletProductionQuote(value, input, expectedAddress = '') {
       || value.requestedAmount !== input.amount || value.paymentMethodType !== input.paymentMethodType
       || (input.destinationCurrencyCode !== undefined && input.destinationCurrencyCode !== destinationCode)))
     || !value.quotes.every(item => plain(item) && checkoutProviders.has(item.serviceProvider) && item.sourceAmount === value.requestedAmount && finite(item.destinationAmount) && item.destinationAmount > 0
-      && finite(item.totalFee) && finite(item.networkFee) && item.sourceCurrencyCode === value.sourceCurrencyCode && item.destinationCurrencyCode === destinationCode
+      && finite(item.totalFee) && (finite(item.networkFee) || (item.serviceProvider === 'MERCURYO' && item.networkFee === null))
+      && item.sourceCurrencyCode === value.sourceCurrencyCode && item.destinationCurrencyCode === destinationCode
       && assetAllowed(destinationCode, value.country, value.sourceCurrencyCode, item.serviceProvider, value.paymentMethodType)
       && (input?.destinationCurrencyCode === undefined || walletProductionExplicitDestinationAllowed(value.country, value.sourceCurrencyCode,
         value.paymentMethodType, destinationCode, item.serviceProvider))

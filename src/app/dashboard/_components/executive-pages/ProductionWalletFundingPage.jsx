@@ -10,7 +10,7 @@ import { readProductionDiscovery, readProductionOptions, createProductionFunding
 import useProductionFundingQuote from '@/components/wallet/useProductionFundingQuote';
 import ProductionCountrySelect from '@/components/wallet/ProductionCountrySelect';
 import WalletUsdcBalance from '@/components/wallet/WalletUsdcBalance';
-import { MEXICO_BANK_FUNDING, mexicoFundingOption, productionFundingCurrencies, productionFundingDestinationChoices, productionFundingLimits, productionFundingRoutesForDestination, productionFundingValue, productionFundingProviderSupported, PRODUCTION_QUOTE_TTL_MS } from '@/lib/production-funding-selection.mjs';
+import { MEXICO_FUNDING_CURRENCIES, mexicoFundingMethod, mexicoFundingOption, productionFundingCurrencies, productionFundingDestinationChoices, productionFundingLimits, productionFundingRoutesForDestination, productionFundingValue, productionFundingProviderSupported, PRODUCTION_QUOTE_TTL_MS } from '@/lib/production-funding-selection.mjs';
 import { walletProductionAsset, walletProductionDestinationCode, walletProductionFailureLog } from '@/lib/wallet-production-funding-contract.mjs';
 import { readSandboxWalletFundingHistory } from '@/lib/sandbox-wallet-client.mjs';
 import { FUNDING_UUID } from '@/lib/wallet-funding-contract.mjs';
@@ -23,7 +23,7 @@ import styles from './wallet-funding.module.css';
 import local from './production-wallet.module.css';
 
 const names = { CREDIT_DEBIT_CARD: 'onramp.cardPayment', LOCAL_BANK_TRANSFER: 'onramp.bankTransfer', OPEN_BANKING: 'walletProduction.openBanking', MOBILE_MONEY: 'walletProduction.mobileMoney' };
-const providerName = value => ({ ONRAMPMONEY: 'Onramp Money', ALCHEMYPAY: 'Alchemy Pay', BANXA: 'Banxa', ONMETA: 'Onmeta',
+const providerName = value => ({ ONRAMPMONEY: 'Onramp Money', ALCHEMYPAY: 'Alchemy Pay', BANXA: 'Banxa', MERCURYO: 'Mercuryo', ONMETA: 'Onmeta',
   YELLOWCARD: 'Yellow Card', RAMPNOW: 'RampNow', TRANSAK: 'Transak', TOPPER: 'Topper' })[value] || value;
 const methodName = value => ({ APPLE_PAY: 'Apple Pay', GOOGLE_PAY: 'Google Pay', SPEI: 'SPEI', PSE: 'PSE', SEPA: 'SEPA', ACH: 'ACH' })[value] || value.replaceAll('_', ' ');
 const destinationLabel = destination => {
@@ -45,10 +45,12 @@ export function ProductionWalletView({ ownerSubject }) {
   const [catalogRoutes, setRoutes] = useState([]), [loading, setLoading] = useState('countries'), [busy, setBusy] = useState(''), [error, setError] = useState('');
   const [catalogDestinationCode, setCatalogDestinationCode] = useState('');
   const [preferredDestinationCode, setPreferredDestinationCode] = useState('');
-  const [mexicoOption, setMexicoOption] = useState(null);
+  const [mexicoOptions, setMexicoOptions] = useState({});
   const isMexico = country === 'MX';
-  const mexicoChoice = isMexico ? mexicoOption : null;
+  const mexicoChoice = isMexico ? mexicoOptions[currency] : null;
   const routes = isMexico ? mexicoChoice?.routes ?? [] : catalogRoutes;
+  const mexicoBankOnly = isMexico && (!currencies.length
+    || (currencies.length === 1 && currency === 'MXN' && !routes.some(route => route.serviceProvider === 'MERCURYO')));
   const destinationChoices = productionFundingDestinationChoices(routes, country, currency, method, catalogDestinationCode);
   const fundingDestinationCode = isMexico ? mexicoChoice?.destinationCurrencyCode ?? ''
     : destinationChoices.includes(preferredDestinationCode) ? preferredDestinationCode : destinationChoices[0] ?? catalogDestinationCode;
@@ -78,7 +80,14 @@ export function ProductionWalletView({ ownerSubject }) {
     catalogVersion.current++; currencyChosen.current = false; methodChosen.current = false; providerChosen.current = false;
     reset(); setLoading(''); setSelected(null); setCountry(value); setCurrencies([]); setCurrency('');
     setMethod(''); setRoutes([]); setCatalogDestinationCode(''); setAmount(''); setAmountMode('unset'); setSelectedProvider(''); setPreferredDestinationCode('');
-    setMexicoOption(null);
+    setMexicoOptions({});
+  };
+  const changeCurrency = value => {
+    if (value === currency) return;
+    catalogVersion.current++; currencyChosen.current = true; methodChosen.current = false; providerChosen.current = false;
+    reset(); setCurrency(value); setAmount(''); setAmountMode('unset'); setSelectedProvider(''); setPreferredDestinationCode('');
+    setMethod(isMexico ? mexicoFundingMethod(mexicoOptions[value]?.routes ?? [], method) : '');
+    if (!isMexico) setRoutes([]);
   };
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; cancel(); }; }, [cancel]);
   useEffect(() => {
@@ -97,26 +106,35 @@ export function ProductionWalletView({ ownerSubject }) {
     const current = () => !controller.signal.aborted && catalogVersion.current === version && live.current.country === country;
     readProductionDiscovery(country, { ownerSubject, signal: controller.signal }).then(async value => {
       if (!current()) return;
-      const offered = productionFundingCurrencies(value); setCurrencies(offered.currencies);
+      const offered = productionFundingCurrencies(value);
       if (country === 'MX') {
-        const fiat = offered.currencies.find(item => item.code === MEXICO_BANK_FUNDING.currency);
-        const option = fiat ? mexicoFundingOption(await readProductionOptions(country, fiat.code, { ownerSubject, signal: controller.signal }), fiat.decimalPlaces) : null;
+        const offeredFiats = offered.currencies.filter(item => MEXICO_FUNDING_CURRENCIES.includes(item.code));
+        const results = await Promise.allSettled(offeredFiats.map(async fiat => {
+          const catalog = await readProductionOptions(country, fiat.code, { ownerSubject, signal: controller.signal });
+          return [fiat, mexicoFundingOption(catalog, fiat.code, fiat.decimalPlaces)];
+        }));
         if (!current()) return;
-        setMexicoOption(option);
-        if (option) {
-          setCurrency(option.currency);
-          setMethod(option.method);
-        } else if (live.current.currency) {
-          reset(); setCurrency(''); setMethod(''); setAmount(''); setAmountMode('unset');
+        const available = results.flatMap(item => item.status === 'fulfilled' && item.value[1] ? [item.value] : []);
+        const failed = results.find(item => item.status === 'rejected');
+        if (!available.length && failed) throw failed.reason;
+        const options = Object.fromEntries(available.map(([fiat, option]) => [fiat.code, option]));
+        const currentCurrency = live.current.currency;
+        const nextCurrency = options[currentCurrency] ? currentCurrency : currentCurrency ? '' : options.MXN ? 'MXN' : available[0]?.[0].code ?? '';
+        const nextMethod = mexicoFundingMethod(options[nextCurrency]?.routes ?? [], live.current.method);
+        if (nextCurrency !== currentCurrency || nextMethod !== live.current.method) {
+          reset(); setCurrency(nextCurrency); setMethod(nextMethod); setAmount(''); setAmountMode('unset');
         }
+        setCurrencies(available.map(([fiat]) => fiat));
+        setMexicoOptions(options);
         return;
       }
+      setCurrencies(offered.currencies);
       if (live.current.currency && !offered.currencies.some(item => item.code === live.current.currency)) {
         reset(); setCurrency(''); setRoutes([]); setMethod(''); setAmount(''); setAmountMode('unset'); setSelectedProvider(''); setPreferredDestinationCode('');
       } else if (!live.current.currency && !currencyChosen.current) setCurrency(offered.currencies.length === 1 ? offered.currencies[0].code : offered.defaultCurrencyCode);
     }).catch(failure => {
       if (current()) {
-        if (country === 'MX') setMexicoOption(null);
+        if (country === 'MX') { setMexicoOptions({}); setCurrencies([]); }
         setError(fail(failure));
       }
     }).finally(() => { if (current()) setLoading(''); });
@@ -164,7 +182,7 @@ export function ProductionWalletView({ ownerSubject }) {
     quoteState.quote.quotes.every(item => productionFundingProviderSupported(routes, item.serviceProvider, quotedInput, decimals));
   const quote = quoteCompatible ? quoteState.quote : null; live.current.quote = quote;
   useEffect(() => { if (quoteState.quote && !loading && !quoteCompatible) quoteState.expire(); }, [quoteState.quote, quoteCompatible, loading, quoteState.expire]);
-  const checkoutProvider = isMexico ? mexicoChoice?.serviceProvider : selectedProvider;
+  const checkoutProvider = isMexico ? routes.find(route => route.paymentMethods.some(item => item.method === method))?.serviceProvider : selectedProvider;
   const checkoutQuote = quote?.quotes.find(item => item.serviceProvider === checkoutProvider);
   const providerAvailable = Boolean(checkoutQuote);
   useEffect(() => {
@@ -262,10 +280,10 @@ export function ProductionWalletView({ ownerSubject }) {
         if (canRequestQuote && !loading && !busy && !quoteState.loading) { setError(''); quoteState.retry(); return; }
         if (checkoutProvider) void open(checkoutProvider);
       }} className={local.form}>
-        <div className={local.fields} data-method-first={isMexico}><div className={local.field}><div className={local.label}><label htmlFor="production-country">{tr('country')}</label><Popover><PopoverTrigger asChild><button type="button" className={local.info} aria-label={tr('residence')}><Info size={18} aria-hidden="true" /></button></PopoverTrigger><PopoverContent className={local.residence}>{tr('residence')}</PopoverContent></Popover></div>
+        <div className={local.fields} data-method-first={mexicoBankOnly}><div className={local.field}><div className={local.label}><label htmlFor="production-country">{tr('country')}</label><Popover><PopoverTrigger asChild><button type="button" className={local.info} aria-label={tr('residence')}><Info size={18} aria-hidden="true" /></button></PopoverTrigger><PopoverContent className={local.residence}>{tr('residence')}</PopoverContent></Popover></div>
           <ProductionCountrySelect id="production-country" value={country} countries={countries} disabled={Boolean(busy) || loading === 'countries'} onChange={changeCountry}
             locale={locale} label={tr('country')} placeholder={tr(loading === 'countries' ? 'loading' : 'chooseCountry')} searchLabel={tr('searchCountry')} emptyLabel={tr('emptyCountries')} /></div>
-          {isMexico ? <div className={local.mexicoMethod} role="group" aria-labelledby="production-mexico-method-label" aria-busy={Boolean(loading)}>
+          {mexicoBankOnly ? <div className={local.mexicoMethod} role="group" aria-labelledby="production-mexico-method-label" aria-busy={Boolean(loading)}>
             <span id="production-mexico-method-label" className={local.methodLabel}>{tr('method')}</span>
             {loading ? <p role="status" className={local.quoteLoading}><Loader2 size={17} className="animate-spin" aria-hidden="true" />{tr('loading')}</p> : null}
             {mexicoChoice ? <>
@@ -278,7 +296,7 @@ export function ProductionWalletView({ ownerSubject }) {
             {!loading && !error && !mexicoChoice ? <p className={styles.hint} role="status">{tr('mexicoNoMethod')}</p> : null}
           </div> : <><div className={local.field}><label htmlFor="production-currency">{tr('currency')}</label>{currencies.length === 1 && currency === currencies[0].code
             ? <output id="production-currency" className={local.fixedValue}><bdi>{currency} · {currencies[0].name}</bdi></output>
-            : <select id="production-currency" value={currency} disabled={Boolean(busy) || !currencies.length || Boolean(loading)} required onChange={event => { catalogVersion.current++; currencyChosen.current = true; methodChosen.current = false; providerChosen.current = false; reset(); setCurrency(event.target.value); setMethod(''); setRoutes([]); setAmount(''); setAmountMode('unset'); setSelectedProvider(''); setPreferredDestinationCode(''); }}><option value="">{tr('selectCurrency')}</option>{currencies.map(item => <option key={item.code} value={item.code}>{item.code} · {item.name}</option>)}</select>}</div>
+            : <select id="production-currency" value={currency} disabled={Boolean(busy) || !currencies.length || Boolean(loading)} required onChange={event => changeCurrency(event.target.value)}><option value="">{tr('selectCurrency')}</option>{currencies.map(item => <option key={item.code} value={item.code}>{item.code} · {item.name}</option>)}</select>}</div>
           <div className={local.field}><label htmlFor="production-method">{tr('method')}</label>{methods.length === 1 && method === methods[0]
             ? <input id="production-method" value={names[method] ? t(names[method]) : methodName(method)} readOnly className={local.fixedValue} />
             : <select id="production-method" value={method} disabled={Boolean(busy) || Boolean(loading) || !methods.length} required onChange={event => { methodChosen.current = true; reset(); setMethod(event.target.value); setPreferredDestinationCode(''); }}><option value="">{tr(loading === 'methods' ? 'loading' : 'selectMethod')}</option>{methods.map(item => <option key={item} value={item}>{names[item] ? t(names[item]) : methodName(item)}</option>)}</select>}</div></>}
@@ -307,6 +325,7 @@ export function ProductionWalletView({ ownerSubject }) {
           <input type="radio" name="production-provider" value={item.serviceProvider} checked={selectedProvider === item.serviceProvider} disabled={Boolean(busy)} aria-label={tr('quoteSelection', { provider: providerName(item.serviceProvider) })} onChange={() => { if (mounted.current && live.current.quote === quote && live.current.binding.canReceive()) { providerChosen.current = true; setSelectedProvider(item.serviceProvider); } }} />
           <strong>{providerName(item.serviceProvider)}</strong><span>{tr('receive')}</span><bdi className={local.received}>{number(item.destinationAmount)} {quote.destination.asset}</bdi><span>{explicitDestinationCode ? tr('quotedNetwork', { network: fundingAsset.networkName }) : fundingAsset.networkName}</span><span>{tr('fees', { amount: number(item.totalFee), currency: quote.sourceCurrencyCode })}</span></label>)}</div>
           {!providerAvailable ? <p className={styles.hint}>{tr('chooseProvider')}</p> : null}</fieldset> : null}
+        {checkoutQuote?.serviceProvider === 'MERCURYO' ? <p className={styles.hint}>{tr('mercuryoCardInstructions')}</p> : null}
         {!isMexico || mexicoChoice ? <button type="submit" className={`executive-button primary ${local.fund}`} disabled={!eligible || !ready || (!providerAvailable && !canRequestQuote) || quoteState.loading || Boolean(loading) || Boolean(busy)}>
           {busy && busy !== 'status' ? <Loader2 size={18} className="animate-spin" aria-hidden="true" /> : null}
           {busy && busy !== 'status' ? tr('opening') : isMexico && providerAvailable ? tr('continue', { provider: providerName(checkoutProvider) }) : tr('addFunds')}

@@ -4,9 +4,7 @@ import { sandboxWalletAddress } from './sandbox-wallet-contract.mjs';
 export const PRODUCTION_QUOTE_DEBOUNCE_MS = 500;
 export const PRODUCTION_QUOTE_TTL_MS = 120000;
 
-export const MEXICO_BANK_FUNDING = {
-  currency: 'MXN', method: 'SPEI', serviceProvider: 'ONRAMPMONEY', destinationCurrencyCode: 'USDC_POLYGON',
-};
+export const MEXICO_FUNDING_CURRENCIES = ['MXN', 'USD'];
 
 /** Discovery returns quote-verified fiat. Keep every offer and prefer the local default. */
 export function productionFundingCurrencies(discovery) {
@@ -34,13 +32,22 @@ export function productionFundingValue(raw, limits, decimalPlaces = 2) {
   return Number.isFinite(value) && value > 0 && Math.abs(value * precision - Math.round(value * precision)) < 0.000001
     && limits.ranges.some(item => value >= item.minimum && value <= item.maximum) ? value : null;
 }
-export function mexicoFundingOption(options, decimalPlaces) {
-  const choice = MEXICO_BANK_FUNDING;
-  if (options.destinationCurrencyCode !== choice.destinationCurrencyCode) return null;
-  const route = options.routes.find(item => item.serviceProvider === choice.serviceProvider);
-  if (!route) return null;
-  const routes = [{ ...route, paymentMethods: route.paymentMethods.filter(item => item.method === choice.method && item.currencyCode === choice.currency) }];
-  return productionFundingLimits(routes, choice.currency, choice.method, decimalPlaces) ? { ...choice, routes } : null;
+export function mexicoFundingOption(options, currency, decimalPlaces) {
+  if (options.destinationCurrencyCode !== 'USDC_POLYGON' || !MEXICO_FUNDING_CURRENCIES.includes(currency)) return null;
+  const routes = options.routes.flatMap(route => {
+    const paymentMethods = route.paymentMethods.filter(item => item.currencyCode === currency && (
+      (route.serviceProvider === 'MERCURYO' && item.method === 'CREDIT_DEBIT_CARD')
+      || (currency === 'MXN' && route.serviceProvider === 'ONRAMPMONEY' && item.method === 'SPEI')
+    ) && productionFundingLimits([{ paymentMethods: [item] }], currency, item.method, decimalPlaces));
+    return paymentMethods.length ? [{ ...route, paymentMethods }] : [];
+  });
+  return routes.length ? { destinationCurrencyCode: options.destinationCurrencyCode, routes } : null;
+}
+export function mexicoFundingMethod(routes, selected = '') {
+  const methods = [...new Set(routes.flatMap(route => route.paymentMethods.map(item => item.method)))];
+  if (methods.includes(selected)) return selected;
+  if (methods.includes('SPEI')) return 'SPEI';
+  return methods.length === 1 ? methods[0] : '';
 }
 export function productionFundingDestinationChoices(routes, country, currency, method, defaultDestination) {
   const rampNowChoices = routes.find(route => route.serviceProvider === 'RAMPNOW')?.paymentMethods

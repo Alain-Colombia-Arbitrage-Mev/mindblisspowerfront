@@ -60,6 +60,38 @@ test('seven production actions pin the Wallet private service, native cookies, c
   assert.equal(calls, 8);
 });
 
+test('Mercuryo MX cards stay on USDC Polygon and retain an unknown network fee across the private service', async () => {
+  for (const [sourceCurrencyCode, amount] of [['MXN', 1000], ['USD', 100]]) {
+    const selection = { ...input, country: 'MX', sourceCurrencyCode, amount };
+    const session = { ...selection, requestId: reference, serviceProvider: 'MERCURYO' };
+    const receiving = { ...destination, asset: 'USDC' };
+    const scopedQuote = { ...quote, country: 'MX', sourceCurrencyCode, requestedAmount: amount, destination: receiving,
+      quotes: [{ ...quote.quotes[0], serviceProvider: 'MERCURYO', sourceCurrencyCode, sourceAmount: amount, destinationCurrencyCode: 'USDC_POLYGON', networkFee: null }] };
+    const scopedAck = { ...ack, country: 'MX', sourceCurrencyCode, requestedAmount: amount, serviceProvider: 'MERCURYO',
+      destinationCurrencyCode: 'USDC_POLYGON', destination: receiving };
+    const responses = [
+      ['quote', selection, scopedQuote, 200],
+      ['session', session, scopedAck, 201],
+    ];
+    for (const [action, body, data, status] of responses) {
+      const response = await handleWalletProductionFunding(request(action, body), action, { env, serviceRequest: async (_url, init) => {
+        assert.deepEqual(JSON.parse(init.body), body);
+        return { ok: true, status, data };
+      } });
+      assert.equal(response.status, status);
+      const payload = await response.json();
+      assert.equal(payload.destination.asset, 'USDC');
+      if (action === 'quote') assert.equal(payload.quotes[0].networkFee, null);
+      else assert.equal(payload.checkoutUrl, scopedAck.checkoutUrl);
+    }
+    for (const unsafe of [{ ...session, country: 'US' }, { ...session, sourceCurrencyCode: 'EUR' }, { ...session, paymentMethodType: 'APPLE_PAY' },
+      { ...session, destinationCurrencyCode: 'USDC_ARBITRUM' }]) {
+      const denied = await handleWalletProductionFunding(request('session', unsafe), 'session', { env, serviceRequest: async () => assert.fail('Unsafe selection reached Core') });
+      assert.equal(denied.status, 400);
+    }
+  }
+});
+
 test('a foreign portal, impersonation, absent native cookie or malformed owner fence cannot reach production Core', async () => {
   const never = async () => assert.fail('Unsafe owner/portal reached transport');
   for (const headers of [{ 'x-mindbliss-wallet-subject': '' }, { 'x-mindbliss-wallet-subject': '%' },
