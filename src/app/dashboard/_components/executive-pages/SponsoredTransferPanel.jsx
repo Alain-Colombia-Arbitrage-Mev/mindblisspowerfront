@@ -10,6 +10,7 @@ import styles from "./company-payment.module.css";
 
 const networkPolicy = (network, asset) => network === "polygon" ? polygonCompanyPaymentPolicy(asset) : network === "solana" ? SOLANA_PERSONAL_WALLET : null;
 const networkName = network => network === "polygon" ? "Polygon" : "Solana";
+export const polygonPaymentAssetName = asset => asset === "USDT" ? "USDT0" : asset;
 export function TransferNetworkPicker({ selected, onChange, disabled = false, solanaEnabled = false }) {
   const { t } = useI18n();
   const options = solanaEnabled ? ["ethereum", "polygon", "solana"] : ["ethereum", "polygon"];
@@ -31,10 +32,47 @@ export function TransferNetworkPicker({ selected, onChange, disabled = false, so
   </fieldset>;
 }
 
-export function SponsoredTransferForm({ flow, network = "polygon", walletActivation = null }) {
+function PolygonPaymentAssetPicker({ id, flow, asset, balances, onPaymentInput }) {
+  const { t } = useI18n();
+  const loading = Object.values(balances).some(balance => balance.loading);
+  return <div className={styles.paymentAssets}>
+    <fieldset className={styles.networks} disabled={flow.busy || !flow.verified}>
+      <legend>{t("walletTransfer.paymentAsset")} · Polygon</legend>
+      <div className={styles.networkChoices}>
+        {["USDT", "USDC"].map(option => {
+          const balance = balances[option], label = polygonPaymentAssetName(option);
+          const refreshing = balance.loading && !balance.error && flow.verified && option === asset && flow.refreshingBalance;
+          const available = flow.verified && balance.walletAddress === flow.wallet && !balance.error
+            ? personalCompanyPaymentAtomic(balance.balanceAtomic, true)
+            : refreshing ? personalCompanyPaymentAtomic(flow.balanceAtomic, true) : null;
+          const disabled = !flow.assets?.includes(option);
+          const balanceId = `${id}-${option}-balance`;
+          return <label key={option} className={styles.paymentAssetOption}>
+            <span><input type="radio" name={`${id}-asset`} value={option} checked={asset === option} disabled={disabled}
+              aria-label={label} aria-describedby={balanceId} onClick={() => onPaymentInput?.()} onChange={() => {
+                if (!disabled && flow.verified && !flow.busy) { onPaymentInput?.(); flow.changeAsset(option); }
+              }} />{label}</span>
+            <span className={styles.paymentAssetBalance} id={balanceId}>
+              {available !== null ? <><span className="sr-only">{t("companyPayment.availableBalance")} </span>
+                <bdi dir="ltr">{formatPersonalCompanyPaymentAmount(available.toString())}</bdi>
+                {refreshing ? <small role="status">{t("walletTransfer.updatingBalance")}</small> : null}</>
+                : balance.loading || (flow.verified && !balance.walletAddress && !balance.error) ? t("companyPayment.loadingBalance")
+                  : flow.verified ? t("walletTransfer.balanceUnavailable") : "—"}
+            </span>
+          </label>;
+        })}
+      </div>
+    </fieldset>
+    <button type="button" className={`${styles.refresh} ${styles.paymentAssetRefresh}`} disabled={flow.busy || !flow.verified || loading}
+      onClick={() => void flow.refresh()} aria-label={t("companyPayment.refreshBalance")}><RefreshCw size={17} aria-hidden="true" /></button>
+  </div>;
+}
+
+export function SponsoredTransferForm({ flow, network = "polygon", walletActivation = null, assetBalances = null, onPaymentInput }) {
   const { t } = useI18n(); const id = useId();
   const walletState = network === "polygon" ? flow.walletState : undefined;
   const asset = network === "polygon" && flow.asset === "USDC" ? "USDC" : "USDT";
+  const assetName = network === "polygon" ? polygonPaymentAssetName(asset) : asset;
   const transferEnabled = flow.transferEnabled ?? flow.capabilities?.transferEnabled;
   const walletActionCopy = { activate: "funding.activateWalletCopy", activating: "funding.activateWalletCopy", checking: "walletPage.checkingCopy",
     error: "walletPage.checkUnavailable", unavailable: "recharge.providerConfiguration", reconnect: "companyPayment.reconnectCopy" }[walletState];
@@ -49,25 +87,25 @@ export function SponsoredTransferForm({ flow, network = "polygon", walletActivat
   const ready = (!walletState || walletState === "ready") && flow.connected && !flow.busy && !flow.loadingBalance && !flow.capabilities?.loading && !flow.capabilities?.error && transferEnabled === true;
   const canReview = ready && !walletActivation && available !== null && validAmount && !insufficient;
   const error = flow.errorKey ? t(flow.errorKey) : "";
-  return <form className={`executive-panel ${styles.panel}`} aria-label={t("companyPayment.title")} onSubmit={event => { event.preventDefault(); if (canReview) void flow.review(); }}>
-    {network === "polygon" && flow.assets?.includes("USDC") ? <div className={styles.field}>
-      <label htmlFor={`${id}-asset`}>{t("walletTransfer.paymentAsset")}</label>
-      <select id={`${id}-asset`} value={asset} className={styles.readonlyAddress} disabled={flow.busy || !flow.verified}
-        onChange={event => flow.changeAsset(event.target.value)}><option value="USDT">USDT</option><option value="USDC">USDC</option></select>
-    </div> : null}
-    <div className={styles.balance} aria-live="polite"><span>{t(network === "solana" ? "walletTransfer.solanaBalance" : "companyPayment.availableBalance")}{network === "polygon" ? " · Polygon" : ""}</span>
-      <strong><bdi dir="ltr">{available !== null ? `${formatPersonalCompanyPaymentAmount(available)} ${asset}` : flow.loadingBalance ? t("companyPayment.loadingBalance") : "—"}</bdi></strong>
+  function enterAmount(value) { onPaymentInput?.(); flow.setAmount(value); }
+  return <form className={`executive-panel ${styles.panel}`} aria-label={t("companyPayment.title")} onSubmit={event => {
+    event.preventDefault(); if (canReview) { onPaymentInput?.(); void flow.review(); }
+  }}>
+    {network === "polygon" && assetBalances
+      ? <PolygonPaymentAssetPicker id={id} flow={flow} asset={asset} balances={assetBalances} onPaymentInput={onPaymentInput} />
+      : <div className={styles.balance} aria-live="polite"><span>{t(network === "solana" ? "walletTransfer.solanaBalance" : "companyPayment.availableBalance")}{network === "polygon" ? " · Polygon" : ""}</span>
+      <strong><bdi dir="ltr">{available !== null ? `${formatPersonalCompanyPaymentAmount(available)} ${assetName}` : flow.loadingBalance ? t("companyPayment.loadingBalance") : "—"}</bdi></strong>
       {flow.loadingBalance && available !== null ? <small role="status">{t("walletTransfer.updatingBalance")}</small> : null}
       <button type="button" className={styles.refresh} disabled={flow.busy || flow.loadingBalance} onClick={() => void flow.refresh()} aria-label={t("companyPayment.refreshBalance")}><RefreshCw size={17} aria-hidden="true" /></button>
-    </div>
+    </div>}
     {network === "solana" ? <p className={styles.note}>{t("walletTransfer.solanaScope")}</p> : null}
-    <div className={styles.field}><label htmlFor={`${id}-amount`}>{t("companyPayment.amountLabel")}</label><div className={styles.amountInput}><span>{asset}</span>
+    <div className={styles.field}><label htmlFor={`${id}-amount`}>{t("companyPayment.amountLabel")}</label><div className={styles.amountInput}><span>{assetName}</span>
       <input id={`${id}-amount`} type="text" inputMode="decimal" autoComplete="off" dir="ltr" placeholder="0.00" maxLength={86} value={flow.amount}
-        disabled={flow.busy || !flow.verified} onChange={event => flow.setAmount(event.target.value.replace(/[,٫]/g, "."))}
+        disabled={flow.busy || !flow.verified} onChange={event => enterAmount(event.target.value.replace(/[,٫]/g, "."))}
         aria-invalid={invalid || undefined} aria-describedby={invalid ? `${id}-error` : undefined} required />
-      <button type="button" className={styles.max} disabled={flow.busy || !flow.verified || available === null || available === "0"} onClick={() => flow.setAmount(formatPersonalCompanyPaymentAmount(available))}>{t("companyPayment.max")}</button>
+      <button type="button" className={styles.max} disabled={flow.busy || !flow.verified || available === null || available === "0"} onClick={() => enterAmount(formatPersonalCompanyPaymentAmount(available))}>{t("companyPayment.max")}</button>
     </div>{invalid ? <p className={styles.fieldError} id={`${id}-error`} role="alert">{t(insufficient ? "companyPayment.insufficientBalance" : "companyPayment.amountInvalid")}</p> : null}</div>
-    <div className={styles.destination}><div className={styles.destinationHeading}><label htmlFor={`${id}-recipient`}>{t("companyPayment.recipientLabel")}</label><span>{networkName(network)} · {asset}</span></div>
+    <div className={styles.destination}><div className={styles.destinationHeading}><label htmlFor={`${id}-recipient`}>{t("companyPayment.recipientLabel")}</label><span>{networkName(network)} · {assetName}</span></div>
       <output id={`${id}-recipient`} className={`${styles.readonlyAddress} ${styles.recipientName}`}>Mindbliss</output></div>
     {flow.verified ? flow.capabilities?.loading ? <p className={styles.note} role="status"><Loader2 className="animate-spin" size={16} aria-hidden="true" />{t("walletTransfer.checkingSponsorship")}</p>
       : flow.capabilities?.error ? <p className={styles.note} role="status">{t("walletTransfer.sponsorCheckFailed")}</p>
@@ -93,6 +131,7 @@ export function SponsoredTransferForm({ flow, network = "polygon", walletActivat
 export function SponsoredTransferReview({ flow, network = "polygon", walletActivation = null }) {
   const { t } = useI18n(); const value = flow.preview;
   const asset = network === "polygon" ? value?.asset ?? "USDT" : "USDT";
+  const assetName = network === "polygon" ? polygonPaymentAssetName(asset) : asset;
   const policy = networkPolicy(network, asset);
   const transferEnabled = flow.transferEnabled ?? flow.capabilities?.transferEnabled;
   const valid = policy && value?.walletAddress === flow.wallet && (network === "solana" ? solanaAddress(value.walletAddress) && solanaAtomic(value.amountAtomic, false) : /^0x[0-9a-f]{40}$/.test(value.walletAddress) && personalCompanyPaymentAtomic(value.amountAtomic))
@@ -101,9 +140,9 @@ export function SponsoredTransferReview({ flow, network = "polygon", walletActiv
       && value.tokenAddress === policy.tokenAddress && value.tokenDecimals === policy.tokenDecimals && (flow.asset === undefined || flow.asset === asset)));
   return <section className={`executive-panel ${styles.panel}`} aria-label={t("companyPayment.reviewTitle")} aria-busy={flow.busy}>
     <header className={styles.heading}><ShieldCheck size={22} aria-hidden="true" /><div><h2>{t("companyPayment.reviewTitle")}</h2><p>{t("walletTransfer.confirmCopy")}</p></div></header>
-    {valid ? <><div className={styles.reviewAmount}><span>{t("companyPayment.amountLabel")}</span><strong><bdi dir="ltr">{formatPersonalCompanyPaymentAmount(value.amountAtomic)} {asset}</bdi></strong></div>
+    {valid ? <><div className={styles.reviewAmount}><span>{t("companyPayment.amountLabel")}</span><strong><bdi dir="ltr">{formatPersonalCompanyPaymentAmount(value.amountAtomic)} {assetName}</bdi></strong></div>
       <dl className={styles.reviewDetails}><div><dt>{t("companyPayment.senderLabel")}</dt><dd><code dir="ltr">{value.walletAddress}</code></dd></div><div><dt>{t("companyPayment.recipientLabel")}</dt><dd>Mindbliss</dd></div>
-        <div><dt>{t("companyPayment.networkLabel")}</dt><dd>{networkName(network)} · {asset}</dd></div><div><dt>{t("walletTransfer.sponsored")}</dt><dd><bdi dir="ltr">0 {network === "polygon" ? "POL" : "SOL"}</bdi></dd></div></dl>
+        <div><dt>{t("companyPayment.networkLabel")}</dt><dd>{networkName(network)} · {assetName}</dd></div><div><dt>{t("walletTransfer.sponsored")}</dt><dd><bdi dir="ltr">0 {network === "polygon" ? "POL" : "SOL"}</bdi></dd></div></dl>
     </> : <p className={styles.error} role="alert">{t("companyPayment.invalidReview")}</p>}
     {network === "polygon" ? <p className={styles.note}>{t(asset === "USDC" ? "walletTransfer.authorizationUsdcCopy" : "walletTransfer.authorizationCopy")}</p> : null}
     {flow.errorKey ? <p className={styles.error} role="alert">{t(flow.errorKey)}</p> : null}
@@ -121,6 +160,7 @@ export function SponsoredTransferStatus({ flow, network = "polygon", walletActiv
   const { t } = useI18n(), value = network === "polygon" ? polygonRelayView(flow.payment) : solanaPaymentView(flow.payment);
   if (!value || value.walletAddress !== flow.wallet) return null;
   const asset = "asset" in value ? value.asset : "USDT";
+  const assetName = network === "polygon" ? polygonPaymentAssetName(asset) : asset;
   const confirmed = value.status === "confirmed", prepared = value.status === "prepared", authorized = value.status === "authorized", terminal = ["confirmed", "failed", "expired"].includes(value.status);
   const title = confirmed ? "confirmedTitle" : authorized ? "authorizedTitle" : value.status === "reconciliation_required" ? "reconciliationTitle" : value.status === "failed" ? "failedTitle" : value.status === "expired" ? "expiredTitle" : value.status === "ambiguous" ? "ambiguousTitle" : "pendingTitle";
   const copy = confirmed ? network === "polygon" ? "confirmedPolygon" : "confirmedSolana" : authorized ? "authorizedCopy" : value.status === "reconciliation_required" ? "reconciliationCopy" : value.status === "failed" ? "failedCopy" : value.status === "expired" ? "expiredCopy" : "pendingCopy";
@@ -128,8 +168,8 @@ export function SponsoredTransferStatus({ flow, network = "polygon", walletActiv
   const hash = "transactionHash" in value ? value.transactionHash : value.transactionSignature;
   return <section className={`executive-panel ${styles.panel}`} aria-label={t(`walletTransfer.${title}`)} aria-busy={flow.busy}>
     <header className={styles.heading}>{confirmed ? <CheckCircle2 size={22} aria-hidden="true" /> : <Clock3 size={22} aria-hidden="true" />}<div><h2>{t(abandoned ? "companyPayment.abandonedTitle" : prepared ? "companyPayment.preparedTitle" : `walletTransfer.${title}`)}</h2><p role="status">{t(abandoned ? "companyPayment.abandonedCopy" : prepared ? flow.recovery ? "walletTransfer.ambiguous" : "companyPayment.preparedCopy" : `walletTransfer.${copy}`)}</p></div></header>
-    <div className={styles.reviewAmount}><span>{t("companyPayment.amountLabel")}</span><strong><bdi dir="ltr">{formatPersonalCompanyPaymentAmount(value.amountAtomic)} {asset}</bdi></strong></div>
-    <dl className={styles.reviewDetails}><div><dt>{t("companyPayment.networkLabel")}</dt><dd>{networkName(network)} · {asset}</dd></div><div><dt>{t("companyPayment.recipientLabel")}</dt><dd>Mindbliss</dd></div>
+    <div className={styles.reviewAmount}><span>{t("companyPayment.amountLabel")}</span><strong><bdi dir="ltr">{formatPersonalCompanyPaymentAmount(value.amountAtomic)} {assetName}</bdi></strong></div>
+    <dl className={styles.reviewDetails}><div><dt>{t("companyPayment.networkLabel")}</dt><dd>{networkName(network)} · {assetName}</dd></div><div><dt>{t("companyPayment.recipientLabel")}</dt><dd>Mindbliss</dd></div>
       {hash ? <div><dt>{t("walletTransfer.receipt")}</dt><dd><a href={network === "polygon" ? `https://polygonscan.com/tx/${hash}` : `https://solscan.io/tx/${hash}`} target="_blank" rel="noreferrer noopener"><code dir="ltr">{hash}</code></a></dd></div> : null}</dl>
     {flow.errorKey ? <p className={styles.error} role="alert">{t(flow.errorKey)}</p> : null}
     {walletActivation}

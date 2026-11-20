@@ -26,6 +26,7 @@ function load(filename, mocks) {
     if (id === 'react' || id === 'react/jsx-runtime') return require(id);
     if (id === 'lucide-react') return icons;
     if (id === '@/i18n/LanguageProvider') return i18n;
+    if (id === '@/hooks/usePersonalWalletBalance') return { usePersonalWalletBalance: () => ({}) };
     if (id === '@/lib/member-session-context') return { useMemberSession: () => ({ subject: 'payment-owner', email: 'payment@example.test' }) };
     if (id === '@/lib/personal-wallet-balance-store.mjs') return { personalWalletBalanceSessionKey: session => session.subject };
     if (id === '@/lib/personal-company-payment-values.mjs') return values;
@@ -246,6 +247,7 @@ test('the active transfer page starts on sponsored Polygon without exposing an E
   function PreviousPayments() { return null; }
   const relay = { stage: 'form', payment: null, preview: null, history: [], historyLoading: false, busy: false, refresh() {} };
   const Router = load('PersonalTransferRouter.jsx', {
+    react: { useEffect() {}, useRef: value => ({ current: value }) },
     'next/link': { default: ({ children }) => React.createElement('a', null, children) },
     '@/components/reown/ReownContext': { useReownWallet: () => reown },
     '@/hooks/usePolygonRelay': { usePolygonRelay: () => relay },
@@ -273,6 +275,7 @@ test('Pagar selects its headless connection without changing the shared wallet A
   const relay = { stage: 'form', connected: false, payment: null, history: [], historyLoading: false, busy: true };
   let received;
   const Router = load('PersonalTransferRouter.jsx', {
+    react: { useEffect() {}, useRef: value => ({ current: value }) },
     'next/link': { default: () => null }, '@/components/reown/ReownContext': { useReownWallet: () => wallet },
     '@/hooks/usePolygonRelay': { usePolygonRelay: value => { received = value; return relay; } },
     '@/lib/polygon-relay-contract.mjs': { polygonRelayView: () => null }, './PaymentWalletActivation': { default: Activation },
@@ -290,6 +293,39 @@ test('Pagar selects its headless connection without changing the shared wallet A
   assert.equal(findAll(tree, node => node?.type === SponsoredForm)[0].props.walletActivation, null);
   wallet.paymentConnection.available = false; wallet.paymentConnection.phase = 'idle'; Router({ DirectPayment: PreviousPayments });
   assert.equal(received.connectWallet, nativeConnect); assert.equal(received.prepareWallet, nativePrepare);
+});
+
+test('Pagar prefers funded Polygon USDC only before the user chooses or edits a payment', () => {
+  const wallet = payment().walletAddress;
+  for (const { usdt, phase, input, calls } of [
+    { usdt: '0', phase: 'form', calls: ['USDC'] },
+    { usdt: '47449117', phase: 'form', calls: [] },
+    { usdt: null, phase: 'form', calls: [] },
+    { usdt: '0', phase: 'review', calls: [] },
+    { usdt: '0', phase: 'form', input: true, calls: [] },
+  ]) {
+    function SponsoredForm() { return null; }
+    let effect;
+    const ref = { current: '' }, changes = [];
+    const relay = { wallet, verified: true, stage: phase, asset: 'USDT', assets: ['USDT', 'USDC'], capabilities: { transferEnabled: true },
+      preview: phase === 'review' ? {} : null, history: [], changeAsset: asset => changes.push(asset) };
+    const Router = load('PersonalTransferRouter.jsx', {
+      react: { useEffect: callback => { effect = callback; }, useRef: () => ref },
+      'next/link': { default: () => null }, '@/components/reown/ReownContext': { useReownWallet: () => reown },
+      '@/hooks/usePolygonRelay': { usePolygonRelay: () => relay },
+      '@/hooks/usePersonalWalletBalance': { usePersonalWalletBalance: (address, network, enabled, asset) => {
+        assert.equal(address, wallet); assert.equal(network, 'polygon'); assert.ok(enabled);
+        return { walletAddress: wallet, balanceAtomic: asset === 'USDT' ? usdt : '46900000', error: '', loading: false };
+      } },
+      '@/lib/polygon-relay-contract.mjs': { polygonRelayView: () => null }, './PaymentWalletActivation': { default: () => null },
+      './SponsoredTransferPanel': { SponsoredTransferForm: SponsoredForm, SponsoredTransferReview: () => null, SponsoredTransferStatus: () => null },
+    }).default;
+    const tree = Router({ DirectPayment: () => null });
+    if (input) findAll(tree, node => node?.type === SponsoredForm)[0].props.onPaymentInput();
+    assert.deepEqual(changes, []);
+    effect(); effect();
+    assert.deepEqual(changes, calls);
+  }
 });
 
 test('previous direct payments remain readable and verifiable without a new payment or signature action', () => {

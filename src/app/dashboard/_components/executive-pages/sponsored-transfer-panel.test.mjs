@@ -55,7 +55,7 @@ function flow(patch = {}) {
 test('Sponsored Polygon form identifies Mindbliss without its address and preserves its balance, Max and sponsorship', () => {
   for (locale of ['es', 'en', 'ar', 'zh']) {
     const state = flow(), tree = SponsoredTransferForm({ flow: state }), html = renderToStaticMarkup(tree);
-    assert.ok(html.includes('28.433366 USDT')); assertMerchantPresentation(html);
+    assert.ok(html.includes('28.433366 USDT0')); assertMerchantPresentation(html);
     assert.match(html, /Polygon/);
     assert.ok(html.includes(translateMessage(locale, 'walletTransfer.sponsored')));
     assert.ok(!html.includes(translateMessage(locale, 'companyPayment.polygonGasCopy')));
@@ -261,23 +261,49 @@ test('a disconnected review offers only explicit reconnect and waits while the w
   }
 });
 
-test('Polygon USDC is an explicit choice with an independent Max and expiring review, while the destination stays hidden', () => {
+test('Polygon USDT0 and USDC show separate balances and use the selected asset for Max without submitting', () => {
   for (locale of ['es', 'en', 'ar', 'zh']) {
-    const state = flow({ asset: 'USDC', assets: ['USDT', 'USDC'], amount: '12.4', balanceAtomic: '12400000',
-      preview: { ...values.POLYGON_USDC_COMPANY_PAYMENT, asset: 'USDC', walletAddress: wallet, amountAtomic: '12400000' },
+    const state = flow({ asset: 'USDC', assets: ['USDT', 'USDC'], amount: '47.425268', balanceAtomic: '47425268',
+      preview: { ...values.POLYGON_USDC_COMPANY_PAYMENT, asset: 'USDC', walletAddress: wallet, amountAtomic: '47425268' },
       changeAsset(asset) { this.calls.push(['asset', asset]); } });
-    const form = SponsoredTransferForm({ flow: state });
-    const selector = all(form, node => node?.type === 'select')[0];
-    assert.equal(selector.props.value, 'USDC');
-    selector.props.onChange({ target: { value: 'USDT' } });
+    const balances = { USDT: { walletAddress: wallet, balanceAtomic: '47449117' }, USDC: { walletAddress: wallet, balanceAtomic: '47425268' } };
+    const form = SponsoredTransferForm({ flow: state, assetBalances: balances });
+    const picker = all(form, node => node?.props?.balances === balances)[0];
+    const options = all(picker.type(picker.props), node => node?.props?.type === 'radio');
+    assert.deepEqual(options.map(({ props }) => [props['aria-label'], props.checked, props.disabled]), [['USDT0', false, false], ['USDC', true, false]]);
     all(form, node => node?.type === 'button' && node.props.className === 'max')[0].props.onClick();
-    assert.deepEqual(state.calls, [['asset', 'USDT'], ['amount', '12.4']]);
-    for (const html of [renderToStaticMarkup(form), renderToStaticMarkup(SponsoredTransferReview({ flow: state }))]) {
-      assert.ok(html.includes('12.4 USDC'));
-      assertMerchantPresentation(html);
-    }
+    const html = renderToStaticMarkup(form);
+    assert.ok(html.includes('>47.449117</bdi>'));
+    assert.ok(html.includes('>47.425268</bdi>'));
+    assertMerchantPresentation(html);
     const review = renderToStaticMarkup(SponsoredTransferReview({ flow: state }));
+    assert.ok(review.includes('47.425268 USDC'));
+    assertMerchantPresentation(review);
     assert.ok(review.includes(translateMessage(locale, 'walletTransfer.authorizationUsdcCopy')));
     assert.ok(!review.includes(translateMessage(locale, 'walletTransfer.authorizationCopy')));
+    options[0].props.onChange();
+    const usdtForm = SponsoredTransferForm({ flow: { ...state, asset: 'USDT', balanceAtomic: balances.USDT.balanceAtomic }, assetBalances: balances });
+    all(usdtForm, node => node?.type === 'button' && node.props.className === 'max')[0].props.onClick();
+    assert.deepEqual(state.calls, [['amount', '47.425268'], ['asset', 'USDT'], ['amount', '47.449117']]);
   }
+  locale = 'es';
+});
+
+test('the dual Polygon selector distinguishes verified zero, refresh and a failed balance', () => {
+  const state = flow({ asset: 'USDC', assets: ['USDT', 'USDC'], amount: '46.9', balanceAtomic: '46900000' });
+  const assetBalances = { USDT: { walletAddress: wallet, balanceAtomic: '0' }, USDC: { walletAddress: wallet, balanceAtomic: '46900000' } };
+  const render = () => renderToStaticMarkup(SponsoredTransferForm({ flow: state, assetBalances }));
+  assert.match(render(), />0<\/bdi>/);
+  assert.match(render(), />46\.9<\/bdi>/);
+  state.loadingBalance = true; state.refreshingBalance = true;
+  assetBalances.USDC = { loading: true, walletAddress: '', balanceAtomic: null };
+  let html = render();
+  assert.match(html, />46\.9<\/bdi>/);
+  assert.ok(html.includes(translateMessage(locale, 'walletTransfer.updatingBalance')));
+  const tree = SponsoredTransferForm({ flow: state, assetBalances });
+  tree.props.onSubmit({ preventDefault() {} }); assert.deepEqual(state.calls, []);
+  assetBalances.USDC = { loading: false, walletAddress: '', balanceAtomic: null, error: 'unavailable' };
+  html = render();
+  assert.doesNotMatch(html, />46\.9<\/bdi>/);
+  assert.ok(html.includes(translateMessage(locale, 'walletTransfer.balanceUnavailable')));
 });
