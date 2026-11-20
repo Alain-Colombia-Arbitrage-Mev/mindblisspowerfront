@@ -37,9 +37,9 @@ export default function PersonalTransferRouter({ DirectPayment }) {
       : relay.payment && relay.stage !== "form" ? <SponsoredTransferStatus flow={relay} network="polygon" walletActivation={walletActivation} /> : <SponsoredTransferForm flow={relay} network="polygon" walletActivation={walletActivation} />}
     <details className="executive-panel" style={{ marginTop: 20 }}><summary className={styles.activitySummary}>{t("companyPayment.historyTitle")} · Polygon</summary>
       {relay.historyLoading ? <p role="status">{t("common.loading")}</p> : !relay.history.length ? <p className={styles.note}>{t("companyPayment.emptyHistory")}</p>
-        : <div className="executive-table-wrap"><table className="executive-table"><thead><tr><th>{t("financePage.date")}</th><th>USDT</th><th>{t("financePage.status")}</th></tr></thead><tbody>
+        : <div className="executive-table-wrap"><table className="executive-table"><thead><tr><th>{t("financePage.date")}</th><th>{t("companyPayment.amountLabel")}</th><th>{t("financePage.status")}</th></tr></thead><tbody>
           {relay.history.map(raw => { const value = polygonRelayView(raw); return value ? <tr key={value.paymentId}><td>{new Intl.DateTimeFormat(locale, { dateStyle: "short" }).format(new Date(value.createdAt))}</td>
-            <td><bdi dir="ltr">{formatPersonalCompanyPaymentAmount(value.amountAtomic)}</bdi></td><td><button className="executive-button" type="button" disabled={relay.busy} onClick={() => relay.selectHistory(value)}>{t(statusLabel(value))}</button></td></tr> : null; })}
+            <td><bdi dir="ltr">{formatPersonalCompanyPaymentAmount(value.amountAtomic)} {value.asset}</bdi></td><td><button className="executive-button" type="button" disabled={relay.busy} onClick={() => relay.selectHistory(value)}>{t(statusLabel(value))}</button></td></tr> : null; })}
         </tbody></table></div>}
       <button className="executive-button" type="button" style={{ marginTop: 12 }} disabled={relay.busy || relay.historyLoading} onClick={() => relay.refresh()}><RefreshCw size={16} aria-hidden="true" />{t("common.update")}</button>
     </details>

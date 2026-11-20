@@ -91,6 +91,7 @@ export function createReownWalletConnectionRequest({ open, timeoutMs = 90_000, r
   let observed = initialState;
   let seenModal = waitForModalClose && initialState.modalOpen === true;
   let requestedModal = seenModal;
+  /** @param {{status?: string, modalOpen?: boolean}} snapshot */
   const ready = ({ status, modalOpen }) => status === 'connected' && (!waitForModalClose || !modalOpen);
   const promise = new Promise((done, fail) => { resolve = done; reject = fail; });
   const finish = (error = null) => {

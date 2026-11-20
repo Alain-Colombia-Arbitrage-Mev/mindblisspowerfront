@@ -6,6 +6,11 @@ export const PERSONAL_COMPANY_PAYMENT = Object.freeze({
 export const POLYGON_COMPANY_PAYMENT = Object.freeze({ ...PERSONAL_COMPANY_PAYMENT,
   chainId: 137, tokenAddress: '0xc2132d05d31c914a87c6611c10748aeb04b58e8f' });
 export const LEGACY_POLYGON_COMPANY_PAYMENT = POLYGON_COMPANY_PAYMENT;
+export const POLYGON_USDC_COMPANY_PAYMENT = Object.freeze({ ...POLYGON_COMPANY_PAYMENT,
+  tokenAddress: '0x3c499c542cef5e3811e1192ce70d8cc03d5c3359' });
+export function polygonCompanyPaymentPolicy(asset = 'USDT') {
+  return asset === 'USDT' ? POLYGON_COMPANY_PAYMENT : asset === 'USDC' ? POLYGON_USDC_COMPANY_PAYMENT : null;
+}
 /** A network selector cannot supply an alternative recipient or token. */
 export function personalCompanyPaymentPolicy(chainId = 1) {
   return chainId === 1 ? PERSONAL_COMPANY_PAYMENT : chainId === 137 ? POLYGON_COMPANY_PAYMENT : null;

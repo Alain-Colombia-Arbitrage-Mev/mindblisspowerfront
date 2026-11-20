@@ -1,18 +1,18 @@
-import { PERSONAL_COMPANY_PAYMENT, LEGACY_POLYGON_COMPANY_PAYMENT, personalCompanyPaymentAtomic } from './personal-company-payment-values.mjs';
+import { PERSONAL_COMPANY_PAYMENT, personalCompanyPaymentAtomic, polygonCompanyPaymentPolicy } from './personal-company-payment-values.mjs';
 import { browserRequestDeadline } from './browser-request-deadline.mjs';
 
 /** Read-only onchain funds, separate from the administrative wallet or internal ledger. */
-export function personalWalletBalance(value, network = 'ethereum') {
-  const policy = network === 'ethereum' ? PERSONAL_COMPANY_PAYMENT : network === 'polygon' ? LEGACY_POLYGON_COMPANY_PAYMENT : null;
+export function personalWalletBalance(value, network = 'ethereum', asset = 'USDT') {
+  const policy = network === 'ethereum' && asset === 'USDT' ? PERSONAL_COMPANY_PAYMENT : network === 'polygon' ? polygonCompanyPaymentPolicy(asset) : null;
   if (!value || typeof value !== 'object' || Array.isArray(value) || value.walletKind !== 'personal'
-    || !policy || value.network !== network || value.asset !== 'USDT'
+    || !policy || value.network !== network || value.asset !== asset
     || typeof value.walletAddress !== 'string' || !/^0x[0-9a-f]{40}$/.test(value.walletAddress)
     || value.chainId !== policy.chainId || value.tokenAddress !== policy.tokenAddress
     || value.tokenDecimals !== policy.tokenDecimals
     || personalCompanyPaymentAtomic(value.balanceAtomic, true) === null
     || personalCompanyPaymentAtomic(value.nativeBalanceAtomic, true) === null
     || typeof value.observedAt !== 'string' || value.observedAt.length > 64 || !Number.isFinite(Date.parse(value.observedAt))) return null;
-  return { walletKind: 'personal', walletAddress: value.walletAddress, network, asset: 'USDT',
+  return { walletKind: 'personal', walletAddress: value.walletAddress, network, asset,
     chainId: policy.chainId, tokenAddress: policy.tokenAddress,
     tokenDecimals: policy.tokenDecimals, balanceAtomic: value.balanceAtomic, nativeBalanceAtomic: value.nativeBalanceAtomic,
     observedAt: value.observedAt };
@@ -20,17 +20,19 @@ export function personalWalletBalance(value, network = 'ethereum') {
 
 export function personalWalletBalances(value) {
   if (!value || value.walletKind !== 'personal' || typeof value.walletAddress !== 'string' || !/^0x[0-9a-f]{40}$/.test(value.walletAddress)
-    || !Array.isArray(value.balances) || value.balances.length !== 2) return null;
-  const balances = ['ethereum', 'polygon'].map(network => {
-    const items = value.balances.filter(item => item?.network === network);
+    || !Array.isArray(value.balances) || ![2, 3].includes(value.balances.length)) return null;
+  const slots = [['ethereum', 'USDT'], ['polygon', 'USDT']];
+  if (value.balances.length === 3) slots.push(['polygon', 'USDC']);
+  const balances = slots.map(([network, asset]) => {
+    const items = value.balances.filter(item => item?.network === network && item.asset === asset);
     if (items.length !== 1 || items[0].walletAddress !== value.walletAddress) return null;
     const item = items[0];
     if (item.error !== undefined) {
       if (item.error !== 'company_payment_rpc_unavailable' || item.balanceAtomic !== null || item.nativeBalanceAtomic !== null || item.observedAt !== null) return null;
-      const safe = personalWalletBalance({ ...item, balanceAtomic: '0', nativeBalanceAtomic: '0', observedAt: '2026-01-01T00:00:00Z' }, network);
+      const safe = personalWalletBalance({ ...item, balanceAtomic: '0', nativeBalanceAtomic: '0', observedAt: '2026-01-01T00:00:00Z' }, network, asset);
       return safe ? { ...safe, balanceAtomic: null, nativeBalanceAtomic: null, observedAt: null, error: item.error } : null;
     }
-    return personalWalletBalance(item, network);
+    return personalWalletBalance(item, network, asset);
   });
   return balances.some(item => !item) ? null : { walletKind: 'personal', walletAddress: value.walletAddress, balances };
 }

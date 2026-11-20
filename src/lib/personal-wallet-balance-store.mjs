@@ -2,6 +2,7 @@ import { readPersonalWalletBalances } from './personal-wallet-balance.mjs';
 
 export const EMPTY_PERSONAL_BALANCE = Object.freeze({ walletAddress: '', balanceAtomic: null, nativeBalanceAtomic: null,
   loading: false, error: '', updatedAt: null });
+const unavailableBalance = Object.freeze({ ...EMPTY_PERSONAL_BALANCE, error: 'company_payment_unavailable' });
 const returnEvents = ['focus', 'pageshow', 'vp:personal-wallet-linked', 'vp:personal-wallet-balance-changed'];
 const invalidationEvents = new Set(['vp:personal-wallet-linked', 'vp:personal-wallet-balance-changed']);
 const blockedErrors = new Set(['unauthenticated', 'company_payment_wallet_not_linked', 'company_payment_forbidden', 'company_payment_unconfigured']);
@@ -40,7 +41,7 @@ export function createPersonalWalletBalanceStore({ read = readPersonalWalletBala
     const current = () => entries.get(key) === entry && entry.token === token && !controller.signal.aborted;
     entry.flight = Promise.resolve().then(() => read({ signal: controller.signal })).then(value => {
       if (!current()) return null;
-      const networks = Object.fromEntries(value.balances.map(item => [item.network, Object.freeze({
+      const networks = Object.fromEntries(value.balances.map(item => [item.asset === 'USDC' ? 'polygon:USDC' : item.network, Object.freeze({
         walletAddress: value.walletAddress, balanceAtomic: item.balanceAtomic, nativeBalanceAtomic: item.nativeBalanceAtomic,
         loading: false, error: item.error || '', updatedAt: item.observedAt,
       })]));
@@ -99,8 +100,9 @@ export function createPersonalWalletBalanceStore({ read = readPersonalWalletBala
       if (entries.get(key) === entry) entries.delete(key);
     };
   }
-  return Object.freeze({ subscribe, refresh, get: (key, network = 'ethereum') => {
+  return Object.freeze({ subscribe, refresh, get: (key, network = 'ethereum', asset = 'USDT') => {
     const snapshot = entries.get(key)?.snapshot;
+    if (asset === 'USDC' && snapshot?.networks) return snapshot.networks['polygon:USDC'] || unavailableBalance;
     return snapshot?.networks?.[network] || snapshot || EMPTY_PERSONAL_BALANCE;
   } });
 }

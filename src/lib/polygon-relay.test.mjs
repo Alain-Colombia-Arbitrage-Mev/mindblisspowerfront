@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, createHmac } from 'node:crypto';
 import { Wallet, TypedDataEncoder } from 'ethers';
-import { LEGACY_POLYGON_COMPANY_PAYMENT as policy } from './personal-company-payment-values.mjs';
-import { POLYGON_RELAY_DOMAIN, POLYGON_RELAY_META_FIELDS, POLYGON_RELAY_ENTRY_POINT, polygonRelayTransferCall, polygonRelayView, polygonRelayInput } from './polygon-relay-contract.mjs';
+import { LEGACY_POLYGON_COMPANY_PAYMENT as policy, POLYGON_USDC_COMPANY_PAYMENT as usdc } from './personal-company-payment-values.mjs';
+import { POLYGON_RELAY_DOMAIN, POLYGON_RELAY_META_FIELDS, POLYGON_RELAY_ENTRY_POINT, POLYGON_USDC_RELAY_DOMAIN, POLYGON_USDC_RELAY_FIELDS, polygonRelayTransferCall, polygonRelayView, polygonRelayInput } from './polygon-relay-contract.mjs';
 import { signPolygonRelay } from './polygon-relay-signing.mjs';
 import { isPolygonRelayChain } from './polygon-relay-chain.mjs';
 import { handlePolygonRelay } from './polygon-relay-bff.mjs';
@@ -245,4 +245,48 @@ test('Transfer instructions and the no-expiry authorization disclosure exist in 
     for (const key of keys) assert.notEqual(translateMessage(locale, `walletTransfer.${key}`), `walletTransfer.${key}`);
     if (locale !== 'es') assert.notEqual(walletTransferMessages[locale].walletTransfer.authorizationCopy, walletTransferMessages.es.walletTransfer.authorizationCopy);
   }
+});
+
+test('Polygon USDC authorizes one expiring native-token transfer with the frozen wallet, amount and recipient', async () => {
+  const expiresAt = new Date(Date.now() + 60_000).toISOString();
+  const typedData = { domain: { ...POLYGON_USDC_RELAY_DOMAIN }, primaryType: 'TransferWithAuthorization',
+    types: { TransferWithAuthorization: POLYGON_USDC_RELAY_FIELDS },
+    message: { from: address, to: usdc.recipientAddress, value: '28433366', validAfter: '0',
+      validBefore: String(Math.floor(Date.parse(expiresAt) / 1000)), nonce: '0x' + '1'.padStart(64, '0') } };
+  const value = payment({ ...usdc, asset: 'USDC', expiresAt, authorizationHasOnchainExpiry: true, typedData,
+    authorizationDigest: TypedDataEncoder.hash(typedData.domain, typedData.types, typedData.message) });
+  const call = { requestId: id, amountAtomic: value.amountAtomic, asset: 'USDC' };
+  assert.deepEqual(polygonRelayInput('prepare', call), call);
+  assert.equal(polygonRelayView(value).asset, 'USDC');
+  const methods = [];
+  const provider = { async request({ method, params }) {
+    methods.push(method);
+    if (method === 'eth_chainId') return '0x89';
+    if (method === 'eth_accounts') return [address];
+    assert.equal(method, 'eth_signTypedData_v4');
+    const signed = JSON.parse(params[1]);
+    assert.equal(signed.primaryType, 'TransferWithAuthorization');
+    assert.deepEqual(signed.message, typedData.message);
+    return signer.signTypedData(typedData.domain, typedData.types, typedData.message);
+  } };
+  for (const patch of [{ to: address }, { validBefore: '9999999999' }, { validAfter: '1' }, { value: '28433367' }, { nonce: '0x' + '2'.padStart(64, '0') }]) {
+    assert.equal(polygonRelayView({ ...value, typedData: { ...typedData, message: { ...typedData.message, ...patch } } }), null);
+  }
+  assert.equal(polygonRelayView({ ...value, asset: 'USDT' }), null);
+  assert.equal(polygonRelayView({ ...value, tokenAddress: policy.tokenAddress }), null);
+  assert.equal(polygonRelayView({ ...value, typedData: { ...typedData, domain: { ...typedData.domain, chainId: 1 } } }), null);
+  assert.equal((await signPolygonRelay(value, provider, address)).paymentId, id);
+  assert.deepEqual(methods, ['eth_chainId', 'eth_accounts', 'eth_signTypedData_v4', 'eth_chainId', 'eth_accounts']);
+  const response = await handlePolygonRelay(request('prepare', call), 'prepare', { env,
+    serviceRequest: async (_path, init) => { assert.deepEqual(JSON.parse(init.body), call); return { ok: true, data: value }; } });
+  assert.equal(response.status, 200);
+  await assert.rejects(writePolygonRelay('prepare', call, { fetchImpl: async () => Response.json(payment()) }), { message: 'polygon_relay_unavailable' });
+  assert.equal((await handlePolygonRelay(request('prepare', call), 'prepare', { env,
+    serviceRequest: async () => ({ ok: true, data: payment() }) })).status, 502);
+  const apexEnv = { ...env, AUTH_PUBLIC_ORIGIN: 'https://mindblisspower.com' };
+  const apex = new Request('https://mindblisspower.com/api/member/polygon-relay/prepare', {
+    method: 'POST', body: JSON.stringify(call), headers: { origin: apexEnv.AUTH_PUBLIC_ORIGIN,
+      cookie: 'better-auth.session_token=synthetic', 'content-type': 'application/json', 'sec-fetch-site': 'same-origin' } });
+  assert.equal((await handlePolygonRelay(apex, 'prepare', {
+    env: apexEnv, serviceRequest: () => assert.fail('USDC prepare left the App boundary') })).status, 400);
 });

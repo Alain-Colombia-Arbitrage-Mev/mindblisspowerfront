@@ -1158,3 +1158,49 @@ test('the longer Headless connection deadline never changes financial review or 
     assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0); assert.equal(h.storage.size, 0);
   } finally { h.unmount(); }
 });
+
+test('USDC uses its own balance and freezes the selected token from review through one sponsored submission', async () => {
+  const usdcFunds = '12400000', paid = '10000000', expiresAt = new Date(Date.now() + 120_000).toISOString();
+  const pending = payment({ ...amounts.POLYGON_USDC_COMPANY_PAYMENT, asset: 'USDC', amountAtomic: paid, typedData: null,
+    authorizationHasOnchainExpiry: true, expiresAt });
+  const prepared = { ...pending, typedData: { domain: contract.POLYGON_USDC_RELAY_DOMAIN, primaryType: 'TransferWithAuthorization',
+    types: { TransferWithAuthorization: contract.POLYGON_USDC_RELAY_FIELDS },
+    message: { from: wallet, to: amounts.POLYGON_USDC_COMPANY_PAYMENT.recipientAddress, value: paid, validAfter: '0',
+      validBefore: String(Math.floor(Date.parse(expiresAt) / 1000)), nonce: '0x' + '0'.repeat(64) } } };
+  const h = harness({
+    capabilities: async () => ({ transferEnabled: true, assets: ['USDT', 'USDC'] }),
+    balance: async () => ({ walletAddress: wallet, balances: [
+      { chainId: 1, balanceAtomic: '93000000', nativeBalanceAtomic: '0' },
+      { chainId: 137, asset: 'USDT', balanceAtomic, nativeBalanceAtomic: '0' },
+      { chainId: 137, asset: 'USDC', balanceAtomic: usdcFunds, nativeBalanceAtomic: '0' },
+    ] }),
+    status: async () => pending,
+    write: async (action, input) => {
+      if (action === 'prepare') {
+        assert.deepEqual(input, { requestId: id, amountAtomic: paid, asset: 'USDC' });
+        return prepared;
+      }
+      if (action === 'authorize') return { ...pending, status: 'authorized' };
+      if (action === 'submit') return { ...pending, status: 'submitted', userOperationHash: hash, transactionHash: hash };
+      assert.fail('unexpected writer: ' + action);
+    },
+  });
+  await h.flush();
+  assert.equal(h.flow.asset, 'USDT');
+  assert.equal(h.flow.balanceAtomic, balanceAtomic);
+  h.flow.changeAsset('USDC'); await h.flush();
+  assert.equal(h.flow.balanceAtomic, usdcFunds);
+  assert.equal(h.flow.amount, '12.4');
+  h.flow.setAmount('10'); await h.flush();
+  await h.flow.review(); await h.flush();
+  assert.equal(h.flow.preview.asset, 'USDC');
+  assert.equal(h.flow.preview.tokenAddress, amounts.POLYGON_USDC_COMPANY_PAYMENT.tokenAddress);
+  h.flow.changeAsset('USDT'); await h.flush();
+  assert.equal(h.flow.asset, 'USDC');
+  assert.equal(h.calls.some(call => call.action === 'prepare'), false);
+  await h.flow.confirm(); await h.flush();
+  assert.equal(h.flow.payment.asset, 'USDC');
+  assert.equal(h.flow.payment.status, 'submitted');
+  assert.deepEqual(h.calls.filter(call => ['prepare', 'authorize', 'submit'].includes(call.action)).map(call => call.action), ['prepare', 'authorize', 'submit']);
+  assert.equal(h.signatures.length, 1);
+});

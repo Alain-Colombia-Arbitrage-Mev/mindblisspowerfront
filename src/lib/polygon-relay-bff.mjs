@@ -39,12 +39,13 @@ export async function handlePolygonRelay(request, action, { env = runtimeEnviron
       if (error?.message === 'request_body_unavailable') return reply({ error: 'polygon_relay_unavailable' }, 503);
       return reply({ error: error?.message === 'request_too_large' ? 'request_too_large' : 'invalid_request' }, error?.message === 'request_too_large' ? 413 : 400);
     }
-    if (!input) return reply({ error: 'invalid_request' }, 400);
+    if (!input || ('asset' in input && input.asset === 'USDC' && env.AUTH_PUBLIC_ORIGIN !== 'https://app.mindblisspower.com')) return reply({ error: 'invalid_request' }, 400);
   } else if (action === 'status') {
     paymentId = url.searchParams.get('paymentId');
     if (!FUNDING_UUID.test(paymentId || '') || paymentId !== paymentId.toLowerCase() || url.search !== `?paymentId=${paymentId}`) return reply({ error: 'invalid_request' }, 400);
   } else if (url.search) return reply({ error: 'invalid_request' }, 400);
   const path = `/api/member/polygon-relay/${action}${paymentId ? `?paymentId=${paymentId}` : ''}`;
+  const expectedId = paymentId || (input && ('requestId' in input ? input.requestId : input.paymentId));
   try {
     const base = betterAuthConfig(env), serialized = input ? JSON.stringify(input) : '';
     const ip = trustedAuthClientIp(request.headers, env), timestamp = String(Math.floor(Date.now() / 1000));
@@ -60,8 +61,8 @@ export async function handlePolygonRelay(request, action, { env = runtimeEnviron
       [400, 401, 403, 404, 409, 413, 429, 503].includes(result.status) ? result.status : 502);
     }
     const safe = action === 'capabilities' ? polygonRelayCapabilities(result.data) : action === 'history' ? polygonRelayHistory(result.data) : polygonRelayView(result.data);
-    if (!safe || (!['capabilities', 'history'].includes(action) && (!('paymentId' in safe) || safe.paymentId !== (paymentId || input.paymentId || input.requestId)))
-      || (action === 'prepare' && (!('amountAtomic' in safe) || safe.amountAtomic !== input.amountAtomic || !('typedData' in safe) || (safe.status === 'prepared' && !safe.typedData)))) return reply({ error: 'polygon_relay_unavailable' }, 502);
+    if (!safe || (!['capabilities', 'history'].includes(action) && (!('paymentId' in safe) || safe.paymentId !== expectedId))
+      || (action === 'prepare' && (!('amountAtomic' in safe) || !input || !('amountAtomic' in input) || safe.amountAtomic !== input.amountAtomic || safe.asset !== (input.asset ?? 'USDT') || !('typedData' in safe) || (safe.status === 'prepared' && !safe.typedData)))) return reply({ error: 'polygon_relay_unavailable' }, 502);
     if (action === 'abandon' && (!('status' in safe) || safe.status !== 'expired' || safe.failureReason !== 'preparation_abandoned')) return reply({ error: 'polygon_relay_unavailable' }, 502);
     return reply(safe);
   } catch { return reply({ error: 'polygon_relay_unavailable' }, 503); }

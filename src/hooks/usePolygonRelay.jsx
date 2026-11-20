@@ -5,9 +5,9 @@ import { useMemberSession } from "@/lib/member-session-context";
 import { usePersonalWalletBalance } from "@/hooks/usePersonalWalletBalance";
 import { personalWalletBalanceSessionKey } from "@/lib/personal-wallet-balance-store.mjs";
 import { readPersonalWalletBalances } from "@/lib/personal-wallet-balance.mjs";
-import { personalCompanyPaymentAtomic, personalCompanyPaymentAmountAtomic, formatPersonalCompanyPaymentAmount, POLYGON_COMPANY_PAYMENT } from "@/lib/personal-company-payment-values.mjs";
+import { personalCompanyPaymentAtomic, personalCompanyPaymentAmountAtomic, formatPersonalCompanyPaymentAmount, polygonCompanyPaymentPolicy } from "@/lib/personal-company-payment-values.mjs";
 import { readPolygonRelayCapabilities, readPolygonRelayHistory, readPolygonRelayStatus, writePolygonRelay } from "@/lib/polygon-relay-client.mjs";
-import { polygonRelayView } from "@/lib/polygon-relay-contract.mjs";
+import { polygonRelaySupportsAsset, polygonRelayView } from "@/lib/polygon-relay-contract.mjs";
 import { signPolygonRelay } from "@/lib/polygon-relay-signing.mjs";
 import { isPolygonRelayChain } from "@/lib/polygon-relay-chain.mjs";
 import { hasSelectedPolygonRelayAccount } from "@/lib/polygon-relay-accounts.mjs";
@@ -15,13 +15,17 @@ import { createReownFundingOperation } from "@/lib/reown-funding-operation.mjs";
 import { FUNDING_UUID } from "@/lib/wallet-funding-contract.mjs";
 
 const terminal = value => ["confirmed", "failed", "expired"].includes(value?.status);
+const defaultAssets = Object.freeze(["USDT"]);
+const emptyCapabilities = { loading: false, transferEnabled: false, error: "", assets: defaultAssets };
+const usdcAddress = polygonCompanyPaymentPolicy("USDC").tokenAddress;
 const proofStates = new Set(["broadcasting", "ambiguous", "submitted", "reconciliation_required"]);
 const receiptPollDelays = [12_000, 30_000, 60_000];
 // A verified zero balance is valid account data, not an amount to pay. Keep an
 // untouched form empty instead of immediately flagging an auto-filled zero.
 const initialPaymentAmount = value => personalCompanyPaymentAtomic(value) !== null ? formatPersonalCompanyPaymentAmount(value) : "";
 const immutable = (left, right) => ["paymentId", "walletAddress", "executionMode", "chainId", "tokenAddress", "recipientAddress", "amountAtomic",
-  "authorizationNonce", "authorizationDigest", "relayerAddress", "entryPointAddress"].every(key => left?.[key] === right?.[key]);
+  "authorizationNonce", "authorizationDigest", "relayerAddress", "entryPointAddress"].every(key => left?.[key] === right?.[key])
+  && (left?.tokenAddress !== usdcAddress || left.expiresAt === right?.expiresAt);
 const unresolved = value => value && !terminal(value);
 const phases = new Set(["signing", "authorizing", "authorized", "submitting", "ambiguous"]);
 async function recoveryKey(owner, wallet) {
@@ -90,7 +94,8 @@ export function usePolygonRelay(reown) {
   const checkingActivation = currentActivation?.phase === "checking";
   const awaitingActivation = currentActivation?.phase === "ready" && (!verified || currentActivation.address !== wallet);
   const activationBlocked = activating || checkingActivation || awaitingActivation || currentActivation?.phase === "failed";
-  const sharedBalance = usePersonalWalletBalance(wallet, "polygon", verified);
+  const [asset, setAssetState] = useState("USDT");
+  const sharedBalance = usePersonalWalletBalance(wallet, "polygon", verified, asset);
   const connected = verified && reown.isConnected === true && reown.isLinked === true && !activationBlocked;
   const owner = useRef({ wallet, sessionKey, generation: 0 });
   if (owner.current.wallet !== wallet || owner.current.sessionKey !== sessionKey) owner.current = { wallet, sessionKey, generation: owner.current.generation + 1 };
@@ -106,9 +111,9 @@ export function usePolygonRelay(reown) {
   const [revision, setRevision] = useState(0);
   const [busy, setBusy] = useState(false), [errorKey, setErrorKey] = useState("");
   const [amount, setAmountState] = useState(""), edited = useRef(false);
-  const [balance, setBalance] = useState({ wallet: "", loading: false, balanceAtomic: null, nativeBalanceAtomic: null, error: "" });
+  const [balance, setBalance] = useState({ wallet: "", asset: "USDT", loading: false, balanceAtomic: null, nativeBalanceAtomic: null, error: "" });
   const [history, setHistory] = useState({ wallet: "", loading: false, payments: [], error: "" });
-  const [capabilities, setCapabilities] = useState({ loading: true, transferEnabled: false, error: "" });
+  const [capabilities, setCapabilities] = useState({ ...emptyCapabilities, loading: true });
   const [payment, setPayment] = useState(null), [preview, setPreview] = useState(null), [stage, setStage] = useState("form"), [recovery, setRecovery] = useState(null);
   const live = useCallback(() => mounted.current && owner.current.generation === generation && Boolean(sessionKey), [generation, sessionKey]);
   const historySelection = useRef(0);
@@ -120,7 +125,7 @@ export function usePolygonRelay(reown) {
     const previous = selected.current;
     if (previous?.paymentId === safe.paymentId && terminal(previous)) return previous;
     if (live()) {
-      selected.current = safe; setPayment(safe); setStage("status");
+      selected.current = safe; setAssetState(safe.asset); setPayment(safe); setStage("status");
       if (terminal(safe)) {
         clearRecovery(key, safe.paymentId, wallet); markerRef.current = null; setRecovery(null); setErrorKey("");
         const notification = `${generation}:${safe.paymentId}`;
@@ -150,17 +155,17 @@ export function usePolygonRelay(reown) {
     displayGeneration.current = generation; operation.current?.scope.cancel(); operation.current = null;
     selected.current = null; previewRef.current = null; markerRef.current = null; edited.current = false;
     setPayment(null); setPreview(null); setRecovery(null); setStage("form"); setAmountState(""); setBusy(false); setErrorKey("");
-    setBalance({ wallet, loading: false, balanceAtomic: null, nativeBalanceAtomic: null, error: "" });
+    setAssetState("USDT"); setBalance({ wallet, asset: "USDT", loading: false, balanceAtomic: null, nativeBalanceAtomic: null, error: "" });
     setHistory({ wallet, loading: false, payments: [], error: "" });
   }, [wallet, generation]);
   useEffect(() => { if (operation.current?.signing) operation.current.scope.cancel(); }, [signerGeneration]);
   useEffect(() => {
-    if (!verified) { setCapabilities({ loading: false, transferEnabled: false, error: "" }); return undefined; }
+    if (!verified) { setCapabilities(emptyCapabilities); return undefined; }
     const controller = new AbortController();
     setCapabilities(current => ({ ...current, loading: true, error: "" }));
     readPolygonRelayCapabilities({ signal: controller.signal }).then(value => {
-      if (live() && !controller.signal.aborted) setCapabilities({ ...value, loading: false, error: "" });
-    }).catch(failure => { if (live() && !controller.signal.aborted) setCapabilities({ loading: false, transferEnabled: false, error: polygonRelayErrorKey(failure) }); });
+      if (live() && !controller.signal.aborted) setCapabilities({ ...value, assets: value.assets ?? defaultAssets, loading: false, error: "" });
+    }).catch(failure => { if (live() && !controller.signal.aborted) setCapabilities({ ...emptyCapabilities, error: polygonRelayErrorKey(failure) }); });
     return () => controller.abort();
   }, [verified, live, revision]);
   useEffect(() => {
@@ -170,16 +175,17 @@ export function usePolygonRelay(reown) {
     }
     if (!live()) return undefined;
     if (sharedBalance.loading || (!sharedBalance.walletAddress && !sharedBalance.error)) {
-      setBalance(current => ({ ...current, wallet, loading: true, error: "" }));
+      setBalance(current => ({ ...current, wallet, asset, balanceAtomic: current.asset === asset ? current.balanceAtomic : null,
+        nativeBalanceAtomic: current.asset === asset ? current.nativeBalanceAtomic : null, loading: true, error: "" }));
     } else if (sharedBalance.error || sharedBalance.walletAddress !== wallet || sharedBalance.balanceAtomic === null) {
-      setBalance({ wallet, loading: false, balanceAtomic: null, nativeBalanceAtomic: null,
+      setBalance({ wallet, asset, loading: false, balanceAtomic: null, nativeBalanceAtomic: null,
         error: polygonRelayErrorKey(new Error(sharedBalance.walletAddress && sharedBalance.walletAddress !== wallet ? "polygon_relay_wallet_changed" : "polygon_relay_unavailable")) });
     } else {
-      setBalance({ wallet, loading: false, balanceAtomic: sharedBalance.balanceAtomic, nativeBalanceAtomic: sharedBalance.nativeBalanceAtomic ?? null, error: "" });
+      setBalance({ wallet, asset, loading: false, balanceAtomic: sharedBalance.balanceAtomic, nativeBalanceAtomic: sharedBalance.nativeBalanceAtomic ?? null, error: "" });
       if (!edited.current && !selected.current && !previewRef.current) setAmountState(initialPaymentAmount(sharedBalance.balanceAtomic));
     }
     return undefined;
-  }, [verified, wallet, live, sharedBalance.walletAddress, sharedBalance.balanceAtomic, sharedBalance.nativeBalanceAtomic,
+  }, [verified, wallet, asset, live, sharedBalance.walletAddress, sharedBalance.balanceAtomic, sharedBalance.nativeBalanceAtomic,
     sharedBalance.loading, sharedBalance.error, sharedBalance.updatedAt]);
   useEffect(() => {
     if (!verified) return undefined;
@@ -193,7 +199,7 @@ export function usePolygonRelay(reown) {
       const expectedId = current?.paymentId || reviewed?.requestId;
       const latest = expectedId && result.payments.find(item => item.paymentId === expectedId);
       if (latest) {
-        if (!current && (!reviewed || latest.walletAddress !== reviewed.walletAddress || latest.amountAtomic !== reviewed.amountAtomic)) throw new Error("polygon_relay_invalid_authorization");
+        if (!current && (!reviewed || latest.walletAddress !== reviewed.walletAddress || latest.amountAtomic !== reviewed.amountAtomic || latest.tokenAddress !== reviewed.tokenAddress)) throw new Error("polygon_relay_invalid_authorization");
         adopt(latest, key); if (!terminal(current) && terminal(latest)) setRevision(number => number + 1);
       }
       else if (!current && !previewRef.current) {
@@ -219,10 +225,10 @@ export function usePolygonRelay(reown) {
     }
   } };
   const active = value => { value.scope.assertActive(); if (!live() || operation.current !== value) throw new DOMException("Aborted", "AbortError"); };
-  async function enabled(value) {
+  async function enabled(value, paymentAsset) {
     const result = await value.scope.wait(() => readPolygonRelayCapabilities({ signal: value.scope.signal })); active(value);
-    setCapabilities({ ...result, loading: false, error: "" });
-    if (!result.transferEnabled) throw new Error("polygon_relay_sponsorship_unavailable");
+    setCapabilities({ ...result, assets: result.assets ?? defaultAssets, loading: false, error: "" });
+    if (!polygonRelaySupportsAsset(result, paymentAsset)) throw new Error("polygon_relay_sponsorship_unavailable");
   }
   async function identity(value, provider) {
     const captured = signer.current.generation;
@@ -235,7 +241,7 @@ export function usePolygonRelay(reown) {
   }
   async function review() {
     const atomic = personalCompanyPaymentAmountAtomic(amount);
-    if (!currentDisplay || !connected || !atomic || balance.wallet !== wallet || balance.balanceAtomic === null || BigInt(atomic) > BigInt(balance.balanceAtomic)) return;
+    if (!currentDisplay || !connected || !atomic || balance.wallet !== wallet || balance.asset !== asset || balance.balanceAtomic === null || BigInt(atomic) > BigInt(balance.balanceAtomic)) return;
     if (selected.current && unresolved(selected.current)) { setErrorKey("walletTransfer.pending"); setStage("status"); return; }
     const value = begin(); if (!value) return; value.signing = true;
     const capturedSigner = signer.current.generation;
@@ -244,13 +250,13 @@ export function usePolygonRelay(reown) {
       if (signer.current.generation !== capturedSigner || !signer.current.connected) throw new DOMException("Aborted", "AbortError");
     };
     try {
-      await enabled(value); assertReview(); await identity(value, reown.getCompanyPaymentProvider()); assertReview();
+      await enabled(value, asset); assertReview(); await identity(value, reown.getCompanyPaymentProvider()); assertReview();
       const key = await value.scope.wait(() => keyPromise); assertReview();
       if (readRecovery(key, wallet)) throw new Error("polygon_relay_pending_exists");
       const readFunds = async () => {
         const result = await value.scope.wait(() => readPersonalWalletBalances({ signal: value.scope.signal })); assertReview();
         if (result.walletAddress !== wallet) throw new Error("polygon_relay_wallet_changed");
-        const entry = result.balances.find(item => item.chainId === 137);
+        const entry = result.balances.find(item => item.chainId === 137 && (item.asset ?? "USDT") === asset);
         if (!entry) return null;
         if (entry.error && entry.error !== "company_payment_rpc_unavailable") throw new Error("polygon_relay_unavailable");
         return entry.error || entry.balanceAtomic === null ? null : entry;
@@ -263,13 +269,13 @@ export function usePolygonRelay(reown) {
       if (!funds) { assertReview(); funds = await readFunds(); }
       if (!funds) throw new Error("polygon_relay_unavailable");
       if (funds.balanceAtomic !== balance.balanceAtomic) {
-        setBalance({ wallet, loading: false, balanceAtomic: funds.balanceAtomic, nativeBalanceAtomic: funds.nativeBalanceAtomic ?? null, error: "" });
+        setBalance({ wallet, asset, loading: false, balanceAtomic: funds.balanceAtomic, nativeBalanceAtomic: funds.nativeBalanceAtomic ?? null, error: "" });
         if (!edited.current && !selected.current && !previewRef.current) setAmountState(initialPaymentAmount(funds.balanceAtomic));
         if (edited.current && BigInt(atomic) > BigInt(funds.balanceAtomic)) throw new Error("polygon_relay_insufficient_balance");
         throw new Error("polygon_relay_balance_changed");
       }
       if (selected.current && unresolved(selected.current)) throw new Error("polygon_relay_pending_exists");
-      const next = Object.freeze({ requestId: crypto.randomUUID(), walletAddress: wallet, amountAtomic: atomic, reviewedBalanceAtomic: funds.balanceAtomic, ...POLYGON_COMPANY_PAYMENT });
+      const next = Object.freeze({ requestId: crypto.randomUUID(), walletAddress: wallet, amountAtomic: atomic, reviewedBalanceAtomic: funds.balanceAtomic, asset, ...polygonCompanyPaymentPolicy(asset) });
       previewRef.current = next; setPreview(next); setStage("review");
     } catch (failure) { if (live()) setErrorKey(polygonRelayErrorKey(failure)); } finally { finish(value); }
   }
@@ -298,15 +304,16 @@ export function usePolygonRelay(reown) {
         assertSigner();
         if (selected.current?.paymentId === local.requestId && selected.current.status !== "prepared") throw new DOMException("Aborted", "AbortError");
       };
-      await enabled(value); await identity(value, provider); key = await value.scope.wait(() => keyPromise); assertSigner();
+      await enabled(value, local.asset); await identity(value, provider); key = await value.scope.wait(() => keyPromise); assertSigner();
       if (!key) throw new Error("polygon_relay_recovery_unavailable");
       if (readRecovery(key, wallet)) throw new Error("polygon_relay_pending_exists");
       const locks = globalThis.navigator?.locks; if (!locks?.request) throw new Error("polygon_relay_recovery_unavailable");
       await locks.request(`mindbliss:polygon-relay:${wallet}`, { mode: "exclusive", ifAvailable: true }, async lock => {
         if (!lock || readRecovery(key, wallet)) throw new Error("polygon_relay_pending_exists"); assertSigner();
-        prepared = await value.scope.wait(() => writePolygonRelay("prepare", { requestId: local.requestId, amountAtomic: local.amountAtomic }, { signal: value.scope.signal })); assertSigner();
+        prepared = await value.scope.wait(() => writePolygonRelay("prepare", { requestId: local.requestId, amountAtomic: local.amountAtomic,
+          ...(local.asset === "USDC" ? { asset: local.asset } : {}) }, { signal: value.scope.signal })); assertSigner();
         if (!polygonRelayView(prepared) || prepared.paymentId !== local.requestId || prepared.walletAddress !== wallet
-          || prepared.amountAtomic !== local.amountAtomic) throw new Error("polygon_relay_invalid_authorization");
+          || prepared.amountAtomic !== local.amountAtomic || prepared.tokenAddress !== local.tokenAddress) throw new Error("polygon_relay_invalid_authorization");
         const latest = await value.scope.wait(() => readPolygonRelayStatus(prepared.paymentId, { signal: value.scope.signal })); assertSigner();
         if (!immutable(prepared, latest)) throw new Error("polygon_relay_invalid_authorization");
         const canonical = adopt(latest, key); if (canonical.status !== "prepared") return;
@@ -340,7 +347,7 @@ export function usePolygonRelay(reown) {
     const current = selected.current; if (!verified || !current || operation.current) return;
     const value = begin(); if (!value) return; let key = "";
     try {
-      await enabled(value); key = await value.scope.wait(() => keyPromise);
+      await enabled(value, current.asset); key = await value.scope.wait(() => keyPromise);
       const latest = await value.scope.wait(() => readPolygonRelayStatus(current.paymentId, { signal: value.scope.signal })); active(value);
       if (!immutable(current, latest)) throw new Error("polygon_relay_invalid_authorization");
       const canonical = adopt(latest, key); if (canonical.status === "authorized") await sendAuthorized(value, canonical, key);
@@ -481,18 +488,18 @@ export function usePolygonRelay(reown) {
   function newPayment() {
     if (!live() || operation.current || (selected.current && !terminal(selected.current)) || markerRef.current) return;
     selected.current = null; previewRef.current = null; setPayment(null); setPreview(null); setStage("form"); setRecovery(null); setErrorKey(""); edited.current = false;
-    setAmountState(balance.wallet === wallet ? initialPaymentAmount(balance.balanceAtomic) : "");
+    setAmountState(balance.wallet === wallet && balance.asset === asset ? initialPaymentAmount(balance.balanceAtomic) : "");
     void sharedBalance.refresh(); setRevision(number => number + 1);
   }
   async function resume() {
     const current = selected.current;
-    if (!connected || current?.status !== "prepared" || operation.current || balance.balanceAtomic === null) return;
+    if (!connected || current?.status !== "prepared" || operation.current || balance.balanceAtomic === null || balance.asset !== current.asset) return;
     const value = begin(); if (!value) return;
     try {
       const key = await value.scope.wait(() => keyPromise); active(value);
       if (readRecovery(key, wallet)) throw new Error("polygon_relay_pending_exists");
       const next = Object.freeze({ requestId: current.paymentId, walletAddress: wallet, amountAtomic: current.amountAtomic,
-        reviewedBalanceAtomic: balance.balanceAtomic, ...POLYGON_COMPANY_PAYMENT });
+        reviewedBalanceAtomic: balance.balanceAtomic, asset: current.asset, ...polygonCompanyPaymentPolicy(current.asset) });
       previewRef.current = next; setPreview(next); setAmountState(formatPersonalCompanyPaymentAmount(current.amountAtomic)); setStage("review");
     } catch (failure) { if (live()) setErrorKey(polygonRelayErrorKey(failure)); } finally { finish(value); }
   }
@@ -523,15 +530,22 @@ export function usePolygonRelay(reown) {
   const walletState = reown.configured !== true ? "unavailable" : !sessionKey ? "checking" : activating ? "activating" : checkingActivation ? "checking"
     : ["error", "unavailable"].includes(reown.linkStatus) ? "error" : reown.linkStatus === "loading" || awaitingActivation ? "checking"
       : verified ? connected ? "ready" : "reconnect" : reown.linkStatus === "unlinked" ? "activate" : "checking";
+  const matchingBalance = currentDisplay && balance.wallet === wallet && balance.asset === asset;
   return { wallet, verified, walletState, connected: currentDisplay && connected, restoring: currentDisplay && reown.isRestoring === true,
     needsVerification: currentDisplay && reown.linkStatus === "unlinked", busy: currentDisplay && (busy || activating || checkingActivation),
+    asset: currentDisplay ? asset : "USDT", assets: currentDisplay ? capabilities.assets : defaultAssets,
+    changeAsset(next) {
+      if (!currentDisplay || !live() || operation.current || previewRef.current || unresolved(selected.current) || markerRef.current
+        || next === asset || !capabilities.assets.includes(next) || !polygonCompanyPaymentPolicy(next)) return;
+      edited.current = false; setAmountState(""); setAssetState(next); setErrorKey("");
+    },
     amount: currentDisplay ? amount : "", setAmount(value) { if (!live() || operation.current) return; edited.current = true; setAmountState(value); setErrorKey(""); },
-    balanceAtomic: currentDisplay && balance.wallet === wallet ? balance.balanceAtomic : null, nativeBalanceAtomic: currentDisplay && balance.wallet === wallet ? balance.nativeBalanceAtomic : null,
-    loadingBalance: !currentDisplay || balance.loading,
-    refreshingBalance: currentDisplay && balance.wallet === wallet && balance.loading && balance.balanceAtomic !== null,
+    balanceAtomic: matchingBalance ? balance.balanceAtomic : null, nativeBalanceAtomic: matchingBalance ? balance.nativeBalanceAtomic : null,
+    loadingBalance: !currentDisplay || (verified && !matchingBalance) || balance.loading,
+    refreshingBalance: matchingBalance && balance.loading && balance.balanceAtomic !== null,
     history: currentDisplay && history.wallet === wallet ? history.payments : [], historyLoading: !currentDisplay || history.loading,
-    capabilities: currentDisplay ? capabilities : { loading: true, transferEnabled: false }, transferEnabled: currentDisplay && capabilities.transferEnabled,
-    errorKey: currentDisplay ? currentActivation?.errorKey || errorKey || balance.error || history.error || capabilities.error : "", payment: currentDisplay ? payment : null,
+    capabilities: currentDisplay ? capabilities : { loading: true, transferEnabled: false }, transferEnabled: currentDisplay && polygonRelaySupportsAsset(capabilities, asset),
+    errorKey: currentDisplay ? currentActivation?.errorKey || errorKey || (matchingBalance ? balance.error : "") || history.error || capabilities.error : "", payment: currentDisplay ? payment : null,
     preview: currentDisplay ? preview : null, recovery: currentDisplay ? recovery : null, stage: currentDisplay ? stage : "form",
     review, confirm, submitAuthorized, verifyPayment, connect, switchNetwork, newPayment, resume, abandon,
     async cancelReview() {

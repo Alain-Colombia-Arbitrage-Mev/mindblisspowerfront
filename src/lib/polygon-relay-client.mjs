@@ -22,7 +22,7 @@ async function request(action, input, { signal, fetchImpl = fetch } = {}) {
     if (!response.ok) throw Object.assign(new Error(typeof data?.error === 'string' && /^(?:polygon_relay_[a-z_]+|unauthenticated|invalid_origin|invalid_request)$/.test(data.error) ? data.error : 'polygon_relay_unavailable'), { status: response.status });
     const safe = action === 'capabilities' ? polygonRelayCapabilities(data) : action === 'history' ? polygonRelayHistory(data) : polygonRelayView(data);
     if (!safe || (!['capabilities', 'history'].includes(action) && (!('paymentId' in safe) || safe.paymentId !== (input.paymentId || input.requestId)))
-      || (action === 'prepare' && (!('amountAtomic' in safe) || safe.amountAtomic !== body.amountAtomic || !('typedData' in safe) || (safe.status === 'prepared' && !safe.typedData)))) throw new Error('polygon_relay_unavailable');
+      || (action === 'prepare' && (!('amountAtomic' in safe) || !body || !('amountAtomic' in body) || safe.amountAtomic !== body.amountAtomic || safe.asset !== (body.asset ?? 'USDT') || !('typedData' in safe) || (safe.status === 'prepared' && !safe.typedData)))) throw new Error('polygon_relay_unavailable');
     if (action === 'abandon' && (!('status' in safe) || safe.status !== 'expired' || safe.failureReason !== 'preparation_abandoned')) throw new Error('polygon_relay_unavailable');
     return safe;
   } finally { deadline.dispose(); }

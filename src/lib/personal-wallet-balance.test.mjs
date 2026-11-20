@@ -90,3 +90,11 @@ test('balance BFF authenticates an exact read-only path and validates the fixed 
     assert.equal((await handleCompanyPayment(request(), 'balance', { env, serviceRequest: async () => ({ ok: true, data }) })).status, 502);
   }
 });
+
+test('Polygon USDC and USDT balances are independent on the same wallet and require the native token contract', () => {
+  const usdc = polygon({ asset: 'USDC', tokenAddress: '0x3c499c542cef5e3811e1192ce70d8cc03d5c3359', balanceAtomic: '12400000' });
+  assert.deepEqual(personalWalletBalances(dual([usdc, polygon(), snapshot()])), dual([snapshot(), polygon(), usdc]));
+  for (const bad of [polygon({ asset: 'USDC' }), { ...usdc, walletAddress: '0x' + '2'.repeat(40) }, { ...usdc, asset: 'USDT' }]) {
+    assert.equal(personalWalletBalances(dual([snapshot(), polygon(), bad])), null);
+  }
+});

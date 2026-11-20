@@ -260,3 +260,24 @@ test('a disconnected review offers only explicit reconnect and waits while the w
     }
   }
 });
+
+test('Polygon USDC is an explicit choice with an independent Max and expiring review, while the destination stays hidden', () => {
+  for (locale of ['es', 'en', 'ar', 'zh']) {
+    const state = flow({ asset: 'USDC', assets: ['USDT', 'USDC'], amount: '12.4', balanceAtomic: '12400000',
+      preview: { ...values.POLYGON_USDC_COMPANY_PAYMENT, asset: 'USDC', walletAddress: wallet, amountAtomic: '12400000' },
+      changeAsset(asset) { this.calls.push(['asset', asset]); } });
+    const form = SponsoredTransferForm({ flow: state });
+    const selector = all(form, node => node?.type === 'select')[0];
+    assert.equal(selector.props.value, 'USDC');
+    selector.props.onChange({ target: { value: 'USDT' } });
+    all(form, node => node?.type === 'button' && node.props.className === 'max')[0].props.onClick();
+    assert.deepEqual(state.calls, [['asset', 'USDT'], ['amount', '12.4']]);
+    for (const html of [renderToStaticMarkup(form), renderToStaticMarkup(SponsoredTransferReview({ flow: state }))]) {
+      assert.ok(html.includes('12.4 USDC'));
+      assertMerchantPresentation(html);
+    }
+    const review = renderToStaticMarkup(SponsoredTransferReview({ flow: state }));
+    assert.ok(review.includes(translateMessage(locale, 'walletTransfer.authorizationUsdcCopy')));
+    assert.ok(!review.includes(translateMessage(locale, 'walletTransfer.authorizationCopy')));
+  }
+});
