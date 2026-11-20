@@ -31,7 +31,7 @@ export default function PersonalTransferRouter({ DirectPayment }) {
     : value.status === "reconciliation_required" ? "walletTransfer.reconciliationTitle" : value.status === "failed" ? "walletTransfer.failedTitle"
       : value.failureReason === "preparation_abandoned" ? "companyPayment.abandonedTitle" : value.status === "expired" ? "walletTransfer.expiredTitle" : value.status === "prepared" ? "companyPayment.preparedTitle" : "walletTransfer.pendingTitle";
   return <section className="executive-page"><div className="executive-container" style={{ maxWidth: 840 }}>
-    <div className="executive-page-header"><div><h1 className="executive-title">{t("companyPayment.title")}</h1><p className="executive-subtitle">{t("companyPayment.subtitle")}</p></div></div>
+    <div className="executive-page-header"><div><h1 className="executive-title">{t("companyPayment.title")}</h1><p className="executive-subtitle">{t("companyPayment.sponsoredSubtitle")}</p></div></div>
     <div className={styles.actions} style={{ marginBottom: 20 }}><Link className="executive-button" href="/dashboard/wallet-personal">{t("walletPage.addFundsAction")}</Link></div>
     {relay.stage === "review" && relay.preview ? <SponsoredTransferReview flow={relay} network="polygon" walletActivation={walletActivation} />
       : relay.payment && relay.stage !== "form" ? <SponsoredTransferStatus flow={relay} network="polygon" walletActivation={walletActivation} /> : <SponsoredTransferForm flow={relay} network="polygon" walletActivation={walletActivation} />}
