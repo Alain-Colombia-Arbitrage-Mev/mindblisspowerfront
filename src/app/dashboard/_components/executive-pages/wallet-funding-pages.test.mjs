@@ -99,7 +99,7 @@ test('Colombia offers COP bank methods through Onramp Money after explicit resid
   assert.deepEqual(calls, [{ country: 'CO', sourceCurrencyCode: 'COP' }]);
 });
 
-test('Mexico MXN retains all eligible rails and the selected method minimum without silently switching or repeating a write', async t => {
+test('Mexico defaults to MXN and SPEI while an explicit card choice retains its limits across retry', async t => {
   const calls = [], submitted = [];
   const harness = formHarness('PersonalFundingForm', { readPersonalFundingOptions: async (country, { sourceCurrencyCode }) => {
     calls.push({ country, sourceCurrencyCode });
@@ -110,8 +110,10 @@ test('Mexico MXN retains all eligible rails and the selected method minimum with
   } });
   t.after(() => harness.unmount());
   const props = { onContinue: value => submitted.push(value) };
-  selectFundingCountry(harness, props, 'MX'); await flush(); let tree = harness.render(props);
-  find(tree, 'FundingCurrencyField').props.onChange('MXN'); harness.render(props); await flush(); tree = harness.render(props); tree = harness.render(props);
+  selectFundingCountry(harness, props, 'MX'); await flush(); harness.render(props); let tree = harness.render(props);
+  assert.deepEqual(calls, [{ country: 'MX', sourceCurrencyCode: 'MXN' }]);
+  assert.equal(find(tree, 'FundingCurrencyField').props.value, 'MXN');
+  assert.equal(find(tree, 'FundingAmountField').props.amount, '931');
   assert.equal(find(tree, 'FundingMethodField').props.value, 'SPEI');
   find(tree, 'FundingAmountField').props.onChange('2000'); tree = harness.render(props); tree = harness.render(props);
   assert.deepEqual(find(tree, 'FundingMethodField').props.methods, ['SPEI', 'CREDIT_DEBIT_CARD']);
@@ -438,7 +440,7 @@ test('personal countries discard canceled responses, respect route limits and su
   const calls = [], submitted = [];
   let administrativeCalls = 0;
   const harness = formHarness('PersonalFundingForm', {
-    readPersonalFundingOptions(country, { signal }) { return new Promise(resolve => calls.push({ country, signal, resolve })); },
+    readPersonalFundingOptions(country, { signal, sourceCurrencyCode }) { return new Promise(resolve => calls.push({ country, signal, sourceCurrencyCode, resolve })); },
     readAdministrativeSandboxOptions() { administrativeCalls++; throw Error('wrong wallet'); },
   });
   t.after(() => harness.unmount());
@@ -452,7 +454,13 @@ test('personal countries discard canceled responses, respect route limits and su
   await flush();
   tree = harness.render(props);
   assert.deepEqual(find(tree, 'FundingMethodField').props.methods, []);
-  calls[1].resolve(meldOptions('MX', 'USD', [meldRoute('MERCURYO', 'USD', ['CREDIT_DEBIT_CARD'], 175, 1000)]));
+  assert.equal(calls[1].sourceCurrencyCode, 'MXN');
+  assert.deepEqual(harness.exports.fundingCurrencyChoices('MX'), ['USD', 'MXN']);
+  find(tree, 'FundingCurrencyField').props.onChange('USD');
+  harness.render(props);
+  assert.equal(calls[1].signal.aborted, true);
+  assert.equal(calls[2].sourceCurrencyCode, 'USD');
+  calls[2].resolve(meldOptions('MX', 'USD', [meldRoute('MERCURYO', 'USD', ['CREDIT_DEBIT_CARD'], 175, 1000)]));
   await flush(); tree = harness.render(props);
   assert.deepEqual(find(tree, 'FundingMethodField').props.methods, [], '100 USD cannot use a 175 USD route');
   find(tree, 'FundingAmountField').props.onChange('200');
@@ -461,6 +469,7 @@ test('personal countries discard canceled responses, respect route limits and su
   tree.props.onSubmit({ preventDefault() {} }); await flush();
   assert.equal(submitted.length, 1);
   assert.equal(submitted[0].countryCode, 'MX');
+  assert.equal(submitted[0].sourceCurrencyCode, 'USD');
   assert.equal(submitted[0].paymentMethodType, 'CREDIT_DEBIT_CARD');
   assert.equal(submitted[0].amount, 200);
   assert.equal(submitted[0].serviceProvider, 'MERCURYO');
@@ -879,6 +888,9 @@ test('personal MXN discovery cancels USD responses and enforces the fixed 931 fl
   harness.render(props); let tree = harness.render(props);
   find(tree, 'FundingCountryField').props.onChange('MX');
   harness.render(props); tree = harness.render(props);
+  find(tree, 'FundingCurrencyField').props.onChange('USD');
+  harness.render(props); tree = harness.render(props);
+  assert.equal(calls.at(-1).sourceCurrencyCode, 'USD');
   find(tree, 'FundingCurrencyField').props.onChange('MXN');
   harness.render(props); tree = harness.render(props);
   const latest = calls.at(-1);
@@ -986,7 +998,7 @@ test('clearing residence aborts and discards in-flight country methods without a
     assert.equal(find(tree, 'FundingSubmit').props.disabled, true); tree.props.onSubmit({ preventDefault() {} }); await flush();
     assert.equal(calls.length, 1); assert.deepEqual(submitted, []);
     selectFundingCountry(harness, props, 'MX'); assert.equal(calls.length, 2); assert.equal(calls[1].country, 'MX');
-    assert.equal(calls[1].sourceCurrencyCode, 'USD'); assert.equal(calls.some(call => !call.country), false);
+    assert.equal(calls[1].sourceCurrencyCode, 'MXN'); assert.equal(calls.some(call => !call.country), false);
     assert.deepEqual(submitted, []);
   }
 });
