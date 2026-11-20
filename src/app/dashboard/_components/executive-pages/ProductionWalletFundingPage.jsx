@@ -273,19 +273,21 @@ export function ProductionWalletView({ ownerSubject }) {
     <header className={styles.pageHeading}><div><h1>{tr('title')}</h1><span>{tr('copy')}</span></div><p className={styles.providerBadge}>USDC</p></header>
     <section className={`executive-panel ${local.panel}`} aria-busy={binding.loading || binding.busy}>
       <div className={styles.sectionHeading}>{ready ? <CheckCircle2 size={22} aria-hidden="true" /> : <Wallet size={22} aria-hidden="true" />}<div><h2>{tr('connection')}</h2><p>{tr(ready ? 'active' : binding.loading ? 'loading' : 'activationCopy')}</p></div></div>
-      <WalletAddress address={binding.linkedAddress || binding.address} label={t('sandboxWallet.address')} loading={binding.loading} emptyLabel={t('sandboxWallet.noWallet')} />
+      <WalletAddress address={ready ? binding.linkedAddress : ''} label={t('sandboxWallet.address')} loading={binding.loading} emptyLabel={t('sandboxWallet.noWallet')} />
       {ready && binding.linkedAddress ? <div className={local.walletTools}>
         <WalletUsdcBalance key={binding.linkedAddress + '-polygon'} address={binding.linkedAddress} refreshKey={revision} className={styles.hint} />
         <WalletUsdcBalance key={binding.linkedAddress + '-arbitrum'} address={binding.linkedAddress} network="arbitrum" refreshKey={revision} className={styles.hint} />
         <WalletUsdcBalance key={binding.linkedAddress + '-ethereum'} address={binding.linkedAddress} network="ethereum" refreshKey={revision} className={styles.hint} />
-        <WalletDepositQr key={binding.linkedAddress} address={binding.linkedAddress} />
       </div> : null}
       {ready ? <p className={styles.hint}>{tr('receivingCopy')}</p> : <div className={local.actions}><button type="button" className="executive-button primary" disabled={binding.loading || activating || reown.isRestoring || !reown.configured || binding.mismatch || binding.status === 'retired'} onClick={() => void activate()}>{activating ? <Loader2 size={18} className="animate-spin" aria-hidden="true" /> : null}{tr(activating ? 'activating' : reown.isConnected ? 'activate' : 'connect')}</button><button type="button" className="executive-button" disabled={binding.loading || binding.busy || binding.status === 'retired'} onClick={() => void binding.refresh()}><RefreshCw size={16} aria-hidden="true" />{tr('refresh')}</button></div>}
       {binding.mismatch || binding.error ? <p role="alert" className={local.error}>{binding.mismatch ? tr('mismatch') : t(`sandboxWallet.${binding.error}`)}</p> : null}
       {binding.mismatch ? <button type="button" className="executive-button" disabled={binding.busy || Boolean(busy)} onClick={() => { setActivationRequested(false); void reown.disconnectWallet().catch(() => { if (mounted.current) setError('unavailable'); }); }}>{t('sandboxWallet.choose')}</button> : null}
     </section>
     <section id="administrative-wallet" className={`executive-panel ${local.panel}`} aria-labelledby="production-funding-title">
-      <div className={styles.sectionHeading}><CreditCard size={22} aria-hidden="true" /><div><h2 id="production-funding-title">{tr('addFunds')}</h2><p>{tr('production')}{fundingAsset ? <> · {fundingAsset.asset} · {fundingAsset.networkName}</> : null}</p></div></div>
+      <div className={local.fundingHeader}>
+        <div className={styles.sectionHeading}><CreditCard size={22} aria-hidden="true" /><div><h2 id="production-funding-title">{tr('addFunds')}</h2><p>{tr('production')}{fundingAsset ? <> · {fundingAsset.asset} · {fundingAsset.networkName}</> : null}</p></div></div>
+        {ready && binding.linkedAddress ? <WalletDepositQr key={binding.linkedAddress} address={binding.linkedAddress} preferredNetwork={fundingAsset?.network} /> : null}
+      </div>
       {!ready ? <p className={styles.hint}>{tr('activationRequired')}</p> : <form onSubmit={event => {
         event.preventDefault();
         if (canRequestQuote && !loading && !busy && !quoteState.loading) { setError(''); quoteState.retry(); return; }

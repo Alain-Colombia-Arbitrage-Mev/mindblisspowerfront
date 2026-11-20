@@ -31,6 +31,9 @@ test('minimum, amount bounds, quote and provider labels preserve the selected cu
     ['quoteReady', { amount: '50', currency: 'USD' }],
     ['quoteSelection', { provider: 'Transak' }],
     ['amountPlaceholder', { currency: 'COP' }],
+    ['depositTitle', { network: 'Arbitrum' }],
+    ['depositInstructions', { network: 'Polygon' }],
+    ['depositQrLabel', { network: 'Arbitrum' }],
   ];
   for (const locale of locales) {
     for (const [key, variables] of cases) {

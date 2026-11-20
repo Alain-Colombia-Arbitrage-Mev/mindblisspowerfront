@@ -1,11 +1,23 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readArbitrumUsdcBalance, readEthereumUsdcBalance, readPolygonUsdcBalance } from './wallet-polygon-usdc.mjs';
+import { readArbitrumUsdcBalance, readEthereumUsdcBalance, readPolygonUsdcBalance, walletUsdcDepositUri } from './wallet-polygon-usdc.mjs';
 
 const projectVariable = 'NEXT_PUBLIC_WALLET_REOWN_PROJECT_ID';
 const project = '1'.repeat(32);
 const wallet = '0x0000000000000000000000000000000000000001';
 const usdc = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359';
+
+test('deposit QR data describes the native USDC transfer to the linked wallet without a suggested amount', () => {
+  assert.equal(walletUsdcDepositUri(wallet, 'polygon'), `ethereum:${usdc}@137/transfer?address=${wallet}`);
+  assert.equal(walletUsdcDepositUri(wallet, 'arbitrum'),
+    `ethereum:0xaf88d065e77c8cC2239327C5EDb3A432268e5831@42161/transfer?address=${wallet}`);
+  for (const network of [undefined, 'ethereum', 'arbitrum-sepolia', 'constructor', 'polygon?address=0']) {
+    assert.equal(walletUsdcDepositUri(wallet, network), '');
+  }
+  for (const address of ['', '0x' + '0'.repeat(40), wallet + '&uint256=1', 'https://example.test']) {
+    assert.equal(walletUsdcDepositUri(address, 'polygon'), '');
+  }
+});
 
 function withProject(t, value = project) {
   const previous = process.env[projectVariable];

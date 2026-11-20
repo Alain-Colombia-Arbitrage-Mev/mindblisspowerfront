@@ -8,6 +8,16 @@ const polygonUsdc = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359';
 const arbitrumUsdc = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831';
 const ethereumUsdc = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
 const token = new Interface(['function balanceOf(address) view returns (uint256)']);
+const arbitrumChainId = 42161;
+
+/** An ERC-681 USDC transfer request. The sending wallet asks for the amount. */
+export function walletUsdcDepositUri(address, network) {
+  const recipient = walletReownAddress(address);
+  if (!recipient) return '';
+  if (network === 'polygon') return `ethereum:${polygonUsdc}@${WALLET_REOWN_CHAIN_ID}/transfer?address=${recipient}`;
+  if (network === 'arbitrum') return `ethereum:${arbitrumUsdc}@${arbitrumChainId}/transfer?address=${recipient}`;
+  return '';
+}
 
 /**
  * Read a single public on-chain balance without a wallet connection or signature.

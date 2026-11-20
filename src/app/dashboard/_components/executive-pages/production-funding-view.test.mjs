@@ -73,7 +73,7 @@ function fixture(t, config = {}) {
     '@/lib/sandbox-wallet-client.mjs': { readSandboxWalletFundingHistory: async () => assert.fail('Legacy remains collapsed') },
     '@/i18n/LanguageProvider': { useI18n: () => ({ locale: 'es', t: (key, values) => translateMessage('es', key, values) }) },
     '@/components/ui/popover': { Popover: ({ children }) => children, PopoverTrigger: ({ children }) => children, PopoverContent: ({ children }) => children },
-    './WalletFundingUI': { WalletAddress: () => null }, './WalletDepositQr': { default: 'wallet-deposit-qr-fixture' },
+    './WalletFundingUI': { WalletAddress: 'wallet-address-fixture' }, './WalletDepositQr': { default: 'wallet-deposit-qr-fixture' },
     './WalletFundingHistory': { default: () => null }, './wallet-funding.module.css': { default: {} }, './production-wallet.module.css': { default: {} } };
   const module = { exports: {} }, code = ts.transpileModule(readFileSync(new URL('./ProductionWalletFundingPage.jsx', import.meta.url), 'utf8'),
     { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
@@ -140,8 +140,20 @@ test('all USDC balances use the verified wallet and disappear when its binding i
   assert.deepEqual(findBalances(await h.flush()).map(({ props }) => [props.address, props.network ?? 'polygon']),
     [[address, 'polygon'], [address, 'arbitrum'], [address, 'ethereum']]);
   assert.equal(all(h.tree).find(node => node?.type === 'wallet-deposit-qr-fixture').props.address, address);
+  const fundingSection = field(h.tree, 'administrative-wallet');
+  assert.ok(all(fundingSection).some(node => node?.type === 'wallet-deposit-qr-fixture'));
   h.binding.retire();
   assert.deepEqual(findBalances(h.render()), []);
+  assert.ok(!all(h.tree).some(node => node?.type === 'wallet-deposit-qr-fixture'));
+  assert.equal(all(h.tree).find(node => node?.type === 'wallet-address-fixture').props.address, '');
+});
+
+test('a merely connected wallet never exposes a deposit address or QR', async t => {
+  const h = fixture(t, { unlinked: true });
+  h.reown.isConnected = true;
+  h.binding.address = address;
+  await h.flush();
+  assert.equal(all(h.tree).find(node => node?.type === 'wallet-address-fixture').props.address, '');
   assert.ok(!all(h.tree).some(node => node?.type === 'wallet-deposit-qr-fixture'));
 });
 
@@ -159,6 +171,7 @@ test('Brazil defaults to BRL Pix and keeps the linked Arbitrum deposit across an
   });
   await h.flush();
   await h.change('production-country', 'BR');
+  assert.equal(all(h.tree).find(node => node?.type === 'wallet-deposit-qr-fixture').props.preferredNetwork, 'arbitrum');
   assert.equal(field(h.tree, 'production-currency').props.children.props.children.join(''), 'BRL · Brazilian real');
   assert.equal(field(h.tree, 'production-method').props.value, 'PIX');
   assert.ok(all(field(h.tree, 'production-method')).some(node => node?.type === 'option' && node.props.value === 'CREDIT_DEBIT_CARD'));
