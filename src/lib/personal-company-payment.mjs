@@ -36,7 +36,7 @@ function quantity(value) {
 }
 
 function chainIdentity(value) {
-  // AppKit 1.8.24 W3mFrameProvider.getLastUsedChainId returns a number for EVM.
+  // Older AppKit embedded wallets can return numeric chain IDs for EVM.
   // This compatibility applies only to network identity, never gas or amounts.
   if (typeof value === 'number' && Number.isSafeInteger(value) && value > 0) return BigInt(value);
   return quantity(value);

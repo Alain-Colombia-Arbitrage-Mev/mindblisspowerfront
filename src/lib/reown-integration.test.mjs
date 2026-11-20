@@ -427,11 +427,11 @@ test("Reown creates separate EVM and Solana wallets while retaining native membe
 
 test("all Reown packages use the same pinned release", () => {
   const pkg = JSON.parse(read("../../package.json"));
-  assert.equal(pkg.dependencies["@reown/appkit"], "1.8.24");
-  assert.equal(pkg.dependencies["@reown/appkit-common"], "1.8.24");
-  assert.equal(pkg.dependencies["@reown/appkit-adapter-ethers"], "1.8.24");
-  assert.equal(pkg.dependencies["@reown/appkit-adapter-solana"], "1.8.24");
-  assert.equal(pkg.dependencies["@reown/appkit-controllers"], "1.8.24");
+  assert.equal(pkg.dependencies["@reown/appkit"], "2.0.0");
+  assert.equal(pkg.dependencies["@reown/appkit-common"], "2.0.0");
+  assert.equal(pkg.dependencies["@reown/appkit-adapter-ethers"], "2.0.0");
+  assert.equal(pkg.dependencies["@reown/appkit-adapter-solana"], "2.0.0");
+  assert.equal(pkg.dependencies["@reown/appkit-controllers"], "2.0.0");
   assert.equal(pkg.dependencies["@reown/appkit-siwx"], undefined);
 });
 

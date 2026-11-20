@@ -4,6 +4,7 @@ import { ApiController, ChainController, ConnectionController, EventsController,
 
 const syntheticProjectId = '00000000000000000000000000000000';
 const syntheticAddress = `0x${'1'.repeat(40)}`;
+const syntheticSdkVersion = 'react-ethers-2.0.0';
 const optionalEvent = { type: 'track', event: 'MODAL_OPEN', properties: { connected: false } };
 
 // Exercise the installed SDK rather than copying its analytics implementation.
@@ -36,7 +37,7 @@ function fixture(t, analytics = true) {
   });
   t.mock.method(ChainController, 'getAccountData', () => ({ address: syntheticAddress }));
   t.mock.method(ChainController, 'getActiveCaipNetwork', () => ({ caipNetworkId: 'eip155:137' }));
-  OptionsController.setOptions({ projectId: syntheticProjectId, sdkType: 'appkit', sdkVersion: 'react-ethers-1.8.24' });
+  OptionsController.setOptions({ projectId: syntheticProjectId, sdkType: 'appkit', sdkVersion: syntheticSdkVersion });
   OptionsController.setFeatures({ analytics });
   Object.assign(EventsController.state, { pendingEvents: [], walletImpressions: [], reportedErrors: {},
     subscribedToVisibilityChange: false, lastFlush: Date.now() });
@@ -70,7 +71,7 @@ function assertSyntheticBatch(beacon, eventNames) {
   assert.equal(url.pathname, '/batch');
   assert.equal(url.searchParams.get('projectId'), syntheticProjectId);
   assert.equal(url.searchParams.get('st'), 'appkit');
-  assert.equal(url.searchParams.get('sv'), 'react-ethers-1.8.24');
+  assert.equal(url.searchParams.get('sv'), syntheticSdkVersion);
   assert.deepEqual(beacon.body.map(event => event.props.event), eventNames);
   for (const event of beacon.body) {
     assert.equal(event.domain, 'analytics.example.test');

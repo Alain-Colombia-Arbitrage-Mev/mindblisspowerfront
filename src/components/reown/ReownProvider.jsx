@@ -113,7 +113,7 @@ function disconnectSharedAuthWallet(disconnect) {
   const previousReconnect = OptionsController.state.enableReconnect;
   let pending;
   try {
-    // AppKit 1.8.24 checks this synchronously when dispatching each adapter's
+    // AppKit checks this synchronously when dispatching each adapter's
     // reset. Restore before awaiting so a hung provider cannot disable reconnect.
     appKitInstance.updateOptions({ enableReconnect: false });
     pending = disconnect({ id: ReownConstantsUtil.CONNECTOR_ID.AUTH });

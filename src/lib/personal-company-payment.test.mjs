@@ -94,7 +94,7 @@ test('MAX reads the complete token balance without requesting signatures, accoun
   assert.equal(mock.provider.listenerCount('chainChanged'), 0);
 });
 
-test('the installed AppKit embedded provider numeric chain ID is accepted without weakening gas or token quantities', async () => {
+test('a legacy embedded wallet numeric chain ID is accepted without weakening gas or token quantities', async () => {
   const mock = fixture({ chain: 1, hooks: { eth_gasPrice: (_request, provider) => { provider.emit('chainChanged', 1); return '0x64'; } } });
   const result = await readPersonalCompanyPaymentBalance({ walletProvider: mock.provider, walletAddress: sender });
   assert.equal(result.balanceAtomic, balance);
