@@ -18,9 +18,11 @@ const empty = Object.freeze({ loading: false, configured: false, status: 'unlink
 export const SandboxWalletBindingContext = createContext(empty);
 export function useSandboxWalletBinding() { return useContext(SandboxWalletBindingContext); }
 const sameAddress = (a, b) => Boolean(a && b && a.toLowerCase() === b.toLowerCase());
-export function sandboxWalletBindingError(error) {
+export function sandboxWalletBindingError(error, stage = '') {
   const code = error?.message;
+  if (stage === 'verify_ownership' && error?.status === 403 && code === 'sandbox_wallet_signature_invalid') return 'signatureInvalid';
   if ([401, 403].includes(error?.status) || ['unauthenticated', 'sandbox_wallet_forbidden', 'wallet_reown_session_changed'].includes(code)) return 'sessionChanged';
+  if (code === 'administrative_signer_mismatch') return 'connectionChanged';
   if (code === 'sandbox_wallet_unconfigured') return 'unconfigured';
   if (code === 'sandbox_wallet_address_in_use') return 'addressUsed';
   if (code === 'sandbox_wallet_already_linked') return 'mismatch';
@@ -65,7 +67,7 @@ export function OwnedSandboxWalletBinding({ owner, ownerSubject, children }) {
     locked.current = true; receiveReady.current = false; epoch.current++; request.current?.controller.abort(); request.current = null;
     if (mounted.current) { setData(null); setLoading(false); setBusy(false); setRetired(true); setError('sessionChanged'); }
   }, []);
-  const fail = useCallback(failure => { const reason = sandboxWalletBindingError(failure); if (reason === 'sessionChanged') retire(); else setError(reason); }, [retire]);
+  const fail = useCallback((failure, stage = '') => { const reason = sandboxWalletBindingError(failure, stage); if (reason === 'sessionChanged') retire(); else setError(reason); }, [retire]);
   const refresh = useCallback(async () => {
     if (!mounted.current || locked.current || request.current) return;
     const controller = new AbortController(), generation = ++epoch.current, operation = { controller };
@@ -111,17 +113,15 @@ export function OwnedSandboxWalletBinding({ owner, ownerSubject, children }) {
     try {
       let before = await readAdministrativeProvider(provider, { signal: controller.signal });
       if (!current(generation, address, provider) || controller.signal.aborted) return;
+      if (!sameAddress(before.address, address)) throw Error('administrative_signer_mismatch');
       if (before.chainId !== '0x89') {
         stage = 'switch_network';
-        await switchAdministrativeProviderNetwork(provider, { signal: controller.signal });
-        if (!current(generation, address, provider) || controller.signal.aborted) return;
-        // The user already requested activation. Confirm the selected account
-        // and network after their explicit switch before requesting ownership;
-        // a resolved switch call alone never proves that the wallet changed.
-        before = await readAdministrativeProvider(provider, { signal: controller.signal });
+        // The switch helper rereads the selected account and chain before
+        // this attempt can request an ownership challenge.
+        before = await switchAdministrativeProviderNetwork(provider, { signal: controller.signal });
         if (!current(generation, address, provider) || controller.signal.aborted) return;
       }
-      if (!administrativeProviderMatches(before, address)) throw Error('wallet_reown_session_changed');
+      if (!administrativeProviderMatches(before, address)) throw Error('administrative_signer_mismatch');
       stage = 'challenge';
       const challenge = await requestSandboxWalletChallenge(address, { signal: controller.signal, ownerSubject });
       if (!current(generation, address, provider) || controller.signal.aborted) return;
@@ -137,7 +137,7 @@ export function OwnedSandboxWalletBinding({ owner, ownerSubject, children }) {
       const code = typeof failure?.message === 'string' && /^(?:sandbox_wallet|wallet_reown|administrative)_[a-z_]{1,60}$/.test(failure.message)
         ? failure.message : 'wallet_provider_request_failed';
       console.warn('wallet_activation_failed', { stage, code, status: Number.isInteger(failure?.status) ? failure.status : null });
-      fail(failure);
+      fail(failure, stage);
     } }
     finally { if (request.current === operation) { request.current = null; if (mounted.current) setBusy(false); } }
   }, [ownerSubject, current, fail]);

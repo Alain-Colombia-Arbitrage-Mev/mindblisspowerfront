@@ -1,4 +1,5 @@
 import { getAddress } from 'ethers';
+import { administrativeProviderMatches, readAdministrativeProvider } from './administrative-injected-provider.mjs';
 import { memberSessionOwnerKey } from './member-session-boundary.mjs';
 
 const markerKey = 'mindbliss.wallet-reown.owner.v1';
@@ -41,18 +42,32 @@ export function createWalletReownBoundary() {
 }
 
 /** Old React closures cannot reuse an SDK provider after the native owner retires. */
-export function guardWalletReownProvider(provider, allowed, { address = '', chainId = () => null } = {}) {
+export function guardWalletReownProvider(provider, allowed, { address = '' } = {}) {
   if (!provider || typeof provider.request !== 'function') return null;
   const checked = () => { if (!allowed()) throw Error('wallet_reown_session_changed'); };
+  const rpc = async input => {
+    checked();
+    const result = await provider.request(input);
+    checked();
+    return result;
+  };
   const listeners = new Map();
   return { request: async input => {
     checked();
     if (!input || !['eth_accounts', 'eth_chainId', 'eth_requestAccounts', 'personal_sign', 'wallet_switchEthereumChain'].includes(input.method)) throw Error('wallet_reown_method_disabled');
     if (input.method === 'wallet_switchEthereumChain' && (!Array.isArray(input.params) || input.params.length !== 1
       || !input.params[0] || Object.keys(input.params[0]).join(',') !== 'chainId' || input.params[0].chainId !== '0x89')) throw Error('wallet_reown_network_required');
-    if (input.method === 'personal_sign' && (chainId() !== 137 || !Array.isArray(input.params) || input.params.length !== 2
-      || !walletReownAddress(input.params[1]) || walletReownAddress(input.params[1]).toLowerCase() !== address.toLowerCase())) throw Error('wallet_reown_network_required');
-    const result = await provider.request(input); checked(); return result;
+    if (input.method === 'personal_sign') {
+      if (!Array.isArray(input.params) || input.params.length !== 2 || typeof input.params[0] !== 'string'
+        || !walletReownAddress(input.params[1]) || walletReownAddress(input.params[1]).toLowerCase() !== address.toLowerCase()) throw Error('wallet_reown_network_required');
+      const signatureRequest = { method: 'personal_sign', params: [input.params[0], address] };
+      // AppKit's rendered network can lag an acknowledged switch. The live
+      // RPC reads are fenced separately, including across account changes.
+      const observed = await readAdministrativeProvider({ request: rpc });
+      if (!administrativeProviderMatches(observed, address)) throw Error('administrative_signer_mismatch');
+      return rpc(signatureRequest);
+    }
+    return rpc(input);
   },
     on: (event, listener) => {
       checked(); if (typeof listener !== 'function') return;

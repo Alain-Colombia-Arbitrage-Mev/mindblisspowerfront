@@ -4,10 +4,9 @@ import { sandboxWalletAddress } from './sandbox-wallet-contract.mjs';
 export const PRODUCTION_QUOTE_DEBOUNCE_MS = 500;
 export const PRODUCTION_QUOTE_TTL_MS = 120000;
 
-export const MEXICO_FUNDING_METHODS = [
-  { currency: 'EUR', method: 'CREDIT_DEBIT_CARD', serviceProvider: 'ALCHEMYPAY', destinationCurrencyCode: 'USDC_ARBITRUM' },
-  { currency: 'MXN', method: 'SPEI', serviceProvider: 'ONRAMPMONEY', destinationCurrencyCode: 'USDC_POLYGON' },
-];
+export const MEXICO_BANK_FUNDING = {
+  currency: 'MXN', method: 'SPEI', serviceProvider: 'ONRAMPMONEY', destinationCurrencyCode: 'USDC_POLYGON',
+};
 
 /** Discovery returns quote-verified fiat. Keep every offer and prefer the local default. */
 export function productionFundingCurrencies(discovery) {
@@ -35,7 +34,8 @@ export function productionFundingValue(raw, limits, decimalPlaces = 2) {
   return Number.isFinite(value) && value > 0 && Math.abs(value * precision - Math.round(value * precision)) < 0.000001
     && limits.ranges.some(item => value >= item.minimum && value <= item.maximum) ? value : null;
 }
-export function mexicoFundingOption(choice, options, decimalPlaces) {
+export function mexicoFundingOption(options, decimalPlaces) {
+  const choice = MEXICO_BANK_FUNDING;
   if (options.destinationCurrencyCode !== choice.destinationCurrencyCode) return null;
   const route = options.routes.find(item => item.serviceProvider === choice.serviceProvider);
   if (!route) return null;

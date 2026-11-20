@@ -37,21 +37,22 @@ function harness(path, exportName, mocks) {
 }
 
 function bindingFixture(t, { initial = status(), walletAddress = address, challengePromise = null, providerChain = '0x89', switchedChain = '0x89',
-  switchedAddress = walletAddress, switchPromise = null, walletConnected = true, statusReader = null } = {}) {
+  switchedAddress = walletAddress, switchPromise = null, walletConnected = true, statusReader = null, verifier = null } = {}) {
   let observedChain = providerChain, observedAddress = walletAddress;
   const signals = { logout: new Set(), replacement: new Set() };
   const subscribe = type => callback => { signals[type].add(callback); return () => signals[type].delete(callback); };
   const calls = { status: 0, challenge: 0, signature: 0, verify: 0, reads: 0 }, wallet = { isConnected: walletConnected,
     address: walletConnected ? walletAddress : '', chainId: walletConnected ? Number(providerChain) : null, provider: walletConnected ? { request: async () => [] } : null };
+  const readObserved = async () => { calls.reads++; return { address: observedAddress, chainId: observedChain }; };
   const h = harness('./SandboxWalletBindingProvider.jsx', 'OwnedSandboxWalletBinding', {
     '@/lib/member-session-context': { useMemberSession: () => ({ subject, email: 'owner@example.test' }) }, '@/lib/wallet-reown-connection.mjs': connection,
     './WalletReownContext': { useWalletReown: () => wallet }, '@/lib/member-logout-sync.mjs': { subscribeMemberLogout: subscribe('logout') }, '@/lib/member-session-sync.mjs': { subscribeMemberSessionReplacement: subscribe('replacement') },
     '@/lib/sandbox-wallet-client.mjs': { readSandboxWalletStatus: async options => { calls.status++; assert.equal(options.ownerSubject, subject); return statusReader ? statusReader(options) : initial; },
       requestSandboxWalletChallenge: async (value, options) => { calls.challenge++; assert.equal(value, walletAddress); assert.equal(options.ownerSubject, subject); return challengePromise || { challengeId: 'fixture', message: 'validated ownership fixture' }; },
-      verifySandboxWallet: async (input, value, options) => { calls.verify++; assert.deepEqual(Object.keys(input), ['challengeId', 'signature']); assert.equal(value, walletAddress); assert.equal(options.ownerSubject, subject); return proof(); } },
-    '@/lib/administrative-injected-provider.mjs': { readAdministrativeProvider: async () => { calls.reads++; return { address: observedAddress, chainId: observedChain }; },
+      verifySandboxWallet: async (input, value, options) => { calls.verify++; assert.deepEqual(Object.keys(input), ['challengeId', 'signature']); assert.equal(value, walletAddress); assert.equal(options.ownerSubject, subject); return verifier ? verifier(options) : proof(); } },
+    '@/lib/administrative-injected-provider.mjs': { readAdministrativeProvider: readObserved,
       switchAdministrativeProviderNetwork: async () => { assert.notEqual(providerChain, '0x89', 'No automatic network switch');
-        if (switchPromise) await switchPromise; observedChain = switchedChain; observedAddress = switchedAddress; wallet.chainId = Number(switchedChain); },
+        if (switchPromise) await switchPromise; observedChain = switchedChain; observedAddress = switchedAddress; wallet.chainId = Number(switchedChain); return readObserved(); },
       administrativeProviderMatches: (value, expected) => value.address === expected && value.chainId === '0x89', signAdministrativeOwnership: async () => { calls.signature++; return 'synthetic-proof'; } },
   });
   h.render({ owner, ownerSubject: subject }); t.after(() => h.unmount()); return { h, calls, wallet,
@@ -83,6 +84,7 @@ test('a switch result is reread: wrong network or a different account cannot cre
     await h.value.activate(); await h.settle();
     assert.equal(calls.reads, 2); assert.equal(calls.challenge, 0); assert.equal(calls.signature, 0); assert.equal(calls.verify, 0);
     assert.equal(h.value.canFund(), false);
+    assert.equal(h.value.status, 'unlinked'); assert.equal(h.value.error, 'connectionChanged');
   }
 });
 
@@ -99,6 +101,35 @@ test('a late challenge after unmount cannot start a signature or verification', 
   const wait = deferred(), { h, calls } = bindingFixture(t, { challengePromise: wait.promise }); await h.settle();
   const pending = h.value.activate(); await settle(); h.unmount(); wait.resolve({ challengeId: 'fixture', message: 'validated ownership fixture' }); await pending;
   assert.equal(calls.signature, 0); assert.equal(calls.verify, 0);
+});
+
+test('invalid ownership proof keeps the native owner active and permits one explicit retry without reconnecting', async t => {
+  let fail = true;
+  const { h, calls } = bindingFixture(t, { verifier: async () => {
+    if (fail) throw Object.assign(Error('sandbox_wallet_signature_invalid'), { status: 403 });
+    return proof();
+  } });
+  await h.settle(); await h.value.activate(); await h.settle();
+  assert.equal(h.value.status, 'unlinked');
+  assert.equal(h.value.error, 'signatureInvalid');
+  assert.equal(h.value.canReceive(), false);
+  assert.equal(h.value.linkedAddress, '');
+  assert.deepEqual(calls, { status: 1, challenge: 1, signature: 1, verify: 1, reads: 1 });
+  fail = false;
+  await h.value.activate(); await h.settle();
+  assert.equal(h.value.canReceive(), true);
+  assert.equal(h.value.linkedAddress, address);
+  assert.deepEqual(calls, { status: 1, challenge: 2, signature: 2, verify: 2, reads: 2 });
+});
+
+test('verify denial for an unknown error still retires activation and prevents any subsequent challenge', async t => {
+  const { h, calls } = bindingFixture(t, { verifier: async () => { throw Object.assign(Error('sandbox_wallet_unavailable'), { status: 403 }); } });
+  await h.settle(); await h.value.activate(); await h.settle();
+  assert.equal(h.value.status, 'retired');
+  assert.equal(h.value.error, 'sessionChanged');
+  assert.equal(h.value.canReceive(), false);
+  await h.value.activate();
+  assert.equal(calls.challenge, 1);
 });
 
 test('a new account cannot receive until its one explicit ownership proof stores the immutable native binding', async t => {
@@ -131,12 +162,12 @@ test('a transient refresh preserves only the same owner canonical address and di
 });
 
 test('session denial, owner conflict and logout retire both display and captured receiving readiness', async t => {
-  for (const code of [401, 403, 409, 'logout', 'replacement']) {
+  for (const code of [401, 403, 409, 'signatureWrongStage', 'logout', 'replacement']) {
     let denied = false;
     const f = bindingFixture(t, { initial: proof(), statusReader: async () => {
-      if (denied) throw Object.assign(Error('owner_changed'), { status: code }); return proof();
+      if (denied) throw code === 'signatureWrongStage' ? Object.assign(Error('sandbox_wallet_signature_invalid'), { status: 403 }) : Object.assign(Error('owner_changed'), { status: code }); return proof();
     } }); await f.h.settle(); const captured = f.h.value.canReceive; assert.equal(captured(), true);
-    if (typeof code === 'number') { denied = true; await f.h.value.refresh(); } else f.signal(code);
+    if (typeof code === 'number' || code === 'signatureWrongStage') { denied = true; await f.h.value.refresh(); } else f.signal(code);
     await f.h.settle(); assert.equal(captured(), false); assert.equal(f.h.value.canReceive(), false);
     assert.equal(f.h.value.address, ''); assert.equal(f.h.value.linkedAddress, ''); assert.equal(f.h.value.status, 'retired');
     await f.h.value.refresh(); await f.h.value.activate(); assert.equal(f.calls.challenge, 0); assert.equal(f.calls.signature, 0);

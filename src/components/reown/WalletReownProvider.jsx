@@ -74,7 +74,7 @@ export function ConfiguredWalletReownProvider({ children }) {
   const modalWasOpen = useRef(false);
   const address = walletReownAddress(account.address), chainId = walletReownChainId(sdkChainId);
   const live = useRef(null);
-  live.current = { owner, generation, address, chainId, walletProvider, connected: account.isConnected === true };
+  live.current = { owner, generation, address, walletProvider, connected: account.isConnected === true };
   const active = useCallback(() => mounted.current && live.current?.owner === owner && fence.current.current(owner, generation), [owner, generation]);
   const retire = useCallback(() => {
     fence.current.retire(); operation.current?.abort(); operation.current = null; forgetWalletReownOwner();
@@ -148,7 +148,7 @@ export function ConfiguredWalletReownProvider({ children }) {
   const isConnected = Boolean(permitted && account.isConnected && address && walletProvider);
   const provider = useMemo(() => isConnected ? guardWalletReownProvider(walletProvider, () => active() && fence.current.permits(owner, generation)
     && live.current?.connected && live.current?.address === address && live.current?.walletProvider === walletProvider,
-  { address, chainId: () => live.current?.chainId }) : null, [isConnected, walletProvider, active, owner, generation, address]);
+  { address }) : null, [isConnected, walletProvider, active, owner, generation, address]);
   const isRestoring = Boolean(owner && (!sdk.initialized || scope.owner !== owner || (!scope.ready && !scope.error)));
   const status = !owner ? 'unauthenticated' : scope.owner === owner && scope.error ? 'error' : isRestoring ? 'restoring'
     : isConnected ? chainId === 137 ? 'connected' : 'wrong_network' : activity || 'disconnected';

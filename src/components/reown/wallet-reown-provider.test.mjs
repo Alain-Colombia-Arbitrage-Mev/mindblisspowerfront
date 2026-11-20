@@ -30,7 +30,7 @@ test('the context outside its lazy provider is safe and makes no SDK or authenti
     { configured: false, address: '', provider: null, connected: false });
 });
 
-function fixture(t, { member = a, connected = false, fingerprint = '', projectId = 'a'.repeat(32), reset = true } = {}) {
+function fixture(t, { member = a, connected = false, fingerprint = '', projectId = 'a'.repeat(32), reset = true, sdkChainId = 137 } = {}) {
   let currentMember = member, provider = null;
   const values = new Map(fingerprint ? [['mindbliss.wallet-reown.owner.v1', fingerprint]] : []);
   const browser = { location: { origin: config.WALLET_REOWN_ORIGIN }, sessionStorage: {
@@ -57,7 +57,7 @@ function fixture(t, { member = a, connected = false, fingerprint = '', projectId
     close: async () => { calls.close++; } };
   const dependencies = { react: hooks,
     '@reown/appkit/react': { createAppKit: options => { calls.create.push(options); return sdkInstance; }, useAppKit: () => ({ open: async () => { calls.open++; sdk.open = true; }, close: sdkInstance.close }),
-      useAppKitAccount: () => account, useAppKitNetwork: () => ({ chainId: 137 }), useAppKitProvider: () => ({ walletProvider: provider }), useAppKitState: () => sdk },
+      useAppKitAccount: () => account, useAppKitNetwork: () => ({ chainId: sdkChainId }), useAppKitProvider: () => ({ walletProvider: provider }), useAppKitState: () => sdk },
     '@reown/appkit-adapter-ethers': { EthersAdapter: class {} }, '@reown/appkit/networks': { polygon: { id: 137 } },
     '@/lib/member-session-context': { useMemberSession: () => currentMember }, '@/lib/member-logout-sync.mjs': { subscribeMemberLogout: fn => { logout.add(fn); return () => logout.delete(fn); } },
     '@/lib/member-session-sync.mjs': { subscribeMemberSessionReplacement: fn => { replaced.add(fn); return () => replaced.delete(fn); } },
@@ -130,6 +130,18 @@ test('a same-owner reload restores the SDK connection without asking to connect 
   const fingerprint = await connection.walletReownOwnerFingerprint(connection.walletReownOwnerKey(a));
   const h = fixture(t, { connected: true, fingerprint }); h.render(); await h.ready();
   assert.equal(h.value.isConnected, true); assert.equal(h.calls.disconnect, 0); assert.equal(h.calls.open, 0); assert.equal(h.calls.rpc.length, 0);
+});
+
+test('one ownership signature works after the wallet reports Polygon while AppKit still renders the previous chain', async t => {
+  const fingerprint = await connection.walletReownOwnerFingerprint(connection.walletReownOwnerKey(a));
+  const h = fixture(t, { connected: true, fingerprint, sdkChainId: 1 });
+  h.render(); await h.ready();
+  assert.equal(h.value.chainId, 1, 'React still has the previous snapshot');
+  assert.equal(h.calls.rpc.length, 0);
+  await h.value.provider.request({ method: 'personal_sign', params: ['ownership', address] });
+  assert.deepEqual(h.calls.rpc.map(request => request.method), ['eth_accounts', 'eth_chainId', 'personal_sign']);
+  assert.equal(h.calls.disconnect, 0);
+  assert.equal(h.calls.open, 0);
 });
 
 test('changing subjects with the same email hides the previous connection immediately and retires its captured provider', async t => {

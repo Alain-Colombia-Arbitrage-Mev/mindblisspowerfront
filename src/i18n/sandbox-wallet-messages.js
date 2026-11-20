@@ -1,5 +1,6 @@
 export const sandboxWalletMessages = {
   es: { sandboxWallet: {
+    signatureInvalid: 'La firma no pudo verificarse. Pulsa Activar billetera y confirma el nuevo mensaje de propiedad.',
     title: 'Billetera personal', copy: 'Conecta tu billetera personal y actívala para probar recargas de USDT en Polygon con Transak.', sandbox: 'Transak · Sandbox',
     notice: 'Solo pruebas. No hagas pagos ni envíes fondos reales. Este flujo no acredita saldo ni genera comisiones reales.',
     connection: 'Tu billetera personal', connect: 'Conectar billetera personal', choose: 'Elegir otra billetera', activate: 'Activar billetera personal', activating: 'Verificando propiedad…',
@@ -16,6 +17,7 @@ export const sandboxWalletMessages = {
     popupBlocked: 'Permite abrir la ventana del proveedor y pulsa el botón nuevamente.', popupClosed: 'La ventana se cerró. Consulta el estado de la solicitud antes de iniciar otra prueba.',
   } },
   en: { sandboxWallet: {
+    signatureInvalid: 'We could not verify the signature. Select Activate wallet and confirm the new ownership message.',
     title: 'Personal wallet', copy: 'Connect and activate your personal wallet to test USDT funding on Polygon with Transak.', sandbox: 'Transak · Sandbox',
     notice: 'Testing only. Do not make payments or send real funds. This flow does not credit balances or generate real commissions.',
     connection: 'Your personal wallet', connect: 'Connect personal wallet', choose: 'Choose another wallet', activate: 'Activate personal wallet', activating: 'Verifying ownership…',
@@ -32,6 +34,7 @@ export const sandboxWalletMessages = {
     popupBlocked: 'Allow the provider window to open and select the button again.', popupClosed: 'The window was closed. Check the request status before starting another test.',
   } },
   ar: { sandboxWallet: {
+    signatureInvalid: 'تعذر التحقق من التوقيع. اختر تفعيل المحفظة وأكد رسالة الملكية الجديدة.',
     title: 'المحفظة الشخصية', copy: 'اربط محفظتك الشخصية وفعّلها لاختبار شحن USDT على Polygon باستخدام Transak.', sandbox: 'Transak · Sandbox',
     notice: 'للاختبار فقط. لا تدفع أو ترسل أموالاً حقيقية. لا يضيف هذا المسار رصيداً ولا يولّد عمولات حقيقية.',
     connection: 'محفظتك الشخصية', connect: 'ربط المحفظة الشخصية', choose: 'اختيار محفظة أخرى', activate: 'تفعيل المحفظة الشخصية', activating: 'جارٍ التحقق من الملكية…',
@@ -48,6 +51,7 @@ export const sandboxWalletMessages = {
     popupBlocked: 'اسمح بفتح نافذة المزوّد ثم اضغط الزر مجدداً.', popupClosed: 'أُغلقت النافذة. تحقق من حالة الطلب قبل بدء اختبار آخر.',
   } },
   zh: { sandboxWallet: {
+    signatureInvalid: '无法验证签名。请选择启用钱包并确认新的所有权验证消息。',
     title: '个人钱包', copy: '连接并激活个人钱包，通过 Transak 测试 Polygon 上的 USDT 充值。', sandbox: 'Transak · Sandbox',
     notice: '仅供测试。请勿付款或发送真实资金。此流程不会计入余额或产生真实佣金。',
     connection: '你的个人钱包', connect: '连接个人钱包', choose: '选择其他钱包', activate: '激活个人钱包', activating: '正在验证所有权…',

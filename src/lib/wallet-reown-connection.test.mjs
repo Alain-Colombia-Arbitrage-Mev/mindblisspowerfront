@@ -49,7 +49,7 @@ test('native owner changes and logout permanently retire captured connection lea
   const epoch = scope.setOwner(first); assert.equal(scope.permits(first, epoch), false);
   assert.equal(scope.authorize(first, epoch), true);
   let calls = 0;
-  const provider = guardWalletReownProvider({ request: async () => { calls++; return [address]; } }, () => scope.permits(first, epoch), { address, chainId: () => 137 });
+  const provider = guardWalletReownProvider({ request: async () => { calls++; return [address]; } }, () => scope.permits(first, epoch), { address });
   assert.deepEqual(await provider.request({ method: 'eth_accounts' }), [address]);
   scope.setOwner(next); await assert.rejects(provider.request({ method: 'eth_accounts' }), /session_changed/); assert.equal(calls, 1);
   assert.equal(scope.authorize(first, epoch), false);
@@ -57,27 +57,56 @@ test('native owner changes and logout permanently retire captured connection lea
 });
 
 test('guarded provider allows only connection, Polygon switching and explicit same-address ownership signing', async () => {
-  const calls = [], raw = { request: async input => { calls.push(input); return 'synthetic'; } }; let chain = 1;
-  const provider = guardWalletReownProvider(raw, () => true, { address, chainId: () => chain });
+  const calls = [];
+  let chain = '0x1', account = address;
+  const provider = guardWalletReownProvider({ request: async request => {
+    calls.push(request.method);
+    if (request.method === 'eth_chainId') return chain;
+    if (request.method === 'eth_accounts') return [account];
+    if (request.method === 'wallet_switchEthereumChain') { chain = '0x89'; return null; }
+    return 'synthetic-signature';
+  } }, () => true, { address });
   for (const method of ['eth_sendTransaction', 'eth_sendRawTransaction', 'eth_signTransaction', 'wallet_sendCalls', 'wallet_grantPermissions', 'eth_sign']) {
     await assert.rejects(provider.request({ method, params: [] }), /method_disabled/);
   }
-  await assert.rejects(provider.request({ method: 'personal_sign', params: ['ownership', address] }), /network_required/);
   await assert.rejects(provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x1' }] }), /network_required/);
   await assert.rejects(provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x89', injected: true }] }), /network_required/);
-  assert.equal(calls.length, 0);
-  await provider.request({ method: 'eth_accounts' }); await provider.request({ method: 'eth_chainId' });
-  await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x89' }] }); chain = 137;
   await assert.rejects(provider.request({ method: 'personal_sign', params: ['ownership', other] }), /network_required/);
-  await provider.request({ method: 'personal_sign', params: ['ownership', address] });
-  assert.equal(calls.length, 4);
+  assert.deepEqual(calls, []);
+  const sign = () => provider.request({ method: 'personal_sign', params: ['ownership', address] });
+  await assert.rejects(sign(), /signer_mismatch/);
+  assert.deepEqual(calls, ['eth_accounts', 'eth_chainId']);
+  await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x89' }] });
+  account = other; await assert.rejects(sign(), /signer_mismatch/);
+  assert.equal(calls.includes('personal_sign'), false);
+  account = address; assert.equal(await sign(), 'synthetic-signature');
+  assert.deepEqual(calls.slice(-3), ['eth_accounts', 'eth_chainId', 'personal_sign']);
 });
 
-test('a late ownership RPC result cannot be reused after its native owner changes', async () => {
+test('retiring the native owner during the provider account check stops before network read and signature', async () => {
   let resolve, active = true;
-  const provider = guardWalletReownProvider({ request: () => new Promise(done => { resolve = done; }) }, () => active, { address, chainId: () => 137 });
+  const calls = [];
+  const provider = guardWalletReownProvider({ request: ({ method }) => {
+    calls.push(method); return new Promise(done => { resolve = done; });
+  } }, () => active, { address });
   const pending = provider.request({ method: 'personal_sign', params: ['ownership', address] });
-  active = false; resolve('synthetic-signature'); await assert.rejects(pending, /session_changed/);
+  active = false; resolve([address]);
+  await assert.rejects(pending, /session_changed/);
+  assert.deepEqual(calls, ['eth_accounts']);
+});
+
+test('a late ownership signature cannot be reused after its native owner changes', async () => {
+  let resolveSign, enterSign, active = true;
+  const signing = new Promise(resolve => { enterSign = resolve; });
+  const provider = guardWalletReownProvider({ request: async ({ method }) => {
+    if (method === 'eth_accounts') return [address];
+    if (method === 'eth_chainId') return 137;
+    enterSign(); return new Promise(done => { resolveSign = done; });
+  } }, () => active, { address });
+  const pending = provider.request({ method: 'personal_sign', params: ['ownership', address] });
+  await signing;
+  active = false; resolveSign('synthetic-signature');
+  await assert.rejects(pending, /session_changed/);
 });
 
 test('captured provider listeners also stop exposing account data after retirement and remain removable', () => {

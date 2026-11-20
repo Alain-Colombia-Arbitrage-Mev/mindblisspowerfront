@@ -78,6 +78,12 @@ test('Native owner mismatch and private provider/SQL diagnostics are sanitized a
   const failure = await handleSandboxWallet(request('funding/session', input), 'funding/session', { env, serviceRequest: async () => { calls++; throw Error('ambiguous transport'); } });
   assert.equal(failure.status, 503); assert.equal(calls, 3);
 });
+test('verify preserves only the canonical invalid-signature denial for explicit recovery', async () => {
+  const response = await handleSandboxWallet(request('verify', { challengeId: reference, signature }), 'verify', { env,
+    serviceRequest: async () => ({ ok: false, status: 403, data: { error: 'sandbox_wallet_signature_invalid', signature, address } }) });
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), { error: 'sandbox_wallet_signature_invalid' });
+});
 test('crossed challenge/quote acknowledgement or production checkout URL cannot be handed to browser', async () => {
   for (const [action, body, value] of [['challenge', { address }, { ...challenge(), address: other }],
     ['funding/session', input, { ...ack, requestedAmount: 100 }], ['funding/session', input, { ...ack, serviceProvider: 'BANXA' }],
