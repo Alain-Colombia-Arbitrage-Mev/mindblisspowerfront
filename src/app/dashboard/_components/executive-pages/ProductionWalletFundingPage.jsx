@@ -25,7 +25,7 @@ import local from './production-wallet.module.css';
 const names = { CREDIT_DEBIT_CARD: 'onramp.cardPayment', LOCAL_BANK_TRANSFER: 'onramp.bankTransfer', OPEN_BANKING: 'walletProduction.openBanking', MOBILE_MONEY: 'walletProduction.mobileMoney' };
 const providerName = value => ({ ONRAMPMONEY: 'Onramp Money', ALCHEMYPAY: 'Alchemy Pay', BANXA: 'Banxa', MERCURYO: 'Mercuryo', ONMETA: 'Onmeta',
   YELLOWCARD: 'Yellow Card', RAMPNOW: 'RampNow', TRANSAK: 'Transak', TOPPER: 'Topper' })[value] || value;
-const methodName = value => ({ APPLE_PAY: 'Apple Pay', GOOGLE_PAY: 'Google Pay', SPEI: 'SPEI', PSE: 'PSE', SEPA: 'SEPA', ACH: 'ACH' })[value] || value.replaceAll('_', ' ');
+const methodName = value => ({ APPLE_PAY: 'Apple Pay', GOOGLE_PAY: 'Google Pay', PIX: 'Pix', SPEI: 'SPEI', PSE: 'PSE', SEPA: 'SEPA', ACH: 'ACH' })[value] || value.replaceAll('_', ' ');
 const destinationLabel = destination => {
   const asset = walletProductionAsset(walletProductionDestinationCode(destination));
   return asset ? asset.asset + ' · ' + asset.networkName : '';
@@ -151,7 +151,10 @@ export function ProductionWalletView({ ownerSubject }) {
       if (value.routes.length) setCatalogDestinationCode(value.destinationCurrencyCode ?? 'USDT_POLYGON');
       const methods = availableMethods(value.routes, currency, currencies.find(item => item.code === currency)?.decimalPlaces ?? 2);
       if (live.current.method && !methods.includes(live.current.method)) { methodChosen.current = true; reset(); setMethod(''); }
-      else if (!live.current.method && !methodChosen.current && methods.length === 1) { methodChosen.current = true; setMethod(methods[0]); }
+      else if (!live.current.method && !methodChosen.current) {
+        const preferred = country === 'BR' && methods.includes('PIX') ? 'PIX' : methods.length === 1 ? methods[0] : '';
+        if (preferred) { methodChosen.current = true; setMethod(preferred); }
+      }
     }).catch(failure => { if (!controller.signal.aborted) setError(fail(failure)); }).finally(() => { if (!controller.signal.aborted) setLoading(''); });
     return () => controller.abort();
   }, [country, currency, ownerSubject, methodRevision, fail]);

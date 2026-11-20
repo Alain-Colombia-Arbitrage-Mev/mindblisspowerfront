@@ -92,6 +92,31 @@ test('Mercuryo MX cards stay on USDC Polygon and retain an unknown network fee a
   }
 });
 
+test('Brazil quotes and sessions accept only Pix or card with USDC on Arbitrum', async () => {
+  const receiving = { address, asset: 'USDC', network: 'arbitrum', chainId: 42161 };
+  for (const [paymentMethodType, serviceProvider] of [['PIX', 'ALCHEMYPAY'], ['CREDIT_DEBIT_CARD', 'MERCURYO']]) {
+    const selection = { country: 'BR', sourceCurrencyCode: 'BRL', amount: 500, paymentMethodType };
+    const session = { ...selection, requestId: reference, serviceProvider };
+    const expected = { country: 'BR', sourceCurrencyCode: 'BRL', requestedAmount: 500, paymentMethodType, destination: receiving };
+    const scopedQuote = { ...quote, ...expected, quotes: [{ ...quote.quotes[0], serviceProvider, sourceAmount: 500,
+      sourceCurrencyCode: 'BRL', destinationCurrencyCode: 'USDC_ARBITRUM' }] };
+    const scopedAck = { ...ack, ...expected, serviceProvider, destinationCurrencyCode: 'USDC_ARBITRUM' };
+    for (const [action, body, data, status] of [['quote', selection, scopedQuote, 200], ['session', session, scopedAck, 201]]) {
+      const response = await handleWalletProductionFunding(request(action, body), action, { env, serviceRequest: async () => ({ ok: true, status, data }) });
+      assert.equal(response.status, status);
+      assert.deepEqual((await response.json()).destination, receiving);
+    }
+    for (const unsafe of [{ ...session, serviceProvider: 'BANXA' }, { ...session, sourceCurrencyCode: 'USD' },
+      { ...session, paymentMethodType: 'LOCAL_BANK_TRANSFER' }, { ...session, destinationCurrencyCode: 'USDC_POLYGON' }]) {
+      const response = await handleWalletProductionFunding(request('session', unsafe), 'session', { env, serviceRequest: async () => assert.fail('Brazil route unavailable') });
+      assert.equal(response.status, 400);
+    }
+    const wrongDestination = { ...scopedAck, destination: { ...receiving, network: 'polygon', chainId: 137 }, destinationCurrencyCode: 'USDC_POLYGON' };
+    const rejected = await handleWalletProductionFunding(request('session', session), 'session', { env, serviceRequest: success(wrongDestination) });
+    assert.equal(rejected.status, 502);
+  }
+});
+
 test('a foreign portal, impersonation, absent native cookie or malformed owner fence cannot reach production Core', async () => {
   const never = async () => assert.fail('Unsafe owner/portal reached transport');
   for (const headers of [{ 'x-mindbliss-wallet-subject': '' }, { 'x-mindbliss-wallet-subject': '%' },

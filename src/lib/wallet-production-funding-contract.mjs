@@ -36,11 +36,15 @@ const usBankMethods = new Set(['ACH', 'LOCAL_BANK_TRANSFER']);
 const rampNowMethods = new Set(['CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY', ...usBankMethods]);
 const isRampNowMethod = (country, fiat, method) => country === 'US' && fiat === 'USD' && rampNowMethods.has(method);
 const isMercuryoMexicoCard = (country, fiat, method) => country === 'MX' && ['MXN', 'USD'].includes(fiat) && method === 'CREDIT_DEBIT_CARD';
+const isMercuryoBrazilCard = (country, fiat, method) => country === 'BR' && fiat === 'BRL' && method === 'CREDIT_DEBIT_CARD';
+const isBrazilPix = (country, fiat, method) => country === 'BR' && fiat === 'BRL' && method === 'PIX';
 export function walletProductionExplicitDestinationAllowed(country, fiat, method, code, provider = 'RAMPNOW') {
   return isRampNowMethod(country, fiat, method) && rampNowAssetCodes.has(code)
     && (provider === 'RAMPNOW' || (provider === 'ONRAMPMONEY' && code === 'USDC_POLYGON' && usBankMethods.has(method)));
 }
 function assetAllowed(code, country, fiat, provider, method) {
+  if (country === 'BR') return code === 'USDC_ARBITRUM' && ((provider === 'ALCHEMYPAY' && isBrazilPix(country, fiat, method))
+    || (provider === 'MERCURYO' && isMercuryoBrazilCard(country, fiat, method)));
   if (provider === 'RAMPNOW') return walletProductionExplicitDestinationAllowed(country, fiat, method, code, provider);
   if (provider === 'MERCURYO') return code === 'USDC_POLYGON' && isMercuryoMexicoCard(country, fiat, method);
   if (code === 'USDT_POLYGON') return true;
@@ -74,9 +78,13 @@ export function walletProductionInput(value, session = false) {
     ...(hasDestination ? ['destinationCurrencyCode'] : [])];
   if (!exact(value, keys) || !code(value.country) || !currency(value.sourceCurrencyCode) || !amount(value.amount) || !token(value.paymentMethodType)
     || (value.sourceCurrencyCode === 'USD' && (value.amount < 50 || value.amount > 25000))
+    || (value.country === 'BR' && !isBrazilPix(value.country, value.sourceCurrencyCode, value.paymentMethodType)
+      && !isMercuryoBrazilCard(value.country, value.sourceCurrencyCode, value.paymentMethodType))
     || (session && (!FUNDING_UUID.test(value.requestId || '') || !checkoutProviders.has(value.serviceProvider)))
+    || (session && value.country === 'BR' && !assetAllowed('USDC_ARBITRUM', value.country, value.sourceCurrencyCode, value.serviceProvider, value.paymentMethodType))
     || (session && value.serviceProvider === 'RAMPNOW' && !hasDestination)
-    || (session && value.serviceProvider === 'MERCURYO' && !isMercuryoMexicoCard(value.country, value.sourceCurrencyCode, value.paymentMethodType))
+    || (session && value.serviceProvider === 'MERCURYO' && !isMercuryoMexicoCard(value.country, value.sourceCurrencyCode, value.paymentMethodType)
+      && !isMercuryoBrazilCard(value.country, value.sourceCurrencyCode, value.paymentMethodType))
     || (hasDestination && !walletProductionExplicitDestinationAllowed(value.country, value.sourceCurrencyCode, value.paymentMethodType,
       value.destinationCurrencyCode, session ? value.serviceProvider : undefined))) return null;
   return { country: value.country, sourceCurrencyCode: value.sourceCurrencyCode, amount: value.amount, paymentMethodType: value.paymentMethodType,

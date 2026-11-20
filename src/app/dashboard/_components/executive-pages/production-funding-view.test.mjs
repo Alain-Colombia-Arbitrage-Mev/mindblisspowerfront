@@ -145,6 +145,37 @@ test('all USDC balances use the verified wallet and disappear when its binding i
   assert.ok(!all(h.tree).some(node => node?.type === 'wallet-deposit-qr-fixture'));
 });
 
+test('Brazil defaults to BRL Pix and keeps the linked Arbitrum deposit across an explicit checkout', async t => {
+  const receive = { address, asset: 'USDC', network: 'arbitrum', chainId: 42161 };
+  const h = fixture(t, {
+    discovery: async country => country === 'BR' ? { country, defaultCurrencyCode: 'BRL',
+      currencies: [{ code: 'BRL', name: 'Brazilian real', decimalPlaces: 2 }] } :
+      { countries: [{ code: 'BR', name: 'Brazil' }] },
+    options: async () => ({ destinationCurrencyCode: 'USDC_ARBITRUM', routes: [
+      { serviceProvider: 'ALCHEMYPAY', paymentMethods: [{ method: 'PIX', currencyCode: 'BRL', minimumAmount: 50, maximumAmount: 20000 }] },
+      { serviceProvider: 'MERCURYO', paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', currencyCode: 'BRL', minimumAmount: 155.65, maximumAmount: 93387.41 }] },
+    ] }),
+    quotes: input => [{ serviceProvider: input.paymentMethodType === 'PIX' ? 'ALCHEMYPAY' : 'MERCURYO', destinationAmount: 8, totalFee: 4, networkFee: 1.25 }],
+  });
+  await h.flush();
+  await h.change('production-country', 'BR');
+  assert.equal(field(h.tree, 'production-currency').props.children.props.children.join(''), 'BRL · Brazilian real');
+  assert.equal(field(h.tree, 'production-method').props.value, 'PIX');
+  assert.ok(all(field(h.tree, 'production-method')).some(node => node?.type === 'option' && node.props.value === 'CREDIT_DEBIT_CARD'));
+  await h.change('production-amount', '500');
+  assert.equal(h.calls.session.length, 0);
+  assert.equal(h.calls.popups.length, 0);
+  assert.equal(submit(h.tree).props.disabled, false);
+  form(h.tree).props.onSubmit({ preventDefault() {} });
+  const [[{ requestId, ...submitted }, wallet]] = h.calls.session;
+  assert.match(requestId, FUNDING_UUID);
+  assert.deepEqual(submitted, { country: 'BR', sourceCurrencyCode: 'BRL', amount: 500, paymentMethodType: 'PIX', serviceProvider: 'ALCHEMYPAY' });
+  assert.equal(wallet, address);
+  h.waiting.resolve({ checkoutUrl: 'https://meldcrypto.com/?token=synthetic_opaque', destination: receive });
+  await h.flush();
+  assert.deepEqual(h.calls.opened, ['https://meldcrypto.com/?token=synthetic_opaque']);
+});
+
 test('Mexico selects SPEI in MXN, offers a single checkout gesture and keeps past EUR history', async t => {
   const catalogCalls = [];
   const config = {
