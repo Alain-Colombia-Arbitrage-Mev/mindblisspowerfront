@@ -7,6 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 import { personalWalletBalanceSessionKey } from '../../../../lib/personal-wallet-balance-store.mjs';
 import { fundingStatus, FUNDING_UUID } from '../../../../lib/wallet-funding-contract.mjs';
+import { appPersonalFundingStatus } from '../../../../lib/app-meld-funding-contract.mjs';
 import { personalFundingFailure } from '../../../../lib/personal-funding-errors.mjs';
 import { translateMessage } from '../../../../i18n/translate.mjs';
 
@@ -45,6 +46,7 @@ function harness(filename, { api = {}, reown = {}, exportName = 'default' } = {}
     '@/lib/member-session-context': { useMemberSession: () => member },
     '@/lib/personal-wallet-balance-store.mjs': { personalWalletBalanceSessionKey },
     '@/lib/wallet-funding-client.mjs': api, '@/lib/wallet-funding-contract.mjs': { fundingStatus, FUNDING_UUID },
+    '@/lib/app-meld-funding-contract.mjs': { appPersonalFundingStatus },
     '@/lib/personal-funding-errors.mjs': { personalFundingFailure }, '@/components/reown/ReownContext': { useReownWallet: () => reown },
     '@/components/wallet/PersonalWalletBalances': { default: () => null }, './WalletFundingForm': { PersonalFundingForm },
     './ResidenceImportantCard': { default: function ResidenceImportantCard() { return null; } },

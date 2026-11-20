@@ -76,25 +76,21 @@ test('Swapped and Mercuryo keep independent route limits instead of sharing the 
   assert.equal(personalProductionOptions({ ...discovery, routes: [route('TOPPER', 10)] }), null);
 });
 
-test('a 100 USD native request retains its eligible-provider echo and admits Topper only for US residence', async () => {
-  const original = globalThis.fetch;
-  try {
-    globalThis.fetch = async (path, init) => {
-      assert.equal(path, '/api/member/wallet-funding/personal/intent');
-      assert.equal(JSON.parse(init.body).amount, 100);
-      return Response.json(ack('personal', 100));
-    };
-    const result = await createPersonalFundingIntent(input('personal', 100));
-    assert.deepEqual(result.allowedProviders, ['SWAPPED']);
-    assert.equal(result.requestedAmount, 100);
-    globalThis.fetch = async () => Response.json({ ...ack('personal', 100), allowedProviders: ['TOPPER'] });
-    assert.deepEqual((await createPersonalFundingIntent(input('personal', 100))).allowedProviders, ['TOPPER']);
-    for (const country of ['CO', 'MX']) {
-      await assert.rejects(createPersonalFundingIntent({ ...input('personal', 100), country }), { message: 'funding_unavailable' });
-    }
-    globalThis.fetch = async () => Response.json({ ...ack('personal', 100), allowedProviders: ['BANXA'] });
-    await assert.rejects(createPersonalFundingIntent(input('personal', 100)), { message: 'funding_unavailable' });
-  } finally { globalThis.fetch = original; }
+test('Mexico USD card accepts only its authenticated Mercuryo checkout', async t => {
+  const body = { ...input('personal', 100), country: 'MX', sourceCurrencyCode: 'USD' };
+  const session = { ...ack('personal', 100), country: 'MX', sourceCurrencyCode: 'USD', provider: 'meld',
+    serviceProvider: 'MERCURYO', status: 'session_created', checkoutUrl: 'https://meldcrypto.com/?token=synthetic' };
+  let response = session;
+  t.mock.method(globalThis, 'fetch', async (path, init) => {
+    assert.equal(path, '/api/member/wallet-funding/personal/intent');
+    assert.deepEqual(JSON.parse(init.body), body);
+    return Response.json(response);
+  });
+  assert.equal((await createPersonalFundingIntent(body)).requestedAmount, 100);
+  for (const unsupported of ['TOPPER', 'SWAPPED', 'BANXA']) {
+    response = { ...session, serviceProvider: unsupported };
+    await assert.rejects(createPersonalFundingIntent(body), { message: 'funding_unavailable' });
+  }
 });
 
 test('production handoff enforces public personal limits without pretending URL parameters select a provider', () => {

@@ -11,7 +11,7 @@ const destination = { address, asset: 'USDT', network: 'polygon', chainId: 137 }
 const env = { AUTH_PROVIDER: 'better-auth', AUTH_BFF_SHARED_SECRET: 's'.repeat(32), AUTH_PUBLIC_ORIGIN: 'https://app.example.test',
   BETTER_AUTH_BACKEND_URL: 'https://auth.core.internal', NODE_ENV: 'production' };
 const post = body => new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/wallet-funding/personal/intent`, { method: 'POST',
-  headers: { cookie: 'better-auth.session_token=synthetic', origin: env.AUTH_PUBLIC_ORIGIN, 'x-mindbliss-wallet-network': 'polygon',
+  headers: { cookie: 'better-auth.session_token=synthetic', origin: env.AUTH_PUBLIC_ORIGIN, 'x-mindbliss-wallet-network': 'polygon', 'x-mindbliss-funding-provider': 'meld',
     'content-type': 'application/json', 'sec-fetch-site': 'same-origin' }, body: JSON.stringify(body) });
 
 test('new Colombia COP routes, writes, acknowledgements and checkout URLs are disabled before transport', async t => {

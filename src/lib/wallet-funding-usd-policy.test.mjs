@@ -19,6 +19,9 @@ const ack = (amount, patch = {}) => ({ checkoutReference: reference, walletKind:
   destinationCurrencyCode: 'USDT_POLYGON', destination: { address, asset: 'USDT', network: 'polygon', chainId: 137 },
   status: 'initiated', requestedAmount: amount, sourceCurrencyCode: 'USD', paymentMethodType: 'CREDIT_DEBIT_CARD',
   allowedProviders: ['SWAPPED'], createdAt, ...patch });
+const mexCard = amount => input(amount, { country: 'MX' });
+const meldSession = amount => ({ ...ack(amount), provider: 'meld', country: 'MX', serviceProvider: 'MERCURYO',
+  status: 'session_created', checkoutUrl: 'https://meldcrypto.com/?token=synthetic' });
 const status = (amount, patch = {}) => ({ ...ack(amount), country: 'US', requestStatus: 'initiated',
   destination: { address, asset: 'USDT', network: 'polygon', chainId: 137 },
   confirmation: { state: 'unconfirmed', source: 'none', testMode: false }, ...patch });
@@ -28,7 +31,7 @@ const discovery = routes => ({ walletKind: 'personal', environment: 'production'
   destinationCurrencyCode: 'USDT_POLYGON', network: 'polygon', chainId: 137,
   paymentMethods: [...new Set(routes.flatMap(route => route.paymentMethods.map(method => method.method)))], routes });
 
-test('new personal USD requests, acknowledgements and locked Reown handoff agree on 30 to 15000 without a testing exception', async () => {
+test('legacy validators continue parsing the original limits while MELD enforces 50 to 15000 USD', async () => {
   const original = globalThis.fetch;
   const projectId = 'a'.repeat(32);
   const handoff = amount => buildReownProductionOnrampUrl({ providerUrl: `https://meldcrypto.com/?publicKey=synthetic&externalCustomerId=${projectId}`,
@@ -40,14 +43,15 @@ test('new personal USD requests, acknowledgements and locked Reown handoff agree
     for (const amount of [20, 29.99, 15000.01, 25000]) {
       assert.equal(fundingInput(input(amount), 'personal'), null);
       assert.equal(fundingAcknowledgement(ack(amount), 'personal'), null);
-      await assert.rejects(createPersonalFundingIntent(input(amount)), { message: 'invalid_request' });
+      await assert.rejects(createPersonalFundingIntent(mexCard(amount)), { message: 'invalid_request' });
       assert.throws(() => handoff(amount), { message: 'reown_context_invalid' });
     }
     assert.equal(calls, 0);
-    for (const amount of [30, 15000]) {
+    await assert.rejects(createPersonalFundingIntent(mexCard(49.99)), { message: 'invalid_request' });
+    for (const amount of [50, 15000]) {
       globalThis.fetch = async (path, init) => { calls++; assert.equal(path, '/api/member/wallet-funding/personal/intent');
-        assert.equal(JSON.parse(init.body).amount, amount); return Response.json(ack(amount)); };
-      assert.equal((await createPersonalFundingIntent(input(amount))).requestedAmount, amount);
+        assert.equal(JSON.parse(init.body).amount, amount); return Response.json(meldSession(amount)); };
+      assert.equal((await createPersonalFundingIntent(mexCard(amount))).requestedAmount, amount);
       const locked = new URL(handoff(amount));
       assert.equal(locked.searchParams.get('sourceAmount'), String(amount));
       assert.equal(locked.searchParams.get('sourceAmountLocked'), String(amount));
@@ -83,21 +87,20 @@ test('old USD20, USD50 and USD25000 records survive browser and private BFF read
   } finally { globalThis.fetch = original; }
 });
 
-test('USD discovery clamps canonical and legacy aliases together across BFF and client while respecting a higher provider floor', async () => {
+test('MELD USD discovery clamps the current maximum across BFF and client and honors a higher provider floor', async () => {
   const original = globalThis.fetch;
-  const raw = discovery([route('SWAPPED', 20, 25000), route('MERCURYO', 500, 20000)]);
+  const raw = { ...discovery([route('MERCURYO', 500, 20000)]), provider: 'meld', country: 'MX' };
   try {
     globalThis.fetch = async path => handleWalletFunding(new Request(`${env.AUTH_PUBLIC_ORIGIN}${path}`, {
       headers: { cookie: 'better-auth.session_token=synthetic' } }), 'personal-options', { env,
       serviceRequest: async () => ({ ok: true, data: raw }) });
-    const safe = await readPersonalFundingOptions('US');
+    const safe = await readPersonalFundingOptions('MX');
     assert.deepEqual(safe.routes.map(route => route.paymentMethods[0]), [
-      { method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount: 30, maximumAmount: 15000, minimumUsd: 30, maximumUsd: 15000 },
-      { method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount: 500, maximumAmount: 15000, minimumUsd: 500, maximumUsd: 15000 },
+      { method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount: 500, maximumAmount: 15000 },
     ]);
     const unavailable = personalProductionOptions(discovery([route('SWAPPED', 20, 29)]));
     assert.deepEqual(unavailable.routes, []); assert.deepEqual(unavailable.paymentMethods, []);
-    const inconsistent = structuredClone(raw);
+    const inconsistent = discovery([route('SWAPPED', 20, 25000)]);
     inconsistent.routes[0].paymentMethods[0].minimumAmount = 30;
     assert.equal(personalProductionOptions(inconsistent), null, 'stale USD aliases cannot conceal an inconsistent upstream contract');
   } finally { globalThis.fetch = original; }
@@ -120,13 +123,13 @@ test('the private BFF blocks old-range new writes before transport and admits on
   let calls = 0;
   const send = amount => handleWalletFunding(new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/wallet-funding/personal/intent`, {
     method: 'POST', headers: { cookie: 'better-auth.session_token=synthetic', origin: env.AUTH_PUBLIC_ORIGIN,
-      'x-mindbliss-wallet-network': 'polygon',
-      'sec-fetch-site': 'same-origin', 'content-type': 'application/json' }, body: JSON.stringify(input(amount)),
+      'x-mindbliss-wallet-network': 'polygon', 'x-mindbliss-funding-provider': 'meld', 'cf-connecting-ip': '198.51.100.5',
+      'sec-fetch-site': 'same-origin', 'content-type': 'application/json' }, body: JSON.stringify(mexCard(amount)),
   }), 'personal', { env, serviceRequest: async (_url, init) => { calls++; const amount = JSON.parse(init.body).amount;
-    assert.ok(amount >= 30 && amount <= 15000); return { ok: true, data: ack(amount) }; } });
-  for (const amount of [20, 29.99, 15000.01, 25000]) assert.equal((await send(amount)).status, 400);
+    assert.ok(amount >= 50 && amount <= 15000); return { ok: true, data: meldSession(amount) }; } });
+  for (const amount of [20, 49.99, 15000.01, 25000]) assert.equal((await send(amount)).status, 400);
   assert.equal(calls, 0);
-  for (const amount of [30, 15000]) assert.equal((await send(amount)).status, 200);
+  for (const amount of [50, 15000]) assert.equal((await send(amount)).status, 200);
   assert.equal(calls, 2);
 });
 

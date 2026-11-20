@@ -3,7 +3,8 @@ import { betterAuthConfig, betterAuthCookies, trustedAuthClientIp } from './bett
 import { coreFetch, runtimeEnvironment } from './cloudflare-runtime.mjs';
 import { memberMutationError } from './member-mutation-policy.mjs';
 import { boundedServiceRequest } from './private-service-request.mjs';
-import { administrativeSandboxOptions, personalProductionOptions, fundingAcknowledgement, fundingHistory, fundingInput, fundingStatus, fundingCurrencyCode, fundingSourceSupported, FUNDING_UUID, PERSONAL_FUNDING_DESTINATION } from './wallet-funding-contract.mjs';
+import { administrativeSandboxOptions, fundingAcknowledgement, fundingHistory, fundingInput, fundingStatus, fundingCurrencyCode, fundingSourceSupported, FUNDING_UUID } from './wallet-funding-contract.mjs';
+import { appMeldFundingContext, appMeldFundingInputError, appMeldFundingOptions, appMeldFundingSession, appPersonalFundingHistory, appPersonalFundingStatus } from './app-meld-funding-contract.mjs';
 import { readBoundedRequestJson } from './bounded-request-json.mjs';
 
 const reply = (body, status = 200) => Response.json(body, { status, headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' } });
@@ -37,10 +38,10 @@ export async function handleWalletFunding(request, action, {
     const url = new URL(request.url);
     const country = url.searchParams.get('country');
     const sourceCurrencyCode = url.searchParams.has('sourceCurrencyCode') ? url.searchParams.get('sourceCurrencyCode') : 'USD';
-    optionsContext = personalProductionOptions({ walletKind: 'personal', environment: 'production', provider: 'reown', country, sourceCurrencyCode, paymentMethods: [], routes: [], ...PERSONAL_FUNDING_DESTINATION });
-    if (!optionsContext || [...url.searchParams.keys()].some(key => !['country', 'sourceCurrencyCode'].includes(key))
+    if (!appMeldFundingContext(country, sourceCurrencyCode) || [...url.searchParams.keys()].some(key => !['country', 'sourceCurrencyCode'].includes(key))
       || url.searchParams.getAll('country').length !== 1 || url.searchParams.getAll('sourceCurrencyCode').length > 1) return reply({ error: 'invalid_request' }, 400);
-    path = `/api/member/wallet-funding/personal/options?country=${country}${sourceCurrencyCode === 'USD' ? '' : `&sourceCurrencyCode=${sourceCurrencyCode}`}`;
+    optionsContext = { country, sourceCurrencyCode };
+    path = `/api/member/wallet-funding/personal/options?country=${country}&sourceCurrencyCode=${sourceCurrencyCode}`;
   } else if (action === 'options') {
     const url = new URL(request.url);
     const country = url.searchParams.get('country');
@@ -61,9 +62,10 @@ export async function handleWalletFunding(request, action, {
   } else {
     const denied = memberMutationError(request, env);
     if (denied) return reply({ error: denied.error }, denied.status);
-    // An already-open tab may still construct Ethereum checkout URLs. Never
-    // persist a Polygon intent unless the current personal client opts in.
-    if (kind === 'personal' && request.headers.get('x-mindbliss-wallet-network') !== 'polygon') {
+    if (kind === 'personal' && request.headers.get('origin') !== env.AUTH_PUBLIC_ORIGIN) return reply({ error: 'invalid_origin' }, 403);
+    // Old tabs can construct a Reown checkout from the previous intent schema.
+    if (kind === 'personal' && (request.headers.get('x-mindbliss-wallet-network') !== 'polygon'
+      || request.headers.get('x-mindbliss-funding-provider') !== 'meld')) {
       return reply({ error: 'wallet_funding_network_changed' }, 409);
     }
     const length = request.headers.get('content-length');
@@ -76,13 +78,20 @@ export async function handleWalletFunding(request, action, {
     }
     if (!body) return reply({ error: 'invalid_request' }, 400);
     if (!fundingSourceSupported(body, kind)) return reply({ error: 'wallet_funding_valuation_unavailable' }, 503);
+    const appInputError = kind === 'personal' && appMeldFundingInputError(body);
+    if (appInputError) return reply({ error: appInputError }, 400);
     path = kind === 'personal' ? '/api/member/wallet-funding/personal/intent' : '/api/member/wallet-funding/administrative/session';
   }
   try {
     const base = betterAuthConfig(env);
     const serialized = body ? JSON.stringify(body) : '';
     const headers = { cookie, ...(body ? { 'content-type': 'application/json', origin: request.headers.get('origin') || '' } : {}) };
-    if (action === 'administrative') {
+    if (action === 'personal-options' || action === 'personal-status' || (action === 'history' && kind === 'personal')) {
+      if (new URL(request.url).origin !== env.AUTH_PUBLIC_ORIGIN) return reply({ error: 'invalid_origin' }, 403);
+      headers.origin = env.AUTH_PUBLIC_ORIGIN;
+      headers['x-mindbliss-funding-provider'] = 'meld';
+    }
+    if (action === 'administrative' || action === 'personal') {
       const ip = trustedAuthClientIp(request.headers, env);
       const timestamp = String(Math.floor(Date.now() / 1000));
       const hash = value => createHash('sha256').update(value).digest('hex');
@@ -91,6 +100,7 @@ export async function handleWalletFunding(request, action, {
       headers['x-vp-auth-client-ip'] = ip;
       headers['x-vp-auth-timestamp'] = timestamp;
       headers['x-vp-auth-signature'] = signature;
+      if (action === 'personal') headers['x-mindbliss-funding-provider'] = 'meld';
     }
     const result = await serviceRequest(`${base}${path}`, {
       method, headers, body: serialized || undefined, signal: request.signal,
@@ -107,10 +117,11 @@ export async function handleWalletFunding(request, action, {
         reason: result.status === 404 ? 'gateway_route_missing' : result.status >= 500 ? 'gateway_service_unavailable' : 'gateway_rejected' },
         [400, 401, 403, 409, 413, 429, 503].includes(result.status) ? result.status : 502);
     }
-    const safe = statusRead ? fundingStatus(result.data, kind)
-      : action === 'personal-options' ? personalProductionOptions(result.data)
+    const safe = statusRead ? (kind === 'personal' ? appPersonalFundingStatus(result.data) : fundingStatus(result.data, kind))
+      : action === 'personal-options' ? appMeldFundingOptions(result.data)
       : action === 'options' ? administrativeSandboxOptions(result.data)
-      : action === 'history' ? fundingHistory(result.data, kind) : fundingAcknowledgement(result.data, kind, body?.country || '');
+      : action === 'history' ? (kind === 'personal' ? appPersonalFundingHistory(result.data) : fundingHistory(result.data, kind))
+      : kind === 'personal' ? appMeldFundingSession(result.data, body) : fundingAcknowledgement(result.data, kind, body?.country || '');
     if (!safe) { diagnostic(action, 'response_contract', result.status || 200); return reply({ error: 'funding_unavailable', reason: 'invalid_gateway_response' }, 502); }
     if (requestedReference && (!('checkoutReference' in safe) || safe.checkoutReference !== requestedReference)) return reply({ error: 'funding_unavailable' }, 502);
     if (body && (!('requestedAmount' in safe) || !('checkoutReference' in safe) || safe.requestedAmount !== body.amount

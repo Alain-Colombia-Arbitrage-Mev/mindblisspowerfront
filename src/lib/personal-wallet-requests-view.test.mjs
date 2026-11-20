@@ -1,3 +1,4 @@
+import { appPersonalFundingStatus } from './app-meld-funding-contract.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { existsSync, readFileSync } from 'node:fs';
@@ -31,6 +32,7 @@ function moduleAt(relative, locale = 'es', overrides = {}) {
       if (['next/link', './IntentLink'].includes(id)) return { default: Link };
       if (id === '@/i18n/LanguageProvider') return { useI18n: () => ({ locale, dir: locale === 'ar' ? 'rtl' : 'ltr', t: (key, values) => translateMessage(locale, key, values) }) };
       if (id === '@/lib/member-navigation.mjs') return { matchesRoute };
+      if (id === '@/lib/app-meld-funding-contract.mjs') return { appPersonalFundingStatus };
       if (id === '@/lib/wallet-funding-contract.mjs') return { FUNDING_UUID };
       if (id === '@/lib/member-session-context') return { useMemberSession: () => ({ subject: 'requests-view-owner', email: 'member@example.test' }) };
       if (id === '@/lib/personal-wallet-balance-store.mjs') return { personalWalletBalanceSessionKey };

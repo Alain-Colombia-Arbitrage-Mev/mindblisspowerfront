@@ -1,12 +1,22 @@
-import { administrativeSandboxOptions, personalProductionOptions, fundingAcknowledgement, fundingHistory, fundingInput, fundingStatus, fundingCurrencyCode, fundingSourceSupported, FUNDING_UUID, PERSONAL_FUNDING_DESTINATION } from './wallet-funding-contract.mjs';
+import { administrativeSandboxOptions, fundingAcknowledgement, fundingHistory, fundingInput, fundingStatus, fundingCurrencyCode, fundingSourceSupported, FUNDING_UUID } from './wallet-funding-contract.mjs';
+import { appMeldFundingContext, appMeldFundingInputError, appMeldFundingOptions, appMeldFundingSession, appPersonalFundingHistory, appPersonalFundingStatus } from './app-meld-funding-contract.mjs';
 import { browserRequestDeadline } from './browser-request-deadline.mjs';
 
 export function fundingRequestId() { return crypto.randomUUID(); }
 
 /** @param {Record<string, unknown>} input @param {{signal?: AbortSignal}} [options] */
 export async function createPersonalFundingIntent(input, options = {}) {
-  const data = await createFunding(input, 'personal', '/api/member/wallet-funding/personal/intent', options);
-  if (!('paymentMethodType' in data) || !('allowedProviders' in data)) throw new Error('funding_unavailable');
+  const body = fundingInput(input, 'personal');
+  if (!body) throw new Error('invalid_request');
+  if (!fundingSourceSupported(body, 'personal')) throw new Error('wallet_funding_valuation_unavailable');
+  const appInputError = appMeldFundingInputError(body);
+  if (appInputError) throw new Error(appInputError);
+  const data = appMeldFundingSession(await request('/api/member/wallet-funding/personal/intent', {
+    method: 'POST', signal: options.signal,
+    headers: { 'content-type': 'application/json', 'x-mindbliss-wallet-network': 'polygon', 'x-mindbliss-funding-provider': 'meld' },
+    body: JSON.stringify(body),
+  }), body);
+  if (!data) throw new Error('funding_unavailable');
   return data;
 }
 
@@ -26,10 +36,10 @@ export async function readAdministrativeSandboxOptions(country, serviceProvider,
   return data;
 }
 
-/** Production discovery uses Reown's merchant configuration, never administrative MELD credentials. */
+/** Production discovery uses the authenticated MELD account. */
 /** @param {string} country @param {{signal?: AbortSignal, sourceCurrencyCode?: string}} [options] */
 export async function readPersonalFundingOptions(country, { signal, sourceCurrencyCode = 'USD' } = {}) {
-  if (!personalProductionOptions({ walletKind: 'personal', environment: 'production', provider: 'reown', country, sourceCurrencyCode, paymentMethods: [], routes: [], ...PERSONAL_FUNDING_DESTINATION })) {
+  if (!appMeldFundingContext(country, sourceCurrencyCode)) {
     throw new Error('invalid_request');
   }
   const deadline = browserRequestDeadline(signal, 25_000);
@@ -46,7 +56,7 @@ export async function readPersonalFundingOptions(country, { signal, sourceCurren
         await fundingReadRetryDelay(deadline.signal);
       }
     }
-    const data = personalProductionOptions(raw);
+    const data = appMeldFundingOptions(raw);
     if (!data || data.country !== country || data.sourceCurrencyCode !== sourceCurrencyCode) throw new Error('funding_unavailable');
     return data;
   } finally { deadline.dispose(); }
@@ -65,7 +75,8 @@ function fundingReadRetryDelay(signal) {
 /** @param {'personal' | 'administrative'} kind @param {{signal?: AbortSignal}} [options] */
 export async function readWalletFundingHistory(kind, { signal } = {}) {
   if (!['personal', 'administrative'].includes(kind)) throw new Error('invalid_request');
-  const data = fundingHistory(await request(`/api/member/wallet-funding/history?walletKind=${kind}`, { method: 'GET', signal }), kind);
+  const raw = await request(`/api/member/wallet-funding/history?walletKind=${kind}`, { method: 'GET', signal });
+  const data = kind === 'personal' ? appPersonalFundingHistory(raw) : fundingHistory(raw, kind);
   if (!data) throw new Error('funding_unavailable');
   return data;
 }
@@ -79,7 +90,8 @@ export async function readWalletFundingStatus(kind, checkoutReference, { signal 
   if (!['personal', 'administrative'].includes(kind) || typeof checkoutReference !== 'string'
     || checkoutReference.length !== 36 || !FUNDING_UUID.test(checkoutReference)) throw new Error('invalid_request');
   const reference = checkoutReference.toLowerCase();
-  const data = fundingStatus(await request(`/api/member/wallet-funding/${kind}/status?checkoutReference=${reference}`, { method: 'GET', signal }), kind);
+  const raw = await request(`/api/member/wallet-funding/${kind}/status?checkoutReference=${reference}`, { method: 'GET', signal });
+  const data = kind === 'personal' ? appPersonalFundingStatus(raw) : fundingStatus(raw, kind);
   if (!data || data.checkoutReference !== reference) throw new Error('funding_unavailable');
   return data;
 }
@@ -91,7 +103,7 @@ async function createFunding(input, kind, path, { signal } = {}) {
   // SPEI uses the provider's MXN limits and is recorded as MXN, never USD.
   if (!fundingSourceSupported(body, kind)) throw new Error('wallet_funding_valuation_unavailable');
   const data = fundingAcknowledgement(await request(path, { method: 'POST', signal,
-    headers: { 'content-type': 'application/json', ...(kind === 'personal' ? { 'x-mindbliss-wallet-network': 'polygon' } : {}) },
+    headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body) }), kind, body.country);
   if (!data || data.requestedAmount !== body.amount || data.checkoutReference !== body.requestId
     || fundingCurrencyCode(data.sourceCurrencyCode) !== fundingCurrencyCode(body.sourceCurrencyCode)

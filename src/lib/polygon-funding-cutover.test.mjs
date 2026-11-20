@@ -6,17 +6,17 @@ import { createPersonalFundingIntent, createAdministrativeSandboxSession } from 
 import { personalFundingFailure } from './personal-funding-errors.mjs';
 
 const address = `0x${'1'.repeat(40)}`, other = `0x${'2'.repeat(40)}`;
-const input = { requestId: '11111111-1111-4111-8111-111111111111', walletAddress: address, country: 'US', amount: 30,
+const input = { requestId: '11111111-1111-4111-8111-111111111111', walletAddress: address, country: 'MX', amount: 50,
   sourceCurrencyCode: 'USD', paymentMethodType: 'CREDIT_DEBIT_CARD' };
-const ack = { walletKind: 'personal', environment: 'production', provider: 'reown', status: 'initiated',
-  checkoutReference: input.requestId, requestedAmount: 30, sourceCurrencyCode: 'USD', paymentMethodType: input.paymentMethodType,
-  allowedProviders: ['SWAPPED'], createdAt: '2026-11-11T12:00:00Z', destinationCurrencyCode: 'USDT_POLYGON',
+const ack = { walletKind: 'personal', environment: 'production', provider: 'meld', serviceProvider: 'MERCURYO', country: 'MX', status: 'session_created',
+  checkoutReference: input.requestId, requestedAmount: 50, sourceCurrencyCode: 'USD', paymentMethodType: input.paymentMethodType,
+  checkoutUrl: 'https://meldcrypto.com/?token=synthetic', createdAt: '2026-11-11T12:00:00Z', destinationCurrencyCode: 'USDT_POLYGON',
   destination: { address, asset: 'USDT', network: 'polygon', chainId: 137 } };
 const env = { AUTH_PROVIDER: 'better-auth', AUTH_BFF_SHARED_SECRET: 's'.repeat(40), NODE_ENV: 'production',
   AUTH_PUBLIC_ORIGIN: 'https://app.mindblisspower.com', BETTER_AUTH_BACKEND_URL: 'https://auth.core.internal' };
 const request = () => new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/wallet-funding/personal/intent`, { method: 'POST',
   headers: { cookie: 'better-auth.session_token=synthetic', origin: env.AUTH_PUBLIC_ORIGIN, 'content-type': 'application/json',
-    'x-mindbliss-wallet-network': 'polygon',
+    'x-mindbliss-wallet-network': 'polygon', 'x-mindbliss-funding-provider': 'meld',
     'sec-fetch-site': 'same-origin', 'cf-connecting-ip': '198.51.100.1' }, body: JSON.stringify(input) });
 
 test('new personal discovery must explicitly identify Polygon USDT before any payment choices are used', () => {

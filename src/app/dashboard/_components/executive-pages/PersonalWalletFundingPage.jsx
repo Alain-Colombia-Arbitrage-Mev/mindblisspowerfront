@@ -70,7 +70,9 @@ export function PersonalWalletFunding() {
   }, []);
   useEffect(() => {
     action.current = null; setActionBusy(false); setCheckoutBusy(false); setWalletRecovery({ phase: "", address: "" });
-    setActionError(""); setActionDiagnostic(""); setSelectedReference(""); setSelectedGeneration(-1); setStatusFocusKey(0);
+    const references = owner && typeof window !== "undefined" ? new URLSearchParams(window.location?.search ?? "").getAll("walletCheckoutReference") : [];
+    const reference = references.length === 1 && FUNDING_UUID.test(references[0]) ? references[0].toLowerCase() : "";
+    setActionError(""); setActionDiagnostic(""); setSelectedReference(reference); setSelectedGeneration(reference ? generation : -1); setStatusFocusKey(0);
   }, [owner, generation]);
 
   async function walletAction(change = false) {

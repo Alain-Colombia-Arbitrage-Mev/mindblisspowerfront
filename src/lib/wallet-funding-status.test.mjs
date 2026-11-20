@@ -3,6 +3,7 @@ import test from 'node:test';
 import { fundingStatus, fundingHistory } from './wallet-funding-contract.mjs';
 import { readWalletFundingStatus } from './wallet-funding-client.mjs';
 import { handleWalletFunding } from './wallet-funding-bff.mjs';
+import { appPersonalFundingHistory } from './app-meld-funding-contract.mjs';
 
 const reference = 'd8a4c010-cc33-44da-a297-8b3c6440f491';
 const otherReference = 'd8a4c010-cc33-44da-a297-8b3c6440f492';
@@ -114,4 +115,29 @@ test('browser status reads cannot mix wallets, reuse another reference or replay
     const controller = new AbortController(); controller.abort();
     await assert.rejects(readWalletFundingStatus('personal', reference, { signal: controller.signal }), { name: 'AbortError' });
   } finally { globalThis.fetch = original; }
+});
+
+test('APP MELD status requires a matching settled proof and keeps the earlier Reown records readable', async () => {
+  const confirmation = { state: 'confirmed', source: 'meld_production_api', testMode: false, providerStatus: 'SETTLED',
+    receivedAmount: '93.284193', transactionId: 'production-transaction', confirmedAt: '2026-11-10T15:00:00Z' };
+  const direct = { ...status(), provider: 'meld', serviceProvider: 'MERCURYO', country: 'MX', sourceCurrencyCode: 'USD',
+    paymentMethodType: 'CREDIT_DEBIT_CARD', destinationCurrencyCode: 'USDT_POLYGON', requestStatus: 'session_created', confirmation };
+  for (const value of [direct, { ...direct, confirmation: { ...confirmation, source: 'query_string' } },
+    { ...direct, confirmation: { ...confirmation, transactionId: '..' } },
+    { ...direct, destination: { ...direct.destination, asset: 'USDC' } }]) {
+    const result = await handleWalletFunding(request('personal'), 'personal-status', { env, serviceRequest: async (_, init) => {
+      assert.equal(init.headers.origin, env.AUTH_PUBLIC_ORIGIN);
+      assert.equal(init.headers['x-mindbliss-funding-provider'], 'meld');
+      return { ok: true, data: value };
+    } });
+    if (value === direct) {
+      assert.equal(result.status, 200);
+      assert.deepEqual((await result.json()).confirmation, confirmation);
+    } else assert.equal(result.status, 502);
+  }
+  const date = '2026-11-10T14:00:00Z';
+  const history = appPersonalFundingHistory({ walletKind: 'personal', environment: 'production', settlement: 'unconfirmed',
+    records: [{ ...direct, status: 'session_created', createdAt: date },
+      { checkoutReference: otherReference, country: 'CO', provider: 'reown', status: 'initiated', requestedAmount: 100, createdAt: date }] });
+  assert.deepEqual(history.records.map(record => [record.checkoutReference, record.provider]), [[reference, 'meld'], [otherReference, 'reown']]);
 });

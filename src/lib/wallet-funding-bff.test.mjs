@@ -7,29 +7,40 @@ import { handleWalletLink } from './wallet-link-bff.mjs';
 const env = { AUTH_PROVIDER: 'better-auth', AUTH_BFF_SHARED_SECRET: 's'.repeat(32),
   AUTH_PUBLIC_ORIGIN: 'https://app.example.test', BETTER_AUTH_BACKEND_URL: 'https://auth.core.internal', NODE_ENV: 'production' };
 const requestId = 'd8a4c010-cc33-44da-a297-8b3c6440f491';
-const input = { requestId, walletAddress: `0x${'1'.repeat(40)}`, country: 'US', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' };
+const input = { requestId, walletAddress: `0x${'1'.repeat(40)}`, country: 'MX', sourceCurrencyCode: 'USD', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' };
 const ack = kind => ({ checkoutReference: requestId, walletKind: kind, environment: kind === 'personal' ? 'production' : 'sandbox',
-  provider: kind === 'personal' ? 'reown' : 'meld', status: kind === 'personal' ? 'initiated' : 'session_created',
+  provider: 'meld', status: 'session_created',
   requestedAmount: 100, createdAt: '2026-11-10T15:00:00.000Z', ...(kind === 'administrative' ? { checkoutUrl: 'https://sb.meldcrypto.com/?token=synthetic' }
-    : { paymentMethodType: input.paymentMethodType, allowedProviders: ['SWAPPED', 'MERCURYO'], destinationCurrencyCode: 'USDT_POLYGON',
+    : { country: 'MX', sourceCurrencyCode: 'USD', serviceProvider: 'MERCURYO', checkoutUrl: 'https://meldcrypto.com/?token=synthetic',
+      paymentMethodType: input.paymentMethodType, destinationCurrencyCode: 'USDT_POLYGON',
       destination: { address: input.walletAddress, asset: 'USDT', network: 'polygon', chainId: 137 } }) });
 const request = (body = input, headers = {}) => new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/wallet-funding/personal/intent`, {
   method: 'POST', headers: { cookie: 'better-auth.session_token=synthetic-session', origin: env.AUTH_PUBLIC_ORIGIN,
-    'x-mindbliss-wallet-network': 'polygon',
+    'x-mindbliss-wallet-network': 'polygon', 'x-mindbliss-funding-provider': 'meld',
     'sec-fetch-site': 'same-origin', 'content-type': 'application/json', 'cf-connecting-ip': '198.51.100.10', ...headers }, body: JSON.stringify(body),
 });
 
-test('personal funding records one native request without Meld credentials, quotes or commissions', async () => {
+test('personal funding signs one private MELD session request and returns the opaque checkout', async () => {
   let calls = 0;
   const response = await handleWalletFunding(request(), 'personal', { env, serviceRequest: async (url, init) => {
     calls++; assert.equal(url, 'https://auth.core.internal/api/member/wallet-funding/personal/intent');
     assert.deepEqual(JSON.parse(init.body), input);
     assert.equal(init.headers.cookie, 'better-auth.session_token=synthetic-session');
+    assert.equal(init.headers['x-mindbliss-funding-provider'], 'meld');
+    const hash = value => createHash('sha256').update(value).digest('hex');
+    assert.equal(init.headers['x-vp-auth-client-ip'], '198.51.100.10');
+    assert.equal(init.headers['x-vp-auth-signature'], createHmac('sha256', env.AUTH_BFF_SHARED_SECRET)
+      .update(['POST', '/api/member/wallet-funding/personal/intent', init.headers['x-vp-auth-timestamp'],
+        '198.51.100.10', hash(init.headers.cookie), hash(init.body)].join('\n')).digest('hex'));
     return { ok: true, data: { ...ack('personal'), commission: 1, token: 'must-not-leak' } };
   } });
   assert.equal(calls, 1); assert.equal(response.status, 200);
   assert.equal(response.headers.get('cache-control'), 'private, no-store');
   assert.deepEqual(await response.json(), ack('personal'));
+  assert.equal((await handleWalletFunding(request(input, { 'x-mindbliss-funding-provider': '' }), 'personal', { env,
+    serviceRequest: async () => assert.fail('old Reown client reached the MELD session') })).status, 409);
+  assert.equal((await handleWalletFunding(request(input, { 'cf-connecting-ip': '' }), 'personal', { env,
+    serviceRequest: async () => assert.fail('missing trusted client IP reached MELD session') })).status, 503);
 });
 
 test('funding rejects foreign origins, extra identity fields and invalid money before private transport', async () => {
@@ -72,7 +83,11 @@ test('administrative funding accepts only a sandbox session and leaves its opaqu
 
 test('wallet and environment acknowledgements cannot cross funding histories or claim settlement', async () => {
   for (const data of [{ ...ack('personal'), environment: 'sandbox' }, { ...ack('personal'), walletKind: 'administrative' },
-    { ...ack('personal'), status: 'complete' }, { ...ack('personal'), requestedAmount: 101 },
+    { ...ack('personal'), status: 'complete' }, { ...ack('personal'), requestedAmount: 101 }, { ...ack('personal'), provider: 'reown' },
+    { ...ack('personal'), serviceProvider: 'SWAPPED' }, { ...ack('personal'), destinationCurrencyCode: 'USDC_POLYGON' },
+    { ...ack('personal'), checkoutUrl: 'https://meldcrypto.com.evil.test/?token=opaque' },
+    { ...ack('personal'), checkoutUrl: 'https://meldcrypto.com/?token=opaque&token=other' },
+    { ...ack('personal'), destination: { ...ack('personal').destination, address: `0x${'2'.repeat(40)}` } },
     { ...ack('personal'), checkoutReference: 'd8a4c010-cc33-44da-a297-8b3c6440f492' }]) {
     assert.equal((await handleWalletFunding(request(), 'personal', { env, serviceRequest: async () => ({ ok: true, data }) })).status, 502);
   }
@@ -111,19 +126,20 @@ test('administrative methods use only the selected sandbox country and provider,
 });
 
 test('personal options authenticate and reject crossed countries, sandbox methods and unknown limits', async () => {
-  const options = { walletKind: 'personal', environment: 'production', provider: 'reown', country: 'US', sourceCurrencyCode: 'USD',
+  const options = { walletKind: 'personal', environment: 'production', provider: 'meld', country: 'MX', sourceCurrencyCode: 'USD',
     destinationCurrencyCode: 'USDT_POLYGON', network: 'polygon', chainId: 137,
-    paymentMethods: ['CREDIT_DEBIT_CARD'], routes: [{ serviceProvider: 'SWAPPED', paymentMethods: [
-      { method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount: 100, maximumAmount: 10000, minimumUsd: 100, maximumUsd: 10000 }] }] };
-  const get = new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/wallet-funding/personal/options?country=US`,
+    paymentMethods: ['CREDIT_DEBIT_CARD'], routes: [{ serviceProvider: 'MERCURYO', paymentMethods: [
+      { method: 'CREDIT_DEBIT_CARD', currencyCode: 'USD', minimumAmount: 100, maximumAmount: 10000 }] }] };
+  const get = new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/wallet-funding/personal/options?country=MX`,
     { headers: { cookie: 'better-auth.session_token=synthetic' } });
   const response = await handleWalletFunding(get, 'personal-options', { env, serviceRequest: async (url, init) => {
-    assert.equal(url, 'https://auth.core.internal/api/member/wallet-funding/personal/options?country=US');
+    assert.equal(url, 'https://auth.core.internal/api/member/wallet-funding/personal/options?country=MX&sourceCurrencyCode=USD');
     assert.equal(init.method, 'GET'); assert.equal(init.body, undefined);
+    assert.equal(init.headers.origin, env.AUTH_PUBLIC_ORIGIN); assert.equal(init.headers['x-mindbliss-funding-provider'], 'meld');
     return { ok: true, data: { ...options, secret: 'must-not-leak' } };
   } });
   assert.deepEqual(await response.json(), options);
-  for (const data of [{ ...options, environment: 'sandbox' }, { ...options, country: 'MX' },
+  for (const data of [{ ...options, environment: 'sandbox' }, { ...options, country: 'US' },
     { ...options, routes: [{ ...options.routes[0], serviceProvider: 'BANXA' }] },
     { ...options, routes: [{ ...options.routes[0], paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', minimumUsd: null, maximumUsd: 10000 }] }] }]) {
     assert.equal((await handleWalletFunding(get, 'personal-options', { env, serviceRequest: async () => ({ ok: true, data }) })).status, 502);
@@ -132,22 +148,23 @@ test('personal options authenticate and reject crossed countries, sandbox method
     serviceRequest: async () => assert.fail('unauthenticated discovery transport') })).status, 401);
 });
 
-test('USD discovery keeps the compatible private path for omitted and explicit currency', async () => {
+test('USD discovery canonicalizes the MELD path for omitted and explicit currency', async () => {
   for (const kind of ['personal', 'administrative']) {
     const administrative = kind === 'administrative';
-    const country = administrative ? 'CO' : 'US';
-    const serviceProvider = administrative ? 'BANXA' : 'SWAPPED';
+    const country = administrative ? 'CO' : 'MX';
+    const serviceProvider = administrative ? 'BANXA' : 'MERCURYO';
     const suffix = administrative ? `&serviceProvider=${serviceProvider}` : '';
-    const legacy = { walletKind: kind, environment: administrative ? 'sandbox' : 'production', provider: administrative ? 'meld' : 'reown',
-      country, ...(administrative ? { serviceProvider } : { destinationCurrencyCode: 'USDT_POLYGON', network: 'polygon', chainId: 137 }), paymentMethods: ['CREDIT_DEBIT_CARD'],
-      routes: [{ serviceProvider, paymentMethods: [{ method: 'CREDIT_DEBIT_CARD', minimumUsd: 10, maximumUsd: 1000 }] }] };
+    const payload = { walletKind: kind, environment: administrative ? 'sandbox' : 'production', provider: 'meld',
+      country, ...(administrative ? { serviceProvider } : { sourceCurrencyCode: 'USD', destinationCurrencyCode: 'USDT_POLYGON', network: 'polygon', chainId: 137 }),
+      paymentMethods: ['CREDIT_DEBIT_CARD'], routes: [{ serviceProvider, paymentMethods: [{ method: 'CREDIT_DEBIT_CARD',
+        ...(administrative ? { minimumUsd: 10, maximumUsd: 1000 } : { currencyCode: 'USD', minimumAmount: 10, maximumAmount: 1000 }) }] }] };
     for (const currencyQuery of ['', '&sourceCurrencyCode=USD']) {
       const request = new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/wallet-funding/${kind}/options?country=${country}${currencyQuery}${suffix}`,
         { headers: { cookie: 'better-auth.session_token=synthetic' } });
       const response = await handleWalletFunding(request, administrative ? 'options' : 'personal-options', {
         env, serviceRequest: async url => {
-          assert.equal(url, `https://auth.core.internal/api/member/wallet-funding/${kind}/options?country=${country}${suffix}`);
-          return { ok: true, data: legacy };
+          assert.equal(url, `https://auth.core.internal/api/member/wallet-funding/${kind}/options?country=${country}${administrative ? suffix : '&sourceCurrencyCode=USD'}`);
+          return { ok: true, data: payload };
         },
       });
       assert.equal(response.status, 200);

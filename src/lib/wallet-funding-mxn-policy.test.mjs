@@ -67,11 +67,11 @@ test('below-floor MXN attempts are rejected before browser transport or authenti
     globalThis.fetch = async () => assert.fail('below-floor amount reached transport');
     await assert.rejects(createPersonalFundingIntent(input(930.99)), { message: 'invalid_request' });
     const request = new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/wallet-funding/personal/intent`, { method: 'POST',
-      headers: { cookie: 'better-auth.session_token=synthetic', origin: env.AUTH_PUBLIC_ORIGIN, 'sec-fetch-site': 'same-origin', 'content-type': 'application/json', 'x-mindbliss-wallet-network': 'polygon' },
+      headers: { cookie: 'better-auth.session_token=synthetic', origin: env.AUTH_PUBLIC_ORIGIN, 'sec-fetch-site': 'same-origin', 'content-type': 'application/json', 'x-mindbliss-wallet-network': 'polygon', 'x-mindbliss-funding-provider': 'meld' },
       body: JSON.stringify(input(930.99)) });
     const response = await handleWalletFunding(request, 'personal', { env, serviceRequest: async () => assert.fail('below-floor amount reached private backend') });
     assert.equal(response.status, 400);
-    globalThis.fetch = async (_path, init) => { assert.deepEqual(JSON.parse(init.body), input(931)); return Response.json(ack(931)); };
+    globalThis.fetch = async (_path, init) => { assert.deepEqual(JSON.parse(init.body), input(931)); return Response.json({ ...ack(931), provider: 'meld', serviceProvider: 'ONRAMPMONEY', country: 'MX', status: 'session_created', checkoutUrl: 'https://meldcrypto.com/?token=synthetic' }); };
     assert.equal((await createPersonalFundingIntent(input(931))).sourceCurrencyCode, 'MXN');
   } finally { globalThis.fetch = original; }
 });

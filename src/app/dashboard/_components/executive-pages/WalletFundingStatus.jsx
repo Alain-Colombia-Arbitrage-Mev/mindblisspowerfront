@@ -4,20 +4,24 @@ import { CheckCircle2, Clock3, Info, Loader2, RefreshCw, XCircle } from "lucide-
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "@/i18n/LanguageProvider";
 import { readWalletFundingStatus } from "@/lib/wallet-funding-client.mjs";
-import { fundingStatus, FUNDING_UUID } from "@/lib/wallet-funding-contract.mjs";
+import { FUNDING_UUID } from "@/lib/wallet-funding-contract.mjs";
+import { appPersonalFundingStatus } from "@/lib/app-meld-funding-contract.mjs";
 import { useMemberSession } from "@/lib/member-session-context";
 import { personalWalletBalanceSessionKey } from "@/lib/personal-wallet-balance-store.mjs";
 import styles from "./wallet-funding.module.css";
 
-/** Current native API deliberately accepts no paid/confirmed response. */
 export function currentFundingView(value, walletKind, checkoutReference) {
   if (walletKind !== "personal") return null;
-  const safe = fundingStatus(value, walletKind);
+  const safe = appPersonalFundingStatus(value);
   if (!safe || typeof checkoutReference !== "string" || !FUNDING_UUID.test(checkoutReference)
     || safe.checkoutReference.toLowerCase() !== checkoutReference.toLowerCase()) return null;
+  const proof = safe.confirmation;
+  const confirmed = proof.state === "confirmed";
+  const state = proof.state !== "unconfirmed" ? proof.state
+    : { session_created: "checkout_ready", unavailable: "request_unavailable", failed: "checkout_failed" }[safe.requestStatus] || "unconfirmed";
   return { walletKind, checkoutReference: safe.checkoutReference, requestedAmount: safe.requestedAmount, sourceCurrencyCode: safe.sourceCurrencyCode || "USD",
     destination: safe.destination, testMode: safe.confirmation.testMode, requestStatus: safe.requestStatus,
-    state: { session_created: "checkout_ready", unavailable: "request_unavailable", failed: "checkout_failed" }[safe.requestStatus] || "unconfirmed" };
+    state, ...(confirmed ? { receivedAmount: proof.receivedAmount, confirmedAt: proof.confirmedAt } : {}) };
 }
 
 export default function WalletFundingStatus({ walletKind, checkoutReference, focusKey = 0 }) {
@@ -70,7 +74,6 @@ export default function WalletFundingStatus({ walletKind, checkoutReference, foc
   </section>;
 }
 
-/** Presentation for future trusted settlement states. Native reads cannot reach confirmed today. */
 export function WalletFundingStatusView({ view }) {
   const { t, locale } = useI18n();
   if (!view || view.walletKind !== "personal" || view.testMode === true) return null;

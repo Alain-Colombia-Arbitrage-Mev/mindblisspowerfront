@@ -15,7 +15,7 @@ function stalled(path, controller = new AbortController()) {
     cancel() { cancels++; return new Promise(() => {}); }, releaseLock() { releases++; } };
   const request = { url: `${origin}${path}`, method: 'POST', signal: controller.signal,
     headers: new Headers({ origin, cookie: 'better-auth.session_token=synthetic',
-      'content-type': 'application/json', 'sec-fetch-site': 'same-origin', 'x-mindbliss-wallet-network': 'polygon' }),
+      'content-type': 'application/json', 'sec-fetch-site': 'same-origin', 'x-mindbliss-wallet-network': 'polygon', 'x-mindbliss-funding-provider': 'meld' }),
     body: { getReader: () => reader } };
   return { request, controller, started, pending, counts: () => ({ reads, cancels, releases }) };
 }
@@ -86,7 +86,7 @@ test('wallet proof and funding bridges retain exact body limits before transport
   for (const [kind, limit] of [['link', 4096], ['funding', 2048]]) {
     const request = new Request(`${origin}/api/member/${kind === 'link' ? 'wallet-link/challenge' : 'wallet-funding/personal/intent'}`, {
       method: 'POST', headers: { origin, cookie: 'better-auth.session_token=synthetic', 'content-type': 'application/json',
-        'content-length': String(limit + 1), 'x-mindbliss-wallet-network': 'polygon' }, body: '{}',
+        'content-length': String(limit + 1), 'x-mindbliss-wallet-network': 'polygon', 'x-mindbliss-funding-provider': 'meld' }, body: '{}',
     });
     const options = { env, serviceRequest: async () => assert.fail('Oversized input reached upstream') };
     const response = await (kind === 'link' ? handleWalletLink(request, 'challenge', options) : handleWalletFunding(request, 'personal', options));

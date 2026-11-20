@@ -23,7 +23,7 @@ const env = { AUTH_PROVIDER: 'better-auth', AUTH_BFF_SHARED_SECRET: 's'.repeat(3
   AUTH_PUBLIC_ORIGIN: 'https://app.example.test', BETTER_AUTH_BACKEND_URL: 'https://auth.core.internal', NODE_ENV: 'production' };
 const post = body => new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/wallet-funding/personal/intent`, {
   method: 'POST', headers: { cookie: 'better-auth.session_token=synthetic', origin: env.AUTH_PUBLIC_ORIGIN,
-    'x-mindbliss-wallet-network': 'polygon', 'content-type': 'application/json', 'sec-fetch-site': 'same-origin' }, body: JSON.stringify(body),
+    'x-mindbliss-wallet-network': 'polygon', 'x-mindbliss-funding-provider': 'meld', 'cf-connecting-ip': '198.51.100.5', 'content-type': 'application/json', 'sec-fetch-site': 'same-origin' }, body: JSON.stringify(body),
 });
 
 test('US dollar options admit three real providers while Topper and Venmo stay scoped to US/USD and both wallet methods remain scoped', () => {
@@ -50,21 +50,15 @@ test('Topper acknowledgements require the request residence rather than trusting
   assert.equal(fundingAcknowledgement(ack(input('US', 'USD', 'CASH'), ['TOPPER']), 'personal', 'US'), null);
 });
 
-test('PayPal uses only Topper US/USD with contextual acknowledgements, Polygon history and locked checkout', async t => {
+test('historical PayPal uses Topper US/USD with contextual acknowledgements and Polygon history', () => {
   const body = input('US', 'USD', 'PAYPAL');
   const response = ack(body, ['TOPPER']);
-  const calls = [];
-  t.mock.method(globalThis, 'fetch', async (_path, init) => { calls.push(init); return Response.json(response); });
-  assert.deepEqual(await createPersonalFundingIntent(body), response);
-  assert.equal((await handleWalletFunding(post(body), 'personal', { env, serviceRequest: async () => ({ ok: true, data: response }) })).status, 200);
   assert.equal(fundingAcknowledgement(response, 'personal'), null);
   assert.deepEqual(fundingAcknowledgement(response, 'personal', 'US'), response);
   for (const country of ['CO', 'MX']) {
     assert.equal(fundingAcknowledgement(response, 'personal', country), null);
-    await assert.rejects(createPersonalFundingIntent({ ...body, country }), { message: 'wallet_funding_valuation_unavailable' });
   }
   for (const sourceCurrencyCode of ['MXN', 'COP']) assert.equal(fundingSourceSupported({ ...body, sourceCurrencyCode }, 'personal'), false);
-  assert.equal(calls.length, 1);
   const projectId = 'a'.repeat(32);
   const url = new URL(buildReownProductionOnrampUrl({ providerUrl: `https://meldcrypto.com/?publicKey=synthetic&externalCustomerId=${projectId}`,
     projectId, address, checkoutReference: requestId, countryCode: 'US', sourceCurrencyCode: 'USD', amount: 100, paymentMethodType: 'PAYPAL', allowedProviders: ['TOPPER'] }));
@@ -74,31 +68,28 @@ test('PayPal uses only Topper US/USD with contextual acknowledgements, Polygon h
   for (const patch of [{ country: 'CO' }, { country: 'MX' }, { destination: { ...destination, network: 'ethereum', chainId: 1 } }]) assert.equal(fundingStatus({ ...status, ...patch }, 'personal'), null);
 });
 
-test('browser and BFF validate three-provider and Venmo acknowledgements against the exact outgoing country', async t => {
-  let calls = 0;
-  t.mock.method(globalThis, 'fetch', async (_url, init) => { calls++; return Response.json(ack(JSON.parse(init.body), ['SWAPPED', 'MERCURYO', 'TOPPER'])); });
-  const body = input('US', 'USD', 'CREDIT_DEBIT_CARD');
-  assert.deepEqual(await createPersonalFundingIntent(body), ack(body, ['SWAPPED', 'MERCURYO', 'TOPPER']));
-  assert.equal((await handleWalletFunding(post(body), 'personal', { env, serviceRequest: async () => ({ ok: true, data: ack(body, ['SWAPPED', 'MERCURYO', 'TOPPER']) }) })).status, 200);
-  for (const country of ['CO', 'MX']) {
-    await assert.rejects(createPersonalFundingIntent({ ...body, country }), { message: 'funding_unavailable' });
-    assert.equal((await handleWalletFunding(post({ ...body, country }), 'personal', { env,
-      serviceRequest: async () => ({ ok: true, data: ack(body, ['SWAPPED', 'MERCURYO', 'TOPPER']) }) })).status, 502);
+test('browser and BFF block currently unavailable US card and wallet writes before transport', async t => {
+  t.mock.method(globalThis, 'fetch', async () => assert.fail('Unsupported route reached transport'));
+  for (const paymentMethodType of ['CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY', 'VENMO', 'PAYPAL']) {
+    const body = input('US', 'USD', paymentMethodType);
+    await assert.rejects(createPersonalFundingIntent(body), { message: 'wallet_funding_method_unavailable' });
+    assert.equal((await handleWalletFunding(post(body), 'personal', { env,
+      serviceRequest: async () => assert.fail('Unsupported route reached MELD') })).status, 400);
   }
-  const before = calls;
-  for (const country of ['CO', 'MX']) await assert.rejects(createPersonalFundingIntent(input(country, 'USD', 'VENMO')), { message: 'wallet_funding_valuation_unavailable' });
-  assert.equal(calls, before);
 });
 
-test('MXN discovery and writes preserve all four canonical methods and the 931 MXN business floor', async t => {
-  const methods = ['SPEI', 'CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY'];
-  const options = { ...usOptions, country: 'MX', sourceCurrencyCode: 'MXN', paymentMethods: methods,
-    routes: [{ serviceProvider: 'SWAPPED', paymentMethods: methods.map(name => method(name, 'MXN', 931)) }] };
-  assert.deepEqual(personalProductionOptions(options), options);
+test('MXN discovery and writes keep confirmed MELD methods and the 931 MXN business floor', async t => {
+  const methods = ['SPEI', 'CREDIT_DEBIT_CARD'];
+  const checkoutUrl = 'https://meldcrypto.com/?token=synthetic';
+  const provider = name => name === 'SPEI' ? 'ONRAMPMONEY' : 'MERCURYO';
+  const options = { ...usOptions, provider: 'meld', country: 'MX', sourceCurrencyCode: 'MXN', paymentMethods: methods,
+    routes: methods.map(name => ({ serviceProvider: provider(name), paymentMethods: [method(name, 'MXN', 931)] })) };
   const sent = [];
   t.mock.method(globalThis, 'fetch', async (_url, init) => {
     if (init.method === 'GET') return Response.json(options);
-    const body = JSON.parse(init.body); sent.push(body); return Response.json(ack(body, ['SWAPPED']));
+    const body = JSON.parse(init.body); sent.push(body);
+    return Response.json({ ...ack(body, []), provider: 'meld', country: 'MX', serviceProvider: provider(body.paymentMethodType),
+      status: 'session_created', checkoutUrl });
   });
   assert.deepEqual(await readPersonalFundingOptions('MX', { sourceCurrencyCode: 'MXN' }), options);
   for (const paymentMethodType of methods) {
@@ -106,7 +97,7 @@ test('MXN discovery and writes preserve all four canonical methods and the 931 M
     assert.equal((await createPersonalFundingIntent(body)).sourceCurrencyCode, 'MXN');
     await assert.rejects(createPersonalFundingIntent({ ...body, amount: 930.99 }), { message: 'invalid_request' });
   }
-  assert.equal(sent.length, 4);
+  assert.equal(sent.length, 2);
   assert.ok(sent.every(body => body.amount === 931 && body.sourceCurrencyCode === 'MXN' && body.country === 'MX'));
 });
 

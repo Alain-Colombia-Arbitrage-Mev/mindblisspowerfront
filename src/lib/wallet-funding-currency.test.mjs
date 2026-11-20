@@ -18,11 +18,17 @@ const options = kind => ({ walletKind: kind, environment: kind === 'personal' ? 
   ...(kind === 'administrative' ? { serviceProvider: 'TRANSAK' } : { destinationCurrencyCode: 'USDT_POLYGON', network: 'polygon', chainId: 137 }), paymentMethods: ['SPEI'],
   routes: [{ serviceProvider: kind === 'personal' ? 'SWAPPED' : 'TRANSAK', paymentMethods: [
     { method: 'SPEI', currencyCode: 'MXN', minimumAmount: kind === 'personal' ? 931 : 150, maximumAmount: 100000 }] }] });
+const productionOptions = () => ({ ...options('personal'), provider: 'meld',
+  routes: options('personal').routes.map(route => ({ ...route, serviceProvider: 'ONRAMPMONEY' })) });
+const speiAcknowledgement = { checkoutReference: requestId, walletKind: 'personal', environment: 'production', provider: 'meld', country: 'MX',
+  destinationCurrencyCode: 'USDT_POLYGON', destination: { address: input.walletAddress, asset: 'USDT', network: 'polygon', chainId: 137 },
+  sourceCurrencyCode: 'MXN', status: 'session_created', requestedAmount: input.amount, createdAt: '2026-11-10T15:00:00Z',
+  paymentMethodType: 'SPEI', serviceProvider: 'ONRAMPMONEY', checkoutUrl: 'https://meldcrypto.com/?token=synthetic' };
 const get = query => new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/wallet-funding/${query}`,
   { headers: { cookie: 'better-auth.session_token=synthetic' } });
 const post = body => new Request(`${env.AUTH_PUBLIC_ORIGIN}/api/member/wallet-funding/personal/intent`, {
   method: 'POST', headers: { cookie: 'better-auth.session_token=synthetic', origin: env.AUTH_PUBLIC_ORIGIN,
-    'x-mindbliss-wallet-network': 'polygon',
+    'x-mindbliss-wallet-network': 'polygon', 'x-mindbliss-funding-provider': 'meld', 'cf-connecting-ip': '198.51.100.10',
     'content-type': 'application/json', 'sec-fetch-site': 'same-origin' }, body: JSON.stringify(body),
 });
 
@@ -86,8 +92,8 @@ test('currency-aware discovery forwards only its exact country, currency and pro
   const original = globalThis.fetch;
   const calls = [];
   try {
-    globalThis.fetch = async (path, init) => { calls.push({ path, init }); return Response.json(options('personal')); };
-    assert.deepEqual(await readPersonalFundingOptions('MX', { sourceCurrencyCode: 'MXN' }), options('personal'));
+    globalThis.fetch = async (path, init) => { calls.push({ path, init }); return Response.json(productionOptions()); };
+    assert.deepEqual(await readPersonalFundingOptions('MX', { sourceCurrencyCode: 'MXN' }), productionOptions());
     assert.equal(calls[0].path, '/api/member/wallet-funding/personal/options?country=MX&sourceCurrencyCode=MXN');
     globalThis.fetch = async (path, init) => { calls.push({ path, init }); return Response.json(options('administrative')); };
     assert.deepEqual(await readAdministrativeSandboxOptions('MX', 'TRANSAK', { sourceCurrencyCode: 'MXN' }), options('administrative'));
@@ -116,10 +122,7 @@ test('a superseded currency read cannot publish a late successful response', asy
 
 test('SPEI records its actual MXN amount while other local mutations remain unavailable', async () => {
   const original = globalThis.fetch;
-  const acknowledgement = { checkoutReference: requestId, walletKind: 'personal', environment: 'production', provider: 'reown',
-    destinationCurrencyCode: 'USDT_POLYGON', destination: { address: input.walletAddress, asset: 'USDT', network: 'polygon', chainId: 137 },
-    status: 'initiated', requestedAmount: input.amount, sourceCurrencyCode: 'MXN', createdAt: '2026-11-10T15:00:00Z',
-    paymentMethodType: 'SPEI', allowedProviders: ['SWAPPED'] };
+  const acknowledgement = speiAcknowledgement;
   try {
     globalThis.fetch = async (path, init) => {
       assert.equal(path, '/api/member/wallet-funding/personal/intent');
@@ -154,10 +157,8 @@ test('SPEI records its actual MXN amount while other local mutations remain unav
 
 test('SPEI acknowledgement currency cannot be omitted or changed into dollars by an upstream response', async () => {
   const original = globalThis.fetch;
-  const acknowledgement = { checkoutReference: requestId, walletKind: 'personal', environment: 'production', provider: 'reown',
-    destinationCurrencyCode: 'USDT_POLYGON', destination: { address: input.walletAddress, asset: 'USDT', network: 'polygon', chainId: 137 },
-    status: 'initiated', requestedAmount: input.amount, createdAt: '2026-11-10T15:00:00Z',
-    paymentMethodType: 'SPEI', allowedProviders: ['SWAPPED'] };
+  const acknowledgement = { ...speiAcknowledgement };
+  delete acknowledgement.sourceCurrencyCode;
   try {
     for (const sourceCurrencyCode of [undefined, 'USD', 'COP', 'mxn']) {
       const data = { ...acknowledgement, ...(sourceCurrencyCode === undefined ? {} : { sourceCurrencyCode }) };
@@ -205,11 +206,12 @@ test('option BFF canonicalizes query currency and rejects duplicates and crossed
     const action = administrative ? 'options' : 'personal-options';
     const suffix = administrative ? '&serviceProvider=TRANSAK' : '';
     const path = `${kind}/options?country=MX&sourceCurrencyCode=MXN${suffix}`;
+    const expected = administrative ? options(kind) : productionOptions();
     const response = await handleWalletFunding(get(path), action, { env, serviceRequest: async url => {
       assert.equal(url, `https://auth.core.internal/api/member/wallet-funding/${path}`);
-      return { ok: true, data: options(kind) };
+      return { ok: true, data: expected };
     } });
-    assert.deepEqual(await response.json(), options(kind));
+    assert.deepEqual(await response.json(), expected);
     for (const query of [`${path}&sourceCurrencyCode=USD`, path.replace('MXN', 'mxn'), `${path}&environment=production`]) {
       assert.equal((await handleWalletFunding(get(query), action, { env,
         serviceRequest: async () => assert.fail('invalid query forwarded') })).status, 400);

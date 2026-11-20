@@ -3,7 +3,7 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import vm from 'node:vm';
 import ts from 'typescript';
-import { reownFundingSelection, buildReownProductionOnrampUrl } from './reown-production-onramp.mjs';
+import { reownFundingSelection } from './reown-production-onramp.mjs';
 import { personalFundingFailure } from './personal-funding-errors.mjs';
 import { createReownFundingOperation, verifyReownWalletOwnership } from './reown-funding-operation.mjs';
 import { personalWalletMetadata } from './personal-portal-origin.mjs';
@@ -34,15 +34,21 @@ function onrampCallback(name, scope) {
 
 const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; };
 const taskTick = () => new Promise(resolve => setTimeout(resolve, 0));
+const checkoutUrl = 'https://meldcrypto.com/?token=synthetic';
+const fundingSession = body => ({
+  provider: 'meld', status: 'session_created', checkoutReference: body.requestId,
+  requestedAmount: body.amount, sourceCurrencyCode: body.sourceCurrencyCode, paymentMethodType: body.paymentMethodType,
+  destinationCurrencyCode: 'USDT_POLYGON', destination: { address: body.walletAddress, asset: 'USDT', network: 'polygon', chainId: 137 },
+  checkoutUrl,
+});
 function fundingRuntime(overrides = {}) {
   const address = `0x${'1'.repeat(40)}`;
   const projectId = 'a'.repeat(32);
   const requestId = 'd8a4c010-cc33-44da-a297-8b3c6440f491';
-  const provider = { name: 'meld', url: `https://meldcrypto.com/?publicKey=test&externalCustomerId=${projectId}` };
   const events = [], states = [], bindings = [];
   const ref = () => ({ current: null });
   const scope = {
-    reownFundingSelection, buildReownProductionOnrampUrl, personalFundingFailure,
+    reownFundingSelection, personalFundingFailure,
     createReownFundingOperation, verifyReownWalletOwnership, projectId,
     onrampErrorCode: personalFundingFailure, isAddress: value => /^0x[0-9a-f]{40}$/i.test(value || ''),
     sameAddress: (a, b) => typeof a === 'string' && typeof b === 'string' && a.toLowerCase() === b.toLowerCase(),
@@ -54,11 +60,8 @@ function fundingRuntime(overrides = {}) {
     PERSONAL_WALLET_MINIMUM_USD: 30, PERSONAL_WALLET_ASSET: 'USDT', DOMException,
     setBinding: value => bindings.push(value), setOnrampState: value => states.push(value),
     setVerificationError() {}, setIsLinking() {}, setFundingRevision: () => events.push('revision'),
-    OnRampController: { state: { providers: [provider], selectedProvider: provider }, setSelectedProvider() {} },
     fundingRequestId: () => requestId,
-    createPersonalFundingIntent: async body => ({ checkoutReference: body.requestId, requestedAmount: body.amount,
-      sourceCurrencyCode: body.sourceCurrencyCode, paymentMethodType: body.paymentMethodType, allowedProviders: ['SWAPPED'],
-      destinationCurrencyCode: 'USDT_POLYGON', destination: { address: body.walletAddress, asset: 'USDT', network: 'polygon', chainId: 137 } }),
+    createPersonalFundingIntent: async body => fundingSession(body),
     open: async () => {}, close: () => events.push('close SDK modal'),
     disconnect: () => assert.fail('cancellation must never disconnect a wallet'),
     window: { open: url => { events.push({ opened: new URL(url) }); return { opener: null }; },
@@ -249,35 +252,31 @@ test('ownership callbacks refuse a mismatched, unselected or switching wallet be
   }
 });
 
-test('SPEI handoff forwards the actual MXN amount without claiming a USD valuation', async () => {
-  const runtime = fundingRuntime({ open: () => assert.fail('verified wallet asked to authenticate again') });
+test('SPEI submits the actual amounts in pesos and opens the server-issued checkout URL', async () => {
+  const runtime = fundingRuntime({ open: () => assert.fail('verified wallet asked to authenticate again'),
+    createPersonalFundingIntent: async body => {
+      assert.equal(body.sourceCurrencyCode, 'MXN'); assert.equal(body.amount, 931); assert.equal(body.paymentMethodType, 'SPEI');
+      return fundingSession(body);
+    } });
   const result = await runtime.scope.startOnramp({ ...runtime.input, sourceCurrencyCode: 'MXN', paymentMethodType: 'SPEI', amount: 931 });
   assert.equal(result.sourceCurrencyCode, 'MXN'); assert.equal(result.minimumUsd, null);
-  const url = runtime.events.find(value => value?.opened).opened;
-  assert.equal(url.searchParams.get('sourceAmountLocked'), '931');
-  assert.equal(url.searchParams.get('sourceCurrencyCodeLocked'), 'MXN');
-  assert.equal(url.searchParams.get('paymentMethodTypeLocked'), 'SPEI');
+  assert.equal(runtime.events.find(value => value?.opened).opened.href, checkoutUrl);
 });
 
-test('US wallet methods and MXN cards hand off with exact source currency and no extra authentication', async () => {
-  for (const choice of [
-    { country: 'US', sourceCurrencyCode: 'USD', paymentMethodType: 'VENMO', amount: 100 },
-    { country: 'US', sourceCurrencyCode: 'USD', paymentMethodType: 'PAYPAL', amount: 50 },
-    ...['CREDIT_DEBIT_CARD', 'APPLE_PAY', 'GOOGLE_PAY'].map(paymentMethodType => ({ country: 'MX', sourceCurrencyCode: 'MXN', paymentMethodType, amount: 931 })),
-  ]) {
+test('Mercuryo USD and MXN cards hand off the linked wallet and chosen currency without extra authentication', async () => {
+  for (const choice of [{ sourceCurrencyCode: 'USD', amount: 50 }, { sourceCurrencyCode: 'MXN', amount: 931 }]) {
     const runtime = fundingRuntime({ open: () => assert.fail('Verified wallet asked to authenticate again'),
-      createPersonalFundingIntent: async body => ({ checkoutReference: body.requestId, requestedAmount: body.amount,
-        sourceCurrencyCode: body.sourceCurrencyCode, paymentMethodType: body.paymentMethodType, allowedProviders: choice.country === 'US' ? ['TOPPER'] : ['SWAPPED'],
-        destinationCurrencyCode: 'USDT_POLYGON', destination: { address: body.walletAddress, asset: 'USDT', network: 'polygon', chainId: 137 } }) });
+      createPersonalFundingIntent: async body => {
+        assert.equal(body.country, 'MX');
+        assert.equal(body.walletAddress, runtime.address);
+        assert.equal(body.paymentMethodType, 'CREDIT_DEBIT_CARD');
+        assert.equal(body.amount, choice.amount);
+        assert.equal(body.sourceCurrencyCode, choice.sourceCurrencyCode);
+        return fundingSession(body);
+      } });
     const result = await runtime.scope.startOnramp({ ...runtime.input, ...choice });
     assert.equal(result.sourceCurrencyCode, choice.sourceCurrencyCode);
-    const url = runtime.events.find(value => value?.opened).opened;
-    assert.equal(url.searchParams.get('sourceAmountLocked'), String(choice.amount));
-    assert.equal(url.searchParams.get('sourceCurrencyCodeLocked'), choice.sourceCurrencyCode);
-    assert.equal(url.searchParams.get('countryCodeLocked'), choice.country);
-    assert.equal(url.searchParams.get('paymentMethodTypeLocked'), choice.paymentMethodType);
-    assert.equal(url.searchParams.get('destinationCurrencyCodeLocked'), 'USDT_POLYGON');
-    assert.equal(url.searchParams.get('walletAddressLocked'), runtime.address);
+    assert.equal(runtime.events.find(value => value?.opened).opened.href, checkoutUrl);
   }
 });
 
@@ -286,10 +285,7 @@ test('a changed checkout reference, amount, currency or method cannot open a pro
     { sourceCurrencyCode: 'MXN' }, { paymentMethodType: 'APPLE_PAY' }, { destinationCurrencyCode: 'USDT' },
     { destination: { address: `0x${'2'.repeat(40)}`, asset: 'USDT', network: 'polygon', chainId: 137 } },
     { destination: { address: `0x${'1'.repeat(40)}`, asset: 'USDT', network: 'ethereum', chainId: 1 } }]) {
-    const runtime = fundingRuntime({ createPersonalFundingIntent: async body => ({ checkoutReference: body.requestId,
-      requestedAmount: body.amount, sourceCurrencyCode: body.sourceCurrencyCode, paymentMethodType: body.paymentMethodType,
-      destinationCurrencyCode: 'USDT_POLYGON', destination: { address: body.walletAddress, asset: 'USDT', network: 'polygon', chainId: 137 },
-      allowedProviders: ['SWAPPED'], ...change }) });
+    const runtime = fundingRuntime({ createPersonalFundingIntent: async body => ({ ...fundingSession(body), ...change }) });
     await assert.rejects(runtime.scope.startOnramp(runtime.input), { message: 'wallet_funding_invalid_acknowledgement' });
     assert.deepEqual(runtime.events, []);
   }
@@ -353,35 +349,18 @@ test('onramp opening and reconnection reject an empty retained country before SD
   assert.doesNotMatch(source, /browserOnrampRegion|detectPersonalFundingCountry/);
 });
 
-test('personal dollar continuation explicitly forwards its currency to the intent and locked checkout', async () => {
+test('personal dollar continuation opens the authenticated MELD URL without adding client query parameters', async () => {
   const events = [];
-  const address = `0x${'1'.repeat(40)}`;
-  const projectId = 'a'.repeat(32);
-  const requestId = 'd8a4c010-cc33-44da-a297-8b3c6440f491';
-  const provider = { name: 'meld', url: `https://meldcrypto.com/?publicKey=test&externalCustomerId=${projectId}` };
-  const operation = createReownFundingOperation();
-  const callback = onrampCallback('runOnramp', {
-    reownFundingSelection, buildReownProductionOnrampUrl, personalFundingFailure, projectId,
-    sameAddress: (left, right) => typeof left === 'string' && typeof right === 'string' && left.toLowerCase() === right.toLowerCase(),
-    boundAddress: address, mounted: { current: true }, navigator: { languages: ['en-US'], language: 'en-US' },
-    PERSONAL_WALLET_MINIMUM_USD: 30, PERSONAL_WALLET_ASSET: 'USDT', AbortController,
-    onrampFlow: { current: null }, onrampSelection: { current: null }, onrampIntent: { current: false },
-    beginOnrampOperation: () => operation, onrampOperation: { current: operation },
-    OnRampController: { state: { providers: [provider], selectedProvider: provider }, setSelectedProvider() { events.push('provider'); } },
-    setOnrampState() {}, setFundingRevision() {},
+  const runtime = fundingRuntime({
     createPersonalFundingIntent: async body => {
       events.push('intent'); assert.equal(body.sourceCurrencyCode, 'USD'); assert.equal(body.amount, 100);
-      assert.equal(body.country, 'MX'); assert.equal(body.walletAddress, address);
-      return { checkoutReference: requestId, requestedAmount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD', allowedProviders: ['SWAPPED'],
-        destinationCurrencyCode: 'USDT_POLYGON', destination: { address: body.walletAddress, asset: 'USDT', network: 'polygon', chainId: 137 } };
+      assert.equal(body.country, 'MX'); assert.equal(body.walletAddress, runtime.address);
+      return fundingSession(body);
     },
-    window: { open(url) { events.push('open'); const parsed = new URL(url);
-      assert.equal(parsed.searchParams.get('sourceCurrencyCodeLocked'), 'USD');
-      assert.equal(parsed.searchParams.get('walletAddressLocked'), address); return { opener: null }; } },
+    window: { open(url) { events.push('open'); assert.equal(url, checkoutUrl); return { opener: null }; } },
   });
-  const result = await callback({ requestId, country: 'MX', sourceCurrencyCode: 'USD', amount: 100, paymentMethodType: 'CREDIT_DEBIT_CARD' });
-  assert.equal(result.opened, true);
-  assert.deepEqual(events, ['provider', 'intent', 'open']);
+  assert.equal((await runtime.scope.startOnramp(runtime.input)).opened, true);
+  assert.deepEqual(events, ['intent', 'open']);
 });
 
 test("Reown creates separate EVM and Solana wallets while retaining native member authorization", () => {
@@ -397,11 +376,11 @@ test("Reown creates separate EVM and Solana wallets while retaining native membe
   assert.match(provider, /analytics: true/);
   assert.match(provider, /onramp: false/);
   assert.match(provider, /allowUnsupportedChain: false/);
-  assert.match(provider, /buildReownProductionOnrampUrl/);
+  assert.doesNotMatch(provider, /buildReownProductionOnrampUrl|OnRampController/);
   assert.match(provider, /createPersonalFundingIntent/);
   assert.doesNotMatch(provider, /createOnrampIntent|createOnrampQuote|getOnrampQuote/);
-  assert.match(provider, /OnRampController\.setSelectedProvider/);
-  assert.match(provider, /provider: "reown"/);
+  assert.match(provider, /window\.open\(intent\.checkoutUrl/);
+  assert.match(provider, /provider: "meld"/);
   assert.doesNotMatch(provider, /\/api\/member\/onramp\/session|app\.topperpay\.com|widget\.swapped\.com|Binance/i);
   assert.match(provider, /onrampIntent\.current = true/);
   assert.match(provider, /const boundReady = Boolean\(boundAddress\)/);

@@ -1,3 +1,4 @@
+import { appPersonalFundingStatus } from '../../../../lib/app-meld-funding-contract.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -22,6 +23,7 @@ function load(filename, mocks) {
   new Function('require', 'module', 'exports', code)(id => {
     if (Object.hasOwn(mocks, id)) return mocks[id];
     if (id === '@/components/wallet/WalletAddressCopyButton') return { default: function WalletAddressCopyButton() { return null; } };
+    if (id === '@/lib/app-meld-funding-contract.mjs') return { appPersonalFundingStatus };
     if (id === '@/lib/wallet-funding-contract.mjs') return { PERSONAL_FUNDING_COUNTRIES, PERSONAL_FUNDING_MINIMUM_USD, PERSONAL_FUNDING_MAXIMUM_USD, PERSONAL_FUNDING_MINIMUM_MXN, PERSONAL_FUNDING_MINIMUM_COP, PERSONAL_FUNDING_MAXIMUM_COP, personalFundingMethod, validFundingAmount, validFundingSourceAmount, WALLET_GATEWAY_FAILURE_REASONS, FUNDING_UUID, fundingStatus };
     if (id === '@/components/wallet/PersonalWalletBalances') return { default: function PersonalWalletBalances() { return null; } };
     if (id === './ResidenceImportantCard') return { default: function ResidenceImportantCard() { return null; } };
