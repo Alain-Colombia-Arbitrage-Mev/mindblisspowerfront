@@ -19,6 +19,7 @@ import { member } from './member-defaults.mjs';
 import { useI18n } from "@/i18n/LanguageProvider";
 import useHistoricalPackageRights from '@/components/member/useHistoricalPackageRights';
 import HistoricalPackageRightsCard from '@/components/member/HistoricalPackageRightsCard';
+import RechargePackageCard from '@/components/member/RechargePackageCard';
 
 const PROFILE_COUNTRIES = getCountries();
 
@@ -285,6 +286,7 @@ export function ProfileDashboardView({ authMode = 'cognito', session = undefined
             </div>
 
             <HistoricalPackageRightsCard snapshot={historicalRights} />
+            {modernAuth ? <RechargePackageCard session={session} /> : null}
             <div className="executive-panel">
               <h2 className="executive-section-title">
                 <Copy size={18} style={{ color: "var(--vp-accent)" }} />

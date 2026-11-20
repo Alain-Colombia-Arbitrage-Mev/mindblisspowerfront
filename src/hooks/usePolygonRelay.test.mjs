@@ -135,7 +135,7 @@ function harness(overrides = {}) {
     const pending = webcrypto.subtle.digest(algorithm, input); digests.add(pending); void pending.finally(() => digests.delete(pending)); return pending;
   } }, randomUUID: () => id }, { navigator: browserNavigator }, overrides.Date || Date,
   overrides.setTimeout || setTimeout, overrides.clearTimeout || clearTimeout);
-  function render() { cursor = 0; dirty = false; current = module.exports.usePolygonRelay(reown()); }
+  function render() { cursor = 0; dirty = false; current = module.exports.usePolygonRelay(reown(), { fullBalance: overrides.fullBalance }); }
   return { get flow() { return current; }, calls, signatures, providerCalls, storage, browser, documentRef, sharedBalances, operationDeadlines,
     get ownerKey() { return personalWalletBalanceSessionKey(session); },
     advanceBalanceTime(duration) { balanceTime += duration; },
@@ -579,6 +579,29 @@ test('a fresh balance discovered during Review updates the displayed maximum and
   await h.flow.review(); await h.flush();
   assert.equal(h.flow.balanceAtomic, latest); assert.equal(h.flow.amount, '27.433366'); assert.equal(h.flow.preview, null);
   await h.flow.review(); await h.flush(); assert.equal(h.flow.preview.amountAtomic, latest);
+  assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
+});
+
+test('Pagar reviews the full selected asset balance and requires a new review when it changes', async t => {
+  let usdc = '47425268';
+  const h = harness({ fullBalance: true, capabilities: async () => ({ transferEnabled: true, assets: ['USDT', 'USDC'] }),
+    balance: async () => ({ walletAddress: wallet, balances: [
+      { chainId: 137, asset: 'USDT', balanceAtomic: '47449117', nativeBalanceAtomic: '0' },
+      { chainId: 137, asset: 'USDC', balanceAtomic: usdc, nativeBalanceAtomic: '0' },
+    ] }) });
+  t.after(() => h.unmount()); await h.flush();
+  assert.equal(h.flow.fullBalance, true);
+  h.flow.setAmount('1'); await h.flush();
+  await h.flow.review(); await h.flush();
+  assert.equal(h.flow.preview.amountAtomic, '47449117'); assert.equal(h.flow.preview.asset, 'USDT');
+  await h.flow.cancelReview(); await h.flush();
+  h.flow.changeAsset('USDC'); await h.flush(); assert.equal(h.flow.balanceAtomic, usdc);
+  usdc = '48000001';
+  await h.flow.review(); await h.flush();
+  assert.equal(h.flow.preview, null); assert.equal(h.flow.balanceAtomic, usdc);
+  assert.equal(h.flow.errorKey, 'companyPayment.balanceChanged');
+  await h.flow.review(); await h.flush();
+  assert.equal(h.flow.preview.amountAtomic, usdc); assert.equal(h.flow.preview.asset, 'USDC');
   assert.deepEqual(writes(h), []); assert.equal(h.signatures.length, 0);
 });
 

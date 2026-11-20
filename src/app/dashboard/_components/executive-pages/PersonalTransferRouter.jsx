@@ -25,7 +25,7 @@ export default function PersonalTransferRouter({ DirectPayment }) {
   const relay = usePolygonRelay({ ...reown,
     connectWallet: integratedConnection && reown.connectPaymentWallet || reown.connectWallet,
     prepareWallet: integratedConnection && reown.preparePaymentWallet || reown.prepareWallet,
-  });
+  }, { fullBalance: true });
   const usdt = usePersonalWalletBalance(relay.wallet, "polygon", relay.verified === true, "USDT");
   const usdc = usePersonalWalletBalance(relay.wallet, "polygon", relay.verified === true, "USDC");
   const selectionOwner = `${activationOwner}:${relay.wallet}`, chosenFor = useRef("");

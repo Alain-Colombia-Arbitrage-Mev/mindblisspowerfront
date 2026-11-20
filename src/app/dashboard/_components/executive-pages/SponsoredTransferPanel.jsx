@@ -71,6 +71,7 @@ function PolygonPaymentAssetPicker({ id, flow, asset, balances, onPaymentInput }
 export function SponsoredTransferForm({ flow, network = "polygon", walletActivation = null, assetBalances = null, onPaymentInput }) {
   const { t } = useI18n(); const id = useId();
   const walletState = network === "polygon" ? flow.walletState : undefined;
+  const fullBalance = network === "polygon" && flow.fullBalance === true;
   const asset = network === "polygon" && flow.asset === "USDC" ? "USDC" : "USDT";
   const assetName = network === "polygon" ? polygonPaymentAssetName(asset) : asset;
   const transferEnabled = flow.transferEnabled ?? flow.capabilities?.transferEnabled;
@@ -80,10 +81,10 @@ export function SponsoredTransferForm({ flow, network = "polygon", walletActivat
     error: "walletPage.retryCheck", unavailable: "funding.activateWallet", reconnect: "companyPayment.reconnect" }[walletState];
   const walletActionDisabled = flow.busy || flow.restoring || (walletState && !["activate", "error", "reconnect"].includes(walletState));
   const available = network === "solana" ? solanaAtomic(flow.balanceAtomic) : personalCompanyPaymentAtomic(flow.balanceAtomic, true)?.toString() ?? null;
-  const entered = personalCompanyPaymentAmountAtomic(flow.amount);
+  const entered = fullBalance ? personalCompanyPaymentAtomic(available)?.toString() ?? null : personalCompanyPaymentAmountAtomic(flow.amount);
   const validAmount = entered !== null && (network !== "solana" || solanaAtomic(entered, false) !== null);
   const insufficient = available !== null && validAmount && BigInt(entered) > BigInt(available);
-  const invalid = flow.amount !== "" && (!validAmount || insufficient);
+  const invalid = !fullBalance && flow.amount !== "" && (!validAmount || insufficient);
   const ready = (!walletState || walletState === "ready") && flow.connected && !flow.busy && !flow.loadingBalance && !flow.capabilities?.loading && !flow.capabilities?.error && transferEnabled === true;
   const canReview = ready && !walletActivation && available !== null && validAmount && !insufficient;
   const error = flow.errorKey ? t(flow.errorKey) : "";
@@ -99,12 +100,17 @@ export function SponsoredTransferForm({ flow, network = "polygon", walletActivat
       <button type="button" className={styles.refresh} disabled={flow.busy || flow.loadingBalance} onClick={() => void flow.refresh()} aria-label={t("companyPayment.refreshBalance")}><RefreshCw size={17} aria-hidden="true" /></button>
     </div>}
     {network === "solana" ? <p className={styles.note}>{t("walletTransfer.solanaScope")}</p> : null}
-    <div className={styles.field}><label htmlFor={`${id}-amount`}>{t("companyPayment.amountLabel")}</label><div className={styles.amountInput}><span>{assetName}</span>
+    {fullBalance ? <div className={styles.field}>
+      <label htmlFor={`${id}-amount`}>{t("walletTransfer.fullBalanceAmount")}</label>
+      <output id={`${id}-amount`} className={`${styles.readonlyAddress} ${styles.recipientName}`}>
+        {available === null ? "—" : <bdi dir="ltr">{formatPersonalCompanyPaymentAmount(available)} {assetName}</bdi>}
+      </output>
+    </div> : <div className={styles.field}><label htmlFor={`${id}-amount`}>{t("companyPayment.amountLabel")}</label><div className={styles.amountInput}><span>{assetName}</span>
       <input id={`${id}-amount`} type="text" inputMode="decimal" autoComplete="off" dir="ltr" placeholder="0.00" maxLength={86} value={flow.amount}
         disabled={flow.busy || !flow.verified} onChange={event => enterAmount(event.target.value.replace(/[,٫]/g, "."))}
         aria-invalid={invalid || undefined} aria-describedby={invalid ? `${id}-error` : undefined} required />
       <button type="button" className={styles.max} disabled={flow.busy || !flow.verified || available === null || available === "0"} onClick={() => enterAmount(formatPersonalCompanyPaymentAmount(available))}>{t("companyPayment.max")}</button>
-    </div>{invalid ? <p className={styles.fieldError} id={`${id}-error`} role="alert">{t(insufficient ? "companyPayment.insufficientBalance" : "companyPayment.amountInvalid")}</p> : null}</div>
+    </div>{invalid ? <p className={styles.fieldError} id={`${id}-error`} role="alert">{t(insufficient ? "companyPayment.insufficientBalance" : "companyPayment.amountInvalid")}</p> : null}</div>}
     <div className={styles.destination}><div className={styles.destinationHeading}><label htmlFor={`${id}-recipient`}>{t("companyPayment.recipientLabel")}</label><span>{networkName(network)} · {assetName}</span></div>
       <output id={`${id}-recipient`} className={`${styles.readonlyAddress} ${styles.recipientName}`}>Mindbliss</output></div>
     {flow.verified ? flow.capabilities?.loading ? <p className={styles.note} role="status"><Loader2 className="animate-spin" size={16} aria-hidden="true" />{t("walletTransfer.checkingSponsorship")}</p>

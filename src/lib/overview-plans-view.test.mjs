@@ -24,6 +24,7 @@ function moduleAt(relative, mocks = {}) {
     : id === "@/lib/member-session-context" ? { useMemberSession: () => null }
     : id === "@/components/member/useHistoricalPackageRights" ? { default: () => ({ data: null, visible: false, loading: false, error: "", canRefresh: false, refresh() { assert.fail("historical presentation mock cannot start a read"); } }) }
     : id === "@/components/member/HistoricalPackageRightsCard" ? { default: function HistoricalPackageRightsCard({ snapshot }) { return snapshot.visible ? React.createElement("section", { "data-test": "HistoricalPackageRightsCard" }) : null; } }
+    : id === "@/components/member/RechargePackageCard" ? { default: () => null }
     : Object.hasOwn(mocks, id) ? mocks[id] : require(id), module, module.exports);
   return module.exports;
 }

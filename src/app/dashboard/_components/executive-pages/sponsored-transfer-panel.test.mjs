@@ -307,3 +307,22 @@ test('the dual Polygon selector distinguishes verified zero, refresh and a faile
   assert.doesNotMatch(html, />46\.9<\/bdi>/);
   assert.ok(html.includes(translateMessage(locale, 'walletTransfer.balanceUnavailable')));
 });
+
+test('Pagar shows the selected full balance as read-only and opens only the review', () => {
+  for (const [asset, symbol, amount, atomic] of [['USDT', 'USDT0', '47.449117', '47449117'], ['USDC', 'USDC', '47.425268', '47425268']]) {
+    const state = flow({ asset, amount: '1', balanceAtomic: atomic, fullBalance: true });
+    const form = SponsoredTransferForm({ flow: state }), html = renderToStaticMarkup(form);
+    assert.ok(html.includes(translateMessage(locale, 'walletTransfer.fullBalanceAmount')));
+    const output = all(form, node => node?.type === 'output' && node.props.id === 'test-amount-amount')[0];
+    assert.ok(renderToStaticMarkup(output).includes(`${amount} ${symbol}`));
+    assert.deepEqual(all(form, node => node?.type === 'input'), []);
+    assert.deepEqual(all(form, node => node?.type === 'button' && node.props.className === 'max'), []);
+    form.props.onSubmit({ preventDefault() {} }); assert.deepEqual(state.calls, ['review']);
+  }
+  for (const balanceAtomic of ['0', null]) {
+    const state = flow({ balanceAtomic, fullBalance: true });
+    const form = SponsoredTransferForm({ flow: state });
+    assert.equal(all(form, node => node?.type === 'button' && node.props.type === 'submit')[0].props.disabled, true);
+    form.props.onSubmit({ preventDefault() {} }); assert.deepEqual(state.calls, []);
+  }
+});

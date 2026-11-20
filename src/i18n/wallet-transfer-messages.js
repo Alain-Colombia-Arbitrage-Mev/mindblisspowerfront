@@ -1,6 +1,6 @@
 export const walletTransferMessages = {
   es: { walletTransfer: {
-    paymentAsset: "Moneda del pago", balanceUnavailable: "Saldo no disponible", usdcSponsoredCopy: "Pagas con USDC desde tu billetera. Mindbliss cubre la comisión en POL.",
+    paymentAsset: "Moneda del pago", fullBalanceAmount: "Saldo completo a pagar", balanceUnavailable: "Saldo no disponible", usdcSponsoredCopy: "Pagas con USDC desde tu billetera. Mindbliss cubre la comisión en POL.",
     authorizationUsdcCopy: "Autorizas este importe en USDC para Mindbliss. La autorización vence si no se ejecuta a tiempo.",
     checkingSponsorship: "Comprobando cobertura de la comisión de red…", sponsorCheckFailed: "No pudimos comprobar la cobertura de la comisión de red. Actualiza la consulta para reintentar.", updatingBalance: "Actualizando saldo…",
     rateLimited: "Has preparado varios envíos seguidos. Espera unos minutos antes de preparar otro; puedes seguir consultando los pagos registrados.",
@@ -28,7 +28,7 @@ export const walletTransferMessages = {
     ambiguous: "La respuesta del envío está pendiente. Consulta su estado; evita enviarlo de nuevo.", networkMismatch: "Selecciona Polygon en tu billetera para autorizar este envío.",
   } },
   en: { walletTransfer: {
-    paymentAsset: "Payment asset", balanceUnavailable: "Balance unavailable", usdcSponsoredCopy: "Pay in USDC from your wallet. Mindbliss covers the fee in POL.",
+    paymentAsset: "Payment asset", fullBalanceAmount: "Full balance to pay", balanceUnavailable: "Balance unavailable", usdcSponsoredCopy: "Pay in USDC from your wallet. Mindbliss covers the fee in POL.",
     authorizationUsdcCopy: "You authorize this USDC amount for Mindbliss. The authorization expires if it is not executed in time.",
     checkingSponsorship: "Checking network fee coverage…", sponsorCheckFailed: "We could not check network fee coverage. Refresh to try again.", updatingBalance: "Updating balance…",
     rateLimited: "You have prepared several transfers in a row. Wait a few minutes before preparing another; you can still check recorded payments.",
@@ -56,7 +56,7 @@ export const walletTransferMessages = {
     ambiguous: "The transfer response is pending. Check its status and avoid sending it again.", networkMismatch: "Select Polygon in your wallet to authorize this transfer.",
   } },
   ar: { walletTransfer: {
-    paymentAsset: "عملة الدفع", balanceUnavailable: "الرصيد غير متاح", usdcSponsoredCopy: "ادفع بعملة USDC من محفظتك. تغطي Mindbliss رسوم POL.",
+    paymentAsset: "عملة الدفع", fullBalanceAmount: "الرصيد الكامل للدفع", balanceUnavailable: "الرصيد غير متاح", usdcSponsoredCopy: "ادفع بعملة USDC من محفظتك. تغطي Mindbliss رسوم POL.",
     authorizationUsdcCopy: "تفوض دفع هذا المبلغ بعملة USDC إلى Mindbliss. إذا لم يُنفَّذ التفويض في الوقت المحدد، تنتهي صلاحيته.",
     checkingSponsorship: "جارٍ التحقق من تغطية رسوم الشبكة…", sponsorCheckFailed: "تعذر التحقق من تغطية رسوم الشبكة. حدّث للاستعلام مجددًا.", updatingBalance: "جارٍ تحديث الرصيد…",
     rateLimited: "لقد أعددت عدة تحويلات متتالية. انتظر بضع دقائق قبل إعداد آخر؛ يمكنك متابعة التحقق من المدفوعات المسجلة.",
@@ -80,7 +80,7 @@ export const walletTransferMessages = {
     sponsorshipUnavailable: "دعم الرسوم غير متاح. تم تسجيل طلبك؛ تحقق من حالته.", ambiguous: "استجابة التحويل معلقة. تحقق من حالته وتجنب إرساله مجددًا.", networkMismatch: "اختر Polygon في محفظتك لتفويض هذا التحويل.",
   } },
   zh: { walletTransfer: {
-    paymentAsset: "付款币种", balanceUnavailable: "余额不可用", usdcSponsoredCopy: "使用你钱包中的 USDC 付款。Mindbliss 承担 POL 网络费。",
+    paymentAsset: "付款币种", fullBalanceAmount: "使用全部余额付款", balanceUnavailable: "余额不可用", usdcSponsoredCopy: "使用你钱包中的 USDC 付款。Mindbliss 承担 POL 网络费。",
     authorizationUsdcCopy: "你授权向 Mindbliss 支付此笔 USDC。授权逾期未执行将失效。",
     checkingSponsorship: "正在查询网络费赞助…", sponsorCheckFailed: "无法查询网络费赞助，请刷新重试。", updatingBalance: "正在更新余额…",
     rateLimited: "你已连续准备多笔转账。请等待几分钟再准备下一笔；仍可查询已记录的付款。",

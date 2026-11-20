@@ -33,6 +33,7 @@ function fixture(t, { api = async () => stored, exportName = 'ProfileDashboardVi
     '@/lib/member-session-context': { useMemberSession: () => session }, '@/lib/payment-display.mjs': { formatPaymentMoney: () => null },
     '@/components/member/useHistoricalPackageRights': { default: (owner, enabled) => { historicalCalls.push([owner, enabled]); return historical; } },
     '@/components/member/HistoricalPackageRightsCard': { default: function HistoricalPackageRightsCard({ snapshot }) { return snapshot.visible ? React.createElement('section', { 'data-test': 'HistoricalPackageRightsCard' }) : null; } },
+    '@/components/member/RechargePackageCard': { default: () => null },
     '../../profile/profile-model.mjs': { ...profileModel, requestProfile: async (...args) => { calls.push(args); return api(...args); } },
     '@/lib/browser-request-deadline.mjs': deadline, './executive-ui': { Field, PageHeader, StatusPill: ({ children }) => children },
     './member-defaults.mjs': { member: { email: '', referralCode: '', rank: '', joined: '', plan: '', username: '', sponsor: 'STATIC-MUST-NOT-SHOW' } },

@@ -80,7 +80,7 @@ function connectionErrorKey(failure) {
 }
 
 /** Personal Polygon native-meta relay only. No signed authorization is cached or replayed. */
-export function usePolygonRelay(reown) {
+export function usePolygonRelay(reown, { fullBalance = false } = {}) {
   const sessionKey = personalWalletBalanceSessionKey(useMemberSession());
   const wallet = typeof reown.linkedAddress === "string" ? reown.linkedAddress.toLowerCase() : "";
   const verified = Boolean(sessionKey) && reown.linkStatus === "linked" && /^0x[0-9a-f]{40}$/.test(wallet);
@@ -240,7 +240,7 @@ export function usePolygonRelay(reown) {
     if (!isPolygonRelayChain(chain)) throw new Error("polygon_relay_network_mismatch");
   }
   async function review() {
-    const atomic = personalCompanyPaymentAmountAtomic(amount);
+    const atomic = fullBalance ? personalCompanyPaymentAtomic(balance.balanceAtomic)?.toString() : personalCompanyPaymentAmountAtomic(amount);
     if (!currentDisplay || !connected || !atomic || balance.wallet !== wallet || balance.asset !== asset || balance.balanceAtomic === null || BigInt(atomic) > BigInt(balance.balanceAtomic)) return;
     if (selected.current && unresolved(selected.current)) { setErrorKey("walletTransfer.pending"); setStage("status"); return; }
     const value = begin(); if (!value) return; value.signing = true;
@@ -533,13 +533,13 @@ export function usePolygonRelay(reown) {
   const matchingBalance = currentDisplay && balance.wallet === wallet && balance.asset === asset;
   return { wallet, verified, walletState, connected: currentDisplay && connected, restoring: currentDisplay && reown.isRestoring === true,
     needsVerification: currentDisplay && reown.linkStatus === "unlinked", busy: currentDisplay && (busy || activating || checkingActivation),
-    asset: currentDisplay ? asset : "USDT", assets: currentDisplay ? capabilities.assets : defaultAssets,
+    asset: currentDisplay ? asset : "USDT", assets: currentDisplay ? capabilities.assets : defaultAssets, fullBalance,
     changeAsset(next) {
       if (!currentDisplay || !live() || operation.current || previewRef.current || unresolved(selected.current) || markerRef.current
         || next === asset || !capabilities.assets.includes(next) || !polygonCompanyPaymentPolicy(next)) return;
       edited.current = false; setAmountState(""); setAssetState(next); setErrorKey("");
     },
-    amount: currentDisplay ? amount : "", setAmount(value) { if (!live() || operation.current) return; edited.current = true; setAmountState(value); setErrorKey(""); },
+    amount: currentDisplay ? amount : "", setAmount(value) { if (fullBalance || !live() || operation.current) return; edited.current = true; setAmountState(value); setErrorKey(""); },
     balanceAtomic: matchingBalance ? balance.balanceAtomic : null, nativeBalanceAtomic: matchingBalance ? balance.nativeBalanceAtomic : null,
     loadingBalance: !currentDisplay || (verified && !matchingBalance) || balance.loading,
     refreshingBalance: matchingBalance && balance.loading && balance.balanceAtomic !== null,

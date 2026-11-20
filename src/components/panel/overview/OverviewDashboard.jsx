@@ -26,6 +26,7 @@ import { useI18n } from "@/i18n/LanguageProvider";
 import { useMemberSession } from '@/lib/member-session-context';
 import useHistoricalPackageRights from '@/components/member/useHistoricalPackageRights';
 import HistoricalPackageRightsCard from '@/components/member/HistoricalPackageRightsCard';
+import RechargePackageCard from '@/components/member/RechargePackageCard';
 
 const QUICK_ACTIONS = [
   { icon: CreditCard, label: "overview.payments", href: "/dashboard/payments" },
@@ -43,7 +44,8 @@ function confirmedAmount(balance) {
 
 export default function OverviewDashboard() {
   const { t } = useI18n();
-  const historicalRights = useHistoricalPackageRights(useMemberSession());
+  const session = useMemberSession();
+  const historicalRights = useHistoricalPackageRights(session);
   const polygonUsdt = usePersonalWalletBalance("", "polygon");
   const polygonUsdc = usePersonalWalletBalance("", "polygon", true, "USDC");
   const usdtAmount = confirmedAmount(polygonUsdt);
@@ -149,6 +151,7 @@ export default function OverviewDashboard() {
             <div className="mb-membership-header"><h2>{t("overview.myMemberships")}</h2><span>{summaryStatus === "ready" ? t("overview.updated") : t("overview.pending")}</span></div>
             <div className="mb-membership-count"><strong>{summaryStatus === "ready" ? String(summary?.active_packages ?? 0) : "—"}</strong><p>{summary?.active_packages === 1 ? t("overview.oneMembership") : t("overview.memberships")}</p></div>
           </section>}
+          <RechargePackageCard session={session} compact />
         </div>
         <OverviewDiscoveryCard />
       </div>

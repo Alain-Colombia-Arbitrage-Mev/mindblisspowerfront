@@ -1,0 +1,10 @@
+.card { display: grid; gap: 8px; min-width: 0; }
+.compact { padding: 16px; }
+.heading { display: flex; align-items: center; gap: 8px; color: var(--vp-accent); }
+.heading svg { flex: none; }
+.heading h2 { margin: 0; color: var(--vp-text); font-size: 14px; font-weight: 750; }
+.package { margin: 0; color: var(--vp-text); font-size: 18px; font-weight: 800; }
+.details { display: flex; flex-wrap: wrap; gap: 10px 20px; margin: 0; }
+.details div { display: grid; min-width: 0; gap: 2px; }
+.details dt { color: var(--vp-muted); font-size: 12px; }
+.details dd { margin: 0; overflow-wrap: anywhere; color: var(--vp-text); font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }

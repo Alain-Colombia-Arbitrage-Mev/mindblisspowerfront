@@ -41,6 +41,7 @@ function loadPages({ summary = { loading: true, data: null, error: '' }, health 
     '@/lib/member-session-context': { useMemberSession: () => session },
     '@/components/member/useHistoricalPackageRights': { default: () => ({ data: null, visible: false, loading: false, error: '', canRefresh: false, refresh: () => assert.fail('presentation must not request historical rights') }) },
     '@/components/member/HistoricalPackageRightsCard': { default: function HistoricalPackageRightsCard({ snapshot }) { return snapshot.visible ? React.createElement('section', { 'data-test': 'HistoricalPackageRightsCard' }) : null; } },
+    '@/components/member/RechargePackageCard': { default: () => null },
     '@/hooks/useMemberSummary': { useMemberSummary: () => ({ state: summary, reload: () => {} }) },
     '@/lib/payment-display.mjs': paymentDisplay,
     '@/lib/personal-company-payment-values.mjs': paymentValues,

@@ -262,7 +262,7 @@ test('the active transfer page starts on sponsored Polygon without exposing an E
   assert.equal(findAll(tree, node => node?.type === PreviousPayments)[0].props.historyOnly, true);
 });
 
-test('Pagar selects its headless connection without changing the shared wallet API or starting a payment', () => {
+test('Pagar selects its headless connection and full-balance mode without starting a payment', () => {
   function SponsoredForm() { return null; }
   function Activation() { return null; }
   function PreviousPayments() { return null; }
@@ -273,16 +273,17 @@ test('Pagar selects its headless connection without changing the shared wallet A
   const wallet = { ...reown, connectWallet: nativeConnect, prepareWallet: nativePrepare, connectPaymentWallet, preparePaymentWallet,
     paymentConnection: { available: true, phase: 'choosing' } };
   const relay = { stage: 'form', connected: false, payment: null, history: [], historyLoading: false, busy: true };
-  let received;
+  let received, paymentMode;
   const Router = load('PersonalTransferRouter.jsx', {
     react: { useEffect() {}, useRef: value => ({ current: value }) },
     'next/link': { default: () => null }, '@/components/reown/ReownContext': { useReownWallet: () => wallet },
-    '@/hooks/usePolygonRelay': { usePolygonRelay: value => { received = value; return relay; } },
+    '@/hooks/usePolygonRelay': { usePolygonRelay: (value, options) => { received = value; paymentMode = options; return relay; } },
     '@/lib/polygon-relay-contract.mjs': { polygonRelayView: () => null }, './PaymentWalletActivation': { default: Activation },
     './SponsoredTransferPanel': { SponsoredTransferForm: SponsoredForm, SponsoredTransferReview: () => null, SponsoredTransferStatus: () => null },
   }).default;
   let tree = Router({ DirectPayment: PreviousPayments });
   assert.equal(received.connectWallet, connectPaymentWallet); assert.equal(received.prepareWallet, preparePaymentWallet);
+  assert.deepEqual(paymentMode, { fullBalance: true });
   assert.equal(wallet.connectWallet, nativeConnect); assert.equal(wallet.prepareWallet, nativePrepare);
   let activation = findAll(tree, node => node?.type === SponsoredForm)[0].props.walletActivation;
   assert.equal(activation.type, Activation); assert.equal(activation.props.connection, wallet.paymentConnection);

@@ -35,6 +35,7 @@ const historicalMocks = {
   '@/components/member/HistoricalPackageRightsCard': { default: function HistoricalPackageRightsCard({ snapshot }) {
     return snapshot.visible ? React.createElement('section', { 'data-test': 'HistoricalPackageRightsCard' }) : null;
   } },
+  '@/components/member/RechargePackageCard': { default: () => null },
 };
 
 const radix = {
