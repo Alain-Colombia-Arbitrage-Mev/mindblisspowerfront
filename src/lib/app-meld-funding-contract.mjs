@@ -15,10 +15,12 @@ function supportsRoute(country, fiat, method, provider) {
     || (provider === 'ONRAMPMONEY' && fiat === 'MXN' && method === 'SPEI'));
 }
 
-export function appMeldFundingInputError({ country, sourceCurrencyCode = 'USD', amount, paymentMethodType }) {
+/** @param {Record<string, unknown>} input */
+export function appMeldFundingInputError(input) {
+  const { country, sourceCurrencyCode = 'USD', amount, paymentMethodType } = input;
   const minimum = sourceCurrencyCode === 'MXN' ? PERSONAL_FUNDING_MINIMUM_MXN : 50;
   const maximum = sourceCurrencyCode === 'MXN' ? 1_000_000_000 : PERSONAL_FUNDING_MAXIMUM_USD;
-  if (!appMeldFundingContext(country, sourceCurrencyCode) || !fiatAmount(amount) || amount < minimum || amount > maximum) return 'invalid_request';
+  if (!appMeldFundingContext(country, sourceCurrencyCode) || typeof amount !== 'number' || !fiatAmount(amount) || amount < minimum || amount > maximum) return 'invalid_request';
   return ['MERCURYO', 'ONRAMPMONEY'].some(provider => supportsRoute(country, sourceCurrencyCode, paymentMethodType, provider))
     ? null : 'wallet_funding_method_unavailable';
 }
