@@ -28,6 +28,7 @@ function load(filename, mocks) {
     if (id === '@/components/wallet/PersonalWalletBalances') return { default: function PersonalWalletBalances() { return null; } };
     if (id === './ResidenceImportantCard') return { default: function ResidenceImportantCard() { return null; } };
     if (id === './WalletFundingTutorial') return { default: () => null };
+    if (id === './AppWalletDepositQr') return { default: function AppWalletDepositQr() { return null; } };
     if (id === '@/lib/member-session-context') return { useMemberSession: () => ({ subject: 'funding-owner', email: 'funding@example.test' }) };
     if (id === '@/lib/personal-wallet-balance-store.mjs') return { personalWalletBalanceSessionKey };
     if (id === '@/components/ui/popover') { const popover = require('@radix-ui/react-popover'); return { Popover: popover.Root, PopoverTrigger: popover.Trigger, PopoverContent: popover.Content }; }
@@ -651,9 +652,8 @@ test('the personal form reviews its immutable trusted destination immediately be
     [meldRoute('MERCURYO', 'USD', ['CREDIT_DEBIT_CARD'], 50, 1000)]) });
   t.after(() => harness.unmount());
   selectFundingCountry(harness, {}, 'US'); await flush(); harness.render(); let tree = harness.render();
-  const fields = React.Children.toArray(tree.props.children.props.children);
-  assert.equal(fields.at(-2).type.name, 'FundingDestination');
-  assert.equal(fields.at(-1).type.name, 'FundingSubmit');
+  const fields = findAll(tree, node => ['FundingDestination', 'FundingSubmit'].includes(node?.type?.name));
+  assert.deepEqual(fields.map(node => node.type.name), ['FundingDestination', 'FundingSubmit']);
   const field = find(tree, 'FundingDestination');
   const destination = field.type(field.props);
   assert.match(renderToStaticMarkup(destination), /USDC · Polygon/);
@@ -663,6 +663,28 @@ test('the personal form reviews its immutable trusted destination immediately be
   assert.equal(input.props.onChange, undefined);
   tree = harness.render({ destinationAddress: '' });
   assert.equal(find(tree, 'FundingSubmit').props.disabled, true);
+});
+
+test('the deposit QR uses only the linked wallet and follows the selected receiving network', async t => {
+  const address = personalStatus.destination.address;
+  let checkoutRequests = 0;
+  const props = { destinationAddress: address, onContinue: () => { checkoutRequests++; } };
+  const harness = formHarness('PersonalFundingForm', { readPersonalFundingOptions: async country => meldOptions(country, 'USD', [
+    meldRoute('MERCURYO', 'USD', ['CREDIT_DEBIT_CARD'], 50, 1000, 'USDC_POLYGON'),
+    meldRoute('MERCURYO', 'USD', ['CREDIT_DEBIT_CARD'], 50, 1000, 'USDC'),
+  ]) });
+  t.after(() => harness.unmount());
+  const qr = tree => find(tree, 'AppWalletDepositQr');
+  assert.equal(qr(harness.render({ ...props, destinationAddress: '' })), undefined);
+  assert.equal(qr(harness.render({ ...props, disabled: true })), undefined);
+  assert.deepEqual(qr(harness.render(props)).props, { address, preferredDestinationCode: 'USDC_POLYGON', disabled: false });
+  selectFundingCountry(harness, props, 'US'); await flush(); harness.render(props);
+  let tree = harness.render(props);
+  find(tree, node => node?.type === 'select' && node.props.id === 'funding-test-network').props.onChange({ target: { value: 'USDC' } });
+  tree = harness.render(props);
+  assert.deepEqual(qr(tree).props, { address, preferredDestinationCode: 'USDC', disabled: false });
+  assert.equal(qr(harness.render({ ...props, busy: true })).props.disabled, true);
+  assert.equal(checkoutRequests, 0);
 });
 
 test('the personal page selects only its acknowledged request and exposes its backend destination to the review field', async t => {

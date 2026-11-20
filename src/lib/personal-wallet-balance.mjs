@@ -4,10 +4,15 @@ import { browserRequestDeadline } from './browser-request-deadline.mjs';
 const ethereumUsdc = Object.freeze({ chainId: 1, tokenAddress: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', tokenDecimals: 6 });
 const arbitrumUsdc = Object.freeze({ chainId: 42161, tokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831', tokenDecimals: 6 });
 
+export function personalWalletBalanceToken(network, asset) {
+  if (network === 'ethereum') return asset === 'USDT' ? PERSONAL_COMPANY_PAYMENT : asset === 'USDC' ? ethereumUsdc : null;
+  if (network === 'polygon') return polygonCompanyPaymentPolicy(asset);
+  return network === 'arbitrum' && asset === 'USDC' ? arbitrumUsdc : null;
+}
+
 /** Read-only onchain funds, separate from the administrative wallet or internal ledger. */
 export function personalWalletBalance(value, network = 'ethereum', asset = 'USDT') {
-  const policy = network === 'ethereum' ? asset === 'USDT' ? PERSONAL_COMPANY_PAYMENT : asset === 'USDC' ? ethereumUsdc : null : network === 'polygon' ? polygonCompanyPaymentPolicy(asset)
-    : network === 'arbitrum' && asset === 'USDC' ? arbitrumUsdc : null;
+  const policy = personalWalletBalanceToken(network, asset);
   if (!value || typeof value !== 'object' || Array.isArray(value) || value.walletKind !== 'personal'
     || !policy || value.network !== network || value.asset !== asset
     || typeof value.walletAddress !== 'string' || !/^0x[0-9a-f]{40}$/.test(value.walletAddress)

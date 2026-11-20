@@ -6,6 +6,7 @@ import { useI18n } from "@/i18n/LanguageProvider";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { APP_MELD_COUNTRIES, APP_MELD_MINIMUM_USD, appMeldCurrencyChoices, appMeldDefaultCurrency, appMeldDestinationFor, appMeldFundingAsset, appMeldLimits, appMeldMinorUnits, appMeldRouteSupported, appMeldSourceAmount } from "@/lib/app-meld-funding-contract.mjs";
 import { fundingRequestId, readPersonalFundingOptions } from "@/lib/wallet-funding-client.mjs";
+import AppWalletDepositQr from "./AppWalletDepositQr";
 import styles from "./wallet-funding.module.css";
 
 const EMPTY_OPTIONS = { status: "idle", country: "", sourceCurrencyCode: "USD", paymentMethods: [], routes: [] };
@@ -196,7 +197,11 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
       </div>
       <FundingDestination address={destinationAddress} asset={countryCode ? destination?.asset : undefined}
         network={destination?.name || "Polygon"} editableByProvider={provider?.serviceProvider === "MERCURYO"} />
-      {walletAction || <FundingSubmit disabled={disabled || !valid} busy={busy} />}
+      <div className={styles.fundingActions}>
+        {walletAction || <FundingSubmit disabled={disabled || !valid} busy={busy} />}
+        {!disabled && destinationAddress ? <AppWalletDepositQr key={destinationAddress} address={destinationAddress}
+          preferredDestinationCode={countryCode && method && destinationCode ? destinationCode : "USDC_POLYGON"} disabled={busy} /> : null}
+      </div>
     </div>
   </form>;
 }
