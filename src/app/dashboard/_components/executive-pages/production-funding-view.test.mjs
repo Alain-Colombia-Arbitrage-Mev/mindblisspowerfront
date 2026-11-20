@@ -24,6 +24,7 @@ const discoveryValue = country => country ? { country, defaultCurrencyCode: { US
   currencies: (country === 'MX' ? ['MXN', 'EUR'] : ['USD', 'MXN', 'COP', 'EUR', 'GBP']).map(code => ({ code, name: code, decimalPlaces: 2 })) }
   : { countries: [{ code: 'US', name: 'United States' }, { code: 'MX', name: 'Mexico' }, { code: 'CO', name: 'Colombia' }, { code: genericCountry, name: 'Canada' }] };
 const retryButton = tree => all(tree).find(node => node?.type === 'button' && node.props.children === translateMessage('es', 'walletProduction.retry'));
+const connectButton = tree => all(tree).find(node => node?.type === 'button' && all(node).includes(translateMessage('es', 'walletProduction.connect')));
 function fixture(t, config = {}) {
   const cells = [], queue = [], cache = new Map(), calls = { session: [], opened: [], popups: [], retries: 0, quoteInputs: [], binding: 0, connect: 0, history: 0 };
   let history = config.history ?? [], quoteExpired = false;
@@ -34,8 +35,10 @@ function fixture(t, config = {}) {
       return [cell.value, update => { const next = typeof update === 'function' ? update(cell.value) : update; if (!Object.is(next, cell.value)) { cell.value = next; dirty = true; } }]; },
     useCallback(fn, deps) { const cell = cells[cursor++] ??= {}; if (changed(cell.deps, deps)) { cell.deps = deps; cell.fn = fn; } return cell.fn; },
     useEffect(fn, deps) { const cell = cells[cursor++] ??= {}; if (changed(cell.deps, deps)) { cell.deps = deps; queue.push(() => { cell.cleanup?.(); cell.cleanup = fn(); }); } } };
-  const binding = { loading: false, busy: false, configured: true, status: 'linked', address, linkedAddress: address, mismatch: false, error: '',
-    canReceive: () => mounted, activate: async () => { calls.binding++; }, refresh: async () => {}, retire() { mounted = false; } };
+  const binding = { loading: false, busy: false, configured: true, status: config.unlinked ? 'unlinked' : 'linked',
+    address: config.unlinked ? '' : address, linkedAddress: config.unlinked ? '' : address, mismatch: false, error: '',
+    canReceive: () => mounted && binding.status === 'linked', activate: async () => { calls.binding++; }, refresh: async () => {}, retire() { mounted = false; } };
+  const reown = { configured: true, isConnected: false, isRestoring: false, isModalOpen: false, connectWallet: async () => { calls.connect++; } };
   const savedWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
   Object.defineProperty(globalThis, 'window', { configurable: true, value: { location: { search: '' }, open: () => {
     const popup = { opener: 'fixture', closed: false, close() { this.closed = true; }, location: { replace: value => calls.opened.push(value) } }; calls.popups.push(popup); return popup;
@@ -43,7 +46,7 @@ function fixture(t, config = {}) {
   const waiting = deferred();
   const mocks = { react: hooks, 'react/jsx-runtime': require('react/jsx-runtime'), 'lucide-react': new Proxy({}, { get: () => () => null }),
     '@/lib/member-session-context': { useMemberSession: () => ({ subject: props.ownerSubject, email: 'fixture@example.test' }) },
-    '@/components/reown/WalletReownContext': { useWalletReown: () => ({ configured: true, isConnected: false, isRestoring: false, connectWallet: async () => { calls.connect++; } }) },
+    '@/components/reown/WalletReownContext': { useWalletReown: () => reown },
     '@/components/reown/SandboxWalletBindingProvider': { useSandboxWalletBinding: () => binding }, '@/lib/wallet-reown-connection.mjs': connection,
     '@/lib/production-funding-selection.mjs': selection, '@/lib/wallet-funding-contract.mjs': { FUNDING_UUID },
     '@/lib/wallet-production-funding-contract.mjs': fundingContract,
@@ -81,9 +84,45 @@ function fixture(t, config = {}) {
   const stop = () => { mounted = false; cells.forEach(cell => cell?.cleanup?.()); };
   t.after(() => { stop(); if (savedWindow) Object.defineProperty(globalThis, 'window', savedWindow); else delete globalThis.window; });
   render();
-  return { calls, binding, waiting, render, flush, stop, setHistory(records) { history = records; }, get tree() { return tree; },
+  return { calls, binding, reown, waiting, render, flush, stop, setHistory(records) { history = records; }, get tree() { return tree; },
     async change(id, value) { const control = field(tree, id); control.props.onChange(control.type === 'country-selector-fixture' ? value : { target: { value } }); await flush(); return tree; } };
 }
+
+test('the first wallet activation waits for Reown to close its connection dialog before requesting ownership', async t => {
+  const h = fixture(t, { unlinked: true });
+  assert.equal(h.calls.binding, 0);
+  const { onClick } = connectButton(h.tree).props;
+  onClick();
+  onClick();
+  h.reown.isModalOpen = true;
+  h.render();
+  h.reown.isConnected = true;
+  h.render();
+  assert.equal(h.calls.binding, 0, 'the Connect dialog may still be finishing its own authentication');
+  h.reown.isModalOpen = false;
+  h.render();
+  await h.flush();
+  assert.equal(h.calls.connect, 1);
+  assert.equal(h.calls.binding, 1);
+  assert.equal(h.calls.session.length, 0);
+});
+
+test('the same click still activates after Reown email or social authentication takes over a minute', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const h = fixture(t, { unlinked: true });
+  connectButton(h.tree).props.onClick();
+  h.reown.isModalOpen = true;
+  h.render();
+  t.mock.timers.tick(120_000);
+  h.render();
+  h.reown.isConnected = true;
+  h.reown.isModalOpen = false;
+  h.render();
+  await h.flush();
+  assert.equal(h.calls.connect, 1);
+  assert.equal(h.calls.binding, 1);
+  assert.equal(h.calls.session.length, 0);
+});
 
 test('form retains country, currency, method and amount order and shows every verified fiat from discovery', async t => {
   const h = fixture(t); await h.flush(); await h.change('production-country', genericCountry);

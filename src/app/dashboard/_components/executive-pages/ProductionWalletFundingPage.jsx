@@ -60,6 +60,7 @@ export function ProductionWalletView({ ownerSubject }) {
   const [legacyOpen, setLegacyOpen] = useState(false), [historyError, setHistoryError] = useState(false);
   const [currencyRevision, setCurrencyRevision] = useState(0), [methodRevision, setMethodRevision] = useState(0);
   const [activationRequested, setActivationRequested] = useState(false);
+  const openingWallet = useRef(false);
   const mounted = useRef(false), operation = useRef(null), generation = useRef(0), live = useRef(null);
   const catalogVersion = useRef(0), currencyChosen = useRef(false);
   const methodChosen = useRef(false), providerChosen = useRef(false);
@@ -235,23 +236,30 @@ export function ProductionWalletView({ ownerSubject }) {
       && value && FUNDING_UUID.test(value)) void checkStatus(value);
   }, [checkStatus, binding.loading, binding.linkedAddress]);
   useEffect(() => {
-    if (!activationRequested) return undefined;
+    // Email and social authentication can outlast the handoff window. Start
+    // the grace period only while no Reown dialog is open.
+    if (!activationRequested || reown.isModalOpen) return undefined;
     const timer = setTimeout(() => { if (mounted.current) setActivationRequested(false); }, 60000);
     return () => clearTimeout(timer);
-  }, [activationRequested]);
+  }, [activationRequested, reown.isModalOpen]);
   useEffect(() => {
     if (!activationRequested || binding.loading || binding.busy) return;
     if (binding.canReceive() || binding.mismatch || binding.status === 'retired') { setActivationRequested(false); return; }
-    if (reown.isConnected && binding.configured) {
-      // Continue only the activation the user just requested. This is an
-      // ownership signature, never a transaction, payment or background login.
+    if (reown.isConnected && !reown.isModalOpen && binding.configured) {
+      // Let Connect finish before asking Reown to open the ownership signature.
       setActivationRequested(false); void binding.activate();
     }
-  }, [activationRequested, binding, reown.isConnected]);
+  }, [activationRequested, binding, reown.isConnected, reown.isModalOpen]);
+  const connecting = activationRequested && (reown.isModalOpen || reown.status === 'connecting');
+  const activating = binding.busy || connecting;
   const activate = async () => {
-    if (!mounted.current || live.current.binding.canReceive() || binding.loading || binding.busy) return;
-    setError(''); try { if (!reown.isConnected) { setActivationRequested(true); await reown.connectWallet(); } else await binding.activate(); }
+    if (!mounted.current || openingWallet.current || live.current.binding.canReceive() || binding.loading || activating) return;
+    const needsConnection = !reown.isConnected;
+    setError('');
+    if (needsConnection) { openingWallet.current = true; setActivationRequested(true); }
+    try { if (needsConnection) await reown.connectWallet(); else await binding.activate(); }
     catch { if (mounted.current) { setActivationRequested(false); setError('unavailable'); } }
+    finally { if (needsConnection) openingWallet.current = false; }
   };
   const stateLabel = state => tr(({ confirmed: 'confirmed', failed: 'failed', pending: 'processing' })[state] || 'pending');
   const displayError = error || quoteState.error;
@@ -269,7 +277,7 @@ export function ProductionWalletView({ ownerSubject }) {
         <WalletUsdcBalance key={binding.linkedAddress + '-ethereum'} address={binding.linkedAddress} network="ethereum" refreshKey={revision} className={styles.hint} />
         <WalletDepositQr key={binding.linkedAddress} address={binding.linkedAddress} />
       </div> : null}
-      {ready ? <p className={styles.hint}>{tr('receivingCopy')}</p> : <div className={local.actions}><button type="button" className="executive-button primary" disabled={binding.loading || binding.busy || reown.isRestoring || !reown.configured || binding.mismatch || binding.status === 'retired'} onClick={() => void activate()}>{binding.busy ? <Loader2 size={18} className="animate-spin" aria-hidden="true" /> : null}{tr(binding.busy ? 'activating' : reown.isConnected ? 'activate' : 'connect')}</button><button type="button" className="executive-button" disabled={binding.loading || binding.busy || binding.status === 'retired'} onClick={() => void binding.refresh()}><RefreshCw size={16} aria-hidden="true" />{tr('refresh')}</button></div>}
+      {ready ? <p className={styles.hint}>{tr('receivingCopy')}</p> : <div className={local.actions}><button type="button" className="executive-button primary" disabled={binding.loading || activating || reown.isRestoring || !reown.configured || binding.mismatch || binding.status === 'retired'} onClick={() => void activate()}>{activating ? <Loader2 size={18} className="animate-spin" aria-hidden="true" /> : null}{tr(activating ? 'activating' : reown.isConnected ? 'activate' : 'connect')}</button><button type="button" className="executive-button" disabled={binding.loading || binding.busy || binding.status === 'retired'} onClick={() => void binding.refresh()}><RefreshCw size={16} aria-hidden="true" />{tr('refresh')}</button></div>}
       {binding.mismatch || binding.error ? <p role="alert" className={local.error}>{binding.mismatch ? tr('mismatch') : t(`sandboxWallet.${binding.error}`)}</p> : null}
       {binding.mismatch ? <button type="button" className="executive-button" disabled={binding.busy || Boolean(busy)} onClick={() => { setActivationRequested(false); void reown.disconnectWallet().catch(() => { if (mounted.current) setError('unavailable'); }); }}>{t('sandboxWallet.choose')}</button> : null}
     </section>

@@ -150,11 +150,12 @@ export function ConfiguredWalletReownProvider({ children }) {
     && live.current?.connected && live.current?.address === address && live.current?.walletProvider === walletProvider,
   { address }) : null, [isConnected, walletProvider, active, owner, generation, address]);
   const isRestoring = Boolean(owner && (!sdk.initialized || scope.owner !== owner || (!scope.ready && !scope.error)));
+  const isModalOpen = sdk.open;
   const status = !owner ? 'unauthenticated' : scope.owner === owner && scope.error ? 'error' : isRestoring ? 'restoring'
     : isConnected ? chainId === 137 ? 'connected' : 'wrong_network' : activity || 'disconnected';
   const value = useMemo(() => ({ configured: true, address: isConnected ? address : '', chainId: isConnected ? chainId : null,
-    isConnected, isRestoring, provider, status, connectWallet, disconnectWallet }),
-  [isConnected, address, chainId, isRestoring, provider, status, connectWallet, disconnectWallet]);
+    isConnected, isRestoring, isModalOpen, provider, status, connectWallet, disconnectWallet }),
+  [isConnected, address, chainId, isRestoring, isModalOpen, provider, status, connectWallet, disconnectWallet]);
   return <WalletReownContext.Provider value={value}>{children}</WalletReownContext.Provider>;
 }
 

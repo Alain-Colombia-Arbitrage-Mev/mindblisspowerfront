@@ -89,6 +89,9 @@ test('module initialization is once, guarded by the dedicated project, and rende
   assert.equal(h.calls.open, 0); assert.equal(h.calls.rpc.length, 0); assert.equal(h.value.isConnected, false);
   await h.value.connectWallet(); assert.equal(h.calls.open, 1); h.connect();
   const value = h.render(); assert.equal(value.isConnected, true); assert.equal(value.address, address);
+  assert.equal(value.isModalOpen, true);
+  h.sdk.open = false;
+  assert.equal(h.render().isModalOpen, false);
   assert.equal(h.calls.rpc.length, 0, 'a connection never triggers a signature or OTP itself');
 });
 
