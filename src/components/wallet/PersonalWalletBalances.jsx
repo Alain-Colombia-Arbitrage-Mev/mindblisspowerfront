@@ -4,11 +4,12 @@ import { useI18n } from "@/i18n/LanguageProvider";
 import PersonalWalletBalance from "./PersonalWalletBalance";
 import styles from "./personal-wallet-balance.module.css";
 
-/** Polygon is the active personal wallet. Other networks retain their own history. */
-export default function PersonalWalletBalances({ expectedAddress = "", compact = false, showGasNotice = true }) {
+/** Each network displays its own balance. */
+export default function PersonalWalletBalances({ expectedAddress = "", compact = false, showGasNotice = true, showArbitrum = false }) {
   const { t } = useI18n();
   return <div className={`${styles.balances}${compact ? ` ${styles.compactBalances}` : ""}`} role="group" aria-label={t("funding.personalBalanceTitle")}>
     <PersonalWalletBalance expectedAddress={expectedAddress} network="polygon" compact={compact} showGasNotice={showGasNotice} />
-    <p className={styles.transferNote}>{t("funding.personalBalanceTransferNetwork")}</p>
+    {showArbitrum ? <PersonalWalletBalance expectedAddress={expectedAddress} network="arbitrum" asset="USDC" compact={compact} showGasNotice={false} /> : null}
+    <p className={styles.transferNote}>{t(showArbitrum ? "funding.personalFundingNetworks" : "funding.personalBalanceTransferNetwork")}</p>
   </div>;
 }

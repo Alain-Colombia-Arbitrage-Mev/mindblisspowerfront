@@ -4,7 +4,7 @@ import { coreFetch, runtimeEnvironment } from './cloudflare-runtime.mjs';
 import { memberMutationError } from './member-mutation-policy.mjs';
 import { boundedServiceRequest } from './private-service-request.mjs';
 import { administrativeSandboxOptions, fundingAcknowledgement, fundingHistory, fundingInput, fundingStatus, fundingCurrencyCode, fundingSourceSupported, FUNDING_UUID } from './wallet-funding-contract.mjs';
-import { appMeldFundingContext, appMeldFundingInputError, appMeldFundingOptions, appMeldFundingRequest, appMeldFundingSession, appPersonalFundingHistory, appPersonalFundingStatus } from './app-meld-funding-contract.mjs';
+import { appMeldDestinationFor, appMeldFundingAsset, appMeldFundingContext, appMeldFundingInputError, appMeldFundingOptions, appMeldFundingRequest, appMeldFundingSession, appPersonalFundingHistory, appPersonalFundingStatus } from './app-meld-funding-contract.mjs';
 import { readBoundedRequestJson } from './bounded-request-json.mjs';
 
 const reply = (body, status = 200) => Response.json(body, { status, headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' } });
@@ -64,7 +64,7 @@ export async function handleWalletFunding(request, action, {
     if (denied) return reply({ error: denied.error }, denied.status);
     if (kind === 'personal' && request.headers.get('origin') !== env.AUTH_PUBLIC_ORIGIN) return reply({ error: 'invalid_origin' }, 403);
     // Old tabs can construct a Reown checkout from the previous intent schema.
-    if (kind === 'personal' && (request.headers.get('x-mindbliss-wallet-network') !== 'polygon'
+    if (kind === 'personal' && (!['polygon', 'arbitrum'].includes(request.headers.get('x-mindbliss-wallet-network'))
       || request.headers.get('x-mindbliss-funding-provider') !== 'meld')) {
       return reply({ error: 'wallet_funding_network_changed' }, 409);
     }
@@ -81,6 +81,10 @@ export async function handleWalletFunding(request, action, {
     if (kind === 'administrative' && !fundingSourceSupported(body, kind)) return reply({ error: 'wallet_funding_valuation_unavailable' }, 503);
     const appInputError = kind === 'personal' && appMeldFundingInputError(body);
     if (appInputError) return reply({ error: appInputError }, 400);
+    if (kind === 'personal') {
+      const destination = appMeldDestinationFor(appMeldFundingAsset(body.country, body.sourceCurrencyCode ?? 'USD'));
+      if (request.headers.get('x-mindbliss-wallet-network') !== destination.network) return reply({ error: 'wallet_funding_network_changed' }, 409);
+    }
     path = kind === 'personal' ? '/api/member/wallet-funding/personal/intent' : '/api/member/wallet-funding/administrative/session';
   }
   try {

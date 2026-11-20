@@ -958,7 +958,7 @@ test('residence is initially unselected despite browser region or remount and ca
     t.after(() => personal.unmount());
     personal.render(props); await flush(); let tree = personal.render(props);
     const field = find(tree, 'FundingCountryField');
-    assert.equal(field.props.value, '', detectedCountry); assert.deepEqual(field.props.countries.map(([code]) => code), ['US', 'MX', 'CO']);
+    assert.equal(field.props.value, '', detectedCountry); assert.deepEqual(field.props.countries.map(([code]) => code), ['US', 'MX', 'CO', 'BR', 'PE', 'AR', 'DE', 'KE', 'VN']);
     const html = renderToStaticMarkup(field.type(field.props));
     assert.match(html, /value=""/); assert.match(html, /value="CO">Colombia</); assert.doesNotMatch(html, /value="(?:PA|ES|GB|CR|DO|GT|UY)"/);
     assert.equal(find(tree, 'FundingCurrencyField'), undefined); assert.equal(find(tree, 'FundingAmountField').props.sourceCurrencyCode, 'USD');
@@ -1216,4 +1216,30 @@ test('new personal funding review identifies its Polygon asset while old records
     assert.ok(html.includes('USDT · ' + label));
     assert.ok(!html.includes('USDT · ' + (network === 'ethereum' ? 'Polygon' : 'Ethereum')));
   }
+});
+
+test('Brazil preselects Pix in BRL, preserves the Arbitrum destination and offers only the two reviewed providers', async t => {
+  const calls = [], submitted = [];
+  const harness = formHarness('PersonalFundingForm', { readPersonalFundingOptions: async (country, { sourceCurrencyCode }) => {
+    calls.push({ country, sourceCurrencyCode });
+    return meldOptions(country, sourceCurrencyCode, [
+      meldRoute('MERCURYO', 'BRL', ['CREDIT_DEBIT_CARD', 'GOOGLE_PAY'], 155.65, 93387.41),
+      meldRoute('ALCHEMYPAY', 'BRL', ['PIX', 'LOCAL_BANK_TRANSFER'], 50, 20000),
+      meldRoute('RAMPNOW', 'BRL', ['PIX'], 50, 20000),
+    ]);
+  } });
+  t.after(() => harness.unmount());
+  const props = { onContinue: value => submitted.push(value) };
+  selectFundingCountry(harness, props, 'BR'); await flush(); harness.render(props); const tree = harness.render(props);
+  assert.deepEqual(calls, [{ country: 'BR', sourceCurrencyCode: 'BRL' }]);
+  assert.deepEqual(harness.exports.fundingCurrencyChoices('BR'), ['BRL']);
+  assert.equal(find(tree, 'FundingMethodField').props.value, 'PIX');
+  assert.deepEqual(find(tree, 'FundingMethodField').props.methods, ['CREDIT_DEBIT_CARD', 'PIX']);
+  assert.equal(find(tree, 'FundingDestination').props.network, 'Arbitrum');
+  assert.equal(find(tree, 'FundingDestination').props.asset, 'USDC');
+  tree.props.onSubmit({ preventDefault() {} }); await flush();
+  assert.deepEqual(submitted.map(({ countryCode, sourceCurrencyCode, serviceProvider, paymentMethodType, destinationCurrencyCode }) =>
+    ({ countryCode, sourceCurrencyCode, serviceProvider, paymentMethodType, destinationCurrencyCode })), [{
+    countryCode: 'BR', sourceCurrencyCode: 'BRL', serviceProvider: 'ALCHEMYPAY', paymentMethodType: 'PIX', destinationCurrencyCode: 'USDC_ARBITRUM',
+  }]);
 });

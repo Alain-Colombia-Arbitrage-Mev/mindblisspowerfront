@@ -98,3 +98,11 @@ test('Polygon USDC and USDT balances are independent on the same wallet and requ
     assert.equal(personalWalletBalances(dual([snapshot(), polygon(), bad])), null);
   }
 });
+
+test('Arbitrum USDC requires the linked address and native token without combining the Polygon USDC balance', () => {
+  const polygonUsdc = polygon({ asset: 'USDC', tokenAddress: '0x3c499c542cef5e3811e1192ce70d8cc03d5c3359' });
+  const arbitrumUsdc = snapshot({ asset: 'USDC', network: 'arbitrum', chainId: 42161, tokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831', balanceAtomic: '21000000' });
+  assert.deepEqual(personalWalletBalances(dual([arbitrumUsdc, polygon(), polygonUsdc, snapshot()])), dual([snapshot(), polygon(), polygonUsdc, arbitrumUsdc]));
+  assert.equal(personalWalletBalances(dual([snapshot(), polygon(), polygonUsdc, { ...arbitrumUsdc, tokenAddress: polygonUsdc.tokenAddress }])), null);
+  assert.equal(personalWalletBalances(dual([snapshot(), polygon(), polygonUsdc, { ...arbitrumUsdc, walletAddress: `0x${'2'.repeat(40)}` }])), null);
+});

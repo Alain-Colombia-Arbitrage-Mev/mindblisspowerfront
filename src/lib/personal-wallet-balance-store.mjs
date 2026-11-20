@@ -41,7 +41,7 @@ export function createPersonalWalletBalanceStore({ read = readPersonalWalletBala
     const current = () => entries.get(key) === entry && entry.token === token && !controller.signal.aborted;
     entry.flight = Promise.resolve().then(() => read({ signal: controller.signal })).then(value => {
       if (!current()) return null;
-      const networks = Object.fromEntries(value.balances.map(item => [item.asset === 'USDC' ? 'polygon:USDC' : item.network, Object.freeze({
+      const networks = Object.fromEntries(value.balances.map(item => [item.asset === 'USDC' ? `${item.network}:USDC` : item.network, Object.freeze({
         walletAddress: value.walletAddress, balanceAtomic: item.balanceAtomic, nativeBalanceAtomic: item.nativeBalanceAtomic,
         loading: false, error: item.error || '', updatedAt: item.observedAt,
       })]));
@@ -102,7 +102,7 @@ export function createPersonalWalletBalanceStore({ read = readPersonalWalletBala
   }
   return Object.freeze({ subscribe, refresh, get: (key, network = 'ethereum', asset = 'USDT') => {
     const snapshot = entries.get(key)?.snapshot;
-    if (asset === 'USDC' && snapshot?.networks) return snapshot.networks['polygon:USDC'] || unavailableBalance;
+    if (asset === 'USDC' && snapshot?.networks) return snapshot.networks[`${network}:USDC`] || unavailableBalance;
     return snapshot?.networks?.[network] || snapshot || EMPTY_PERSONAL_BALANCE;
   } });
 }

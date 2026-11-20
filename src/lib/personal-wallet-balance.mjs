@@ -1,9 +1,12 @@
 import { PERSONAL_COMPANY_PAYMENT, personalCompanyPaymentAtomic, polygonCompanyPaymentPolicy } from './personal-company-payment-values.mjs';
 import { browserRequestDeadline } from './browser-request-deadline.mjs';
 
+const arbitrumUsdc = Object.freeze({ chainId: 42161, tokenAddress: '0xaf88d065e77c8cc2239327c5edb3a432268e5831', tokenDecimals: 6 });
+
 /** Read-only onchain funds, separate from the administrative wallet or internal ledger. */
 export function personalWalletBalance(value, network = 'ethereum', asset = 'USDT') {
-  const policy = network === 'ethereum' && asset === 'USDT' ? PERSONAL_COMPANY_PAYMENT : network === 'polygon' ? polygonCompanyPaymentPolicy(asset) : null;
+  const policy = network === 'ethereum' && asset === 'USDT' ? PERSONAL_COMPANY_PAYMENT : network === 'polygon' ? polygonCompanyPaymentPolicy(asset)
+    : network === 'arbitrum' && asset === 'USDC' ? arbitrumUsdc : null;
   if (!value || typeof value !== 'object' || Array.isArray(value) || value.walletKind !== 'personal'
     || !policy || value.network !== network || value.asset !== asset
     || typeof value.walletAddress !== 'string' || !/^0x[0-9a-f]{40}$/.test(value.walletAddress)
@@ -20,9 +23,10 @@ export function personalWalletBalance(value, network = 'ethereum', asset = 'USDT
 
 export function personalWalletBalances(value) {
   if (!value || value.walletKind !== 'personal' || typeof value.walletAddress !== 'string' || !/^0x[0-9a-f]{40}$/.test(value.walletAddress)
-    || !Array.isArray(value.balances) || ![2, 3].includes(value.balances.length)) return null;
+    || !Array.isArray(value.balances) || ![2, 3, 4].includes(value.balances.length)) return null;
   const slots = [['ethereum', 'USDT'], ['polygon', 'USDT']];
-  if (value.balances.length === 3) slots.push(['polygon', 'USDC']);
+  if (value.balances.length >= 3) slots.push(['polygon', 'USDC']);
+  if (value.balances.length === 4) slots.push(['arbitrum', 'USDC']);
   const balances = slots.map(([network, asset]) => {
     const items = value.balances.filter(item => item?.network === network && item.asset === asset);
     if (items.length !== 1 || items[0].walletAddress !== value.walletAddress) return null;

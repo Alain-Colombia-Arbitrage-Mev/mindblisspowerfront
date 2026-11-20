@@ -1,5 +1,5 @@
 import { administrativeSandboxOptions, fundingAcknowledgement, fundingHistory, fundingInput, fundingStatus, fundingCurrencyCode, fundingSourceSupported, FUNDING_UUID } from './wallet-funding-contract.mjs';
-import { appMeldFundingContext, appMeldFundingInputError, appMeldFundingOptions, appMeldFundingRequest, appMeldFundingSession, appPersonalFundingHistory, appPersonalFundingStatus } from './app-meld-funding-contract.mjs';
+import { appMeldDestinationFor, appMeldFundingAsset, appMeldFundingContext, appMeldFundingInputError, appMeldFundingOptions, appMeldFundingRequest, appMeldFundingSession, appPersonalFundingHistory, appPersonalFundingStatus } from './app-meld-funding-contract.mjs';
 import { browserRequestDeadline } from './browser-request-deadline.mjs';
 
 export function fundingRequestId() { return crypto.randomUUID(); }
@@ -10,9 +10,10 @@ export async function createPersonalFundingIntent(input, options = {}) {
   if (!body) throw new Error('invalid_request');
   const appInputError = appMeldFundingInputError(body);
   if (appInputError) throw new Error(appInputError);
+  const destination = appMeldDestinationFor(appMeldFundingAsset(body.country, body.sourceCurrencyCode ?? 'USD'));
   const data = appMeldFundingSession(await request('/api/member/wallet-funding/personal/intent', {
     method: 'POST', signal: options.signal,
-    headers: { 'content-type': 'application/json', 'x-mindbliss-wallet-network': 'polygon', 'x-mindbliss-funding-provider': 'meld' },
+    headers: { 'content-type': 'application/json', 'x-mindbliss-wallet-network': destination.network, 'x-mindbliss-funding-provider': 'meld' },
     body: JSON.stringify(body),
   }), body);
   if (!data) throw new Error('funding_unavailable');

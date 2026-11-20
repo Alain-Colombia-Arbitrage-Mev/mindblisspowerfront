@@ -98,7 +98,7 @@ function requestedSource(value, kind, countryRequired = false) {
     ...(value.paymentMethodType !== undefined ? { paymentMethodType: value.paymentMethodType } : {}) };
 }
 
-export function fundingInput(value, kind) {
+export function fundingInput(value, kind, { personalCountry = personalFundingCountry } = {}) {
   if (!value || typeof value !== 'object' || Array.isArray(value) || !['personal', 'administrative'].includes(kind)) return null;
   const currency = fundingCurrencyCode(value.sourceCurrencyCode);
   const keys = ['requestId', 'walletAddress', 'country', 'amount', 'paymentMethodType', 'sourceCurrencyCode', ...(kind === 'administrative' ? ['serviceProvider'] : [])];
@@ -108,7 +108,7 @@ export function fundingInput(value, kind) {
       ? validFundingSourceAmount(value.amount, kind, currency) : validFiatAmount(value.amount))
     || typeof value.paymentMethodType !== 'string' || !METHOD.test(value.paymentMethodType)) return null;
   if (kind === 'administrative' && !PROVIDERS.has(value.serviceProvider)) return null;
-  if (kind === 'personal' && (!personalFundingCountry(value.country) || !personalFundingMethod(value.paymentMethodType))) return null;
+  if (kind === 'personal' && (!personalCountry(value.country) || !personalFundingMethod(value.paymentMethodType))) return null;
   return Object.fromEntries(keys.filter(key => value[key] !== undefined).map(key => [key, value[key]]));
 }
 

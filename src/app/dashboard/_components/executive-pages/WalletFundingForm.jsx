@@ -4,9 +4,9 @@ import { CreditCard, Info, Landmark, Loader2, RefreshCw, ShieldCheck, Smartphone
 import { useEffect, useId, useRef, useState } from "react";
 import { useI18n } from "@/i18n/LanguageProvider";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { APP_MELD_MINIMUM_USD, appMeldRouteSupported } from "@/lib/app-meld-funding-contract.mjs";
+import { APP_MELD_COUNTRIES, APP_MELD_LOCAL_CURRENCIES, APP_MELD_MINIMUM_USD, appMeldLimits, appMeldRouteSupported, appMeldSourceAmount } from "@/lib/app-meld-funding-contract.mjs";
 import { fundingRequestId, readPersonalFundingOptions } from "@/lib/wallet-funding-client.mjs";
-import { PERSONAL_FUNDING_COUNTRIES, PERSONAL_FUNDING_MAXIMUM_USD, PERSONAL_FUNDING_MINIMUM_MXN, PERSONAL_FUNDING_MINIMUM_COP, PERSONAL_FUNDING_MAXIMUM_COP, validFundingSourceAmount } from "@/lib/wallet-funding-contract.mjs";
+import { PERSONAL_FUNDING_MAXIMUM_USD, PERSONAL_FUNDING_MINIMUM_COP, PERSONAL_FUNDING_MAXIMUM_COP } from "@/lib/wallet-funding-contract.mjs";
 import styles from "./wallet-funding.module.css";
 
 const EMPTY_OPTIONS = { status: "idle", country: "", sourceCurrencyCode: "USD", paymentMethods: [], routes: [] };
@@ -14,12 +14,17 @@ const EMPTY_OPTIONS = { status: "idle", country: "", sourceCurrencyCode: "USD", 
 // by the public form. Provider floors may raise its public minimum.
 const PERSONAL_FORM_MINIMUM_USD = APP_MELD_MINIMUM_USD;
 const PERSONAL_FORM_DEFAULT_USD = 100;
-function validPersonalFormAmount(amount, currency) {
-  return validFundingSourceAmount(amount, "personal", currency) && (currency !== "USD" || amount >= PERSONAL_FORM_MINIMUM_USD);
+function amountRangeKey(currency) {
+  return { USD: "funding.personalAmountRange", COP: "funding.personalCopAmountRange", MXN: "funding.personalMxnAmountRange" }[currency] || "funding.localAmountRange";
+}
+
+function defaultAmount(currency) {
+  if (currency === "COP") return "";
+  return String(currency === "USD" ? PERSONAL_FORM_DEFAULT_USD : currency === "BRL" ? 500 : appMeldLimits(currency)[0]);
 }
 
 export function eligiblePaymentMethods(routes, amount, sourceCurrencyCode = "USD", countryCode = "") {
-  if (!Array.isArray(routes) || !validPersonalFormAmount(amount, sourceCurrencyCode)) return [];
+  if (!Array.isArray(routes) || !appMeldSourceAmount(amount, sourceCurrencyCode)) return [];
   const entered = Number.isFinite(amount) && amount > 0;
   return [...new Set(routes.flatMap(route => (route.paymentMethods || [])
     .filter(item => { const limits = routeLimits(item, sourceCurrencyCode); return appMeldRouteSupported(countryCode, sourceCurrencyCode, item.method, route.serviceProvider) && limits && (!entered || (amount >= limits.minimumAmount && amount <= limits.maximumAmount)); })
@@ -30,8 +35,8 @@ function routeLimits(item, sourceCurrencyCode) {
   if ((item.currencyCode || "USD") !== sourceCurrencyCode) return null;
   const providerMinimum = item.minimumAmount ?? item.minimumUsd;
   const providerMaximum = item.maximumAmount ?? item.maximumUsd;
-  const maximumAmount = Math.min(sourceCurrencyCode === "USD" ? PERSONAL_FUNDING_MAXIMUM_USD : sourceCurrencyCode === "COP" ? PERSONAL_FUNDING_MAXIMUM_COP : 1_000_000_000, providerMaximum);
-  const floor = sourceCurrencyCode === "MXN" ? PERSONAL_FUNDING_MINIMUM_MXN : sourceCurrencyCode === "COP" ? PERSONAL_FUNDING_MINIMUM_COP : PERSONAL_FORM_MINIMUM_USD;
+  const [floor, ceiling] = appMeldLimits(sourceCurrencyCode);
+  const maximumAmount = Math.min(ceiling, providerMaximum);
   const minimumAmount = Math.max(floor, providerMinimum);
   return Number.isFinite(providerMinimum) && providerMinimum >= 0 && Number.isFinite(providerMaximum) && Number.isFinite(maximumAmount) && maximumAmount >= minimumAmount
     ? { minimumAmount, maximumAmount } : null;
@@ -54,10 +59,13 @@ export function selectedMethodLimits(routes, method, amount, sourceCurrencyCode 
 }
 
 // ISO currencies are choices to consult, not a claim that a provider supports a route.
-const LOCAL_CURRENCIES = { MX: "MXN", CO: "COP" };
-const PROVIDER_NAMES = { MERCURYO: "Mercuryo", ONRAMPMONEY: "Onramp Money", RAMPNOW: "RampNow" };
-const PERSONAL_COUNTRIES = PERSONAL_FUNDING_COUNTRIES.map(code => [code]);
-export function fundingCurrencyChoices(country) { return country === "CO" ? ["COP"] : ["USD", LOCAL_CURRENCIES[country]].filter(Boolean); }
+const LOCAL_CURRENCIES = APP_MELD_LOCAL_CURRENCIES;
+const PROVIDER_NAMES = { MERCURYO: "Mercuryo", ONRAMPMONEY: "Onramp Money", RAMPNOW: "RampNow", ALCHEMYPAY: "Alchemy Pay" };
+const PERSONAL_COUNTRIES = APP_MELD_COUNTRIES.map(code => [code]);
+export function fundingCurrencyChoices(country) {
+  if (country === "MX") return ["USD", LOCAL_CURRENCIES.MX];
+  return [LOCAL_CURRENCIES[country] || "USD"];
+}
 
 /** Personal state and availability never consume the administrative options endpoint. */
 export function PersonalFundingForm({ disabled = false, busy = false, onContinue, onSelectionChange = undefined, destinationAddress = "", walletAction = null }) {
@@ -81,7 +89,7 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
     ? options.routes.filter(route => eligiblePaymentMethods([route], Number(amount), sourceCurrencyCode, countryCode).includes(method)) : [];
   const provider = selectableRoutes.find(route => route.serviceProvider === providerChoice) || selectableRoutes[0];
   const selectedLimits = current && method ? selectedMethodLimits(provider ? [provider] : options.routes, method, 0, sourceCurrencyCode) : null;
-  const copLimits = current && sourceCurrencyCode === "COP" ? selectedLimits : null;
+  const localLimits = current && !["USD", "MXN"].includes(sourceCurrencyCode) ? selectedLimits : null;
   const routeMinimum = current ? selectedLimits?.minimumAmount ?? selectedLimits?.minimumUsd ?? lowestRouteMinimum(options.routes, sourceCurrencyCode, countryCode) : null;
   const selectionUnavailable = Boolean(current && options.status === "ready" && method && !methods.includes(method));
   const parsedAmount = Number(amount);
@@ -112,8 +120,12 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
     return () => controller.abort();
   }, [countryCode, sourceCurrencyCode, revision]);
 
-  useEffect(() => { setMethod(selected => selected || (sourceCurrencyCode === "MXN" && methodsKey.split(",").includes("SPEI") ? "SPEI"
-    : methodsKey.split(",").includes("CREDIT_DEBIT_CARD") ? "CREDIT_DEBIT_CARD" : methodsKey.split(",").includes("PSE") ? "PSE" : methodsKey.split(",")[0] || "")); }, [methodsKey, countryCode, amount, sourceCurrencyCode]);
+  useEffect(() => {
+    const eligible = methodsKey.split(",");
+    const preferred = { MXN: "SPEI", BRL: "PIX" }[sourceCurrencyCode];
+    setMethod(selected => selected || (preferred && eligible.includes(preferred) ? preferred
+      : eligible.includes("CREDIT_DEBIT_CARD") ? "CREDIT_DEBIT_CARD" : eligible.includes("PSE") ? "PSE" : eligible[0] || ""));
+  }, [methodsKey, countryCode, amount, sourceCurrencyCode]);
 
   async function submit(event) {
     event.preventDefault();
@@ -131,7 +143,7 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
           const currency = localCurrencies.current[value] || "USD";
           changeSelection(setCountryCode, value);
           copDefaultPending.current = currency === "COP" && currency !== sourceCurrencyCode;
-          if (currency !== sourceCurrencyCode) setAmount(currency === "COP" ? "" : String(currency === "MXN" ? PERSONAL_FUNDING_MINIMUM_MXN : PERSONAL_FORM_DEFAULT_USD));
+          if (currency !== sourceCurrencyCode) setAmount(defaultAmount(currency));
           setSourceCurrencyCode(currency);
         }} busy={busy} />
         {LOCAL_CURRENCIES[countryCode] ? <FundingCurrencyField id={id} country={countryCode} value={sourceCurrencyCode} onChange={value => {
@@ -139,15 +151,15 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
           localCurrencies.current[countryCode] = value;
           copDefaultPending.current = value === "COP";
           changeSelection(setSourceCurrencyCode, value);
-          setAmount(value === "COP" ? "" : String(value === "USD" ? PERSONAL_FORM_DEFAULT_USD : PERSONAL_FUNDING_MINIMUM_MXN));
+          setAmount(defaultAmount(value));
         }} busy={busy} /> : null}
-        <FundingAmountField id={id} amount={amount} sourceCurrencyCode={sourceCurrencyCode} minimumAmount={routeMinimum} maximumAmount={copLimits?.maximumAmount}
+        <FundingAmountField id={id} amount={amount} sourceCurrencyCode={sourceCurrencyCode} minimumAmount={routeMinimum} maximumAmount={localLimits?.maximumAmount}
           onChange={value => { copDefaultPending.current = false; changeSelection(setAmount, value); }} busy={busy} />
         <FundingMethodField id={id} value={methods.includes(method) ? method : ""} methods={methods} status={current ? options.status : "loading"}
           selectionUnavailable={selectionUnavailable}
           countrySelected={Boolean(countryCode)} sourceCurrencyCode={sourceCurrencyCode} minimumUsd={routeMinimum}
-          amountValid={validPersonalFormAmount(parsedAmount, sourceCurrencyCode)}
-          onUseMinimum={routeMinimum !== null && Number(amount) < routeMinimum ? () => changeSelection(setAmount, sourceCurrencyCode === "COP" ? String(Math.ceil(routeMinimum)) : (Math.ceil(routeMinimum * 100) / 100).toFixed(2)) : undefined}
+          amountValid={appMeldSourceAmount(parsedAmount, sourceCurrencyCode)}
+          onUseMinimum={routeMinimum !== null && Number(amount) < routeMinimum ? () => changeSelection(setAmount, ["COP", "VND"].includes(sourceCurrencyCode) ? String(Math.ceil(routeMinimum)) : (Math.ceil(routeMinimum * 100) / 100).toFixed(2)) : undefined}
           limits={selectedLimits} onChange={value => { setProviderChoice(""); changeSelection(setMethod, value); }}
           onRetry={() => setRevision(value => value + 1)} busy={busy}>
           {selectableRoutes.length > 1 ? <label className={`mb-onramp-country-picker ${styles.currencyField}`} htmlFor={`${id}-provider`}><span>{t("funding.providerLabel")}</span>
@@ -157,7 +169,7 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
         </FundingMethodField>
       </div>
       <FundingDestination address={destinationAddress} asset={current ? options.destinationCurrencyCode?.split("_")[0] : undefined}
-        editableByProvider={provider?.serviceProvider === "MERCURYO"} />
+        network={countryCode === "BR" ? "Arbitrum" : "Polygon"} editableByProvider={provider?.serviceProvider === "MERCURYO"} />
       {sourceCurrencyCode === "MXN" ? <p className={styles.hint} role="status">{t("funding.personalMxnLimits")}</p> : null}
       {sourceCurrencyCode === "COP" ? <p className={styles.hint} role="status">{t("funding.personalPseLimits")}</p> : null}
       {walletAction || <FundingSubmit disabled={disabled || !valid} busy={busy} />}
@@ -169,9 +181,11 @@ function FundingAmountField({ id, amount, sourceCurrencyCode = "USD", minimumAmo
   const { t, locale } = useI18n();
   const usd = sourceCurrencyCode === "USD";
   const cop = sourceCurrencyCode === "COP";
-  const minimum = usd ? PERSONAL_FORM_MINIMUM_USD : cop ? Math.max(PERSONAL_FUNDING_MINIMUM_COP, minimumAmount ?? PERSONAL_FUNDING_MINIMUM_COP) : PERSONAL_FUNDING_MINIMUM_MXN;
-  const maximum = usd ? PERSONAL_FUNDING_MAXIMUM_USD : cop ? Math.min(PERSONAL_FUNDING_MAXIMUM_COP, maximumAmount ?? PERSONAL_FUNDING_MAXIMUM_COP) : maximumAmount ?? 1_000_000_000;
-  const invalid = amount !== "" && (!validPersonalFormAmount(Number(amount), sourceCurrencyCode) || (cop && (Number(amount) < minimum || Number(amount) > maximum)));
+  const [floor, ceiling] = appMeldLimits(sourceCurrencyCode);
+  const constrained = !usd && sourceCurrencyCode !== "MXN";
+  const minimum = constrained ? Math.max(floor, minimumAmount ?? floor) : floor;
+  const maximum = Math.min(ceiling, maximumAmount ?? ceiling);
+  const invalid = amount !== "" && (!appMeldSourceAmount(Number(amount), sourceCurrencyCode) || (constrained && (Number(amount) < minimum || Number(amount) > maximum)));
   const currency = value => new Intl.NumberFormat(locale, { style: "currency", currency: sourceCurrencyCode }).format(value);
   const presets = usd ? [PERSONAL_FORM_MINIMUM_USD, PERSONAL_FORM_DEFAULT_USD, 500, 1000, 2000, 5000, 10000, PERSONAL_FUNDING_MAXIMUM_USD]
     : cop && minimumAmount !== null ? [...new Set([minimumAmount, PERSONAL_FUNDING_MINIMUM_COP, 200000, 500000, 1000000, 2000000, PERSONAL_FUNDING_MAXIMUM_COP].filter(value => value >= minimum && value <= maximum))] : [];
@@ -189,7 +203,7 @@ function FundingAmountField({ id, amount, sourceCurrencyCode = "USD", minimumAmo
     {presets.length ? <div className={`mb-onramp-quick-amounts ${styles.quickAmounts}`}>{presets.map(value => <button type="button" key={value}
       className={Number(amount) === value ? "active" : ""} aria-label={currency(value)} aria-pressed={Number(amount) === value} onClick={() => onChange(String(value))}>
       <bdi>{new Intl.NumberFormat(locale, { maximumFractionDigits: cop ? 2 : 0 }).format(value)}</bdi></button>)}</div> : null}
-    <label className={`mb-onramp-amount-input ${styles.amountInput}`} htmlFor={`${id}-amount`}><span>{sourceCurrencyCode}</span><input id={`${id}-amount`} name="amount" autoComplete="off" type="number" min={String(minimum)} max={String(maximum)} step="0.01" inputMode="decimal"
+    <label className={`mb-onramp-amount-input ${styles.amountInput}`} htmlFor={`${id}-amount`}><span>{sourceCurrencyCode}</span><input id={`${id}-amount`} name="amount" autoComplete="off" type="number" min={String(minimum)} max={String(maximum)} step={sourceCurrencyCode === "VND" ? "1" : "0.01"} inputMode={sourceCurrencyCode === "VND" ? "numeric" : "decimal"}
       value={amount} onChange={event => onChange(event.target.value)} aria-label={t("onramp.amountLabel")} aria-invalid={invalid || undefined} aria-describedby={[usd ? `${id}-usd-limits` : "", invalid ? `${id}-amount-hint` : ""].filter(Boolean).join(" ") || undefined} required /></label>
     {usd ? <div className={styles.amountSliderGroup}>
       <label className="sr-only" htmlFor={`${id}-amount-slider`}>{t("funding.amountSlider")}</label>
@@ -198,7 +212,7 @@ function FundingAmountField({ id, amount, sourceCurrencyCode = "USD", minimumAmo
       <div className={styles.sliderLimits} dir="ltr" aria-hidden="true"><span>{currency(PERSONAL_FORM_MINIMUM_USD)}</span><span>{currency(PERSONAL_FUNDING_MAXIMUM_USD)}</span></div>
       <small id={`${id}-usd-limits`} className="mb-onramp-disclosure">{t("funding.personalAmountLimits", { minimum: currency(PERSONAL_FORM_MINIMUM_USD), maximum: currency(PERSONAL_FUNDING_MAXIMUM_USD) })}</small>
     </div> : null}
-    {invalid ? <small id={`${id}-amount-hint`} role="alert" className="mb-onramp-disclosure">{t(usd ? "funding.personalAmountRange" : cop ? "funding.personalCopAmountRange" : "funding.personalMxnAmountRange")}</small> : null}
+    {invalid ? <small id={`${id}-amount-hint`} role="alert" className="mb-onramp-disclosure">{t(amountRangeKey(sourceCurrencyCode))}</small> : null}
   </fieldset>;
 }
 
@@ -245,7 +259,7 @@ function FundingMethodField({ id, value, methods, status, countrySelected, sourc
     <legend>{t("onramp.paymentMethodLabel")}{ready && methods.length ? <span className={styles.methodCount}>{t("funding.methodCount", { count: new Intl.NumberFormat(locale).format(methods.length) })}</span> : null}</legend>
     {methods.length ? <div className={styles.methodChoices}>{methods.map(method => {
       const Icon = ["CREDIT_DEBIT_CARD", "CARD", "VISA", "MASTERCARD"].includes(method) ? CreditCard
-        : ["BANK_TRANSFER", "SEPA", "ACH", "SPEI", "PSE", "LOCAL_BANK_TRANSFER"].includes(method) ? Landmark : ["APPLE_PAY", "GOOGLE_PAY"].includes(method) ? Smartphone : WalletCards;
+        : ["BANK_TRANSFER", "SEPA", "ACH", "SPEI", "PSE", "PIX", "VIETQR", "LOCAL_BANK_TRANSFER"].includes(method) ? Landmark : ["APPLE_PAY", "GOOGLE_PAY", "MPESA"].includes(method) ? Smartphone : WalletCards;
       return <label className={`${styles.methodOption}${value === method ? ` ${styles.methodSelected}` : ""}`} key={method}>
         <input type="radio" name={`${id}-method`} value={method} checked={value === method} onChange={() => onChange(method)} disabled={!ready} required />
         <Icon size={17} aria-hidden="true" /><span>{paymentMethodLabel(method, t)}</span>
@@ -256,7 +270,7 @@ function FundingMethodField({ id, value, methods, status, countrySelected, sourc
       {selectionUnavailable && methods.length ? <p>{t("funding.methodUnavailable")}</p> : null}
       {unavailable ? <><p>{t(status === "error" ? "funding.methodsLoadFailed" : "funding.methodsForAmountUnavailable")}</p>{status === "error" ? <button className="executive-button" type="button" onClick={onRetry} disabled={busy}><RefreshCw size={14} aria-hidden="true" />{t("walletPage.retry")}</button> : null}</>
         : !countrySelected ? t("funding.chooseCountryFirst") : status === "loading" ? <span className={styles.methodLoading}><Loader2 className="animate-spin" size={15} aria-hidden="true" />{t("walletPage.checkingAvailability")}</span>
-          : ready && !amountValid ? t(sourceCurrencyCode === "USD" ? "funding.personalAmountRange" : sourceCurrencyCode === "COP" ? "funding.personalCopAmountRange" : "funding.personalMxnAmountRange") : null}
+          : ready && !amountValid ? t(amountRangeKey(sourceCurrencyCode)) : null}
       {ready && partialAvailability && methods.length ? <><p>{t("funding.methodsPartiallyLoaded")}</p><button className="executive-button" type="button" onClick={onRetry} disabled={busy}><RefreshCw size={14} aria-hidden="true" />{t("walletPage.retry")}</button></> : null}
       {ready && limits ? t("funding.methodRange", { minimum: currency(limits.minimumAmount ?? limits.minimumUsd), maximum: currency(limits.maximumAmount ?? limits.maximumUsd) })
         : ready && amountValid && !methods.length && minimumUsd !== null ? <p>{t("funding.providerMinimum", { amount: currency(minimumUsd) })}</p> : null}
@@ -273,10 +287,10 @@ function FundingSubmit({ disabled, busy }) {
   </button>;
 }
 
-export function FundingDestination({ address, asset, editableByProvider = false }) {
+export function FundingDestination({ address, asset, network = "Polygon", editableByProvider = false }) {
   const { t } = useI18n();
   const id = useId();
-  return <div className={styles.destinationReview}><label htmlFor={`${id}-destination`}>{t("funding.reviewDestination")}<small>{asset ? `${asset} · Polygon` : "Polygon"}</small></label>
+  return <div className={styles.destinationReview}><label htmlFor={`${id}-destination`}>{t("funding.reviewDestination")}<small>{asset ? `${asset} · ${network}` : network}</small></label>
     <input id={`${id}-destination`} type="text" readOnly value={address} dir="ltr" title={address || undefined}
       aria-describedby={`${id}-destination-help`} placeholder={t("funding.destinationReviewEmpty")} />
     <small id={`${id}-destination-help`} className={address && !editableByProvider ? "sr-only" : undefined}>
@@ -291,6 +305,10 @@ export function paymentMethodLabel(code, t) {
   if (["CREDIT_DEBIT_CARD", "CARD", "VISA", "MASTERCARD"].includes(code)) return t("onramp.cardPayment");
   if (code === "APPLE_PAY") return "Apple Pay";
   if (code === "GOOGLE_PAY") return "Google Pay";
+  if (code === "PIX") return "Pix";
+  if (code === "MPESA") return "M-Pesa";
+  if (code === "VIETQR") return "VietQR";
+  if (code === "SEPA") return "SEPA";
   if (code === "SPEI") return t("funding.speiPayment");
   if (code === "PSE") return t("funding.psePayment");
   if (code === "LOCAL_BANK_TRANSFER") return t("funding.localBankTransfer");
