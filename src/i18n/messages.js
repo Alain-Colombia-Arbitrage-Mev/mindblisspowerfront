@@ -12,7 +12,7 @@ export const messages = {
     common: { update: "Actualizar", support: "Soporte", account: "Mi cuenta", close: "Cerrar", loading: "Cargando…" },
     theme: { light: "Claro", dark: "Oscuro", enableLight: "Activar tema claro", enableDark: "Activar tema oscuro" },
     nav: {
-      account: "CUENTA", summary: "Resumen", memberships: "Membresías", wallet: "Billetera",
+      account: "CUENTA", summary: "Resumen", memberships: "Membresías", wallet: "Billetera", commissions: "Comisiones",
       communityGroup: "COMUNIDAD", community: "Comunidad", referrals: "Referidos por niveles", ranks: "Rangos",
       settings: "AJUSTES", profile: "Mi perfil", personalAccount: "Cuenta personal", helpCenter: "Centro de ayuda y soporte",
       logout: "Cerrar sesión", myWallet: "Mi wallet", personalWallet: "Wallet personal", administrativeWallet: "Wallet administrativa", topUpAdministrative: "Recargar fondos", openWallet: "Abrir", buyCrypto: "Recargar fondos", addFunds: "Recargar fondos",
@@ -100,7 +100,7 @@ export const messages = {
     common: { update: "Refresh", support: "Support", account: "My account", close: "Close", loading: "Loading…" },
     theme: { light: "Light", dark: "Dark", enableLight: "Enable light theme", enableDark: "Enable dark theme" },
     nav: {
-      account: "ACCOUNT", summary: "Overview", memberships: "Memberships", wallet: "Wallet",
+      account: "ACCOUNT", summary: "Overview", memberships: "Memberships", wallet: "Wallet", commissions: "Commissions",
       communityGroup: "COMMUNITY", community: "Community", referrals: "Level referrals", ranks: "Ranks",
       settings: "SETTINGS", profile: "My profile", personalAccount: "Personal account", helpCenter: "Help and support center",
       logout: "Sign out", myWallet: "My wallet", personalWallet: "Personal wallet", administrativeWallet: "Administrative wallet", topUpAdministrative: "Add funds", openWallet: "Open", buyCrypto: "Add funds", addFunds: "Add funds",
@@ -188,7 +188,7 @@ export const messages = {
     common: { update: "تحديث", support: "الدعم", account: "حسابي", close: "إغلاق", loading: "جارٍ التحميل…" },
     theme: { light: "فاتح", dark: "داكن", enableLight: "تفعيل المظهر الفاتح", enableDark: "تفعيل المظهر الداكن" },
     nav: {
-      account: "الحساب", summary: "الملخص", memberships: "العضويات", wallet: "المحفظة",
+      account: "الحساب", summary: "الملخص", memberships: "العضويات", wallet: "المحفظة", commissions: "العمولات",
       communityGroup: "المجتمع", community: "المجتمع", referrals: "الإحالات حسب المستوى", ranks: "الرتب",
       settings: "الإعدادات", profile: "ملفي الشخصي", personalAccount: "حساب شخصي", helpCenter: "مركز المساعدة والدعم",
       logout: "تسجيل الخروج", myWallet: "محفظتي", personalWallet: "المحفظة الشخصية", administrativeWallet: "المحفظة الإدارية", topUpAdministrative: "إضافة أموال", openWallet: "فتح", buyCrypto: "إضافة أموال", addFunds: "إضافة أموال",
@@ -276,7 +276,7 @@ export const messages = {
     common: { update: "刷新", support: "支持", account: "我的账户", close: "关闭", loading: "加载中…" },
     theme: { light: "浅色", dark: "深色", enableLight: "启用浅色主题", enableDark: "启用深色主题" },
     nav: {
-      account: "账户", summary: "概览", memberships: "会员方案", wallet: "钱包",
+      account: "账户", summary: "概览", memberships: "会员方案", wallet: "钱包", commissions: "佣金",
       communityGroup: "社区", community: "社区", referrals: "分层推荐", ranks: "等级",
       settings: "设置", profile: "我的资料", personalAccount: "个人账户", helpCenter: "帮助与支持中心",
       logout: "退出登录", myWallet: "我的钱包", personalWallet: "个人钱包", administrativeWallet: "管理钱包", topUpAdministrative: "充值资金", openWallet: "打开", buyCrypto: "充值资金", addFunds: "充值资金",

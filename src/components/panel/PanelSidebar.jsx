@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   LogOut,
   Network,
+  ReceiptText,
   Trophy,
   UserRound,
   Users,
@@ -26,6 +27,7 @@ const NAV_GROUPS = [
     { icon: Wallet, label: "nav.wallet", href: "/dashboard/payments", exact: true, also: ["/dashboard/wallet-personal"] },
     { icon: History, label: "funding.history", href: "/dashboard/wallet-personal/requests" },
     { icon: ArrowUpRight, label: "companyPayment.transferAction", href: "/dashboard/wallet-personal/pay" },
+    { icon: ReceiptText, label: "nav.commissions", href: "/dashboard/comisiones", requiresCommissions: true },
   ] },
   { label: "nav.communityGroup", items: [
     { icon: Users, label: "nav.community", href: "/dashboard/referrals" },
@@ -37,7 +39,7 @@ const NAV_GROUPS = [
   ] },
 ];
 
-export default function PanelSidebar({ pathname, member, onNavigate = undefined }) {
+export default function PanelSidebar({ pathname, member, showCommissions = false, onNavigate = undefined }) {
   const { t } = useI18n();
   return (
     <div className="flex h-full flex-col" style={{ background: "var(--vp-shell)" }}>
@@ -48,7 +50,7 @@ export default function PanelSidebar({ pathname, member, onNavigate = undefined 
         {NAV_GROUPS.map((group) => (
           <div className="vp-sidebar-nav-group" key={group.label}>
             <p>{t(group.label)}</p>
-            {group.items.map((item) => (
+            {group.items.filter(item => !item.requiresCommissions || showCommissions).map((item) => (
               <SidebarNavItem
                 key={item.href}
                 icon={item.icon}

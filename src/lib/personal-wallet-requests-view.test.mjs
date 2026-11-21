@@ -69,6 +69,22 @@ test('the actual shared sidebar places personal requests under wallet, keeps tra
   assert.match(shell, /<NavigationDrawer\b/);
 });
 
+test('the App menu exposes localized commissions as a sibling of the wallet and marks its own route active', () => {
+  const pathname = '/dashboard/comisiones';
+  for (const locale of ['es', 'en', 'ar', 'zh']) {
+    const { default: Sidebar } = moduleAt('../components/panel/PanelSidebar.jsx', locale);
+    const hidden = renderToStaticMarkup(React.createElement(Sidebar, { pathname }));
+    const visible = renderToStaticMarkup(React.createElement(Sidebar, { pathname, showCommissions: true }));
+    assert.doesNotMatch(hidden, /href="\/dashboard\/comisiones"/);
+    assert.match(visible, /href="\/dashboard\/comisiones"[^>]*aria-current="page"/);
+    assert.doesNotMatch(visible, /href="\/dashboard\/payments"[^>]*aria-current="page"/);
+    assert.ok(visible.includes(translateMessage(locale, 'nav.commissions')));
+    assert.ok(visible.indexOf('href="/dashboard/wallet-personal/pay"') < visible.indexOf(`href="${pathname}"`));
+  }
+  assert.equal(memberPageFor(pathname).title, 'Comisiones');
+  assert.equal(memberPageKeysFor(pathname).title, 'nav.commissions');
+});
+
 test('the separate requests page renders real personal history without wallet SDK, setup, funding form or administrative data', () => {
   for (const locale of ['es', 'en', 'ar', 'zh']) {
     const { default: Page } = moduleAt('../app/dashboard/_components/executive-pages/PersonalWalletRequestsPage.jsx', locale);

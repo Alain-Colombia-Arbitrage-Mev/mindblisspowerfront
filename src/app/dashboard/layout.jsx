@@ -1,5 +1,6 @@
 import { rawIdToken } from "@/lib/admin-bff";
 import { betterAuthEnabled, AuthServiceUnavailable, AuthAccessRestricted } from "@/lib/better-auth-bridge.mjs";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { verifyIdTokenForSession } from "@/lib/verify-id-token";
@@ -46,8 +47,9 @@ export default async function DashboardLayout({ children }) {
   }
 
   const authMode = betterAuthEnabled() ? "better-auth" : "cognito";
+  const showCommissions = authMode === "better-auth" && (await headers()).get("host") === "app.mindblisspower.com";
   return <DashboardSessionBoundary owner={{ email: claims.email, subject: claims.sub }} mode={authMode}>
-    <DashboardShell authMode={authMode}>{children}</DashboardShell>
+    <DashboardShell authMode={authMode} showCommissions={showCommissions}>{children}</DashboardShell>
   </DashboardSessionBoundary>;
 }
 

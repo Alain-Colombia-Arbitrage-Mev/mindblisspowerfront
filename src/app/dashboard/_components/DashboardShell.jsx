@@ -15,7 +15,7 @@ import { REFERRAL_REQUEST_TIMEOUT_MS, browserReferralChoice, chooseBrowserReferr
 import { useI18n } from "@/i18n/LanguageProvider";
 import "@/components/panel/panel-shell.css";
 
-export default function DashboardShell({ authMode: _authMode, children }) {
+export default function DashboardShell({ authMode: _authMode, showCommissions = false, children }) {
   const { t } = useI18n();
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -146,11 +146,12 @@ export default function DashboardShell({ authMode: _authMode, children }) {
           <PanelSidebar
             pathname={pathname}
             member={member}
+            showCommissions={showCommissions}
             onNavigate={closeMenu}
           />
         </NavigationDrawer>
         <aside className="vp-panel-sidebar">
-          <PanelSidebar pathname={pathname} member={member} />
+          <PanelSidebar pathname={pathname} member={member} showCommissions={showCommissions} />
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
