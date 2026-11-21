@@ -21,6 +21,14 @@ test('a confirmed package has its own level, ceiling, exact gross and valid date
   assert.equal(rechargePackageSnapshot({ balanceUsd: 140 }), null);
 });
 
+test('Pagar benefits only accept the exact integer projection tied to an owned package', () => {
+  const pagarBenefits = { activeGrossUsdMinor: 13_789, roiAccruedUsdMinor: 42, ownPv: 137, bonusCreditedUsdMinor: 260 };
+  assert.deepEqual(rechargePackageSnapshot({ package: item, pagarBenefits }), { package: item, pagarBenefits });
+  assert.equal(rechargePackageSnapshot({ package: null, pagarBenefits }), null);
+  assert.equal(rechargePackageSnapshot({ package: item, pagarBenefits: { ...pagarBenefits, ownPv: -1 } }), null);
+  assert.equal(rechargePackageSnapshot({ package: item, pagarBenefits: { ...pagarBenefits, arbitrarilyCredited: 100 } }), null);
+});
+
 test('the exact App GET passes the session cookie and stale-owner fence on a no-store request', async () => {
   const input = request(undefined, { headers: { cookie: `${cookie}; other=discard`, authorization: 'discard' } });
   const response = await handleRechargePackage(input, { env, fetchImpl: async (url, init) => {

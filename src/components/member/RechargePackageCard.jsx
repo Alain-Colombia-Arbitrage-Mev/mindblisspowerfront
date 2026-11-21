@@ -24,7 +24,7 @@ export default function RechargePackageCard({ session, compact = false }) {
       pending = true;
       try {
         const data = await readRechargePackage(subject, { signal: controller.signal });
-        if (!controller.signal.aborted) setSnapshot({ owner, package: data.package });
+        if (!controller.signal.aborted) setSnapshot({ owner, ...data });
       } catch (error) {
         if (controller.signal.aborted) return;
         if ([401, 403, 409].includes(error?.status)) retire();
@@ -42,12 +42,14 @@ export default function RechargePackageCard({ session, compact = false }) {
 
   const item = snapshot?.owner === owner ? snapshot.package : null;
   if (!item) return null;
+  const benefits = snapshot?.pagarBenefits;
   const usd = new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', currencyDisplay: 'code' });
   const cents = new Intl.NumberFormat(locale, { minimumIntegerDigits: 2, useGrouping: false });
   const formatUsd = minor => usd.formatToParts(BigInt(minor) / 100n)
     .map(part => part.type === 'fraction' ? cents.format(minor % 100) : part.value).join('');
   const confirmedDate = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(item.confirmedAt));
-  const level = new Intl.NumberFormat(locale).format(item.level);
+  const numbers = new Intl.NumberFormat(locale);
+  const level = numbers.format(item.level);
   return <section className={`executive-panel ${styles.card}${compact ? ` ${styles.compact}` : ''}`} aria-labelledby={heading}>
     <div className={styles.heading}><BadgeCheck size={18} aria-hidden="true" /><h2 id={heading}>{t('rechargePackage.title')}</h2></div>
     <p className={styles.package}>{t('rechargePackage.level', { level })}</p>
@@ -58,5 +60,13 @@ export default function RechargePackageCard({ session, compact = false }) {
         <div><dt>{t('rechargePackage.confirmed')}</dt><dd><time dateTime={item.confirmedAt}>{confirmedDate}</time></dd></div>
       </>}
     </dl>
+    {benefits && (benefits.activeGrossUsdMinor > 0 || benefits.bonusCreditedUsdMinor > 0) && <>
+      <h3 className={styles.benefitHeading}>{t('rechargePackage.pagar')}</h3>
+      <dl className={styles.details}>
+        <div><dt>{t('rechargePackage.roi')}</dt><dd><bdi>{formatUsd(benefits.roiAccruedUsdMinor)}</bdi></dd></div>
+        <div><dt>{t('rechargePackage.pv')}</dt><dd><bdi>{numbers.format(benefits.ownPv)}</bdi></dd></div>
+        <div><dt>{t('rechargePackage.bonus')}</dt><dd><bdi>{formatUsd(benefits.bonusCreditedUsdMinor)}</bdi></dd></div>
+      </dl>
+    </>}
   </section>;
 }
