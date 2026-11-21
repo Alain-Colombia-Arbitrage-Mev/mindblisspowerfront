@@ -60,13 +60,14 @@ test('focus refresh is bounded to one read and a late previous-account response 
   assert.deepEqual(h.calls.map(value => value.subject), [ownerA.subject, ownerA.subject, ownerB.subject]);
 });
 
-test('the package card shows earned Pagar figures separately and never exposes them on account change', async t => {
+test('the package card identifies virtual commission balances separately from PV and clears them on account change', async t => {
   const h = fixture(t, async subject => subject === ownerA.subject
     ? { ...receipt, pagarBenefits: { activeGrossUsdMinor: 13_789, roiAccruedUsdMinor: 42, ownPv: 137, bonusCreditedUsdMinor: 260 } }
     : { package: null });
   h.render(); await settle();
   const html = renderToStaticMarkup(h.render(ownerA, true));
-  for (const key of ['pagar', 'roi', 'pv', 'bonus']) assert.ok(html.includes(translateMessage('es', `rechargePackage.${key}`)));
+  for (const key of ['pagar', 'roi', 'pv']) assert.ok(html.includes(translateMessage('es', `rechargePackage.${key}`)));
+  assert.match(html, /<dt>Saldo virtual de comisiones<\/dt>/);
   assert.ok(html.includes(new Intl.NumberFormat('es', { style: 'currency', currency: 'USD', currencyDisplay: 'code' }).format(2.60)));
   assert.equal(h.render(ownerB), null);
 });
