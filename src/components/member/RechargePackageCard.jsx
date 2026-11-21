@@ -1,10 +1,12 @@
 'use client';
 
 import { useEffect, useId, useState } from 'react';
-import { BadgeCheck } from 'lucide-react';
+import { BadgeCheck, Clock3 } from 'lucide-react';
+import Link from 'next/link';
 import { useI18n } from '@/i18n/LanguageProvider';
 import { memberSessionOwnerKey } from '@/lib/member-session-boundary.mjs';
 import { readRechargePackage } from '@/lib/recharge-package-client.mjs';
+import { rechargePackageTier } from '@/lib/recharge-package-contract.mjs';
 import { subscribeMemberLogout } from '@/lib/member-logout-sync.mjs';
 import { subscribeMemberSessionReplacement } from '@/lib/member-session-sync.mjs';
 import styles from './recharge-package.module.css';
@@ -43,24 +45,31 @@ export default function RechargePackageCard({ session, compact = false }) {
   const item = snapshot?.owner === owner ? snapshot.package : null;
   if (!item) return null;
   const benefits = snapshot?.pagarBenefits;
+  const paidGross = benefits?.activeGrossUsdMinor ?? 0;
+  const active = rechargePackageTier(paidGross);
+  const paymentPending = benefits && item.grossUsdMinor > paidGross;
+  const StatusIcon = active ? BadgeCheck : Clock3;
   const usd = new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', currencyDisplay: 'code' });
   const cents = new Intl.NumberFormat(locale, { minimumIntegerDigits: 2, useGrouping: false });
   const formatUsd = minor => usd.formatToParts(BigInt(minor) / 100n)
     .map(part => part.type === 'fraction' ? cents.format(minor % 100) : part.value).join('');
-  const confirmedDate = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(item.confirmedAt));
   const numbers = new Intl.NumberFormat(locale);
-  const level = numbers.format(item.level);
   return <section className={`executive-panel ${styles.card}${compact ? ` ${styles.compact}` : ''}`} aria-labelledby={heading}>
-    <div className={styles.heading}><BadgeCheck size={18} aria-hidden="true" /><h2 id={heading}>{t('rechargePackage.title')}</h2></div>
-    <p className={styles.package}>{t('rechargePackage.level', { level })}</p>
-    <dl className={styles.details}>
-      <div><dt>{t('rechargePackage.gross')}</dt><dd><bdi>{formatUsd(item.grossUsdMinor)}</bdi></dd></div>
-      {!compact && <>
-        <div><dt>{t('rechargePackage.ceiling')}</dt><dd><bdi>{formatUsd(item.ceilingUsdMinor)}</bdi></dd></div>
-        <div><dt>{t('rechargePackage.confirmed')}</dt><dd><time dateTime={item.confirmedAt}>{confirmedDate}</time></dd></div>
-      </>}
-    </dl>
-    {benefits && (benefits.activeGrossUsdMinor > 0 || benefits.bonusCreditedUsdMinor > 0) && <>
+    <div className={styles.heading}><StatusIcon size={18} aria-hidden="true" /><h2 id={heading}>
+      {t(active ? 'rechargePackage.title' : paymentPending ? 'rechargePackage.pendingTitle' : 'rechargePackage.checkingTitle')}
+    </h2></div>
+    {active && <>
+      <p className={styles.package}>{t('rechargePackage.level', { level: numbers.format(active.level) })}</p>
+      <dl className={styles.details}>
+        <div><dt>{t('rechargePackage.gross')}</dt><dd><bdi>{formatUsd(paidGross)}</bdi></dd></div>
+        {!compact && <div><dt>{t('rechargePackage.ceiling')}</dt><dd><bdi>{formatUsd(active.ceilingUsdMinor)}</bdi></dd></div>}
+      </dl>
+    </>}
+    {paymentPending && <>
+      <p className={styles.status}>{t(active ? 'rechargePackage.pendingUpgrade' : 'rechargePackage.pendingCopy')}</p>
+      <Link href="/dashboard/wallet-personal/pay" prefetch={false} className={`executive-button ${styles.pay}`}>{t('companyPayment.transferAction')}</Link>
+    </>}
+    {benefits && (active || benefits.bonusCreditedUsdMinor > 0) && <>
       <h3 className={styles.benefitHeading}>{t('rechargePackage.pagar')}</h3>
       <dl className={styles.details}>
         <div><dt>{t('rechargePackage.roi')}</dt><dd><bdi>{formatUsd(benefits.roiAccruedUsdMinor)}</bdi></dd></div>

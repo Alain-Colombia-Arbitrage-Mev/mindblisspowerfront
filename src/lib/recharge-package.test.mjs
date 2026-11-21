@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { RECHARGE_PACKAGE_ORIGIN as origin, RECHARGE_PACKAGE_PATH as path, rechargePackageSnapshot } from './recharge-package-contract.mjs';
+import { RECHARGE_PACKAGE_ORIGIN as origin, RECHARGE_PACKAGE_PATH as path, rechargePackageSnapshot, rechargePackageTier } from './recharge-package-contract.mjs';
 import { handleRechargePackage } from './recharge-package-bff.mjs';
 import { readRechargePackage } from './recharge-package-client.mjs';
 
@@ -13,12 +13,19 @@ const request = (url = `${origin}${path}`, init = {}) => new Request(url, { ...i
 test('a confirmed package has its own level, ceiling, exact gross and valid date', () => {
   assert.deepEqual(rechargePackageSnapshot({ package: item }), { package: item });
   assert.deepEqual(rechargePackageSnapshot({ package: null }), { package: null });
-  for (const extra of [{ level: '3' }, { level: 0 }, { level: 9 }, { ceilingUsdMinor: 50_000 }, { grossUsdMinor: 0 }, { grossUsdMinor: 13.49 },
+  for (const extra of [{ level: '3' }, { level: 0 }, { level: 9 }, { ceilingUsdMinor: 50_000 }, { grossUsdMinor: 0 }, { grossUsdMinor: 13.49 }, { grossUsdMinor: 5_000 },
     { confirmedAt: '2026-11-31T00:00:00Z' }, { confirmedAt: null }, { status: 'pending' }, { wallet: 'private' }]) {
     assert.equal(rechargePackageSnapshot({ package: { ...item, ...extra } }), null);
   }
   assert.equal(rechargePackageSnapshot({ package: item, state: 'unconfirmed' }), null);
   assert.equal(rechargePackageSnapshot({ balanceUsd: 140 }), null);
+});
+
+test('package levels retain the inclusive USD boundaries and cap at the last level', () => {
+  assert.equal(rechargePackageTier(0), null);
+  assert.deepEqual(rechargePackageTier(5_000), { level: 1, ceilingUsdMinor: 5_000 });
+  assert.deepEqual(rechargePackageTier(5_001), { level: 2, ceilingUsdMinor: 10_000 });
+  assert.deepEqual(rechargePackageTier(2_500_001), { level: 8, ceilingUsdMinor: 2_500_000 });
 });
 
 test('Pagar benefits only accept the exact integer projection tied to an owned package', () => {

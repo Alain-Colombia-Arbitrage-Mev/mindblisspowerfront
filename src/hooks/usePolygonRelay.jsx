@@ -61,6 +61,7 @@ export function polygonRelayErrorKey(failure) {
   const keys = { unauthenticated: "session", wallet_connection_timeout: "session", reown_connection_timeout: "ambiguous",
     wallet_address_mismatch: "walletMismatch", personal_company_wallet_unavailable: "walletMismatch", polygon_relay_wallet_changed: "walletMismatch",
     polygon_relay_wallet_not_linked: "walletMismatch", polygon_relay_expired: "expired", polygon_relay_insufficient_balance: "insufficientBalance",
+    polygon_relay_full_payment_required: "fullPaymentRequired",
     polygon_relay_pending_exists: "pending", polygon_relay_recovery_unavailable: "pending",
     polygon_relay_invalid_authorization: "invalidAuthorization", polygon_relay_signature_invalid: "invalidAuthorization",
     polygon_relay_authorization_nonce_changed: "invalidAuthorization", polygon_relay_forbidden: "walletMismatch",

@@ -41,6 +41,22 @@ test('Polygon relay cannot display confirmation without UserOp and canonical rec
   for (const patch of [{ amountAtomic: '1' }, { authorizationNonce: '2' }, { recipientAddress: address }, { authorizationHasOnchainExpiry: true },
     { entryPointAddress: address }]) assert.equal(polygonRelayView({ ...value, ...patch }), null);
 });
+test('App reports incomplete package payment before requesting a transfer signature', async () => {
+  const error = 'polygon_relay_full_payment_required';
+  const response = await handlePolygonRelay(request('prepare', { requestId: id, amountAtomic: '28433366' }), 'prepare', {
+    env,
+    serviceRequest: async () => ({ ok: false, status: 409, data: { error, hidden: 'internal balance evidence' } }),
+  });
+  assert.equal(response.status, 409);
+  assert.equal(response.headers.get('cache-control'), 'private, no-store');
+  assert.deepEqual(await response.json(), { error });
+  for (const locale of ['es', 'en', 'ar', 'zh']) {
+    const label = translateMessage(locale, 'walletTransfer.fullPaymentRequired');
+    assert.notEqual(label, 'walletTransfer.fullPaymentRequired');
+    assert.equal(label, walletTransferMessages[locale].walletTransfer.fullPaymentRequired);
+  }
+});
+
 test('Polygon relay identifiers and signatures are strings, never coerced arrays or objects', () => {
   const value = payment({ typedData: null });
   const coercionTrap = { toString() { assert.fail('untrusted identifiers must not be coerced'); } };

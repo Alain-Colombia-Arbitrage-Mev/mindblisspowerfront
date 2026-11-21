@@ -9,3 +9,5 @@
 .details dt { color: var(--vp-muted); font-size: 12px; }
 .details dd { margin: 0; overflow-wrap: anywhere; color: var(--vp-text); font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .benefitHeading { margin: 4px 0 0; color: var(--vp-text); font-size: 13px; font-weight: 750; }
+.status { margin: 0; color: var(--vp-muted); font-size: 13px; }
+.pay { justify-self: start; min-height: 44px; }

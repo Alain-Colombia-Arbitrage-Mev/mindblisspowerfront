@@ -12,6 +12,7 @@ const safeErrors = new Set(['unauthenticated', 'invalid_origin', 'invalid_reques
   'polygon_relay_wallet_not_linked', 'polygon_relay_forbidden', 'polygon_relay_rate_limited', 'polygon_relay_budget_exceeded', 'polygon_relay_pending_exists',
   'polygon_relay_not_found', 'polygon_relay_request_already_used', 'polygon_relay_expired', 'polygon_relay_invalid_transition',
   'polygon_relay_invalid_authorization', 'polygon_relay_nonce_changed', 'polygon_relay_insufficient_balance', 'polygon_relay_broadcast_disabled',
+  'polygon_relay_full_payment_required',
   'polygon_relay_sponsorship_unavailable', 'polygon_relay_rpc_unavailable', 'polygon_relay_transaction_pending', 'polygon_relay_transaction_mismatch',
   'polygon_relay_ambiguous', 'polygon_relay_authorization_reused']);
 for (const code of ['signature_invalid', 'contract_changed', 'authorization_unavailable', 'fee_unavailable', 'provider_unavailable',
