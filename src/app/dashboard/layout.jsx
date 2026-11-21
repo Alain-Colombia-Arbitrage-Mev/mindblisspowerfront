@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { verifyIdTokenForSession } from "@/lib/verify-id-token";
+import { isPagarCommissionsHost } from "@/lib/pagar-commissions-bff.mjs";
 
 import AuthShell from "../_components/AuthShell";
 import DashboardShell from "./_components/DashboardShell";
@@ -47,7 +48,7 @@ export default async function DashboardLayout({ children }) {
   }
 
   const authMode = betterAuthEnabled() ? "better-auth" : "cognito";
-  const showCommissions = authMode === "better-auth" && (await headers()).get("host") === "app.mindblisspower.com";
+  const showCommissions = authMode === "better-auth" && isPagarCommissionsHost((await headers()).get("host"));
   return <DashboardSessionBoundary owner={{ email: claims.email, subject: claims.sub }} mode={authMode}>
     <DashboardShell authMode={authMode} showCommissions={showCommissions}>{children}</DashboardShell>
   </DashboardSessionBoundary>;

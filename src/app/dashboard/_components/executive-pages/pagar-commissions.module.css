@@ -1,0 +1,87 @@
+.content {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.balance {
+  margin: 0 0 6px;
+  color: var(--vp-text);
+  font-size: clamp(24px, 6vw, 36px);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.status {
+  margin: 0;
+  color: var(--vp-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.periods {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.periods li + li {
+  border-block-start: 1px solid var(--vp-border);
+}
+
+.period {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px 20px;
+  margin: 0;
+  padding-block: 12px;
+}
+
+.period dt {
+  color: var(--vp-muted);
+  font-size: 13px;
+  margin-block-end: 4px;
+}
+
+.period dd {
+  color: var(--vp-text);
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.feedback {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.control {
+  min-height: 44px;
+  max-width: 100%;
+  white-space: normal;
+}
+
+.control:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.older {
+  margin-block-start: 12px;
+}
+
+@media (max-width: 560px) {
+  .period {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .period div:first-child {
+    grid-column: 1 / -1;
+  }
+}

@@ -9,6 +9,7 @@ import { walletTutorialMessages } from "./wallet-tutorial-messages.js";
 import { profileEditMessages } from "./profile-edit-messages.js";
 import { historicalPackageMessages } from "./historical-package-messages.js";
 import { rechargePackageMessages } from "./recharge-package-messages.js";
+import { pagarCommissionsMessages } from "./pagar-commissions-messages.js";
 import { authEntryMessages } from "./auth-entry-messages.js";
 
 export function normalizeLocale(value) {
@@ -26,6 +27,7 @@ export function translateMessage(locale, key, variables = undefined) {
   const activeLocale = normalizeLocale(locale);
   let value = valueAt(authEntryMessages[activeLocale], key)
     ?? valueAt(rechargePackageMessages[activeLocale], key)
+    ?? valueAt(pagarCommissionsMessages[activeLocale], key)
     ?? valueAt(historicalPackageMessages[activeLocale], key)
     ?? valueAt(profileEditMessages[activeLocale], key)
     ?? valueAt(walletTutorialMessages[activeLocale], key)
@@ -38,6 +40,7 @@ export function translateMessage(locale, key, variables = undefined) {
     ?? valueAt(messages[activeLocale], key)
     ?? valueAt(authEntryMessages.es, key)
     ?? valueAt(rechargePackageMessages.es, key)
+    ?? valueAt(pagarCommissionsMessages.es, key)
     ?? valueAt(historicalPackageMessages.es, key)
     ?? valueAt(profileEditMessages.es, key)
     ?? valueAt(walletTutorialMessages.es, key)
