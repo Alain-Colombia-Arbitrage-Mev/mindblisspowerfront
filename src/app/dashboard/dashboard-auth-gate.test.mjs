@@ -8,11 +8,13 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 import { AuthServiceUnavailable, AuthAccessRestricted } from '../../lib/better-auth-bridge.mjs';
 import { privateCloudflareResponse } from '../../lib/cloudflare-portal-guard.mjs';
+import { isPagarCommissionsHost } from '../../lib/pagar-commissions-bff.mjs';
 
 // Execute the real layout and existing AuthShell without starting Next or
 // contacting providers. Every identity and failure below is synthetic.
 function gate({ token = 'synthetic-private-token', claims = null, tokenError,
-  verificationError, betterAuth = true, redirectError } = {}) {
+  verificationError, betterAuth = true, redirectError, host = 'app.mindblisspower.com',
+  publicOrigin = 'https://app.mindblisspower.com' } = {}) {
   const calls = { token: 0, verification: [], redirects: [], shell: 0, privateChildren: 0 };
   const compile = (path, mocks) => {
     const source = readFileSync(new URL(path, import.meta.url), 'utf8');
@@ -46,6 +48,9 @@ function gate({ token = 'synthetic-private-token', claims = null, tokenError,
       return token;
     } },
     '@/lib/better-auth-bridge.mjs': { betterAuthEnabled: () => betterAuth, AuthServiceUnavailable, AuthAccessRestricted },
+    '@/lib/pagar-commissions-bff.mjs': { isPagarCommissionsHost: value => isPagarCommissionsHost(value, {
+      AUTH_PUBLIC_ORIGIN: publicOrigin, AUTH_PROVIDER: betterAuth ? 'better-auth' : 'cognito',
+    }) },
     '@/lib/verify-id-token': {
       verifyIdToken: () => assert.fail('dashboard must distinguish unavailable verification from invalid proof'),
       verifyIdTokenForSession: async value => {
@@ -54,6 +59,7 @@ function gate({ token = 'synthetic-private-token', claims = null, tokenError,
         return claims;
       },
     },
+    'next/headers': { headers: async () => new Headers({ host }) },
     'next/navigation': { redirect: path => {
       calls.redirects.push(path);
       throw redirectError || Object.assign(new Error('synthetic-next-redirect'), { digest: 'NEXT_REDIRECT' });
@@ -167,10 +173,22 @@ test('healthy verified identities retain the shell and children without receivin
     assert.deepEqual(output.props.owner, { email: claims.email, subject: claims.sub });
     assert.deepEqual(Object.keys(output.props).sort(), ['children', 'mode', 'owner']);
     assert.equal(output.props.children.props.authMode, betterAuth ? 'better-auth' : 'cognito');
+    assert.equal(output.props.children.props.showCommissions, betterAuth);
     assert.match(html, /synthetic-private-child-content/);
     assert.doesNotMatch(html, /synthetic-private-token|synthetic@example|untrusted-unused-role|MBP-LOGIN/);
   }
   assert.deepEqual(logs, []);
+});
+
+test('a verified identity only sees Comisiones on the configured App host', async () => {
+  const claims = { sub: 'synthetic-subject', email: 'synthetic@example.test' };
+  for (const configuration of [
+    { host: 'wallet.mindblisspower.com' },
+    { publicOrigin: 'https://mindblisspower.com' },
+  ]) {
+    const { output } = await gate({ ...configuration, claims }).render();
+    assert.equal(output.props.children.props.showCommissions, false);
+  }
 });
 
 test('Next redirect exceptions remain outside auth catches instead of becoming a service outage', async t => {
