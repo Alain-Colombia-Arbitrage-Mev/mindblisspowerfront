@@ -59,7 +59,7 @@ export function selectedMethodLimits(routes, method, amount, sourceCurrencyCode 
 }
 
 // ISO currencies are choices to consult, not a claim that a provider supports a route.
-const PROVIDER_NAMES = { MERCURYO: "Mercuryo", ONRAMPMONEY: "Onramp Money", ALCHEMYPAY: "Alchemy Pay", BANXA: "Banxa", ONMETA: "Onmeta" };
+const PROVIDER_NAMES = { MERCURYO: "Mercuryo", ONRAMPMONEY: "Onramp Money", ALCHEMYPAY: "Alchemy Pay", BANXA: "Banxa", ONMETA: "Onmeta", RAMPNOW: "RampNow" };
 const PERSONAL_COUNTRIES = APP_MELD_COUNTRIES.map(code => [code]);
 export function fundingCurrencyChoices(country) {
   const currencies = appMeldCurrencyChoices(country);
@@ -198,7 +198,10 @@ export function PersonalFundingForm({ disabled = false, busy = false, onContinue
             {networkChoices.length > 1 ? <label className={`mb-onramp-country-picker ${styles.currencyField}`} htmlFor={`${id}-network`}><span>{t("funding.depositNetwork")}</span>
               <select id={`${id}-network`} value={destinationCode} disabled={busy} onChange={event => {
                 setProviderChoice(""); changeSelection(setDestinationChoice, event.target.value);
-              }}>{networkChoices.map(code => <option key={code} value={code}>{appMeldDestinationFor(code)?.name}</option>)}</select></label> : null}
+              }}>{networkChoices.map(code => {
+                const target = appMeldDestinationFor(code);
+                return <option key={code} value={code}>{target.asset} · {target.name}</option>;
+              })}</select></label> : null}
             {matchingRoutes.length > 1 ? <label className={`mb-onramp-country-picker ${styles.currencyField}`} htmlFor={`${id}-provider`}><span>{t("funding.providerLabel")}</span>
               <select id={`${id}-provider`} value={providerChoice || provider?.serviceProvider || ""} onChange={event => changeSelection(setProviderChoice, event.target.value)} disabled={busy}>
                 {!providerChoice && !provider ? <option value="" disabled>{t("funding.providerLabel")}</option> : null}
@@ -354,6 +357,7 @@ export function paymentMethodLabel(code, t) {
   if (code === "MPESA") return "M-Pesa";
   if (code === "VIETQR") return "VietQR";
   if (code === "SEPA") return "SEPA";
+  if (code === "SEPA_INSTANT") return "SEPA Instant";
   if (code === "PAYID") return "PayID";
   if (code === "OPEN_BANKING") return t("funding.openBanking");
   if (code === "MOBILE_MONEY") return t("funding.mobileMoney");

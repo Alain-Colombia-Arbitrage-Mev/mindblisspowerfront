@@ -61,8 +61,8 @@ test('login guidance states the actual OTP policy and manual waits without chang
   await submit(harness.render(props));
   markup = html(harness);
   assert.match(markup, /Vence en 5 minutos y permite hasta 3 intentos/);
-  assert.match(markup, /no uses un código de registro o recuperación ni lo compartas/);
-  assert.match(markup, /Espera a que termine el contador antes de solicitar otro código/);
+  assert.match(markup, /No uses un código de registro o recuperación ni lo compartas/);
+  assert.match(markup, /espera a que termine el contador antes de solicitar otro/);
   assert.doesNotMatch(markup, /recibirás|Te enviamos|te quedan|Correo verificado correctamente/);
   assert.deepEqual(paths, ['/api/auth/email-otp/send-verification-otp']);
   assert.deepEqual(destinations, []);
@@ -310,7 +310,7 @@ test('Microsoft delivery help preserves the original account and distinguishes t
   await submit(harness.render(props));
   const markup = html(harness);
   assert.match(markup, /conserva el correo original de tu cuenta/);
-  assert.match(markup, /no uses un código de registro o recuperación/);
+  assert.match(markup, /No uses un código de registro o recuperación/);
   assert.doesNotMatch(markup, /usa otro correo|cambia(?:r)? (?:el|tu) correo/i);
   assert.match(markup, /name="login-code"/);
   assert.match(markup, /aria-describedby="login-code-helper"/);
@@ -327,7 +327,8 @@ test('edge HTML 429 and service 503 preserve code entry, neutral guidance and a 
     }); });
     const harness = view({ cooldowns }); await submit(harness.render(props));
     const markup = html(harness);
-    assert.match(markup, /No pudimos confirmar el envío/); assert.doesNotMatch(markup, /private recipient|<html>|Correo verificado correctamente/);
+    assert.match(markup, status === 429 ? /Demasiados intentos de envío/ : /No pudimos confirmar el envío/);
+    assert.doesNotMatch(markup, /private recipient|<html>|Correo verificado correctamente/);
     assert.ok(find(harness.render(props), node => node?.props?.id === 'login-code'));
     assert.equal(cooldowns.get('send').seconds, 621); assert.equal(cooldowns.get('confirm').active, false);
     for (let count = 0; count < 3; count++) harness.render(props);

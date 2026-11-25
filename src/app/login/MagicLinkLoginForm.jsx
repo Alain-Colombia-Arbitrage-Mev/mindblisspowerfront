@@ -275,7 +275,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
             if (!resend) setLoginCode("");
             codeCooldown.start(registrationRetrySeconds(response, payload));
             setError(response.status === 429
-              ? `${otpFailureMessage(429, 'send')} ${OTP_SEND_UNCONFIRMED_NOTICE}`
+              ? otpFailureMessage(429, 'send')
               : OTP_SEND_UNCONFIRMED_NOTICE);
           } else setError(otpFailureMessage(response.status, 'send'));
           return;
@@ -734,7 +734,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
               label="Código de acceso"
               value={loginCode}
               codeLength={emailOtpOnly ? 6 : 12}
-              helper={emailOtpOnly ? 'Usa el código de acceso más reciente de 6 dígitos. Vence en 5 minutos y permite hasta 3 intentos; no uses un código de registro o recuperación ni lo compartas. Para pedir otro, espera a que termine el contador.' : ''}
+              helper={emailOtpOnly ? 'Usa el código de acceso más reciente. Vence en 5 minutos y permite hasta 3 intentos. No uses un código de registro o recuperación ni lo compartas.' : ''}
               autoFocus
               onChange={(value) => {
                 setLoginCode(value);
@@ -745,8 +745,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
               {emailOtpOnly && confirmationCooldown.active ? confirmationCooldown.label.replace(/^Reenviar/, 'Validar de nuevo') : 'Entrar con código'}
             </PrimaryButton>
 
-            <p className="text-sm leading-6" style={{ color: 'var(--vp-muted)' }}>Después de leer el correo, vuelve a esta misma pestaña para escribir el código y abrir tu panel.</p>
-            <DeliveryHint email={codeRecipient} />
+            {!emailOtpOnly || isMicrosoftEmail(codeRecipient) ? <DeliveryHint email={codeRecipient} /> : null}
 
             <div className="grid grid-cols-2 gap-2">
               <SecondaryButton disabled={isLoading} onClick={() => switchMode("code")} icon={<ArrowLeft size={15} />}>

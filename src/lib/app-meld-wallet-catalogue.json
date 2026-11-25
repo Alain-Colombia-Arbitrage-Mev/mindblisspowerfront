@@ -1430,6 +1430,66 @@
       "minimumAmount": 50,
       "maximumAmount": 16821.71,
       "destinationCurrencyCode": "USDC_POLYGON"
+    },
+    {
+      "country": "MX",
+      "sourceCurrencyCode": "MXN",
+      "serviceProvider": "BANXA",
+      "paymentMethodType": "SPEI",
+      "minorUnits": 2,
+      "minimumAmount": 1200,
+      "maximumAmount": 35000,
+      "destinationCurrencyCode": "USDC_POLYGON"
+    },
+    {
+      "country": "MX",
+      "sourceCurrencyCode": "MXN",
+      "serviceProvider": "ALCHEMYPAY",
+      "paymentMethodType": "SPEI",
+      "minorUnits": 2,
+      "minimumAmount": 931,
+      "maximumAmount": 20000,
+      "destinationCurrencyCode": "USDC_ARBITRUM"
+    },
+    {
+      "country": "CO",
+      "sourceCurrencyCode": "COP",
+      "serviceProvider": "ALCHEMYPAY",
+      "paymentMethodType": "LOCAL_BANK_TRANSFER",
+      "minorUnits": 2,
+      "minimumAmount": 170000,
+      "maximumAmount": 3000000,
+      "destinationCurrencyCode": "USDC_ARBITRUM"
+    },
+    {
+      "country": "CL",
+      "sourceCurrencyCode": "CLP",
+      "serviceProvider": "ALCHEMYPAY",
+      "paymentMethodType": "KHIPU",
+      "minorUnits": 0,
+      "minimumAmount": 30000,
+      "maximumAmount": 250000,
+      "destinationCurrencyCode": "USDC_ARBITRUM"
+    },
+    {
+      "country": "DE",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "ALCHEMYPAY",
+      "paymentMethodType": "SEPA_INSTANT",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 5000,
+      "destinationCurrencyCode": "USDC_ARBITRUM"
+    },
+    {
+      "country": "DE",
+      "sourceCurrencyCode": "EUR",
+      "serviceProvider": "RAMPNOW",
+      "paymentMethodType": "SEPA",
+      "minorUnits": 2,
+      "minimumAmount": 10,
+      "maximumAmount": 100000,
+      "destinationCurrencyCode": "USDC_POLYGON"
     }
   ]
 }

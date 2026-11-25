@@ -19,7 +19,9 @@ export function otpRequest(provider, action, email, code = '') {
 }
 
 export function otpFailureMessage(status, action, code = '') {
-  if (status === 429) return 'Demasiados intentos. Espera antes de volver a intentarlo. Si aparece un contador, deja que termine; no envíes solicitudes repetidas.';
+  if (status === 429) return action === 'send'
+    ? 'Demasiados intentos de envío. Si ya recibiste un código, puedes usarlo aquí. Para pedir otro, espera a que termine el contador.'
+    : 'Demasiados intentos de verificación. Espera a que termine el contador para volver a validar el código.';
   if (status >= 500) return 'El servicio de acceso no está disponible. Intenta más tarde.';
   if (action === 'confirm' && ['INVALID_OTP', 'OTP_EXPIRED'].includes(code)) {
     return 'Código inválido o expirado. Usa el código de acceso más reciente; si venció o agotó sus intentos, espera el contador antes de solicitar otro. El código de prueba 123456 sólo funciona en el entorno local de desarrollo.';
@@ -45,4 +47,4 @@ export const OTP_SEND_NOTICE = 'Si tu cuenta está habilitada, busca el código 
 
 // A lost/failed acknowledgement does not prove that no message was sent. This
 // never claims delivery, account existence or permission to enter the network.
-export const OTP_SEND_UNCONFIRMED_NOTICE = 'No pudimos confirmar el envío. Revisa tu bandeja y spam. Si recibes un código vigente, introdúcelo aquí. No enviaremos otro automáticamente; espera el contador antes de solicitarlo de nuevo y no lo compartas.';
+export const OTP_SEND_UNCONFIRMED_NOTICE = 'No pudimos confirmar el envío. Revisa tu correo y spam. Si recibes el código, introdúcelo aquí.';

@@ -164,8 +164,7 @@ test('timeout recovery does not lose a possibly delivered code or start an autom
   await find(harness.render(props), node => node?.type === 'form').props.onSubmit({ preventDefault() {} });
   const html = renderToStaticMarkup(harness.render(props));
   assert.match(html, /Código de acceso/);
-  assert.match(html, /Si recibes un código vigente, introdúcelo aquí/);
-  assert.match(html, /No enviaremos otro automáticamente/);
+  assert.match(html, /Si recibes el código, introdúcelo aquí/);
   assert.equal(calls, 1); assert.equal(seconds, 300);
   harness.unmount();
 });
@@ -179,7 +178,8 @@ test('HTTP 429 keeps existing code entry available without shortening its safe r
   await find(harness.render(props), node => node?.type === 'form').props.onSubmit({ preventDefault() {} });
   const tree = harness.render(props);
   assert.ok(find(tree, node => node?.props?.id === 'login-code'));
-  assert.match(renderToStaticMarkup(tree), /Demasiados intentos/);
+  assert.match(renderToStaticMarkup(tree), /Demasiados intentos de envío/);
+  assert.doesNotMatch(renderToStaticMarkup(tree), /No pudimos confirmar el envío/);
   assert.equal(seconds, 300); assert.equal(calls, 1);
   harness.unmount();
 });
@@ -211,7 +211,7 @@ test('HTTP-date 429 and delivery-ambiguous 503 keep code entry, the full resend 
     const props = { authMode: 'better-auth', initialEmail: 'member@example.test' };
     await find(harness.render(props), node => node?.type === 'form').props.onSubmit({ preventDefault() {} });
     let tree = harness.render(props);
-    assert.match(renderToStaticMarkup(tree), /No pudimos confirmar el envío/);
+    assert.match(renderToStaticMarkup(tree), status === 429 ? /Demasiados intentos de envío/ : /No pudimos confirmar el envío/);
     assert.doesNotMatch(renderToStaticMarkup(tree), /private-WAF|private-provider|Te enviamos|Si tu cuenta está habilitada/);
     find(tree, node => node?.props?.id === 'login-code').props.onChange('001234');
     tree = harness.render(props);

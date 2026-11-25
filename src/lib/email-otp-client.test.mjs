@@ -43,19 +43,16 @@ test('single email delivery attempt waits 30 seconds while received-code confirm
 test('OTP send guidance stays neutral, private and manual without promising delivery or importing daily recovery quotas', () => {
   assert.match(OTP_SEND_NOTICE, /^Si tu cuenta está habilitada, busca el código de acceso/);
   assert.match(OTP_SEND_UNCONFIRMED_NOTICE, /^No pudimos confirmar el envío/);
-  assert.match(OTP_SEND_UNCONFIRMED_NOTICE, /No enviaremos otro automáticamente/);
+  assert.match(OTP_SEND_UNCONFIRMED_NOTICE, /Si recibes el código, introdúcelo aquí/);
   for (const notice of [OTP_SEND_NOTICE, OTP_SEND_UNCONFIRMED_NOTICE]) {
     assert.match(notice, /spam/);
-    assert.match(notice, /espera.*contador/i);
-    assert.match(notice, /no lo compartas/i);
     assert.doesNotMatch(notice, /recibirás|Te enviamos|correo verificado|cuenta existe|te quedan|24 horas|5 solicitudes|10 intentos/);
   }
 });
 
 test('login limit messages require manual waiting without fabricated times or remaining attempts', () => {
   const limited = otpFailureMessage(429, 'confirm');
-  assert.match(limited, /Espera antes de volver a intentarlo/);
-  assert.match(limited, /Si aparece un contador, deja que termine/);
+  assert.match(limited, /Espera a que termine el contador/);
   for (const status of [400, 401, 403, 429, 503]) {
     assert.doesNotMatch(otpFailureMessage(status, 'confirm'), /te quedan|intentos restantes|24 horas|5 solicitudes|10 intentos|correo verificado|cuenta bloqueada/);
   }
