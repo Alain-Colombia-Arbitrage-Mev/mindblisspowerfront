@@ -27,6 +27,20 @@ const post = (body, network = 'polygon') => new Request(`${env.AUTH_PUBLIC_ORIGI
     'x-mindbliss-wallet-network': network, 'x-mindbliss-funding-provider': 'meld', 'cf-connecting-ip': '198.51.100.5', 'content-type': 'application/json', 'sec-fetch-site': 'same-origin' }, body: JSON.stringify(body),
 });
 
+test('Germany keeps its existing default deposit asset while local routes roll out on additional networks', () => {
+  const oldRoute = { serviceProvider: 'BANXA', destinationCurrencyCode: 'USDT_POLYGON',
+    network: 'polygon', chainId: 137, paymentMethods: [method('SEPA', 'EUR', 10)] };
+  const previous = { walletKind: 'personal', environment: 'production', provider: 'meld', country: 'DE', sourceCurrencyCode: 'EUR',
+    destinationCurrencyCode: 'USDT_POLYGON', network: 'polygon', chainId: 137, paymentMethods: ['SEPA'], routes: [oldRoute] };
+  assert.deepEqual(appMeldFundingOptions(previous), previous);
+
+  const rampNow = { ...oldRoute, serviceProvider: 'RAMPNOW', destinationCurrencyCode: 'USDC_POLYGON' };
+  const alchemy = { serviceProvider: 'ALCHEMYPAY', destinationCurrencyCode: 'USDC_ARBITRUM',
+    network: 'arbitrum', chainId: 42161, paymentMethods: [{ ...method('SEPA_INSTANT', 'EUR', 10), maximumAmount: 5000 }] };
+  const expanded = { ...previous, paymentMethods: ['SEPA', 'SEPA_INSTANT'], routes: [oldRoute, rampNow, alchemy] };
+  assert.deepEqual(appMeldFundingOptions(expanded), expanded);
+});
+
 test('US dollar options admit three real providers while Topper and Venmo stay scoped to US/USD and both wallet methods remain scoped', () => {
   assert.deepEqual(personalProductionOptions(usOptions), usOptions);
   for (const country of ['CO', 'MX']) assert.equal(personalProductionOptions({ ...usOptions, country }), null);

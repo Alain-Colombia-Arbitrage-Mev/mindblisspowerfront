@@ -23,7 +23,7 @@ export function appMeldFundingAsset(country, fiat, provider = '', method = '') {
         (!provider || row.serviceProvider === provider) && (!method || row.paymentMethodType === method));
     return row?.destinationCurrencyCode ?? 'USDT_POLYGON';
   }
-  return (rows.find(row => row.destinationCurrencyCode === 'USDC_POLYGON') ?? rows[0])?.destinationCurrencyCode ?? 'USDT_POLYGON';
+  return rows[0]?.destinationCurrencyCode ?? 'USDT_POLYGON';
 }
 
 export function appMeldRouteSupported(country, fiat, method, provider, asset = '') {
