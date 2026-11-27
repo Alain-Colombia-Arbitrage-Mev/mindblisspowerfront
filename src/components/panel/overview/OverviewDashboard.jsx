@@ -24,6 +24,8 @@ import OverviewDiscoveryCard from "./OverviewDiscoveryCard";
 import PositionSnapshotCard from "./PositionSnapshotCard";
 import { useI18n } from "@/i18n/LanguageProvider";
 import { useMemberSession } from '@/lib/member-session-context';
+import { memberSessionOwnerKey } from '@/lib/member-session-boundary.mjs';
+import ManualMembershipDetails, { readManualMembershipItems } from './ManualMembershipDetails';
 import useHistoricalPackageRights from '@/components/member/useHistoricalPackageRights';
 import HistoricalPackageRightsCard from '@/components/member/HistoricalPackageRightsCard';
 import RechargePackageCard from '@/components/member/RechargePackageCard';
@@ -53,7 +55,9 @@ export default function OverviewDashboard() {
   const emptyWallet = usdtAmount === 0n && usdcAmount === 0n
     && polygonUsdt.walletAddress.toLowerCase() === polygonUsdc.walletAddress.toLowerCase();
   const fundedWallet = (usdtAmount ?? 0n) > 0n || (usdcAmount ?? 0n) > 0n;
-  const [summary, setSummary] = useState(null);
+  const ownerKey = memberSessionOwnerKey(session);
+  const [summaryResult, setSummary] = useState(null);
+  const summary = summaryResult?.ownerKey === ownerKey ? summaryResult.data : null;
   const [network, setNetwork] = useState(null);
   const [summaryStatus, setSummaryStatus] = useState("loading");
   const [networkStatus, setNetworkStatus] = useState("loading");
@@ -74,6 +78,7 @@ export default function OverviewDashboard() {
       summary: { url: "/api/payments/me", validate: validMemberSummary },
       network: { url: "/api/member/tree?depth=4&limit=64", validate: validMemberTree },
     }, { signal: controller.signal, onPart: (key, result) => {
+      if (controller.signal.aborted) return;
       if ([401, 403].includes(result.error?.status)) {
         setSummary(null);
         setNetwork(null);
@@ -82,13 +87,13 @@ export default function OverviewDashboard() {
         setErrors({ summary: result.error, network: result.error });
         return;
       }
-      const setData = key === "summary" ? setSummary : setNetwork;
       const setStatus = key === "summary" ? setSummaryStatus : setNetworkStatus;
-      setData(result.data || null);
+      if (key === "summary") setSummary(result.data ? { ownerKey, data: result.data } : null);
+      else setNetwork(result.data || null);
       setStatus(result.error ? "error" : "ready");
       setErrors((previous) => ({ ...previous, [key]: result.error }));
     } });
-  }, []);
+  }, [ownerKey]);
 
   useEffect(() => {
     load();
@@ -120,6 +125,8 @@ export default function OverviewDashboard() {
   }, []);
 
   const unavailable = summaryStatus === "error" || networkStatus === "error";
+  const hasHistorical = historicalRights.data?.totalCount > 0;
+  const manualItems = ownerKey && summaryStatus === "ready" ? readManualMembershipItems(summary?.manual_memberships) : [];
 
   return (
     <div className="vp-overview flex min-h-full flex-col" aria-busy={summaryStatus === "loading" || networkStatus === "loading"}>
@@ -147,9 +154,11 @@ export default function OverviewDashboard() {
               <button className="executive-button" type="button" onClick={() => openRecharge("welcome")}>{t("overview.howItWorks")}<ArrowUpRight size={14} /></button>
             </div>
           </section>
-          {historicalRights.data?.totalCount > 0 ? <HistoricalPackageRightsCard snapshot={historicalRights} compact /> : <section className="executive-card mb-membership-summary">
+          {hasHistorical && <HistoricalPackageRightsCard snapshot={historicalRights} compact />}
+          {(!hasHistorical || manualItems.length > 0) && <section className="executive-card mb-membership-summary">
             <div className="mb-membership-header"><h2>{t("overview.myMemberships")}</h2><span>{summaryStatus === "ready" ? t("overview.updated") : t("overview.pending")}</span></div>
-            <div className="mb-membership-count"><strong>{summaryStatus === "ready" ? String(summary?.active_packages ?? 0) : "—"}</strong><p>{summary?.active_packages === 1 ? t("overview.oneMembership") : t("overview.memberships")}</p></div>
+            <div className="mb-membership-count"><strong>{summaryStatus === "ready" && summary ? String(summary.active_packages ?? 0) : "—"}</strong><p>{summary?.active_packages === 1 ? t("overview.oneMembership") : t("overview.memberships")}</p></div>
+            <ManualMembershipDetails items={manualItems} />
           </section>}
           <RechargePackageCard session={session} compact />
         </div>

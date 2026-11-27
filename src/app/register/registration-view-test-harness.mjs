@@ -71,7 +71,7 @@ export function registrationViewHarness(filename, mocks) {
     if (id === 'react/jsx-runtime') return require(id);
     assert.fail(`Unexpected test dependency: ${id}`);
   }, module, module.exports);
-  return { render(props = {}) {
+  return { exports: module.exports, render(props = {}) {
     stateIndex = 0; refIndex = 0; effectIndex = 0; callbackIndex = 0; idIndex = 0;
     const tree = module.exports.default(props);
     while (queued.length) queued.shift()();

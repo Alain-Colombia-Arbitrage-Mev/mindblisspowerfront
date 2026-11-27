@@ -127,6 +127,8 @@ test("actual summary follows the Pen bento and omits the retired long-form secti
   const react = { ...React, useState: initial => [initial, () => {}], useRef: () => ({ current: null }), useCallback: callback => callback, useEffect: () => {} };
   const mocks = { react,
     "next/dynamic": { default: () => marker("ReownRechargeDialog") },
+    "@/lib/member-session-boundary.mjs": { memberSessionOwnerKey: () => "" },
+    "./ManualMembershipDetails": { default: () => null, readManualMembershipItems: () => [] },
     "@/app/_components/ThemeToggle": { default: marker("ThemeToggle") },
     "@/lib/member-read.mjs": { readMemberParts: () => { throw new Error("Unexpected request"); }, validMemberTree: () => true, validMemberSummary: () => true },
     "@/hooks/usePersonalWalletBalance": { usePersonalWalletBalance: () => ({ loading: true, error: '', walletAddress: '', balanceAtomic: null }) },

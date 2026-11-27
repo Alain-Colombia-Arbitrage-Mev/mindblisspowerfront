@@ -912,6 +912,26 @@ body:has(> .vp-dashboard-shell) {
   color: var(--vp-text);
   font-size: 15px;
 }
+.mb-manual-memberships {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.mb-manual-memberships li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  border-top: 1px solid var(--vp-border);
+  padding-block-start: 8px;
+  color: var(--vp-text);
+  font-size: 13px;
+}
+.mb-manual-memberships li span:last-child {
+  margin-inline-start: auto;
+}
 .mb-membership-summary .executive-button {
   width: 100%;
   min-height: 44px;

@@ -30,6 +30,8 @@ const copy = {
 const icons = new Proxy({}, { get: () => () => null });
 const historicalMocks = {
   '@/lib/member-session-context': { useMemberSession: () => null },
+  '@/lib/member-session-boundary.mjs': { memberSessionOwnerKey: () => '' },
+  './ManualMembershipDetails': { default: () => null, readManualMembershipItems: () => [] },
   '@/components/member/useHistoricalPackageRights': { default: () => ({ data: null, visible: false, loading: false, error: '', canRefresh: false,
     refresh() { assert.fail('funding presentation must not start a historical access read'); } }) },
   '@/components/member/HistoricalPackageRightsCard': { default: function HistoricalPackageRightsCard({ snapshot }) {
