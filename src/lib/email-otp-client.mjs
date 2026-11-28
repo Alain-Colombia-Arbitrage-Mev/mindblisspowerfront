@@ -40,6 +40,8 @@ export function otpConfirmationRetrySeconds(response, now = Date.now()) {
 export function otpTimeoutMs(action) {
   if (action === 'send') return 30000;
   if (action === 'confirm') return 12000;
+  // Sign-in redeems the code and verifies the native session in the same request.
+  if (action === 'sign-in-confirm') return 20000;
   throw new Error('invalid_action');
 }
 

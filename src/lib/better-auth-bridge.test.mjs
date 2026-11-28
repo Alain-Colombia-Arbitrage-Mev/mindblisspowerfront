@@ -253,3 +253,36 @@ test('private JWKS fetcher validates real signatures and bounds response sizes',
   const excessive = createBetterAuthVerifier(jwtEnv, { publicKeyCache: createPublicJwksCache(), fetchImpl: async () => new Response('x'.repeat(65537)) });
   await assert.rejects(excessive.verify(token), /auth_keys_too_large/);
 });
+
+test('OTP handoff retries only the new session read after a temporary upstream fault', async () => {
+  const user = { id: 'synthetic-user', email: 'user@example.test', emailVerified: true };
+  const token = 'synthetic-fresh-session';
+  const freshCookie = '__Secure-better-auth.session_token=synthetic-fresh-cookie';
+  for (const [initialStatus, match, expectedStatus, checks] of [
+    [503, true, 200, 2],
+    [503, false, 503, 2],
+    [401, true, 503, 1],
+  ]) {
+    let signIns = 0, sessionChecks = 0;
+    const response = await proxyBetterAuth(request(JSON.stringify({ email: user.email, otp: '123456' })), 'sign-in/email-otp', {
+      env, fetchImpl: async (url, options) => {
+        if (url.endsWith('/sign-in/email-otp')) {
+          assert.equal(options.method, 'POST');
+          signIns++;
+          return Response.json({ token, user }, { headers: { 'set-cookie': freshCookie + '; Secure; HttpOnly' } });
+        }
+        assert.ok(url.endsWith('/get-session'));
+        assert.equal(options.method, 'GET');
+        assert.equal(options.headers.cookie, freshCookie);
+        if (++sessionChecks === 1) return new Response(null, { status: initialStatus });
+        return Response.json({ user, session: { id: 'synthetic-session', userId: user.id,
+          token: match ? token : 'other-session', expiresAt: new Date(Date.now() + 60000).toISOString() } });
+      },
+    });
+    assert.equal(response.status, expectedStatus);
+    assert.equal(signIns, 1);
+    assert.equal(sessionChecks, checks);
+    assert.equal(response.headers.has('set-cookie'), expectedStatus === 200);
+    assert.ok(!(await response.text()).includes(token));
+  }
+});

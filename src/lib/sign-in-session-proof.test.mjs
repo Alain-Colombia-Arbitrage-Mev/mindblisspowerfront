@@ -91,15 +91,19 @@ for (const path of ['sign-in/email', 'sign-in/email-otp']) {
       assert.deepEqual(await response.json(), { error: 'authentication_unavailable' });
       assert.equal(calls, 2, 'a failed session proof never repeats login/OTP or asks for a service JWT');
     }
-    for (const upstream of [() => new Response(null, { status: 401 }), () => new Response(null, { status: 403 }),
-      () => Response.json({ error: 'private-diagnostic' }, { status: 503 }), () => new Response('not-json'),
-      () => new Response(JSON.stringify(canonical()), { headers: { 'content-type': 'text/plain' } })]) {
+    for (const [upstream, expectedCalls] of [
+      [() => new Response(null, { status: 401 }), 2],
+      [() => new Response(null, { status: 403 }), 2],
+      [() => Response.json({ error: 'private-diagnostic' }, { status: 503 }), 3],
+      [() => new Response('not-json'), 2],
+      [() => new Response(JSON.stringify(canonical()), { headers: { 'content-type': 'text/plain' } }), 2],
+    ]) {
       let calls = 0;
       const response = await proxyBetterAuth(request(path), path, { env, fetchImpl: async url => {
         calls++; return url.endsWith('/get-session') ? upstream() : issued();
       } });
       assert.equal(response.status, 503); assert.equal(response.headers.get('set-cookie'), null);
-      assert.equal(calls, 2);
+      assert.equal(calls, expectedCalls);
     }
   });
 
