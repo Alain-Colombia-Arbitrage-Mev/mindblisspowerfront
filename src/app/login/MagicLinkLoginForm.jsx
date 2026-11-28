@@ -446,7 +446,7 @@ export default function MagicLinkLoginForm({ authState, initialEmail = "", initi
     const controller = new AbortController();
     otpRequestRef.current = controller;
     setLoadingAction("code-confirm");
-    const deadline = browserRequestDeadline(controller.signal, otpTimeoutMs('confirm'));
+    const deadline = browserRequestDeadline(controller.signal, otpTimeoutMs(emailOtpOnly ? 'sign-in-confirm' : 'confirm'));
     try {
       const contract = emailOtpOnly ? otpRequest(authMode, 'confirm', normalizedEmail, code) : {
         path: "/api/auth/cognito/code-login/confirm", body: { email: normalizedEmail, code },

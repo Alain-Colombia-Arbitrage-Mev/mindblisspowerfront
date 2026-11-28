@@ -33,9 +33,10 @@ test('legacy Cognito contract remains separate and bounded errors do not expose 
   assert.match(otpFailureMessage(401, 'confirm'), /inválido o expirado/);
 });
 
-test('single email delivery attempt waits 30 seconds while received-code confirmation stays at 12 seconds', () => {
+test('single email delivery attempt waits 30 seconds while the session handoff can finish within 20 seconds', () => {
   assert.equal(otpTimeoutMs('send'), 30000);
   assert.equal(otpTimeoutMs('confirm'), 12000);
+  assert.equal(otpTimeoutMs('sign-in-confirm'), 20000);
   for (const action of ['', undefined, 'reset', 'https://evil.example.test']) assert.throws(() => otpTimeoutMs(action));
 });
 

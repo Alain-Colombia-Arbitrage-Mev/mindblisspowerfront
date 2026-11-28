@@ -93,7 +93,7 @@ test('the real password form preserves the supplied safe continuation after EMAI
   assert.match(renderToStaticMarkup(harness.render(props)), /href="\/register\?email=member%40example.test&amp;ref=MP-REFERRED&amp;side=R&amp;resume=1"/);
 });
 
-test('real email-login send and explicit resend handlers get 30 seconds but verification keeps its 12-second deadline', async t => {
+test('real email-login send and explicit resend get 30 seconds and the sign-in handoff gets 20 seconds', async t => {
   browser(t);
   const deadlines = [], paths = [];
   const timeout = globalThis.setTimeout.bind(globalThis);
@@ -111,7 +111,7 @@ test('real email-login send and explicit resend handlers get 30 seconds but veri
   tree = harness.render(props);
   find(tree, node => node?.props?.id === 'login-code').props.onChange('001234');
   await find(harness.render(props), node => node?.type === 'form').props.onSubmit({ preventDefault() {} });
-  assert.deepEqual(deadlines, [30000, 30000, 12000]);
+  assert.deepEqual(deadlines, [30000, 30000, 20000]);
   assert.deepEqual(paths, ['/api/auth/email-otp/send-verification-otp', '/api/auth/email-otp/send-verification-otp', '/api/auth/sign-in/email-otp']);
   harness.unmount();
 });

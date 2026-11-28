@@ -225,8 +225,15 @@ async function confirmedSignInCookies(upstream, data, verified, request, origin,
   // Prove only the just-issued native session. An old browser/session_data
   // cookie, a verified-mailbox flag or a service JWT cannot replace this proof.
   const cookie = betterAuthCookies(sessions[0].split(';')[0]);
-  const canonical = await fetchBetterAuth('/get-session', { cookie, origin, signal: request.signal }, transport);
-  const identity = await readAuthBody({ body: canonical.body, signal: request.signal });
+  let proofSignal = request.signal;
+  let canonical = await fetchBetterAuth('/get-session', { cookie, origin, signal: proofSignal }, transport);
+  if ([502, 503, 504].includes(canonical.status) && !proofSignal.aborted) {
+    // The code is already redeemed. Recheck only this freshly issued cookie.
+    void canonical.body?.cancel().catch(() => {});
+    proofSignal = AbortSignal.any([request.signal, AbortSignal.timeout(2000)]);
+    canonical = await fetchBetterAuth('/get-session', { cookie, origin, signal: proofSignal }, transport);
+  }
+  const identity = await readAuthBody({ body: canonical.body, signal: proofSignal });
   if (canonical.status !== 200 || !/^application\/json(?:\s*;|$)/i.test(canonical.headers.get('content-type') || '')
     || !identity || typeof identity !== 'object' || Array.isArray(identity) || identity.error || identity.code
     || !identity.session || typeof identity.session !== 'object' || Array.isArray(identity.session)
@@ -237,7 +244,7 @@ async function confirmedSignInCookies(upstream, data, verified, request, origin,
     || !identity.user || typeof identity.user !== 'object' || Array.isArray(identity.user)
     || identity.user.id !== verified.id || typeof identity.user.email !== 'string'
     || identity.user.email.trim().toLowerCase() !== verified.email.trim().toLowerCase()
-    || identity.user.emailVerified !== true || request.signal.aborted) {
+    || identity.user.emailVerified !== true || proofSignal.aborted) {
     throw new Error('invalid_sign_in_session');
   }
   return cookies;
